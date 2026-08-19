@@ -9,6 +9,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY stackgraph_ai ./stackgraph_ai
 COPY prompts ./prompts
+COPY capabilities ./capabilities
 COPY tests ./tests
 
 ENTRYPOINT ["python", "-m", "stackgraph_ai.sync_prompts"]

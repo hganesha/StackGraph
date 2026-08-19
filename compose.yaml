@@ -179,5 +179,21 @@ services:
       database:
         condition: service_healthy
 
+  capability-intelligence:
+    profiles: [tools]
+    build:
+      context: ./services/intelligence/ai-services
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_AI_ROUTES_JSON: ${STACKGRAPH_AI_ROUTES_JSON:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    entrypoint: ["python", "-m", "stackgraph_ai.capability_worker"]
+    command: ["--help"]
+    depends_on:
+      database:
+        condition: service_healthy
+
 volumes:
   stackgraph_postgres_data:

@@ -67,6 +67,28 @@
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/identityReviewRequest"}}}},
         "responses": {"200": {"$ref": "#/components/responses/identityReview"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
       }
+    },
+    "/capabilities/taxonomy": {
+      "get": {
+        "operationId": "getCapabilityTaxonomy",
+        "parameters": [{"name": "version", "in": "query", "schema": {"type": "string"}}],
+        "responses": {"200": {"$ref": "#/components/responses/capabilityTaxonomy"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/repositories/{id}/capabilities": {
+      "get": {
+        "operationId": "getRepositoryCapabilities",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "responses": {"200": {"$ref": "#/components/responses/repositoryCapabilities"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/capability-inferences/{id}/review": {
+      "post": {
+        "operationId": "reviewCapabilityInference",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/capabilityInferenceReviewRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/capabilityInferenceReview"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
+      }
     }
   },
   "components": {
@@ -84,6 +106,9 @@
       "graph": {"description": "Bounded graph neighborhood", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/graphNeighborhood"}}}},
       "evidence": {"description": "Fact evidence", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/evidenceDetail"}}}},
       "identityReview": {"description": "Reviewed identity assertion", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/identityReviewResult"}}}},
+      "capabilityTaxonomy": {"description": "Versioned capability taxonomy", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/capabilityTaxonomy"}}}},
+      "repositoryCapabilities": {"description": "Repository capability intelligence", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/repositoryCapabilityIntelligence"}}}},
+      "capabilityInferenceReview": {"description": "Reviewed capability inference", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/capabilityInferenceReviewResult"}}}},
       "error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/error"}}}}
     }
   }

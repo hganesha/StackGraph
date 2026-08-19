@@ -252,6 +252,84 @@ class IdentityReviewResult(ContractModel):
     reviewed_at: datetime
 
 
+class CapabilityDefinitionModel(ContractModel):
+    key: str = Field(min_length=2)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    parent_key: str | None = None
+    aliases: list[str] = Field(default_factory=list)
+
+
+class CapabilityTaxonomyResponse(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    key: str = Field(min_length=3)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    capabilities: list[CapabilityDefinitionModel] = Field(min_length=1)
+
+
+class CapabilityInferenceSummary(ContractModel):
+    id: UUID
+    subject: EntitySummary
+    capability: CapabilityDefinitionModel
+    source_revision: str = Field(min_length=1)
+    assertion_class: Literal["CURATED", "INFERRED"]
+    confidence: float = Field(ge=0, le=1)
+    confidence_band: ConfidenceLabel
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    counter_evidence_fact_ids: list[UUID]
+    taxonomy_key: str
+    taxonomy_version: str
+    analyzer: Extractor
+    model_provider: str | None = None
+    model_name: str | None = None
+    policy_version: str
+    rationale: str = Field(min_length=1)
+    review_state: Literal["UNREVIEWED", "CONFIRMED", "REJECTED"]
+    version: int = Field(ge=1)
+    stale: bool
+    created_at: datetime
+
+
+class DuplicateCapabilityCandidateSummary(ContractModel):
+    id: UUID
+    capability: CapabilityDefinitionModel
+    source_revision: str = Field(min_length=1)
+    dependencies: list[EntitySummary] = Field(min_length=2)
+    capability_inference_ids: list[UUID] = Field(min_length=2)
+    supporting_fact_ids: list[UUID] = Field(min_length=2)
+    confidence: float = Field(ge=0, le=1)
+    summary: str = Field(min_length=1)
+    limitations: list[str] = Field(min_length=1)
+    review_state: Literal["UNREVIEWED", "CONFIRMED", "REJECTED"]
+    stale: bool
+
+
+class RepositoryCapabilityIntelligence(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    taxonomy_key: str | None = None
+    taxonomy_version: str | None = None
+    inferences: list[CapabilityInferenceSummary]
+    duplicate_candidates: list[DuplicateCapabilityCandidateSummary]
+
+
+class CapabilityInferenceReviewRequest(ContractModel):
+    decision: Literal["CONFIRM", "REJECT"]
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class CapabilityInferenceReviewResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    capability_inference_id: UUID
+    review_state: Literal["CONFIRMED", "REJECTED"]
+    version: int = Field(ge=2)
+    reviewed_at: datetime
+
+
 class ErrorResponse(ContractModel):
     code: str
     message: str

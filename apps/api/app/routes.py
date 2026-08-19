@@ -10,6 +10,9 @@ from app.models import (
     ApplicationDetail,
     AskRequest,
     AskResponse,
+    CapabilityInferenceReviewRequest,
+    CapabilityInferenceReviewResult,
+    CapabilityTaxonomyResponse,
     EstateSummary,
     EvidenceDetail,
     GraphNeighborhood,
@@ -17,6 +20,7 @@ from app.models import (
     IdentityReviewResult,
     ModernizationList,
     Namespace,
+    RepositoryCapabilityIntelligence,
     TechnologyDetail,
 )
 
@@ -36,6 +40,16 @@ class ReadModelsProtocol(Protocol):
     async def review_identity_assertion(
         self, assertion_id: UUID, review: IdentityReviewRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> IdentityReviewResult: ...
+    async def capability_taxonomy(
+        self, *, tenant_id: UUID | None, version: str | None,
+    ) -> CapabilityTaxonomyResponse: ...
+    async def repository_capabilities(
+        self, repository_id: UUID, *, tenant_id: UUID | None,
+    ) -> RepositoryCapabilityIntelligence: ...
+    async def review_capability_inference(
+        self, inference_id: UUID, review: CapabilityInferenceReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> CapabilityInferenceReviewResult: ...
 
 
 router = APIRouter()
@@ -159,5 +173,51 @@ async def review_identity_assertion(
 ) -> IdentityReviewResult:
     principal = _principal(request)
     return await _store(request).review_identity_assertion(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/capabilities/taxonomy", response_model=CapabilityTaxonomyResponse,
+    response_model_exclude_none=True, operation_id="getCapabilityTaxonomy",
+    tags=["intelligence"],
+)
+async def get_capability_taxonomy(
+    request: Request,
+    version: str | None = None,
+) -> CapabilityTaxonomyResponse:
+    principal = _principal(request)
+    return await _store(request).capability_taxonomy(
+        tenant_id=principal.tenant_id, version=version,
+    )
+
+
+@router.get(
+    "/repositories/{id}/capabilities", response_model=RepositoryCapabilityIntelligence,
+    response_model_exclude_none=True, operation_id="getRepositoryCapabilities",
+    tags=["intelligence"],
+)
+async def get_repository_capabilities(
+    id: UUID,
+    request: Request,
+) -> RepositoryCapabilityIntelligence:
+    principal = _principal(request)
+    return await _store(request).repository_capabilities(
+        id, tenant_id=principal.tenant_id,
+    )
+
+
+@router.post(
+    "/capability-inferences/{id}/review", response_model=CapabilityInferenceReviewResult,
+    response_model_exclude_none=True, operation_id="reviewCapabilityInference",
+    tags=["intelligence"],
+)
+async def review_capability_inference(
+    id: UUID,
+    body: CapabilityInferenceReviewRequest,
+    request: Request,
+) -> CapabilityInferenceReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_capability_inference(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
