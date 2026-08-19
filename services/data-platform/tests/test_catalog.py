@@ -1,8 +1,10 @@
 import os
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from stackgraph_data.catalog import load_catalog, sha256_key
+from stackgraph_data.migrate import file_checksum
 
 
 class CatalogTests(unittest.TestCase):
@@ -25,6 +27,14 @@ class CatalogTests(unittest.TestCase):
             sha256_key({"a": 1, "b": 2}),
             sha256_key({"b": 2, "a": 1}),
         )
+
+    def test_migration_checksum_detects_content_changes(self) -> None:
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "001_example.sql"
+            path.write_text("SELECT 1;\n", encoding="utf-8")
+            first_checksum = file_checksum(path)
+            path.write_text("SELECT 2;\n", encoding="utf-8")
+            self.assertNotEqual(first_checksum, file_checksum(path))
 
 
 if __name__ == "__main__":

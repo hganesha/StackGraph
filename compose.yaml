@@ -79,5 +79,32 @@ services:
       database:
         condition: service_healthy
 
+  migrate:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_MIGRATIONS_DIR: /migrations
+    command: ["python", "-m", "stackgraph_data.migrate"]
+    volumes:
+      - ./infrastructure/database/migrations:/migrations:ro
+    depends_on:
+      database:
+        condition: service_healthy
+
+  projection:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_GRAPH_NAME: stackgraph
+      STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+    command: ["python", "-m", "stackgraph_data.project"]
+    depends_on:
+      database:
+        condition: service_healthy
+
 volumes:
   stackgraph_postgres_data:

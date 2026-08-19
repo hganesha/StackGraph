@@ -252,9 +252,16 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'source snapshot % not found',p_snapshot_id; END IF;
  IF s.status<>'STAGED' THEN RAISE EXCEPTION 'source snapshot % is not staged',p_snapshot_id; END IF;
  IF s.completeness='COMPLETE' THEN
-  UPDATE fact_assertion f SET system_to=now() FROM source_snapshot old
-   WHERE f.source_snapshot_id=old.id AND old.ingest_target_id=s.ingest_target_id AND old.extractor_key=s.extractor_key
-   AND old.extractor_version=s.extractor_version AND old.id<>s.id AND f.system_to IS NULL;
+  WITH closed AS (
+   UPDATE fact_assertion f SET system_to=now() FROM source_snapshot old
+    WHERE f.source_snapshot_id=old.id AND old.ingest_target_id=s.ingest_target_id AND old.extractor_key=s.extractor_key
+    AND old.extractor_version=s.extractor_version AND old.id<>s.id AND f.system_to IS NULL
+    RETURNING f.id,f.tenant_id
+  )
+  INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)
+  SELECT closed.tenant_id,'FACT',closed.id,'CLOSE','snapshot:'||p_snapshot_id::text||':close:'||closed.id::text,
+   jsonb_build_object('closed_by_source_snapshot_id',p_snapshot_id)
+  FROM closed ON CONFLICT(dedupe_key) DO NOTHING;
  END IF;
  UPDATE source_snapshot SET status='PUBLISHED',published_at=now() WHERE id=p_snapshot_id;
  INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)

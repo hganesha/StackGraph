@@ -47,7 +47,18 @@ make database-seed
 make database-seed-verify
 ```
 
-Re-running the same seed version is a no-op and reports `"replayed": true`. A later seed version creates a new complete snapshot and closes the earlier current facts through the normal snapshot publication path.
+`database-seed` applies pending tracked migrations before loading. Migrations can also be run independently with `make database-migrate`. Re-running the same seed version is a no-op and reports `"replayed": true`. A later seed version creates a new complete snapshot and closes the earlier current facts through the normal snapshot publication path.
+
+## Populate the AGE projection
+
+Project pending fact events after seeding:
+
+```shell
+make database-project
+make database-project-verify
+```
+
+The worker uses leased `projection_outbox` batches, idempotently upserts generic `Entity` vertices and `Relationship` edges, and acknowledges each batch in the same PostgreSQL transaction as its AGE writes. Re-running with an empty outbox reports zero processed events.
 
 ## Operate
 
