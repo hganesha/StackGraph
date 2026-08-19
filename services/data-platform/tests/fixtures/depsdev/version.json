@@ -1,0 +1,23 @@
+{
+  "versionKey": {
+    "system": "NPM",
+    "name": "demo-root",
+    "version": "1.0.0"
+  },
+  "publishedAt": "2026-01-02T03:04:05Z",
+  "isDefault": true,
+  "isDeprecated": false,
+  "licenses": ["MIT"],
+  "advisoryKeys": [{"id": "GHSA-demo-0000-0000"}],
+  "links": [
+    {"label": "SOURCE_REPO", "url": "https://github.com/example/demo-root"}
+  ],
+  "registries": ["https://registry.npmjs.org/"],
+  "relatedProjects": [
+    {
+      "projectKey": {"id": "github.com/example/demo-root"},
+      "relationProvenance": "UNVERIFIED_METADATA",
+      "relationType": "SOURCE_REPO"
+    }
+  ]
+}
