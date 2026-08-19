@@ -17,6 +17,10 @@
   overflow-x: hidden;
   padding: var(--sg-space-6);
 }
+.workspaceFullBleed {
+  overflow: hidden;
+  padding: 0;
+}
 .backdrop {
   display: none;
 }
@@ -30,6 +34,9 @@
 @media (max-width: 768px) {
   .workspace {
     padding: var(--sg-space-4);
+  }
+  .workspaceFullBleed {
+    padding: 0;
   }
   .backdrop {
     display: block;

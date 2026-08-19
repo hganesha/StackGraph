@@ -19,6 +19,50 @@
   color: var(--sg-text-secondary);
 }
 
+.contextBanner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sg-space-2);
+  margin-block-start: var(--sg-space-3);
+  padding: var(--sg-space-3);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-business-200);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-color-domain-business-50);
+}
+
+.contextBanner > span {
+  padding: 3px 5px;
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-color-domain-business-100);
+  color: var(--sg-color-domain-business-800);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.contextBanner strong {
+  overflow: hidden;
+  color: var(--sg-text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextBanner small {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+
+.contextBanner button {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+
+.contextBanner button:hover {
+  color: var(--sg-text-primary);
+}
+
 .empty {
   flex: 1;
   display: flex;
@@ -185,4 +229,14 @@
 .send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .contextBanner {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .contextBanner small {
+    display: none;
+  }
 }
