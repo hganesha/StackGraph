@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton, confidenceLabel } from "@stackgraph/design-system";
 import { useGraphNeighborhood } from "@/lib/queries";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { UncertainBridge } from "@/components/reviews/UncertainBridge";
 import styles from "./graphlens.module.css";
 
 // React Flow is browser-only — load the canvas without SSR.
@@ -73,7 +74,6 @@ export function GraphLens({ centerId, techName }: { centerId: string; techName: 
                   <li key={e.id} className={styles.edgeItem}>
                     <span className={`${styles.predicate} sg-mono`}>{e.predicate}</span>
                     <span className={styles.other}>{other?.label}</span>
-                    {e.review_state === "POSSIBLE" ? <span className={styles.possible}>possible match</span> : null}
                     {factId ? (
                       <CitationChip label="evidence" onOpen={() => openEvidence(factId, `${e.predicate} evidence`)} />
                     ) : null}
@@ -81,6 +81,24 @@ export function GraphLens({ centerId, techName }: { centerId: string; techName: 
                 );
               })}
             </ul>
+
+            {connectedEdges
+              .filter((e) => e.review_state === "POSSIBLE")
+              .map((e) => {
+                const src = data?.nodes.find((n) => n.id === e.source);
+                const tgt = data?.nodes.find((n) => n.id === e.target);
+                return (
+                  <div key={`review-${e.id}`} className={styles.bridgeSlot}>
+                    <h3 className={styles.inspectorH3}>Uncertain bridge</h3>
+                    <UncertainBridge
+                      assertionId={e.id}
+                      sourceLabel={src?.label ?? "?"}
+                      targetLabel={tgt?.label ?? "?"}
+                      confidence={e.confidence}
+                    />
+                  </div>
+                );
+              })}
           </aside>
         ) : (
           <aside className={styles.inspectorEmpty}>
