@@ -20,7 +20,9 @@ import type {
   TechnologyDetail,
 } from "../contracts/read-models";
 
-import estateSummary from "../fixtures/estate-summary.json";
+// UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
+// The golden fixture is contracts/v1/fixtures/estate-summary.json.
+import estateSummary from "../fixtures/estate-summary.demo.json";
 import applicationDetail from "../fixtures/application-detail.json";
 import technologyDetail from "../fixtures/technology-detail.json";
 import modernizationList from "../fixtures/modernization-list.json";
