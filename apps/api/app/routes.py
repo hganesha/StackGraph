@@ -94,7 +94,12 @@ async def ask_estate(
     return await _store(request).ask(body, tenant_id=_tenant(request, tenant_id))
 
 
-@router.get("/graph/neighborhood", response_model=GraphNeighborhood, tags=["graph"])
+@router.get(
+    "/graph/neighborhood",
+    response_model=GraphNeighborhood,
+    response_model_exclude_none=True,
+    tags=["graph"],
+)
 async def get_graph_neighborhood(
     request: Request,
     center_id: UUID,

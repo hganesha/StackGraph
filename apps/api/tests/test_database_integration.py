@@ -46,6 +46,40 @@ async def exercise_read_models() -> None:
             assert graph.center_id == entity_row["id"]
             assert len(graph.nodes) <= 10
 
+        connected_entity = await database.fetch_one(
+            """
+            SELECT r.source_entity_id id
+            FROM current_relationship r
+            JOIN entity e ON e.id=r.source_entity_id
+            WHERE e.namespace='TECHNOLOGY' AND e.entity_type='Technology'
+            ORDER BY e.name,r.relationship_type,r.fact_assertion_id LIMIT 1
+            """
+        )
+        if connected_entity:
+            aggregate_graph = await store.graph_neighborhood(
+                connected_entity["id"], tenant_id=None, depth=1, real_node_limit=1,
+            )
+            repeated_graph = await store.graph_neighborhood(
+                connected_entity["id"], tenant_id=None, depth=1, real_node_limit=1,
+            )
+            real_nodes = [node for node in aggregate_graph.nodes if not node.aggregate]
+            aggregate_nodes = [node for node in aggregate_graph.nodes if node.aggregate]
+            aggregate_ids = {node.id for node in aggregate_nodes}
+
+            assert aggregate_graph.truncated
+            assert aggregate_graph.truncation_reason == "REAL_NODE_LIMIT"
+            assert len(real_nodes) == 1
+            assert aggregate_nodes
+            assert len(aggregate_graph.nodes) <= 50
+            assert sum(node.member_count or 0 for node in aggregate_nodes) >= 1
+            assert any(
+                edge.source in aggregate_ids or edge.target in aggregate_ids
+                for edge in aggregate_graph.edges
+            )
+            assert [node.id for node in aggregate_graph.nodes] == [
+                node.id for node in repeated_graph.nodes
+            ]
+
         fact_row = await database.fetch_one("SELECT id FROM current_fact ORDER BY id LIMIT 1")
         if fact_row:
             evidence = await store.evidence_detail(fact_row["id"], tenant_id=None)
@@ -63,7 +97,12 @@ def test_http_api_queries_seeded_database() -> None:
     database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
     with psycopg.connect(database_url) as connection:
         technology_id = connection.execute(
-            "SELECT id FROM entity WHERE namespace='TECHNOLOGY' AND entity_type='Technology' ORDER BY name LIMIT 1"
+            """
+            SELECT r.source_entity_id
+            FROM current_relationship r JOIN entity e ON e.id=r.source_entity_id
+            WHERE e.namespace='TECHNOLOGY' AND e.entity_type='Technology'
+            ORDER BY e.name,r.relationship_type,r.fact_assertion_id LIMIT 1
+            """
         ).fetchone()[0]
         fact_id = connection.execute("SELECT id FROM current_fact ORDER BY id LIMIT 1").fetchone()[0]
 
@@ -77,7 +116,10 @@ def test_http_api_queries_seeded_database() -> None:
                 return (
                     await client.get("/estate/summary"),
                     await client.get(f"/technologies/{technology_id}"),
-                    await client.get("/graph/neighborhood", params={"center_id": str(technology_id), "depth": 1}),
+                    await client.get(
+                        "/graph/neighborhood",
+                        params={"center_id": str(technology_id), "depth": 1, "real_node_limit": 1},
+                    ),
                     await client.get(f"/facts/{fact_id}/evidence"),
                     await client.post("/ask", json={"question": "How many items are in the estate?"}),
                 )
@@ -88,6 +130,18 @@ def test_http_api_queries_seeded_database() -> None:
     assert summary.json()["counts"]["technologies"] == 192
     assert technology.status_code == 200
     assert graph.status_code == 200
+    assert graph.json()["truncated"] is True
+    assert any(node["aggregate"] for node in graph.json()["nodes"])
+    assert all(
+        "member_count" not in node
+        for node in graph.json()["nodes"]
+        if not node["aggregate"]
+    )
+    assert any(
+        node.get("member_count", 0) >= 1
+        for node in graph.json()["nodes"]
+        if node["aggregate"]
+    )
     assert evidence.status_code == 200
     assert ask.status_code == 200
 
