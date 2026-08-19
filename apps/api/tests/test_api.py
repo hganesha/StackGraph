@@ -14,13 +14,23 @@ from app.main import create_app
 from app.models import (
     AskRequest,
     AskResponse,
+    CapabilityDefinitionModel,
+    CapabilityInferenceReviewRequest,
+    CapabilityInferenceReviewResult,
+    CapabilityTaxonomyResponse,
     Coverage,
+    DuplicateCapabilityReviewRequest,
+    DuplicateCapabilityReviewResult,
+    EntitySummary,
     EstateCounts,
     EstateSummary,
     Freshness,
     IdentityReviewRequest,
     IdentityReviewResult,
     PageInfo,
+    ModernizationRecommendationReviewRequest,
+    ModernizationRecommendationReviewResult,
+    RepositoryModernizationIntelligence,
 )
 
 
@@ -86,6 +96,73 @@ class StubReadModels:
             reviewed_at=NOW,
         )
 
+    async def capability_taxonomy(self, *, tenant_id, version):
+        self.last_tenant_id = tenant_id
+        return CapabilityTaxonomyResponse(
+            key="stackgraph.technical-capabilities",
+            version=version or "1.0.0",
+            name="Technical Capabilities",
+            description="Versioned technical capabilities.",
+            content_hash="sha256:" + "a" * 64,
+            capabilities=[CapabilityDefinitionModel(
+                key="http-client", name="HTTP Client",
+                description="Issue outbound HTTP requests.",
+            )],
+        )
+
+    async def repository_capabilities(self, repository_id, *, tenant_id):
+        raise NotImplementedError
+
+    async def review_capability_inference(
+        self, inference_id, review: CapabilityInferenceReviewRequest, *, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return CapabilityInferenceReviewResult(
+            capability_inference_id=inference_id,
+            review_state="CONFIRMED" if review.decision == "CONFIRM" else "REJECTED",
+            version=review.expected_version + 1,
+            reviewed_at=NOW,
+        )
+
+    async def review_duplicate_capability_candidate(
+        self, candidate_id, review: DuplicateCapabilityReviewRequest, *, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return DuplicateCapabilityReviewResult(
+            duplicate_capability_candidate_id=candidate_id,
+            review_state="CONFIRMED" if review.decision == "CONFIRM" else "REJECTED",
+            version=review.expected_version + 1,
+            reviewed_at=NOW,
+        )
+
+    async def repository_modernization_intelligence(self, repository_id, *, tenant_id, limit):
+        self.last_tenant_id = tenant_id
+        return RepositoryModernizationIntelligence(
+            repository=EntitySummary(
+                id=repository_id, kind="Repository", name="Billing API",
+                canonical_key="github:repo:billing-api",
+            ),
+            source_revision="revision-1",
+            candidates=[],
+            truncated=False,
+        )
+
+    async def review_modernization_recommendation(
+        self, recommendation_id, review: ModernizationRecommendationReviewRequest,
+        *, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        state = {"ACCEPT": "ACCEPTED", "REJECT": "REJECTED", "DISMISS": "DISMISSED"}[review.decision]
+        return ModernizationRecommendationReviewResult(
+            modernization_recommendation_id=recommendation_id,
+            review_state=state,
+            version=review.expected_version + 1,
+            reviewed_at=NOW,
+        )
+
 
 def app_with_stubs(settings: Settings | None = None) -> tuple[FastAPI, StubReadModels]:
     read_models = StubReadModels()
@@ -115,6 +192,63 @@ def test_estate_summary_is_available_on_contract_and_versioned_paths() -> None:
     assert direct.status_code == 200
     assert direct.json()["contract_version"] == "1.0.0"
     assert versioned.json() == direct.json()
+
+
+def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
+    app, _ = app_with_stubs()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/capabilities/taxonomy?version=1.0.0",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["capabilities"][0]["key"] == "http-client"
+
+
+def test_capability_review_forwards_tenant_and_actor() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(
+        environment="test", default_tenant_id=tenant_id,
+    ))
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/capability-inferences/00000000-0000-4000-8000-000000000700/review",
+        json={"decision": "CONFIRM", "rationale": "Evidence verified.", "expected_version": 1},
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["review_state"] == "CONFIRMED"
+    assert store.last_tenant_id == tenant_id
+    assert store.last_actor_key == "local-user"
+
+
+def test_modernization_intelligence_is_bounded_and_versioned() -> None:
+    app, _ = app_with_stubs()
+    response = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/repositories/00000000-0000-4000-8000-000000000701/modernization-intelligence?limit=25",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["contract_version"] == "1.0.0"
+    assert response.json()["truncated"] is False
+
+
+def test_modernization_review_forwards_tenant_and_actor() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/modernization-recommendations/00000000-0000-4000-8000-000000000702/review",
+        json={"decision": "ACCEPT", "rationale": "Validated migration surface.", "expected_version": 1},
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["review_state"] == "ACCEPTED"
+    assert store.last_tenant_id == tenant_id
+    assert store.last_actor_key == "local-user"
 
 
 def test_development_principal_is_forwarded_and_tenant_header_is_ignored() -> None:

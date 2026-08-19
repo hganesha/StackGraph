@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-work repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
 
 backend-up:
 	docker compose up --build -d database api
@@ -78,6 +78,22 @@ ai-test:
 
 ai-prompts-sync: database-migrate
 	docker compose run --rm ai-prompts
+
+capabilities-sync: database-migrate
+	docker compose run --rm --entrypoint python ai-prompts -m stackgraph_ai.sync_capabilities --catalog-dir /code/capabilities
+
+capabilities-analyze: capabilities-sync
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	@test -n "$(REPOSITORY_ID)" || (echo "REPOSITORY_ID is required" >&2; exit 2)
+	docker compose run --rm capability-intelligence --tenant-id "$(TENANT_ID)" --repository-id "$(REPOSITORY_ID)" --catalog-dir /code/capabilities $(if $(AI_UNMAPPED),--ai-unmapped --ai-route "$${AI_ROUTE:-default}",)
+
+intelligence-run: database-migrate
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	@test -n "$(REPOSITORY_ID)" || (echo "REPOSITORY_ID is required" >&2; exit 2)
+	docker compose run --rm modernization-intelligence run --tenant-id "$(TENANT_ID)" --repository-id "$(REPOSITORY_ID)" $(if $(AI_UNMAPPED),--ai-unmapped --ai-route "$${AI_ROUTE:-default}",)
+
+intelligence-work: database-migrate
+	docker compose run --rm modernization-intelligence work --max-jobs "$${MAX_JOBS:-10}" $(if $(AI_UNMAPPED),--ai-unmapped --ai-route "$${AI_ROUTE:-default}",)
 
 repository-scan:
 	@test -n "$(SCANNER_REQUEST)" || (echo "SCANNER_REQUEST is required (container path under /snapshots)" >&2; exit 2)

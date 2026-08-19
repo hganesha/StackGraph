@@ -16,6 +16,14 @@ import type {
   GraphNeighborhood,
   IdentityReviewRequest,
   IdentityReviewResult,
+  CapabilityTaxonomy,
+  RepositoryCapabilityIntelligence,
+  OptimisticReviewRequest,
+  CapabilityInferenceReviewResult,
+  DuplicateCapabilityReviewResult,
+  RepositoryModernizationIntelligence,
+  ModernizationRecommendationReviewRequest,
+  ModernizationRecommendationReviewResult,
   ModernizationList,
   TechnologyDetail,
 } from "../contracts/read-models";
@@ -32,6 +40,9 @@ import askResponse from "../fixtures/ask-response.json";
 import graphNeighborhood from "../fixtures/graph-neighborhood.demo.json";
 import evidenceDetail from "../fixtures/evidence-detail.json";
 import identityReview from "../fixtures/identity-review-result.json";
+import capabilityTaxonomy from "../fixtures/capability-taxonomy.json";
+import repositoryCapabilities from "../fixtures/repository-capabilities.json";
+import repositoryModernization from "../fixtures/repository-modernization-intelligence.json";
 
 export interface StackGraphClient {
   getEstateSummary(): Promise<EstateSummary>;
@@ -42,6 +53,12 @@ export interface StackGraphClient {
   getGraphNeighborhood(centerId: string, depth?: number): Promise<GraphNeighborhood>;
   getFactEvidence(factId: string): Promise<EvidenceDetail>;
   reviewIdentityAssertion(id: string, body: IdentityReviewRequest): Promise<IdentityReviewResult>;
+  getCapabilityTaxonomy(version?: string): Promise<CapabilityTaxonomy>;
+  getRepositoryCapabilities(id: string): Promise<RepositoryCapabilityIntelligence>;
+  reviewCapabilityInference(id: string, body: OptimisticReviewRequest): Promise<CapabilityInferenceReviewResult>;
+  reviewDuplicateCapabilityCandidate(id: string, body: OptimisticReviewRequest): Promise<DuplicateCapabilityReviewResult>;
+  getRepositoryModernizationIntelligence(id: string, limit?: number): Promise<RepositoryModernizationIntelligence>;
+  reviewModernizationRecommendation(id: string, body: ModernizationRecommendationReviewRequest): Promise<ModernizationRecommendationReviewResult>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
@@ -79,6 +96,30 @@ const fixtureClient: StackGraphClient = {
   async reviewIdentityAssertion() {
     await delay();
     return identityReview as IdentityReviewResult;
+  },
+  async getCapabilityTaxonomy() {
+    await delay();
+    return capabilityTaxonomy as CapabilityTaxonomy;
+  },
+  async getRepositoryCapabilities() {
+    await delay();
+    return repositoryCapabilities as RepositoryCapabilityIntelligence;
+  },
+  async reviewCapabilityInference(id, body) {
+    await delay();
+    return {contract_version: "1.0.0", capability_inference_id: id, review_state: body.decision === "CONFIRM" ? "CONFIRMED" : "REJECTED", version: body.expected_version + 1, reviewed_at: new Date().toISOString()};
+  },
+  async reviewDuplicateCapabilityCandidate(id, body) {
+    await delay();
+    return {contract_version: "1.0.0", duplicate_capability_candidate_id: id, review_state: body.decision === "CONFIRM" ? "CONFIRMED" : "REJECTED", version: body.expected_version + 1, reviewed_at: new Date().toISOString()};
+  },
+  async getRepositoryModernizationIntelligence() {
+    await delay();
+    return repositoryModernization as RepositoryModernizationIntelligence;
+  },
+  async reviewModernizationRecommendation(id, body) {
+    await delay();
+    return {contract_version: "1.0.0", modernization_recommendation_id: id, review_state: body.decision === "ACCEPT" ? "ACCEPTED" : body.decision === "REJECT" ? "REJECTED" : "DISMISSED", version: body.expected_version + 1, reviewed_at: new Date().toISOString()};
   },
 };
 
@@ -125,6 +166,23 @@ const liveClient: StackGraphClient = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }),
+  getCapabilityTaxonomy: (version) =>
+    req(`/capabilities/taxonomy${version ? `?version=${encodeURIComponent(version)}` : ""}`),
+  getRepositoryCapabilities: (id) => req(`/repositories/${id}/capabilities`),
+  reviewCapabilityInference: (id, body) =>
+    req(`/capability-inferences/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  reviewDuplicateCapabilityCandidate: (id, body) =>
+    req(`/duplicate-capability-candidates/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  getRepositoryModernizationIntelligence: (id, limit = 50) =>
+    req(`/repositories/${id}/modernization-intelligence?limit=${limit}`),
+  reviewModernizationRecommendation: (id, body) =>
+    req(`/modernization-recommendations/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
 };
 

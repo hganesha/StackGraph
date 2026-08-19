@@ -1,0 +1,16 @@
+{
+  "contract_version": "1.0.0",
+  "key": "stackgraph.technical-capabilities",
+  "version": "1.0.0",
+  "name": "StackGraph Technical Capability Taxonomy",
+  "description": "Versioned technical capabilities used to classify dependency usage.",
+  "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "capabilities": [
+    {
+      "key": "http-client",
+      "name": "HTTP Client",
+      "description": "Issue outbound HTTP requests and process responses.",
+      "aliases": ["web client"]
+    }
+  ]
+}

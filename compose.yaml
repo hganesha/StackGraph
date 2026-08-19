@@ -30,7 +30,8 @@ services:
 
   api:
     build:
-      context: ./apps/api
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: development
     restart: unless-stopped
     environment:
@@ -43,6 +44,20 @@ services:
       STACKGRAPH_AUTH_SESSION_SECRET: ${STACKGRAPH_AUTH_SESSION_SECRET:-}
       STACKGRAPH_DEVELOPMENT_ACTOR_KEY: ${STACKGRAPH_DEVELOPMENT_ACTOR_KEY:-local-user}
       STACKGRAPH_CONTRACTS_DIR: /contracts/v1
+      STACKGRAPH_AI_ASK_ENABLED: ${STACKGRAPH_AI_ASK_ENABLED:-false}
+      STACKGRAPH_AI_ASK_ROUTE: ${STACKGRAPH_AI_ASK_ROUTE:-default}
+      STACKGRAPH_AI_ASK_FALLBACK_ENABLED: ${STACKGRAPH_AI_ASK_FALLBACK_ENABLED:-true}
+      STACKGRAPH_AI_ASK_MAX_EVIDENCE_CHARS: ${STACKGRAPH_AI_ASK_MAX_EVIDENCE_CHARS:-50000}
+      STACKGRAPH_AI_PROMPTS_DIR: /code/prompts
+      STACKGRAPH_AI_ROUTES_JSON: ${STACKGRAPH_AI_ROUTES_JSON:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-}
+      OPENROUTER_SITE_NAME: ${OPENROUTER_SITE_NAME:-StackGraph}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
     command:
       - uvicorn
       - app.main:app
@@ -56,6 +71,8 @@ services:
     volumes:
       - ./apps/api/app:/code/app:ro
       - ./apps/api/tests:/code/tests:ro
+      - ./services/intelligence/ai-services/stackgraph_ai:/code/stackgraph_ai:ro
+      - ./services/intelligence/ai-services/prompts:/code/prompts:ro
       - ./stackgraph-foundation/contracts/v1:/contracts/v1:ro
     depends_on:
       database:
@@ -175,6 +192,38 @@ services:
     environment:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
     command: ["--prompts-dir", "/code/prompts"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  capability-intelligence:
+    profiles: [tools]
+    build:
+      context: ./services/intelligence/ai-services
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_AI_ROUTES_JSON: ${STACKGRAPH_AI_ROUTES_JSON:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    entrypoint: ["python", "-m", "stackgraph_ai.capability_worker"]
+    command: ["--help"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  modernization-intelligence:
+    profiles: [tools]
+    build:
+      context: ./services/intelligence/ai-services
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_AI_ROUTES_JSON: ${STACKGRAPH_AI_ROUTES_JSON:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    entrypoint: ["python", "-m", "stackgraph_ai.modernization_worker"]
+    command: ["work", "--max-jobs", "10"]
     depends_on:
       database:
         condition: service_healthy

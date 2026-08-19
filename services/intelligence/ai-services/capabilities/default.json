@@ -1,0 +1,50 @@
+{
+  "taxonomy": {
+    "key": "stackgraph.technical-capabilities",
+    "version": "1.0.0",
+    "status": "ACTIVE",
+    "name": "StackGraph Technical Capability Taxonomy",
+    "description": "Versioned technical capabilities used to classify dependency and symbol usage.",
+    "metadata": {"policy_version": "capability-taxonomy/v1"}
+  },
+  "capabilities": [
+    {"key": "http-client", "name": "HTTP Client", "description": "Issue outbound HTTP requests and process responses.", "aliases": ["web client"]},
+    {"key": "jwt-token-processing", "name": "JWT / Token Processing", "description": "Create, verify, decode, or validate signed tokens.", "aliases": ["JWT"]},
+    {"key": "collection-object-utilities", "name": "Collection and Object Utilities", "description": "Transform, query, merge, or compare collections and objects.", "aliases": ["utility library"]},
+    {"key": "rate-control", "name": "Rate and Invocation Control", "description": "Debounce, throttle, retry, or otherwise control invocation rate.", "aliases": ["debounce", "throttle"]},
+    {"key": "schema-validation", "name": "Schema Validation", "description": "Validate and parse structured application data.", "aliases": ["data validation"]},
+    {"key": "application-logging", "name": "Application Logging", "description": "Produce structured or unstructured application logs.", "aliases": ["logging"]},
+    {"key": "automated-testing", "name": "Automated Testing", "description": "Define and execute automated software tests.", "aliases": ["test framework"]},
+    {"key": "relational-database-access", "name": "Relational Database Access", "description": "Connect to and query relational databases.", "aliases": ["SQL client", "ORM"]},
+    {"key": "web-application-framework", "name": "Web Application Framework", "description": "Route, handle, and compose web application requests.", "aliases": ["web framework"]},
+    {"key": "date-time-processing", "name": "Date and Time Processing", "description": "Parse, format, calculate, or compare dates and times.", "aliases": ["datetime"]}
+  ],
+  "mappings": [
+    {"ecosystem": "npm", "package": "axios", "capability": "http-client", "confidence": 0.99, "rationale": "Axios is an HTTP client.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "node-fetch", "capability": "http-client", "confidence": 0.99, "rationale": "node-fetch implements Fetch for outbound HTTP.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "undici", "capability": "http-client", "confidence": 0.99, "rationale": "Undici provides HTTP client APIs.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "requests", "capability": "http-client", "confidence": 0.99, "rationale": "Requests is a Python HTTP client.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "httpx", "capability": "http-client", "confidence": 0.99, "rationale": "HTTPX is a Python HTTP client.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "jsonwebtoken", "capability": "jwt-token-processing", "confidence": 0.99, "rationale": "jsonwebtoken signs and verifies JWTs.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "jose", "capability": "jwt-token-processing", "confidence": 0.98, "rationale": "jose implements JOSE and JWT operations.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "pyjwt", "capability": "jwt-token-processing", "confidence": 0.99, "rationale": "PyJWT encodes and decodes JWTs.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "lodash", "symbol": "debounce", "capability": "rate-control", "confidence": 0.99, "rationale": "The referenced symbol debounces calls.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "lodash", "symbol": "throttle", "capability": "rate-control", "confidence": 0.99, "rationale": "The referenced symbol throttles calls.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "lodash", "symbol": "*", "capability": "collection-object-utilities", "confidence": 0.85, "rationale": "Lodash broadly provides collection and object utilities.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "zod", "capability": "schema-validation", "confidence": 0.99, "rationale": "Zod validates typed schemas.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "joi", "capability": "schema-validation", "confidence": 0.99, "rationale": "Joi validates JavaScript values.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "pydantic", "capability": "schema-validation", "confidence": 0.98, "rationale": "Pydantic validates Python data models.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "winston", "capability": "application-logging", "confidence": 0.99, "rationale": "Winston is an application logger.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "pino", "capability": "application-logging", "confidence": 0.99, "rationale": "Pino is an application logger.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "structlog", "capability": "application-logging", "confidence": 0.99, "rationale": "structlog provides structured logging.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "jest", "capability": "automated-testing", "confidence": 0.99, "rationale": "Jest is an automated test framework.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "pytest", "capability": "automated-testing", "confidence": 0.99, "rationale": "pytest is an automated test framework.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "pg", "capability": "relational-database-access", "confidence": 0.99, "rationale": "pg is a PostgreSQL client.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "sqlalchemy", "capability": "relational-database-access", "confidence": 0.99, "rationale": "SQLAlchemy provides SQL and ORM access.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "express", "capability": "web-application-framework", "confidence": 0.99, "rationale": "Express is a web application framework.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "fastapi", "capability": "web-application-framework", "confidence": 0.99, "rationale": "FastAPI is a web application framework.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "date-fns", "capability": "date-time-processing", "confidence": 0.99, "rationale": "date-fns provides date and time utilities.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "npm", "package": "dayjs", "capability": "date-time-processing", "confidence": 0.99, "rationale": "Day.js provides date and time utilities.", "evidence": {"source": "curated-v1"}},
+    {"ecosystem": "pypi", "package": "pendulum", "capability": "date-time-processing", "confidence": 0.99, "rationale": "Pendulum provides Python date and time utilities.", "evidence": {"source": "curated-v1"}}
+  ]
+}

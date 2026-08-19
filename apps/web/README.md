@@ -38,11 +38,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
 ```
 
 The swap happens entirely inside `@stackgraph/shared`'s API client
-(`packages/shared/src/api/client.ts`); components never change. The live API currently exposes only
-`/health/*` — read endpoints (`/estate/summary`, …) are pending on the backend. **CORS is not yet
-enabled** on the API; the backend must allow the web origin before `live` mode works from the browser.
+(`packages/shared/src/api/client.ts`); components never change. The live API exposes the estate,
+application, technology, modernization, graph, evidence, capability-taxonomy, repository-capability,
+and repository-modernization read models. CORS is enabled for the configured web origins, including
+the default local web URL.
 
-## What's implemented (Phase 0 + first Phase 1 slice)
+## What's implemented
 
 - Monorepo: `apps/web`, `packages/design-system` (Strata), `packages/shared` (contract types + client),
   `packages/graph-ui` (stub for Phase 2).
@@ -53,6 +54,8 @@ enabled** on the API; the backend must allow the web origin before `live` mode w
 - **Software Estate** surface bound to `getEstateSummary` (ranked table, stat tiles, loading/empty/error states).
 - **Application detail** (`/applications/[id]`) bound to `getApplication` (ontology breadcrumb, business context,
   assessments, recommendations).
+- Live API bindings for capability taxonomy, repository capability intelligence, inference/duplicate review,
+  and evidence-backed repository modernization intelligence.
 - Placeholder routes for the remaining surfaces (Technologies, Modernization, Ask, Reviews, Health, Admin).
 
 ## Next (per plan §9)

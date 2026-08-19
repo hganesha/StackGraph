@@ -15,7 +15,7 @@ from app.config import Settings, get_settings
 from app.database import Database, DatabaseReadiness
 from app.errors import APIError
 from app.read_models import ReadModelStore
-from app.routes import ReadModelsProtocol, router
+from app.routes import AskServiceProtocol, ReadModelsProtocol, router
 
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,7 @@ def create_app(
     settings: Settings | None = None,
     database: DatabaseProtocol | None = None,
     read_models: ReadModelsProtocol | None = None,
+    ask_service: AskServiceProtocol | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
     app_database = database or Database(app_settings)
@@ -60,6 +61,20 @@ def create_app(
         graph_read_mode=app_settings.graph_read_mode,
         graph_discovery_limit=app_settings.graph_discovery_limit,
     )
+    application.state.ask_service = ask_service or application.state.read_models
+    if ask_service is None and app_settings.ai_ask_enabled:
+        from app.ai_ask import AIAskOrchestrator
+        from stackgraph_ai import AISettings, build_ai_service
+
+        ai_service = build_ai_service(AISettings.from_env(), database=app_database)  # type: ignore[arg-type]
+        ai_service.routes.get(app_settings.ai_ask_route)
+        application.state.ask_service = AIAskOrchestrator(
+            deterministic=application.state.read_models,
+            ai=ai_service,
+            route=app_settings.ai_ask_route,
+            fallback_enabled=app_settings.ai_ask_fallback_enabled,
+            max_evidence_chars=app_settings.ai_ask_max_evidence_chars,
+        )
     application.state.authenticator = Authenticator(app_settings)
 
     application.add_middleware(
