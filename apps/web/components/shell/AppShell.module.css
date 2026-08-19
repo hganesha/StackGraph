@@ -1,0 +1,42 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  block-size: 100dvh;
+  overflow: hidden;
+}
+.body {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+  position: relative;
+}
+.workspace {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sg-space-6);
+}
+.backdrop {
+  display: none;
+}
+.statusPlaceholder {
+  block-size: 33px;
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+  background: var(--sg-surface-sunken);
+}
+
+/* ---- mobile: rail becomes an off-canvas drawer ---- */
+@media (max-width: 768px) {
+  .workspace {
+    padding: var(--sg-space-4);
+  }
+  .backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    background: rgba(0, 0, 0, 0.4);
+    border: none;
+  }
+}

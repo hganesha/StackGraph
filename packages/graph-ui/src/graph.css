@@ -1,0 +1,30 @@
+/* Global styles for the graph lens: React Flow base + Strata theming.
+   Import once (app imports "@stackgraph/graph-ui/styles.css"). */
+@import "@xyflow/react/dist/style.css";
+
+/* Map React Flow surfaces to Strata tokens so the canvas matches both themes. */
+.react-flow {
+  background: var(--sg-surface-base);
+}
+.react-flow__controls {
+  box-shadow: var(--sg-elevation-raised);
+  border-radius: var(--sg-radius-control);
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: var(--sg-surface-card);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+  color: var(--sg-text-secondary);
+}
+.react-flow__controls-button:hover {
+  background: var(--sg-surface-sunken);
+}
+.react-flow__controls-button svg {
+  fill: var(--sg-text-secondary);
+}
+.react-flow__edge-text {
+  fill: var(--sg-text-muted);
+}
+.react-flow__attribution {
+  display: none;
+}

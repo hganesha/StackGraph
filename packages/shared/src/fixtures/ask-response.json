@@ -1,0 +1,6 @@
+{
+  "contract_version": "1.0.0",
+  "text": "Billing API directly depends on axios 1.7.9.",
+  "citations": [{"fact_id": "00000000-0000-4000-8000-000000000301", "label": "package-lock.json"}],
+  "result_kind": "ANSWER"
+}

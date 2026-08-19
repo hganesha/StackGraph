@@ -1,0 +1,25 @@
+.row {
+  display: flex;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3) 0;
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+  list-style: none;
+}
+.row:last-child {
+  border-block-end: none;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.source {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-primary);
+  word-break: break-all;
+}
+.desc {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}

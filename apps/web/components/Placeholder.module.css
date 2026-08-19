@@ -1,0 +1,27 @@
+.wrap {
+  max-inline-size: 640px;
+  margin: var(--sg-space-16) auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-8);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) dashed var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-card);
+}
+.phase {
+  align-self: flex-start;
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  padding: 2px 8px;
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-color-domain-intelligence-100);
+  color: var(--sg-color-domain-intelligence-800);
+}
+.title {
+  font-size: var(--sg-type-h1-size);
+  font-weight: 500;
+}
+.note {
+  color: var(--sg-text-secondary);
+}

@@ -12,6 +12,10 @@ __pycache__/
 .venv/
 *.py[cod]
 
+# TypeScript / Next build artifacts
+*.tsbuildinfo
+next-env.d.ts
+
 .env
 .env.*
 !.env.example
