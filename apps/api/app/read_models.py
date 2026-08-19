@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.database import Database
 from app.errors import APIError
@@ -39,6 +39,23 @@ from app.models import (
 
 
 CONTRACT_VERSION = "1.0.0"
+MAX_GRAPH_NODES = 50
+
+_GRAPH_NEIGHBORHOOD_CTE = """
+WITH RECURSIVE walk(id,depth) AS (
+  SELECT %s::uuid,0
+  UNION
+  SELECT CASE WHEN r.source_entity_id=w.id THEN r.target_entity_id ELSE r.source_entity_id END,w.depth+1
+  FROM walk w JOIN current_relationship r ON r.source_entity_id=w.id OR r.target_entity_id=w.id
+  WHERE w.depth<%s
+), closest AS (
+  SELECT id,min(depth) depth FROM walk GROUP BY id
+), ranked AS (
+  SELECT e.*,c.depth,
+         row_number() OVER (ORDER BY c.depth,e.namespace,e.entity_type,e.name,e.id) node_rank
+  FROM closest c JOIN entity e ON e.id=c.id
+)
+"""
 
 
 def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
@@ -95,6 +112,13 @@ def _decode_cursor(cursor: str | None) -> int:
         return offset
     except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
         raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
+
+
+def _aggregate_node_id(center_id: UUID, depth: int, namespace: str, entity_type: str) -> UUID:
+    return uuid5(
+        NAMESPACE_URL,
+        f"stackgraph:aggregate:{center_id}:{depth}:{namespace}:{entity_type}",
+    )
 
 
 class ReadModelStore:
@@ -346,24 +370,41 @@ class ReadModelStore:
         real_node_limit: int,
     ) -> GraphNeighborhood:
         await self._get_entity(center_id, tenant_id)
-        node_rows = await self.database.fetch_all(
-            """
-            WITH RECURSIVE walk(id,depth) AS (
-              SELECT %s::uuid,0
-              UNION
-              SELECT CASE WHEN r.source_entity_id=w.id THEN r.target_entity_id ELSE r.source_entity_id END,w.depth+1
-              FROM walk w JOIN current_relationship r ON r.source_entity_id=w.id OR r.target_entity_id=w.id
-              WHERE w.depth<%s
-            ), closest AS (SELECT id,min(depth) depth FROM walk GROUP BY id)
-            SELECT e.*,c.depth,coalesce(e.last_seen_at,e.updated_at) observed_at
-            FROM closest c JOIN entity e ON e.id=c.id
-            ORDER BY c.depth,e.namespace,e.entity_type,e.name,e.id LIMIT %s
-            """,
-            (center_id, depth, real_node_limit + 1),
+        total_row = await self.database.fetch_one(
+            _GRAPH_NEIGHBORHOOD_CTE + "SELECT count(*) total FROM ranked",
+            (center_id, depth),
             tenant_id=tenant_id,
         )
-        truncated = len(node_rows) > real_node_limit
-        node_rows = node_rows[:real_node_limit]
+        total_nodes = int(total_row["total"]) if total_row else 1
+        truncated = total_nodes > real_node_limit
+        kept_real_count = min(total_nodes, real_node_limit)
+        cluster_rows: list[dict[str, Any]] = []
+
+        if truncated:
+            while True:
+                cluster_rows = await self._graph_cluster_rows(
+                    center_id,
+                    tenant_id=tenant_id,
+                    depth=depth,
+                    kept_real_count=kept_real_count,
+                )
+                next_kept_count = max(
+                    1,
+                    min(real_node_limit, MAX_GRAPH_NODES - len(cluster_rows)),
+                )
+                if next_kept_count == kept_real_count:
+                    break
+                kept_real_count = next_kept_count
+
+        node_rows = await self.database.fetch_all(
+            _GRAPH_NEIGHBORHOOD_CTE
+            + """
+            SELECT *,coalesce(last_seen_at,updated_at) observed_at
+            FROM ranked WHERE node_rank<=%s ORDER BY node_rank
+            """,
+            (center_id, depth, kept_real_count),
+            tenant_id=tenant_id,
+        )
         node_ids = [row["id"] for row in node_rows]
         edge_rows = await self.database.fetch_all(
             """
@@ -378,6 +419,39 @@ class ReadModelStore:
             (node_ids, node_ids),
             tenant_id=tenant_id,
         )
+        aggregate_nodes = [
+            GraphNode(
+                id=_aggregate_node_id(
+                    center_id,
+                    depth,
+                    row["namespace"],
+                    row["entity_type"],
+                ),
+                namespace=row["namespace"],
+                type=row["entity_type"],
+                key=(
+                    f"aggregate:{center_id}:{depth}:"
+                    f"{row['namespace']}:{row['entity_type']}"
+                ),
+                label=(
+                    f"{row['entity_type']} cluster · {row['member_count']} "
+                    f"{'node' if row['member_count'] == 1 else 'nodes'}"
+                ),
+                aggregate=True,
+                member_count=row["member_count"],
+            )
+            for row in cluster_rows
+        ]
+        aggregate_edges = (
+            await self._graph_aggregate_edges(
+                center_id,
+                tenant_id=tenant_id,
+                depth=depth,
+                kept_real_count=kept_real_count,
+            )
+            if truncated
+            else []
+        )
         return GraphNeighborhood(
             center_id=center_id,
             nodes=[
@@ -386,7 +460,7 @@ class ReadModelStore:
                     key=row["canonical_key"], label=row["name"], aggregate=False,
                 )
                 for row in node_rows
-            ],
+            ] + aggregate_nodes,
             edges=[
                 GraphEdge(
                     id=row["fact_assertion_id"], source=row["source_entity_id"], target=row["target_entity_id"],
@@ -396,11 +470,118 @@ class ReadModelStore:
                 )
                 for row in edge_rows
                 if row["review_state"] != "REJECTED"
-            ],
+            ] + aggregate_edges,
             highlighted_path=[],
             truncated=truncated,
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
+
+    async def _graph_cluster_rows(
+        self,
+        center_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        kept_real_count: int,
+    ) -> list[dict[str, Any]]:
+        return await self.database.fetch_all(
+            _GRAPH_NEIGHBORHOOD_CTE
+            + """
+            SELECT namespace,entity_type,count(*)::integer member_count,min(depth) min_depth
+            FROM ranked WHERE node_rank>%s
+            GROUP BY namespace,entity_type
+            ORDER BY min(depth),namespace,entity_type
+            """,
+            (center_id, depth, kept_real_count),
+            tenant_id=tenant_id,
+        )
+
+    async def _graph_aggregate_edges(
+        self,
+        center_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        kept_real_count: int,
+    ) -> list[GraphEdge]:
+        rows = await self.database.fetch_all(
+            _GRAPH_NEIGHBORHOOD_CTE
+            + """
+            , mapped AS (
+              SELECT id,namespace,entity_type,node_rank,
+                     CASE WHEN node_rank<=%s THEN id END real_id
+              FROM ranked
+            )
+            SELECT
+              source.real_id source_real_id,
+              source.namespace source_namespace,
+              source.entity_type source_entity_type,
+              target.real_id target_real_id,
+              target.namespace target_namespace,
+              target.entity_type target_entity_type,
+              r.relationship_type,
+              r.assertion_class,
+              coalesce(ia.review_state,'NOT_APPLICABLE') review_state,
+              min(r.confidence) confidence,
+              (array_agg(r.fact_assertion_id ORDER BY r.fact_assertion_id))[1:20] citation_fact_ids
+            FROM current_relationship r
+            JOIN mapped source ON source.id=r.source_entity_id
+            JOIN mapped target ON target.id=r.target_entity_id
+            LEFT JOIN identity_assertion ia ON r.relationship_type='SAME_AS'
+              AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
+                OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
+            WHERE (source.real_id IS NULL OR target.real_id IS NULL)
+              AND coalesce(ia.review_state,'NOT_APPLICABLE')<>'REJECTED'
+              AND NOT (
+                source.real_id IS NULL AND target.real_id IS NULL
+                AND source.namespace=target.namespace
+                AND source.entity_type=target.entity_type
+              )
+            GROUP BY source.real_id,source.namespace,source.entity_type,
+                     target.real_id,target.namespace,target.entity_type,
+                     r.relationship_type,r.assertion_class,
+                     coalesce(ia.review_state,'NOT_APPLICABLE')
+            ORDER BY source.namespace,source.entity_type,target.namespace,target.entity_type,
+                     r.relationship_type,r.assertion_class
+            """,
+            (center_id, depth, kept_real_count),
+            tenant_id=tenant_id,
+        )
+        edges: list[GraphEdge] = []
+        for row in rows:
+            source_id = row["source_real_id"] or _aggregate_node_id(
+                center_id,
+                depth,
+                row["source_namespace"],
+                row["source_entity_type"],
+            )
+            target_id = row["target_real_id"] or _aggregate_node_id(
+                center_id,
+                depth,
+                row["target_namespace"],
+                row["target_entity_type"],
+            )
+            edge_id = uuid5(
+                NAMESPACE_URL,
+                (
+                    f"stackgraph:aggregate-edge:{center_id}:{depth}:{source_id}:"
+                    f"{target_id}:{row['relationship_type']}:{row['assertion_class']}:"
+                    f"{row['review_state']}"
+                ),
+            )
+            edges.append(
+                GraphEdge(
+                    id=edge_id,
+                    source=source_id,
+                    target=target_id,
+                    predicate=row["relationship_type"],
+                    confidence=_number(row["confidence"]),
+                    assertion_class=row["assertion_class"],
+                    review_state=row["review_state"],
+                    citation_fact_ids=row["citation_fact_ids"],
+                )
+            )
+        return edges
 
     async def evidence_detail(self, fact_id: UUID, *, tenant_id: UUID | None) -> EvidenceDetail:
         fact = await self.database.fetch_one(
