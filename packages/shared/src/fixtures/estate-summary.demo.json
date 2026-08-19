@@ -1,0 +1,76 @@
+{
+  "_comment": "UI-DEMO ONLY — not a contract fixture. Schema-valid estateSummary with several ranked items across domains/confidence/freshness so the filter/sort/lens UI is exercisable in fixture mode. The frozen golden fixture is contracts/v1/fixtures/estate-summary.json.",
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-19T14:10:00Z",
+  "counts": {"applications": 3, "repositories": 12, "services": 5, "technologies": 5},
+  "distributions": {"runtime.node": 8, "runtime.python": 3, "deployment.container": 9, "deployment.vm": 3},
+  "ranked_items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000201",
+      "kind": "Application", "name": "Billing API", "domain": "ENTERPRISE",
+      "priority": {"value": 81, "confidence": 0.91, "confidence_label": "HIGH", "method_version": "priority-v1"},
+      "viability": {"value": 64, "confidence": 0.88, "confidence_label": "HIGH", "method_version": "viability-v1"},
+      "summary": "A tier-1 service with one runtime upgrade opportunity.",
+      "freshness": {"observed_at": "2026-08-19T14:00:00Z", "status": "FRESH", "source_key": "github:repo:123"},
+      "citations": [{"fact_id": "00000000-0000-4000-8000-000000000301", "label": "Repository dependency evidence", "href": "/api/v1/facts/00000000-0000-4000-8000-000000000301/evidence"}]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000701",
+      "kind": "Application", "name": "Legacy Reporting", "domain": "ENTERPRISE",
+      "priority": {"value": 91, "confidence": 0.89, "confidence_label": "HIGH", "method_version": "priority-v1"},
+      "viability": {"value": 18, "confidence": 0.55, "confidence_label": "LOW", "method_version": "viability-v1"},
+      "summary": "Unsupported runtime and deprecated dependencies — a top modernization candidate.",
+      "freshness": {"observed_at": "2026-08-12T09:00:00Z", "status": "STALE", "source_key": "github:repo:451"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000702",
+      "kind": "Application", "name": "Payments Service", "domain": "ENTERPRISE",
+      "priority": {"value": 76, "confidence": 0.9, "confidence_label": "HIGH", "method_version": "priority-v1"},
+      "viability": {"value": 70, "confidence": 0.86, "confidence_label": "HIGH", "method_version": "viability-v1"},
+      "summary": "Healthy tier-1 service; container-native, current runtime.",
+      "freshness": {"observed_at": "2026-08-19T13:40:00Z", "status": "FRESH", "source_key": "github:repo:210"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000204",
+      "kind": "PackageVersion", "name": "axios 1.7.9", "domain": "TECHNOLOGY",
+      "priority": {"value": 72, "confidence": 0.84, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
+      "viability": {"value": 58, "confidence": 0.8, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
+      "summary": "Widely used HTTP client; native fetch is a viable alternative.",
+      "freshness": {"observed_at": "2026-08-19T14:05:00Z", "status": "FRESH", "source_key": "deps-dev"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000703",
+      "kind": "PackageVersion", "name": "request 2.88.2", "domain": "TECHNOLOGY",
+      "priority": {"value": 88, "confidence": 0.87, "confidence_label": "HIGH", "method_version": "priority-v1"},
+      "viability": {"value": 22, "confidence": 0.71, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
+      "summary": "Deprecated by maintainer; 0 releases in 38 months. Replace with native fetch.",
+      "freshness": {"observed_at": "2026-08-10T08:00:00Z", "status": "STALE", "source_key": "deps-dev"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000704",
+      "kind": "Runtime", "name": "Node 18", "domain": "TECHNOLOGY",
+      "priority": {"value": 64, "confidence": 0.83, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
+      "viability": {"value": 48, "confidence": 0.79, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
+      "summary": "Approaching end of active support; plan an upgrade path.",
+      "freshness": {"observed_at": "2026-08-19T12:00:00Z", "status": "FRESH", "source_key": "deps-dev"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000705",
+      "kind": "OSSProject", "name": "express", "domain": "OSS",
+      "priority": {"value": 60, "confidence": 0.82, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
+      "viability": {"value": 75, "confidence": 0.85, "confidence_label": "HIGH", "method_version": "viability-v1"},
+      "summary": "Healthy, actively maintained web framework.",
+      "freshness": {"observed_at": "2026-08-19T11:20:00Z", "status": "FRESH", "source_key": "deps-dev"}
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000706",
+      "kind": "OSSProject", "name": "lodash", "domain": "OSS",
+      "priority": {"value": 55, "confidence": 0.58, "confidence_label": "LOW", "method_version": "priority-v1"},
+      "viability": {"value": 61, "confidence": 0.6, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
+      "summary": "Common utility library; many usages replaceable by native JS.",
+      "freshness": {"observed_at": "2026-08-05T10:00:00Z", "status": "UNKNOWN", "source_key": "deps-dev"}
+    }
+  ],
+  "coverage": {"repositories_total": 12, "repositories_scanned": 9, "facts_with_evidence_ratio": 0.94},
+  "page_info": {"has_next_page": false, "next_cursor": null}
+}

@@ -1,0 +1,104 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3) var(--sg-space-4);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sg-space-3);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.grow {
+  flex: 1;
+  min-inline-size: 160px;
+}
+.label {
+  font-size: var(--sg-type-small-size);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sg-text-muted);
+}
+.select,
+.input {
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+}
+.select:focus-visible,
+.input:focus-visible {
+  border-color: var(--sg-color-domain-enterprise-500);
+  outline: none;
+}
+.input {
+  inline-size: 100%;
+}
+.dir {
+  inline-size: 38px;
+  block-size: 38px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-base);
+  color: var(--sg-text-secondary);
+  font-size: 16px;
+}
+.dir:hover {
+  background: var(--sg-surface-sunken);
+}
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-3);
+  margin-inline-start: auto;
+}
+.count {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+  white-space: nowrap;
+}
+.clear {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-color-domain-enterprise-600);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.clear:hover {
+  color: var(--sg-color-domain-enterprise-500);
+}
+
+@media (max-width: 768px) {
+  .summary {
+    margin-inline-start: 0;
+    inline-size: 100%;
+    justify-content: space-between;
+  }
+  /* Search takes its own line so the selects stay readable. */
+  .grow {
+    flex-basis: 100%;
+    order: -1;
+  }
+  .field {
+    flex: 1;
+    min-inline-size: 96px;
+  }
+  .select {
+    inline-size: 100%;
+  }
+}
