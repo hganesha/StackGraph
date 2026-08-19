@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify
 
 backend-up:
 	docker compose up --build -d database api
@@ -11,6 +11,9 @@ backend-logs:
 
 backend-test:
 	docker compose run --rm --no-deps api python -m pytest
+
+backend-integration-test:
+	docker compose run --rm -e STACKGRAPH_TEST_DATABASE_URL=postgresql://stackgraph_app:stackgraph_app@database:5432/stackgraph api python -m pytest -q tests/test_database_integration.py
 
 backend-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/smoke.sql'

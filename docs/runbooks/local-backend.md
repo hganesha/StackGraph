@@ -12,14 +12,30 @@ make backend-up
 
 The API is available at `http://localhost:8080`, interactive API documentation at `http://localhost:8080/docs`, and PostgreSQL at `localhost:5432` by default. The host API port is intentionally configurable through `STACKGRAPH_API_PORT`; the container always listens on port 8000.
 
+The V0 API read models are available both at their contract paths and under the versioned `/api/v1` prefix:
+
+- `GET /estate/summary`
+- `GET /applications/{id}`
+- `GET /technologies/{id}`
+- `GET /modernization`
+- `POST /ask`
+- `GET /graph/neighborhood`
+- `GET /facts/{id}/evidence`
+- `POST /identity-assertions/{id}/review`
+
+Tenant-scoped requests use `X-StackGraph-Tenant-ID`. Identity reviews also accept `X-StackGraph-Actor` for the audit record. These headers are the local-development boundary; production authentication must supply trusted tenant and actor claims rather than forwarding arbitrary client headers.
+
 ## Verify
 
 ```shell
 make backend-test
+make backend-integration-test
 make backend-verify
 curl --fail http://localhost:8080/health/live
 curl --fail http://localhost:8080/health/ready
 ```
+
+The integration suite queries the running database, exercises the HTTP read models, and verifies an optimistic, audited identity review. Its temporary tenant data is removed after the test.
 
 ## Seed the curated framework catalog
 

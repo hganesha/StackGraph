@@ -38,6 +38,7 @@ services:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_APP_USER:-stackgraph_app}:${STACKGRAPH_DB_APP_PASSWORD:-stackgraph_app}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       STACKGRAPH_DB_POOL_MIN_SIZE: ${STACKGRAPH_DB_POOL_MIN_SIZE:-1}
       STACKGRAPH_DB_POOL_MAX_SIZE: ${STACKGRAPH_DB_POOL_MAX_SIZE:-5}
+      STACKGRAPH_CORS_ALLOWED_ORIGINS: ${STACKGRAPH_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     command:
       - uvicorn
       - app.main:app
