@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.auth import Authenticator
 from app.config import Settings, get_settings
 from app.database import Database, DatabaseReadiness
 from app.errors import APIError
@@ -49,18 +50,20 @@ def create_app(
         title="StackGraph API",
         version="1.0.0",
         description="Evidence-backed software estate intelligence API.",
+        servers=[{"url": "/api/v1"}],
         lifespan=lifespan,
     )
     application.state.settings = app_settings
     application.state.database = app_database
     application.state.read_models = read_models or ReadModelStore(app_database)  # type: ignore[arg-type]
+    application.state.authenticator = Authenticator(app_settings)
 
     application.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.allowed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Request-ID", "X-StackGraph-Tenant-ID", "X-StackGraph-Actor"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
     @application.middleware("http")

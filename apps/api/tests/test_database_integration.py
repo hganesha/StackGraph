@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 
 import pytest
 import psycopg
@@ -10,6 +11,18 @@ from app.database import Database
 from app.models import AskRequest
 from app.read_models import ReadModelStore
 from app.main import create_app
+from tests.contract_support import ContractValidator
+from tests.golden_billing import (
+    APPLICATION_ID,
+    CAPABILITY_ID,
+    DEPENDENCY_FACT_ID,
+    OSS_PROJECT_ID,
+    PACKAGE_ID,
+    REPOSITORY_ID,
+    TENANT_ID,
+    install_golden_billing,
+    remove_golden_billing,
+)
 
 
 pytestmark = pytest.mark.skipif(
@@ -127,7 +140,8 @@ def test_http_api_queries_seeded_database() -> None:
     summary, technology, graph, evidence, ask = asyncio.run(query_api())
 
     assert summary.status_code == 200
-    assert summary.json()["counts"]["technologies"] == 192
+    # The curated catalog can grow independently while preserving the seeded baseline.
+    assert summary.json()["counts"]["technologies"] >= 192
     assert technology.status_code == 200
     assert graph.status_code == 200
     assert graph.json()["truncated"] is True
@@ -181,7 +195,12 @@ def test_identity_review_is_atomic_and_audited() -> None:
 
     try:
         async def review_api():
-            app = create_app(settings=Settings(environment="test", database_url=database_url))
+            app = create_app(settings=Settings(
+                environment="test",
+                database_url=database_url,
+                default_tenant_id=tenant_id,
+                development_actor_key="integration-test",
+            ))
             async with app.router.lifespan_context(app):
                 async with AsyncClient(
                     transport=ASGITransport(app=app, raise_app_exceptions=False),
@@ -189,12 +208,10 @@ def test_identity_review_is_atomic_and_audited() -> None:
                 ) as client:
                     response = await client.post(
                         f"/identity-assertions/{assertion_id}/review",
-                        headers={"X-StackGraph-Tenant-ID": tenant_id, "X-StackGraph-Actor": "integration-test"},
                         json={"decision": "CONFIRM", "rationale": "Verified test identity.", "expected_version": 1},
                     )
                     conflict = await client.post(
                         f"/identity-assertions/{assertion_id}/review",
-                        headers={"X-StackGraph-Tenant-ID": tenant_id, "X-StackGraph-Actor": "integration-test"},
                         json={"decision": "REJECT", "rationale": "Stale review.", "expected_version": 1},
                     )
                     return response, conflict
@@ -220,3 +237,99 @@ def test_identity_review_is_atomic_and_audited() -> None:
             connection.execute("DELETE FROM identity_assertion WHERE id=%s", (assertion_id,))
             connection.execute("DELETE FROM entity WHERE id IN (%s,%s)", (left_id, right_id))
             connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
+
+
+def test_golden_billing_vertical_slice() -> None:
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    install_golden_billing(database_url)
+
+    async def query_api():
+        app = create_app(settings=Settings(
+            environment="test",
+            database_url=database_url,
+            default_tenant_id=TENANT_ID,
+        ))
+        async with app.router.lifespan_context(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app, raise_app_exceptions=False),
+                base_url="http://testserver",
+            ) as client:
+                return {
+                    "estateSummary": await client.get("/estate/summary"),
+                    "applicationDetail": await client.get(f"/applications/{APPLICATION_ID}"),
+                    "technologyDetail": await client.get(f"/technologies/{PACKAGE_ID}"),
+                    "modernizationList": await client.get("/modernization"),
+                    "graphNeighborhood": await client.get(
+                        "/graph/neighborhood",
+                        params=[
+                            ("center_id", PACKAGE_ID),
+                            ("depth", "2"),
+                            ("predicate", "DEPENDS_ON"),
+                            ("predicate", "IMPLEMENTED_BY"),
+                            ("highlight_to", APPLICATION_ID),
+                        ],
+                    ),
+                    "evidenceDetail": await client.get(f"/facts/{DEPENDENCY_FACT_ID}/evidence"),
+                    "unsupportedAsk": await client.post(
+                        "/ask", json={"question": "Which Tier-1 applications use unsupported runtimes?"},
+                    ),
+                    "viabilityAsk": await client.post(
+                        "/ask", json={"question": "Why is Billing's viability score low?"},
+                    ),
+                    "dependencyAsk": await client.post(
+                        "/ask", json={"question": "What does Billing API depend on?"},
+                    ),
+                    "indirectAsk": await client.post(
+                        "/ask",
+                        json={
+                            "question": "Show all applications indirectly dependent on this package",
+                            "context_entity_ids": [PACKAGE_ID],
+                        },
+                    ),
+                }
+
+    try:
+        responses = asyncio.run(query_api())
+        for name, response in responses.items():
+            assert response.status_code == 200, f"{name}: {response.text}"
+
+        contract = ContractValidator(Path("/contracts/v1"))
+        for definition in (
+            "estateSummary", "applicationDetail", "technologyDetail",
+            "modernizationList", "graphNeighborhood", "evidenceDetail",
+        ):
+            contract.validate_read_model(definition, responses[definition].json())
+        for name in ("unsupportedAsk", "viabilityAsk", "dependencyAsk", "indirectAsk"):
+            contract.validate_read_model("askResponse", responses[name].json())
+
+        summary = responses["estateSummary"].json()
+        assert summary["counts"]["applications"] == 1
+        assert summary["counts"]["repositories"] == 1
+        assert summary["counts"]["services"] == 1
+        # Tenant estates intentionally inherit the global curated technology catalog.
+        assert summary["counts"]["technologies"] >= 2
+        assert summary["ranked_items"][0]["name"] == "Billing API"
+        assert summary["ranked_items"][0]["priority"]["confidence_label"] == "HIGH"
+
+        application = responses["applicationDetail"].json()
+        assert {item["id"] for item in application["business_context"]} == {CAPABILITY_ID}
+        assert {item["id"] for item in application["repositories"]} == {REPOSITORY_ID}
+        assert PACKAGE_ID in {item["id"] for item in application["technologies"]}
+
+        technology = responses["technologyDetail"].json()
+        assert technology["internal_usage"]["repository_count"] == 1
+        assert technology["internal_usage"]["application_count"] == 1
+        assert {item["id"] for item in technology["projects"]} == {OSS_PROJECT_ID}
+
+        graph = responses["graphNeighborhood"].json()
+        assert graph["highlighted_path"] == [PACKAGE_ID, REPOSITORY_ID, APPLICATION_ID]
+        assert {edge["predicate"] for edge in graph["edges"]} <= {"DEPENDS_ON", "IMPLEMENTED_BY"}
+
+        assert responses["unsupportedAsk"].json()["rows"][0]["application"] == "Billing API"
+        assert responses["viabilityAsk"].json()["citations"]
+        assert responses["dependencyAsk"].json()["text"] == "Billing API directly depends on axios 1.7.9."
+        assert responses["dependencyAsk"].json()["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
+        assert responses["indirectAsk"].json()["result_kind"] == "GRAPH"
+        assert responses["indirectAsk"].json()["graph_highlight"]["highlighted_path"]
+    finally:
+        remove_golden_billing(database_url)
