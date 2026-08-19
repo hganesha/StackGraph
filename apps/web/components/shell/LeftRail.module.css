@@ -45,6 +45,27 @@
 .label {
   font-size: var(--sg-type-body-size);
 }
+.compact {
+  inline-size: 64px;
+  padding-inline: var(--sg-space-2);
+}
+.compact .item {
+  justify-content: center;
+  padding-inline: var(--sg-space-2);
+}
+.compact .label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.compact .icon {
+  inline-size: 20px;
+}
 .divider {
   block-size: 1px;
   background: var(--sg-surface-border);
@@ -67,8 +88,24 @@
     transition: transform var(--sg-motion-panel);
     box-shadow: var(--sg-elevation-raised);
   }
+  .compact {
+    inline-size: 264px;
+    padding: var(--sg-space-3);
+  }
+  .compact .item {
+    justify-content: flex-start;
+    padding: var(--sg-space-2) var(--sg-space-3);
+  }
+  .compact .label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
   .open {
     transform: translateX(0);
   }
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { stackGraphClient, type AskResponse } from "@stackgraph/shared";
 import { CitationChip } from "@stackgraph/design-system";
@@ -14,52 +14,130 @@ interface Turn {
   error?: boolean;
 }
 
+interface BusinessMapContext {
+  title: string;
+  template: string;
+  viewMode?: "value-chain" | "organization";
+  stages: Array<{
+    name: string;
+    capabilities: Array<{ name: string; maturity: number }>;
+  }>;
+  organizationUnits?: Array<{
+    name: string;
+    functions: string[];
+  }>;
+}
+
+interface AskRequest {
+  id: number;
+  requestQuestion: string;
+}
+
 const SUGGESTIONS = [
   "Which Tier-1 applications use unsupported runtimes?",
   "What are our largest modernization opportunities?",
   "Show all applications that depend on axios",
 ];
 
+const MAP_SUGGESTIONS = [
+  "Where are the largest gaps in this business map?",
+  "Which mapped capabilities need the most maturity attention?",
+  "What capabilities should we consider adding next?",
+];
+
+function serializeBusinessMap(context: BusinessMapContext): string {
+  if (context.viewMode === "organization" && context.organizationUnits) {
+    const units = context.organizationUnits.map((unit) =>
+      `${unit.name}: ${unit.functions.length ? unit.functions.join(", ") : "no assigned functions"}`,
+    );
+    return `Organization map \"${context.title}\". ${units.join(" | ")}`;
+  }
+  const stages = context.stages.map((stage) => {
+    const capabilities = stage.capabilities.length
+      ? stage.capabilities.map((capability) => `${capability.name} (maturity ${capability.maturity}/5)`).join(", ")
+      : "no mapped capabilities";
+    return `${stage.name}: ${capabilities}`;
+  });
+  return `Business map \"${context.title}\" using the ${context.template} template. ${stages.join(" | ")}`;
+}
+
 export default function AskPage() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
+  const [businessMapContext, setBusinessMapContext] = useState<BusinessMapContext | null>(null);
   const openEvidence = useEvidenceStore((s) => s.open);
   const nextId = useRef(1);
   const listEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("source") !== "business-map") return;
+    try {
+      const raw = window.sessionStorage.getItem("stackgraph.ask.business-map-context");
+      if (raw) setBusinessMapContext(JSON.parse(raw) as BusinessMapContext);
+    } catch {
+      // An unavailable map snapshot should fall back to the standard Ask experience.
+    }
+  }, []);
+
   const ask = useMutation({
-    mutationFn: (question: string) => stackGraphClient.ask({ question }),
-    onSuccess: (response, question) => {
-      setTurns((t) => t.map((turn) => (turn.question === question && !turn.response ? { ...turn, response } : turn)));
+    mutationFn: (request: AskRequest) => stackGraphClient.ask({ question: request.requestQuestion }),
+    onSuccess: (response, request) => {
+      setTurns((t) => t.map((turn) => (turn.id === request.id ? { ...turn, response } : turn)));
       requestAnimationFrame(() => listEndRef.current?.scrollIntoView({ behavior: "smooth" }));
     },
-    onError: (_e, question) => {
-      setTurns((t) => t.map((turn) => (turn.question === question && !turn.response ? { ...turn, error: true } : turn)));
+    onError: (_e, request) => {
+      setTurns((t) => t.map((turn) => (turn.id === request.id ? { ...turn, error: true } : turn)));
     },
   });
 
   const submit = (question: string) => {
     const q = question.trim();
     if (!q) return;
-    setTurns((t) => [...t, { id: nextId.current++, question: q }]);
+    const id = nextId.current++;
+    setTurns((t) => [...t, { id, question: q }]);
     setInput("");
-    ask.mutate(q);
+    ask.mutate({
+      id,
+      requestQuestion: businessMapContext ? `${q}\n\nAttached business-map context:\n${serializeBusinessMap(businessMapContext)}` : q,
+    });
   };
+
+  const suggestions = businessMapContext ? MAP_SUGGESTIONS : SUGGESTIONS;
 
   return (
     <div className={styles.page}>
       <header className={styles.head}>
         <h1 className={styles.title}>Ask your estate</h1>
         <p className={styles.subtitle}>
-          Answered from your facts, text-first, always cited — never generated from model memory.
+          {businessMapContext ? "Ask across the current business map and the evidence already in your estate." : "Answered from your facts, text-first, always cited — never generated from model memory."}
         </p>
+        {businessMapContext ? (
+          <div className={styles.contextBanner}>
+            <span className="sg-mono">BIZ MAP</span>
+            <strong>{businessMapContext.title}</strong>
+            <small>
+              {businessMapContext.viewMode === "organization" && businessMapContext.organizationUnits
+                ? `${businessMapContext.organizationUnits.length} units · ${businessMapContext.organizationUnits.reduce((total, unit) => total + unit.functions.length, 0)} mapped functions`
+                : `${businessMapContext.stages.length} stages · ${businessMapContext.stages.reduce((total, stage) => total + stage.capabilities.length, 0)} mapped capabilities`}
+            </small>
+            <button
+              type="button"
+              onClick={() => {
+                window.sessionStorage.removeItem("stackgraph.ask.business-map-context");
+                setBusinessMapContext(null);
+              }}
+            >
+              Detach
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {turns.length === 0 ? (
         <div className={styles.empty}>
           <p className={styles.emptyLabel}>Try asking</p>
           <div className={styles.suggestions}>
-            {SUGGESTIONS.map((s) => (
+            {suggestions.map((s) => (
               <button key={s} type="button" className={styles.suggestion} onClick={() => submit(s)}>
                 {s}
               </button>

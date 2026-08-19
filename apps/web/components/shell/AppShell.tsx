@@ -15,6 +15,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const fullBleed = pathname.startsWith("/business-map");
 
   // Close the drawer on route change and when returning to desktop width.
   useEffect(() => setNavOpen(false), [pathname]);
@@ -44,9 +45,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <TopBar onToggleNav={() => setNavOpen((v) => !v)} navOpen={navOpen} />
       <div className={styles.body}>
-        <LeftRail open={navOpen} onNavigate={() => setNavOpen(false)} />
+        <LeftRail open={navOpen} compact={fullBleed} onNavigate={() => setNavOpen(false)} />
         {navOpen ? <button className={styles.backdrop} aria-label="Close navigation" onClick={() => setNavOpen(false)} /> : null}
-        <main className={styles.workspace} id="main" tabIndex={-1}>
+        <main className={`${styles.workspace} ${fullBleed ? styles.workspaceFullBleed : ""}`} id="main">
           {children}
         </main>
       </div>
