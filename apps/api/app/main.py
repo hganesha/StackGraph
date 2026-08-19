@@ -55,7 +55,11 @@ def create_app(
     )
     application.state.settings = app_settings
     application.state.database = app_database
-    application.state.read_models = read_models or ReadModelStore(app_database)  # type: ignore[arg-type]
+    application.state.read_models = read_models or ReadModelStore(  # type: ignore[arg-type]
+        app_database,
+        graph_read_mode=app_settings.graph_read_mode,
+        graph_discovery_limit=app_settings.graph_discovery_limit,
+    )
     application.state.authenticator = Authenticator(app_settings)
 
     application.add_middleware(

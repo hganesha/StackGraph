@@ -126,7 +126,7 @@ def test_http_api_queries_seeded_database() -> None:
                 transport=ASGITransport(app=app, raise_app_exceptions=False),
                 base_url="http://testserver",
             ) as client:
-                return (
+                responses = (
                     await client.get("/estate/summary"),
                     await client.get(f"/technologies/{technology_id}"),
                     await client.get(
@@ -136,8 +136,10 @@ def test_http_api_queries_seeded_database() -> None:
                     await client.get(f"/facts/{fact_id}/evidence"),
                     await client.post("/ask", json={"question": "How many items are in the estate?"}),
                 )
+                return responses, app.state.read_models.graph_read_metrics.age_reads
 
-    summary, technology, graph, evidence, ask = asyncio.run(query_api())
+    responses, age_reads = asyncio.run(query_api())
+    summary, technology, graph, evidence, ask = responses
 
     assert summary.status_code == 200
     # The curated catalog can grow independently while preserving the seeded baseline.
@@ -158,6 +160,59 @@ def test_http_api_queries_seeded_database() -> None:
     )
     assert evidence.status_code == 200
     assert ask.status_code == 200
+    assert age_reads >= 1
+
+
+def test_age_and_sql_neighborhoods_have_canonical_parity() -> None:
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    with psycopg.connect(database_url) as connection:
+        row = connection.execute(
+            """
+            SELECT r.source_entity_id,r.target_entity_id,r.relationship_type
+            FROM current_relationship r
+            JOIN stackgraph."Relationship" projected
+              ON trim(both '"' from ag_catalog.agtype_access_operator(
+                   VARIADIC ARRAY[projected.properties,'"fact_id"'::ag_catalog.agtype]
+                 )::text)::uuid=r.fact_assertion_id
+            WHERE r.tenant_id IS NULL
+            ORDER BY (
+              SELECT count(*) FROM current_relationship peer
+              WHERE peer.source_entity_id=r.source_entity_id
+                AND peer.relationship_type=r.relationship_type
+            ),r.fact_assertion_id
+            LIMIT 1
+            """
+        ).fetchone()
+    assert row is not None
+    center_id, highlight_to, predicate = row
+
+    async def compare_graphs():
+        settings = Settings(database_url=database_url)
+        database = Database(settings)
+        await database.open()
+        try:
+            sql_store = ReadModelStore(database, graph_read_mode="sql")
+            age_store = ReadModelStore(database, graph_read_mode="age")
+            sql_graph = await sql_store.graph_neighborhood(
+                center_id, tenant_id=None, depth=1, real_node_limit=50,
+                predicates=[predicate], highlight_to=highlight_to,
+            )
+            age_graph = await age_store.graph_neighborhood(
+                center_id, tenant_id=None, depth=1, real_node_limit=50,
+                predicates=[predicate], highlight_to=highlight_to,
+            )
+            return sql_graph, age_graph, age_store.graph_read_metrics
+        finally:
+            await database.close()
+
+    sql_graph, age_graph, metrics = asyncio.run(compare_graphs())
+
+    assert metrics.age_reads == 1
+    assert metrics.sql_reads == 0
+    assert {node.id for node in age_graph.nodes} == {node.id for node in sql_graph.nodes}
+    assert {edge.id for edge in age_graph.edges} == {edge.id for edge in sql_graph.edges}
+    assert age_graph.highlighted_path == sql_graph.highlighted_path == [center_id, highlight_to]
+    assert age_graph.truncated == sql_graph.truncated
 
 
 def test_identity_review_is_atomic_and_audited() -> None:

@@ -106,6 +106,7 @@ services:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       STACKGRAPH_GRAPH_NAME: stackgraph
       STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+      STACKGRAPH_DB_APP_USER: ${STACKGRAPH_DB_APP_USER:-stackgraph_app}
     command: ["python", "-m", "stackgraph_data.project"]
     depends_on:
       database:

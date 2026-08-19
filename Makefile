@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify
 
 backend-up:
 	docker compose up --build -d database api
@@ -17,6 +17,10 @@ backend-integration-test:
 
 backend-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/smoke.sql'
+
+backend-graph-benchmark:
+	test -n "$(GRAPH_CENTER_ID)"
+	python3 scripts/benchmark_graph_api.py "$(GRAPH_CENTER_ID)" --requests "$${GRAPH_REQUESTS:-50}" $${GRAPH_BENCHMARK_ARGS:-}
 
 database-migrate:
 	docker compose run --rm migrate
