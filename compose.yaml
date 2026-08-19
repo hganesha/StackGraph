@@ -131,6 +131,13 @@ services:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
     entrypoint: ["python", "-m", "stackgraph_data.osv_worker"]
     command: ["work"]
+  ai-prompts:
+    profiles: [tools]
+    build:
+      context: ./services/intelligence/ai-services
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    command: ["--prompts-dir", "/code/prompts"]
     depends_on:
       database:
         condition: service_healthy

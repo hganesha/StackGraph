@@ -1,4 +1,5 @@
 .PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify osv-enqueue osv-sync osv-work osv-run osv-verify
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify ai-test ai-prompts-sync
 
 backend-up:
 	docker compose up --build -d database api
@@ -66,3 +67,8 @@ osv-run:
 
 osv-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/osv-smoke.sql'
+ai-test:
+	docker compose run --rm --no-deps --entrypoint python ai-prompts -m unittest discover -s /code/tests -v
+
+ai-prompts-sync: database-migrate
+	docker compose run --rm ai-prompts
