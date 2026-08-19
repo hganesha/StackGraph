@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTheme } from "@stackgraph/design-system";
 import { config } from "@stackgraph/shared";
 import styles from "./TopBar.module.css";
 
 export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => void; navOpen?: boolean }) {
   const { choice, setChoice } = useTheme();
+  const router = useRouter();
   const cycle = () => setChoice(choice === "light" ? "dark" : choice === "dark" ? "system" : "light");
   const themeIcon = choice === "light" ? "☀" : choice === "dark" ? "☾" : "◐";
 
@@ -26,7 +28,7 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
       </div>
 
       {/* Ask your estate — the one global input, present on every screen (plan §3.1). Wired in P2. */}
-      <button className={styles.ask} type="button" aria-label="Ask your estate">
+      <button className={styles.ask} type="button" aria-label="Ask your estate" onClick={() => router.push("/ask")}>
         <span className={styles.askLead} aria-hidden="true">
           ⌕
         </span>

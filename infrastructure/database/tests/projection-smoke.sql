@@ -11,8 +11,14 @@ DECLARE
   pending_projection_count integer;
 BEGIN
   SELECT count(*) INTO relational_entity_count
-  FROM entity
-  WHERE tenant_id IS NULL;
+  FROM entity relational
+  WHERE relational.tenant_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM fact_assertion fact
+      WHERE fact.subject_entity_id = relational.id
+         OR fact.object_entity_id = relational.id
+    );
 
   SELECT count(*) INTO graph_entity_count
   FROM stackgraph."Entity";
@@ -32,6 +38,12 @@ BEGIN
          VARIADIC ARRAY[graph.properties, '"entity_id"'::ag_catalog.agtype]
        )::text) = relational.id::text
   WHERE relational.tenant_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM fact_assertion fact
+      WHERE fact.subject_entity_id = relational.id
+         OR fact.object_entity_id = relational.id
+    )
     AND graph.id IS NULL;
 
   SELECT count(*) INTO missing_relationship_count

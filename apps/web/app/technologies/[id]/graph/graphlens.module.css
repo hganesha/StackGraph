@@ -131,6 +131,11 @@
   color: var(--sg-text-muted);
   font-style: italic;
 }
+.bridgeSlot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+}
 
 @media (max-width: 768px) {
   .stage {

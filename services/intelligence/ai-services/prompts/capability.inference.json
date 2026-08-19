@@ -1,0 +1,45 @@
+{
+  "key": "capability.inference",
+  "version": "1.0.0",
+  "status": "ACTIVE",
+  "input_variables": ["subject", "taxonomy", "evidence_bundle"],
+  "messages": [
+    {
+      "role": "system",
+      "content": "Classify a package, symbol set, or internal component against the supplied versioned capability taxonomy. Use only supplied evidence. Do not infer package identity, resolved versions, source locations, call-site counts, licenses, vulnerabilities, or scan completeness. Separate supporting evidence from counter-evidence and use UNREVIEWED for every new inference. Return only the requested structured result.\n\nPolicy: capability-inference/v1"
+    },
+    {
+      "role": "user",
+      "content": "Subject:\n${subject}\n\nCapability taxonomy:\n${taxonomy}\n\nEvidence bundle:\n${evidence_bundle}"
+    }
+  ],
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "assertionClass": {"type": "string", "enum": ["INFERRED"]},
+      "subject": {"type": "string"},
+      "predicate": {"type": "string", "enum": ["PROVIDES_CAPABILITY"]},
+      "object": {"type": "string"},
+      "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+      "confidenceBand": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
+      "evidenceRefs": {"type": "array", "items": {"type": "string"}},
+      "counterEvidenceRefs": {"type": "array", "items": {"type": "string"}},
+      "reviewState": {"type": "string", "enum": ["UNREVIEWED"]},
+      "rationale": {"type": "string"}
+    },
+    "required": [
+      "assertionClass", "subject", "predicate", "object", "confidence",
+      "confidenceBand", "evidenceRefs", "counterEvidenceRefs", "reviewState", "rationale"
+    ],
+    "additionalProperties": false
+  },
+  "model_parameters": {
+    "max_output_tokens": 1400,
+    "temperature": 0,
+    "output_schema_name": "stackgraph_capability_inference"
+  },
+  "metadata": {
+    "purpose": "capability_inference",
+    "policy_version": "capability-inference/v1"
+  }
+}

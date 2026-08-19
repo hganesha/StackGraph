@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { StatusStrip } from "@stackgraph/design-system";
 import { useEstateSummary } from "@/lib/queries";
 import { TopBar } from "./TopBar";
@@ -14,9 +14,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data } = useEstateSummary();
   const [navOpen, setNavOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
 
   // Close the drawer on route change and when returning to desktop width.
   useEffect(() => setNavOpen(false), [pathname]);
+
+  // ⌘K / Ctrl-K opens Ask your estate from anywhere (plan §3.1, §4.3).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        router.push("/ask");
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [router]);
   useEffect(() => {
     if (!navOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setNavOpen(false);

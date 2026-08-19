@@ -25,7 +25,9 @@ import applicationDetail from "../fixtures/application-detail.json";
 import technologyDetail from "../fixtures/technology-detail.json";
 import modernizationList from "../fixtures/modernization-list.json";
 import askResponse from "../fixtures/ask-response.json";
-import graphNeighborhood from "../fixtures/graph-neighborhood.json";
+// UI-demo neighborhood (richer than the golden fixture) so the uncertain-bridge and
+// aggregate-cluster UI can be exercised in fixture mode. See the file's _comment.
+import graphNeighborhood from "../fixtures/graph-neighborhood.demo.json";
 import evidenceDetail from "../fixtures/evidence-detail.json";
 import identityReview from "../fixtures/identity-review-result.json";
 

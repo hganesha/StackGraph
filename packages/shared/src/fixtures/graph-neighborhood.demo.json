@@ -1,0 +1,46 @@
+{
+  "_comment": "UI-DEMO ONLY — not a contract fixture. Schema-valid graphNeighborhood used in fixture mode to exercise the uncertain-bridge and aggregate-cluster UI. The frozen golden fixture is contracts/v1/fixtures/graph-neighborhood.json.",
+  "contract_version": "1.0.0",
+  "center_id": "00000000-0000-4000-8000-000000000204",
+  "nodes": [
+    {"id": "00000000-0000-4000-8000-000000000203", "namespace": "ENTERPRISE", "type": "Repository", "key": "github:repo:123", "label": "billing-svc", "aggregate": false},
+    {"id": "00000000-0000-4000-8000-000000000204", "namespace": "TECHNOLOGY", "type": "PackageVersion", "key": "pkg:npm/axios@1.7.9", "label": "axios 1.7.9", "aggregate": false},
+    {"id": "00000000-0000-4000-8000-000000000207", "namespace": "OSS", "type": "Capability", "key": "cap:http-client", "label": "HTTP Client", "aggregate": false, "confidence": 0.71},
+    {"id": "00000000-0000-4000-8000-000000000208", "namespace": "ENTERPRISE", "type": "Repository", "key": "aggregate:repos-using-axios", "label": "repositories", "aggregate": true, "member_count": 212}
+  ],
+  "edges": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "source": "00000000-0000-4000-8000-000000000203",
+      "target": "00000000-0000-4000-8000-000000000204",
+      "predicate": "DEPENDS_ON",
+      "confidence": 1,
+      "assertion_class": "DECLARED",
+      "review_state": "NOT_APPLICABLE",
+      "citation_fact_ids": ["00000000-0000-4000-8000-000000000301"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000402",
+      "source": "00000000-0000-4000-8000-000000000204",
+      "target": "00000000-0000-4000-8000-000000000207",
+      "predicate": "SAME_AS",
+      "confidence": 0.71,
+      "assertion_class": "INFERRED",
+      "review_state": "POSSIBLE",
+      "citation_fact_ids": ["00000000-0000-4000-8000-000000000301"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000403",
+      "source": "00000000-0000-4000-8000-000000000208",
+      "target": "00000000-0000-4000-8000-000000000204",
+      "predicate": "DEPENDS_ON",
+      "confidence": 1,
+      "assertion_class": "OBSERVED",
+      "review_state": "NOT_APPLICABLE",
+      "citation_fact_ids": ["00000000-0000-4000-8000-000000000301"]
+    }
+  ],
+  "highlighted_path": ["00000000-0000-4000-8000-000000000204", "00000000-0000-4000-8000-000000000207"],
+  "truncated": true,
+  "truncation_reason": "bounded to the one-hop neighborhood; further nodes are clustered"
+}
