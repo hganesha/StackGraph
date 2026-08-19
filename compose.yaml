@@ -1,0 +1,109 @@
+name: stackgraph
+
+services:
+  database:
+    image: apache/age:release_PG16_1.6.0
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${STACKGRAPH_DB_NAME:-stackgraph}
+      POSTGRES_USER: ${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}
+      POSTGRES_PASSWORD: ${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}
+      STACKGRAPH_DB_APP_USER: ${STACKGRAPH_DB_APP_USER:-stackgraph_app}
+      STACKGRAPH_DB_APP_PASSWORD: ${STACKGRAPH_DB_APP_PASSWORD:-stackgraph_app}
+    ports:
+      - "127.0.0.1:${STACKGRAPH_DB_PORT:-5432}:5432"
+    volumes:
+      - stackgraph_postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/database/init/005-create-app-role.sh:/docker-entrypoint-initdb.d/005-create-app-role.sh:ro
+      - ./stackgraph-foundation/schema.sql:/docker-entrypoint-initdb.d/010-schema.sql:ro
+      - ./infrastructure/database/init/020-create-graph.sql:/docker-entrypoint-initdb.d/020-create-graph.sql:ro
+      - ./infrastructure/database/init/030-grant-app-role.sh:/docker-entrypoint-initdb.d/030-grant-app-role.sh:ro
+      - ./infrastructure/database/tests:/stackgraph/tests:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: ./apps/api
+      target: development
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_ENVIRONMENT: development
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_APP_USER:-stackgraph_app}:${STACKGRAPH_DB_APP_PASSWORD:-stackgraph_app}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_DB_POOL_MIN_SIZE: ${STACKGRAPH_DB_POOL_MIN_SIZE:-1}
+      STACKGRAPH_DB_POOL_MAX_SIZE: ${STACKGRAPH_DB_POOL_MAX_SIZE:-5}
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+    ports:
+      - "127.0.0.1:${STACKGRAPH_API_PORT:-8080}:8000"
+    volumes:
+      - ./apps/api/app:/code/app:ro
+      - ./apps/api/tests:/code/tests:ro
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=2)
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  seed:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_SEED_DIR: /seed
+    volumes:
+      - ./stackgraph-foundation/seed:/seed:ro
+    depends_on:
+      database:
+        condition: service_healthy
+
+  migrate:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_MIGRATIONS_DIR: /migrations
+    command: ["python", "-m", "stackgraph_data.migrate"]
+    volumes:
+      - ./infrastructure/database/migrations:/migrations:ro
+    depends_on:
+      database:
+        condition: service_healthy
+
+  projection:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_GRAPH_NAME: stackgraph
+      STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+    command: ["python", "-m", "stackgraph_data.project"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+volumes:
+  stackgraph_postgres_data:

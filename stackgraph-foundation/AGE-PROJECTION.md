@@ -25,6 +25,18 @@ V1 graph nodes:
 
 Do not create file/function/class/symbol nodes in V1. Those remain evidence locators.
 
+## Physical V1 mapping
+
+The V1 projection deliberately uses stable generic labels rather than creating a physical AGE label for every ontology type:
+
+- `Entity` vertices are keyed by the canonical PostgreSQL entity UUID and carry namespace, entity type, canonical key, name, temporal fields, tenant scope, and serialized source properties.
+- `Relationship` edges are keyed by the fact `logical_key` and carry the current fact UUID, predicate as `relationship_type`, confidence, assertion class, temporal fields, source snapshot, and evidence fact IDs.
+- `HAS_PROPERTY` facts refresh their subject vertex but do not create graph edges.
+- A complete snapshot emits `CLOSE` outbox entries for facts it closes. The projection worker removes the corresponding edge; it does not delete the canonical entity vertex.
+- Projection jobs claim `projection_outbox` rows with leases and `FOR UPDATE SKIP LOCKED`. AGE writes and outbox acknowledgement commit in the same PostgreSQL transaction.
+
+The generic mapping keeps graph traversal independent of Cypher label interpolation and lets the ontology evolve without graph DDL for each new entity or predicate. API read models still expose the canonical ontology types and predicates, not the generic physical labels.
+
 ## Temporal model
 
 Every projected edge should carry:
