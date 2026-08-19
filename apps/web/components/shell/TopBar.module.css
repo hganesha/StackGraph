@@ -116,7 +116,7 @@
   justify-content: center;
   border-radius: var(--sg-radius-pill);
   background: var(--sg-color-domain-enterprise-500);
-  color: #fff;
+  color: var(--sg-on-accent);
   font-family: var(--sg-font-evidence);
   font-size: var(--sg-type-small-size);
   flex-shrink: 0;

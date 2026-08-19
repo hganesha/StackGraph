@@ -39,11 +39,14 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.shell}>
+      <a href="#main" className={styles.skipLink}>
+        Skip to content
+      </a>
       <TopBar onToggleNav={() => setNavOpen((v) => !v)} navOpen={navOpen} />
       <div className={styles.body}>
         <LeftRail open={navOpen} onNavigate={() => setNavOpen(false)} />
         {navOpen ? <button className={styles.backdrop} aria-label="Close navigation" onClick={() => setNavOpen(false)} /> : null}
-        <main className={styles.workspace} id="main">
+        <main className={styles.workspace} id="main" tabIndex={-1}>
           {children}
         </main>
       </div>

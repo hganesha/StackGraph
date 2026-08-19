@@ -4,6 +4,26 @@
   block-size: 100dvh;
   overflow: hidden;
 }
+/* Skip link — first focusable element; visible only when focused (plan §8.1). */
+.skipLink {
+  position: absolute;
+  inset-block-start: var(--sg-space-2);
+  inset-inline-start: var(--sg-space-2);
+  z-index: 100;
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-enterprise-500);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-text-primary);
+  transform: translateY(-200%);
+  transition: transform var(--sg-motion-hover);
+}
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+.workspace:focus-visible {
+  outline: none;
+}
 .body {
   display: flex;
   flex: 1;

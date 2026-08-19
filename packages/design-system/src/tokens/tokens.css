@@ -96,7 +96,7 @@
   --sg-surface-border-strong: #C4C1B7;
   --sg-text-primary: #1A1B1E;
   --sg-text-secondary: #4E4D49;
-  --sg-text-muted: #807E76;
+  --sg-text-muted: #6E6D62;
 }
 
 /* Explicit dark selection wins in both directions. */
@@ -108,7 +108,7 @@
   --sg-surface-border-strong: #3D4048;
   --sg-text-primary: #E8E7E2;
   --sg-text-secondary: #B4B2AA;
-  --sg-text-muted: #7B7A74;
+  --sg-text-muted: #8B8A82;
 }
 
 /* System dark, unless the user forced light. */
@@ -121,6 +121,6 @@
     --sg-surface-border-strong: #3D4048;
     --sg-text-primary: #E8E7E2;
     --sg-text-secondary: #B4B2AA;
-    --sg-text-muted: #7B7A74;
+    --sg-text-muted: #8B8A82;
   }
 }
