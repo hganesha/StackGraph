@@ -27,6 +27,8 @@ In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAU
 
 Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_confidence`, and an optional `highlight_to` entity ID in addition to the frozen v1 center, depth, and limit parameters. Traversal and response nodes remain bounded to depth 2 and 50 nodes.
 
+`STACKGRAPH_GRAPH_READ_MODE=auto` uses the tenant-filtered AGE projection when its fact outbox is current. Pending projection work, missing projection data, a parity mismatch, permission failure, or AGE unavailability automatically falls back to authoritative SQL and emits a structured fallback log. Set the mode to `sql` to disable AGE reads while diagnosing a projection issue; `age` forces an AGE attempt but still preserves the SQL safety fallback.
+
 ## Verify
 
 ```shell
@@ -36,6 +38,15 @@ make backend-verify
 curl --fail http://localhost:8080/health/live
 curl --fail http://localhost:8080/health/ready
 ```
+
+Benchmark a representative bounded neighborhood after seeding and projection:
+
+```shell
+GRAPH_CENTER_ID=<entity-uuid> GRAPH_REQUESTS=50 \
+  GRAPH_BENCHMARK_ARGS="--max-p95-ms 1000" make backend-graph-benchmark
+```
+
+The benchmark reports min/mean/p50/p95/max latency and fails if the response exceeds the 50-node contract or the optional p95 gate.
 
 The integration suite queries the running database, exercises the HTTP read models, verifies an optimistic audited identity review, and installs a temporary evidence-backed Billing estate that covers every public read endpoint plus deterministic Ask templates. Temporary tenant data is removed after each test.
 

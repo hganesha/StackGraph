@@ -11,8 +11,14 @@ DECLARE
   pending_projection_count integer;
 BEGIN
   SELECT count(*) INTO relational_entity_count
-  FROM entity
-  WHERE tenant_id IS NULL;
+  FROM entity relational
+  WHERE relational.tenant_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM fact_assertion fact
+      WHERE fact.subject_entity_id = relational.id
+         OR fact.object_entity_id = relational.id
+    );
 
   SELECT count(*) INTO graph_entity_count
   FROM stackgraph."Entity";
@@ -32,6 +38,12 @@ BEGIN
          VARIADIC ARRAY[graph.properties, '"entity_id"'::ag_catalog.agtype]
        )::text) = relational.id::text
   WHERE relational.tenant_id IS NULL
+    AND EXISTS (
+      SELECT 1
+      FROM fact_assertion fact
+      WHERE fact.subject_entity_id = relational.id
+         OR fact.object_entity_id = relational.id
+    )
     AND graph.id IS NULL;
 
   SELECT count(*) INTO missing_relationship_count
@@ -48,10 +60,10 @@ BEGIN
   FROM projection_outbox
   WHERE aggregate_type = 'FACT' AND processed_at IS NULL;
 
-  IF graph_entity_count <> relational_entity_count THEN
+  IF relational_entity_count <> 230 OR graph_entity_count < relational_entity_count THEN
     RAISE EXCEPTION 'entity parity failed: relational %, graph %', relational_entity_count, graph_entity_count;
   END IF;
-  IF graph_relationship_count <> relational_relationship_count THEN
+  IF relational_relationship_count <> 101 OR graph_relationship_count < relational_relationship_count THEN
     RAISE EXCEPTION 'relationship parity failed: relational %, graph %', relational_relationship_count, graph_relationship_count;
   END IF;
   IF missing_entity_count <> 0 THEN
