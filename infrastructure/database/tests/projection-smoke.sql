@@ -12,8 +12,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO relational_entity_count
   FROM entity
-  WHERE tenant_id IS NULL
-    AND properties->>'seed_id' = 'framework-landscape-2026';
+  WHERE tenant_id IS NULL;
 
   SELECT count(*) INTO graph_entity_count
   FROM stackgraph."Entity";
@@ -21,8 +20,7 @@ BEGIN
   SELECT count(*) INTO relational_relationship_count
   FROM current_relationship relationship
   JOIN fact_assertion fact ON fact.id = relationship.fact_assertion_id
-  WHERE fact.tenant_id IS NULL
-    AND fact.properties->>'seed_id' = 'framework-landscape-2026';
+  WHERE fact.tenant_id IS NULL;
 
   SELECT count(*) INTO graph_relationship_count
   FROM stackgraph."Relationship";
@@ -34,7 +32,6 @@ BEGIN
          VARIADIC ARRAY[graph.properties, '"entity_id"'::ag_catalog.agtype]
        )::text) = relational.id::text
   WHERE relational.tenant_id IS NULL
-    AND relational.properties->>'seed_id' = 'framework-landscape-2026'
     AND graph.id IS NULL;
 
   SELECT count(*) INTO missing_relationship_count
@@ -45,7 +42,6 @@ BEGIN
          VARIADIC ARRAY[graph.properties, '"fact_id"'::ag_catalog.agtype]
        )::text) = relational.fact_assertion_id::text
   WHERE fact.tenant_id IS NULL
-    AND fact.properties->>'seed_id' = 'framework-landscape-2026'
     AND graph.id IS NULL;
 
   SELECT count(*) INTO pending_projection_count

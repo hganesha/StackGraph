@@ -1,0 +1,23 @@
+{
+  "nodes": [
+    {
+      "versionKey": {"system": "NPM", "name": "demo-root", "version": "1.0.0"},
+      "relation": "SELF",
+      "errors": []
+    },
+    {
+      "versionKey": {"system": "NPM", "name": "alpha", "version": "2.1.0"},
+      "relation": "DIRECT",
+      "errors": []
+    },
+    {
+      "versionKey": {"system": "NPM", "name": "bravo", "version": "3.2.1"},
+      "relation": "INDIRECT",
+      "errors": []
+    }
+  ],
+  "edges": [
+    {"fromNode": 0, "toNode": 1, "requirement": "^2.0.0"},
+    {"fromNode": 1, "toNode": 2, "requirement": "~3.2.0"}
+  ]
+}
