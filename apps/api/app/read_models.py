@@ -42,12 +42,25 @@ CONTRACT_VERSION = "1.0.0"
 MAX_GRAPH_NODES = 50
 
 _GRAPH_NEIGHBORHOOD_CTE = """
-WITH RECURSIVE walk(id,depth) AS (
+WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
+  VALUES (%s::text[],%s::text[],%s::numeric)
+), walk(id,depth) AS (
   SELECT %s::uuid,0
   UNION
-  SELECT CASE WHEN r.source_entity_id=w.id THEN r.target_entity_id ELSE r.source_entity_id END,w.depth+1
-  FROM walk w JOIN current_relationship r ON r.source_entity_id=w.id OR r.target_entity_id=w.id
+  SELECT next_entity.id,w.depth+1
+  FROM walk w
+  CROSS JOIN filters
+  JOIN current_relationship r ON r.source_entity_id=w.id OR r.target_entity_id=w.id
+  JOIN entity next_entity ON next_entity.id=CASE
+    WHEN r.source_entity_id=w.id THEN r.target_entity_id ELSE r.source_entity_id END
+  LEFT JOIN identity_assertion ia ON r.relationship_type='SAME_AS'
+    AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
+      OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
   WHERE w.depth<%s
+    AND (filters.predicates IS NULL OR r.relationship_type=ANY(filters.predicates))
+    AND (filters.namespaces IS NULL OR next_entity.namespace=ANY(filters.namespaces))
+    AND r.confidence>=filters.min_confidence
+    AND coalesce(ia.review_state,'NOT_APPLICABLE')<>'REJECTED'
 ), closest AS (
   SELECT id,min(depth) depth FROM walk GROUP BY id
 ), ranked AS (
@@ -64,9 +77,9 @@ def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
 
 def _confidence_label(value: Decimal | float) -> str:
     confidence = float(value)
-    if confidence >= 0.8:
+    if confidence >= 0.85:
         return "HIGH"
-    if confidence >= 0.5:
+    if confidence >= 0.6:
         return "MEDIUM"
     return "LOW"
 
@@ -95,22 +108,25 @@ def _entity(row: dict[str, Any]) -> EntitySummary:
     )
 
 
-def _encode_cursor(offset: int) -> str:
-    payload = json.dumps({"offset": offset}, separators=(",", ":")).encode()
+def _encode_cursor(kind: str, **values: Any) -> str:
+    payload = json.dumps(
+        {"v": 1, "kind": kind, **values},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
     return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def _decode_cursor(cursor: str | None) -> int:
+def _decode_cursor(cursor: str | None, kind: str) -> dict[str, Any] | None:
     if cursor is None:
-        return 0
+        return None
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded).decode())
-        offset = int(payload["offset"])
-        if offset < 0:
+        if not isinstance(payload, dict) or payload.get("v") != 1 or payload.get("kind") != kind:
             raise ValueError
-        return offset
-    except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+        return payload
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError) as error:
         raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
 
 
@@ -132,7 +148,13 @@ class ReadModelStore:
         cursor: str | None,
         limit: int,
     ) -> EstateSummary:
-        offset = _decode_cursor(cursor)
+        cursor_data = _decode_cursor(cursor, "estate")
+        try:
+            cursor_score = Decimal(cursor_data["score"]) if cursor_data else None
+            cursor_name = str(cursor_data["name"]) if cursor_data else None
+            cursor_id = UUID(cursor_data["id"]) if cursor_data else None
+        except (KeyError, TypeError, ValueError) as error:
+            raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
         counts_row = await self.database.fetch_one(
             """
             SELECT
@@ -194,14 +216,22 @@ class ReadModelStore:
               ORDER BY a.valid_from DESC LIMIT 1
             ) v ON true
             WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+              AND (
+                %s::numeric IS NULL
+                OR coalesce(p.score,0)<%s::numeric
+                OR (coalesce(p.score,0)=%s::numeric AND (e.name,e.id)>(%s::text,%s::uuid))
+              )
             ORDER BY coalesce(p.score,0) DESC,e.name,e.id
-            OFFSET %s LIMIT %s
+            LIMIT %s
             """,
-            (offset, limit + 1),
+            (cursor_score, cursor_score, cursor_score, cursor_name, cursor_id, limit + 1),
             tenant_id=tenant_id,
         )
         has_next = len(rows) > limit
         rows = rows[:limit]
+        citations_by_entity = await self._entity_citations_batch(
+            [row["id"] for row in rows], tenant_id,
+        )
         ranked_items: list[RankedItem] = []
         for row in rows:
             priority_confidence = _number(row.get("priority_confidence"), 0.5)
@@ -229,7 +259,7 @@ class ReadModelStore:
                     viability=viability,
                     summary=(row.get("properties") or {}).get("summary"),
                     freshness=_freshness(row.get("observed_at")),
-                    citations=await self._entity_citations(row["id"], tenant_id),
+                    citations=citations_by_entity.get(row["id"], []),
                 )
             )
         return EstateSummary(
@@ -240,13 +270,21 @@ class ReadModelStore:
             coverage=coverage,
             page_info=PageInfo(
                 has_next_page=has_next,
-                next_cursor=_encode_cursor(offset + limit) if has_next else None,
+                next_cursor=(
+                    _encode_cursor(
+                        "estate",
+                        score=str(rows[-1].get("priority_score") or 0),
+                        name=rows[-1]["name"],
+                        id=str(rows[-1]["id"]),
+                    )
+                    if has_next else None
+                ),
             ),
         )
 
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail:
         application = await self._get_entity(application_id, tenant_id, namespace="ENTERPRISE", entity_type="Application")
-        related = await self._related_entities(application_id, tenant_id, depth=2)
+        related = await self._application_related_entities(application_id, tenant_id)
         assessments = await self._assessments(application_id, tenant_id)
         recommendations = await self._recommendations(application_id, tenant_id)
         return ApplicationDetail(
@@ -262,7 +300,7 @@ class ReadModelStore:
 
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail:
         technology = await self._get_entity(technology_id, tenant_id, namespace="TECHNOLOGY")
-        related = await self._related_entities(technology_id, tenant_id, depth=2)
+        related = await self._technology_related_entities(technology_id, tenant_id)
         repositories = [row for row in related if row["entity_type"] == "Repository"]
         applications = [row for row in related if row["entity_type"] == "Application"]
         packages = [row for row in [technology, *related] if row["entity_type"] in {"Package", "PackageVersion"}]
@@ -317,24 +355,42 @@ class ReadModelStore:
         cursor: str | None,
         limit: int,
     ) -> ModernizationList:
-        offset = _decode_cursor(cursor)
+        cursor_data = _decode_cursor(cursor, "modernization")
+        try:
+            cursor_confidence = Decimal(cursor_data["confidence"]) if cursor_data else None
+            cursor_created_at = datetime.fromisoformat(cursor_data["created_at"]) if cursor_data else None
+            cursor_id = UUID(cursor_data["id"]) if cursor_data else None
+        except (KeyError, TypeError, ValueError) as error:
+            raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
         rows = await self.database.fetch_all(
             """
             SELECT r.*,e.namespace,e.entity_type,e.name,e.properties,
                    coalesce(e.last_seen_at,r.updated_at,r.created_at) observed_at
             FROM recommendation r JOIN entity e ON e.id=r.subject_entity_id
             WHERE r.status NOT IN ('REJECTED','COMPLETED','DISMISSED') AND r.action<>'RETAIN'
-            ORDER BY r.confidence DESC,r.created_at DESC,r.id OFFSET %s LIMIT %s
+              AND (
+                %s::numeric IS NULL
+                OR r.confidence<%s::numeric
+                OR (r.confidence=%s::numeric AND r.created_at<%s::timestamptz)
+                OR (r.confidence=%s::numeric AND r.created_at=%s::timestamptz AND r.id>%s::uuid)
+              )
+            ORDER BY r.confidence DESC,r.created_at DESC,r.id LIMIT %s
             """,
-            (offset, limit + 1),
+            (
+                cursor_confidence, cursor_confidence, cursor_confidence, cursor_created_at,
+                cursor_confidence, cursor_created_at, cursor_id, limit + 1,
+            ),
             tenant_id=tenant_id,
         )
         has_next = len(rows) > limit
         rows = rows[:limit]
+        citations_by_recommendation = await self._recommendation_citations_batch(
+            [row["id"] for row in rows], tenant_id,
+        )
         opportunities: list[RankedItem] = []
         for row in rows:
             confidence = _number(row["confidence"])
-            citations = await self._recommendation_citations(row["id"], tenant_id)
+            citations = citations_by_recommendation.get(row["id"], [])
             opportunities.append(
                 RankedItem(
                     id=row["id"],
@@ -357,7 +413,15 @@ class ReadModelStore:
             opportunities=opportunities,
             page_info=PageInfo(
                 has_next_page=has_next,
-                next_cursor=_encode_cursor(offset + limit) if has_next else None,
+                next_cursor=(
+                    _encode_cursor(
+                        "modernization",
+                        confidence=str(rows[-1]["confidence"]),
+                        created_at=rows[-1]["created_at"].isoformat(),
+                        id=str(rows[-1]["id"]),
+                    )
+                    if has_next else None
+                ),
             ),
         )
 
@@ -368,11 +432,18 @@ class ReadModelStore:
         tenant_id: UUID | None,
         depth: int,
         real_node_limit: int,
+        predicates: list[str] | None = None,
+        namespaces: list[str] | None = None,
+        min_confidence: float = 0,
+        highlight_to: UUID | None = None,
     ) -> GraphNeighborhood:
         await self._get_entity(center_id, tenant_id)
+        if highlight_to is not None:
+            await self._get_entity(highlight_to, tenant_id)
+        graph_params = (predicates or None, namespaces or None, min_confidence, center_id, depth)
         total_row = await self.database.fetch_one(
             _GRAPH_NEIGHBORHOOD_CTE + "SELECT count(*) total FROM ranked",
-            (center_id, depth),
+            graph_params,
             tenant_id=tenant_id,
         )
         total_nodes = int(total_row["total"]) if total_row else 1
@@ -387,6 +458,9 @@ class ReadModelStore:
                     tenant_id=tenant_id,
                     depth=depth,
                     kept_real_count=kept_real_count,
+                    predicates=predicates,
+                    namespaces=namespaces,
+                    min_confidence=min_confidence,
                 )
                 next_kept_count = max(
                     1,
@@ -402,7 +476,7 @@ class ReadModelStore:
             SELECT *,coalesce(last_seen_at,updated_at) observed_at
             FROM ranked WHERE node_rank<=%s ORDER BY node_rank
             """,
-            (center_id, depth, kept_real_count),
+            (*graph_params, kept_real_count),
             tenant_id=tenant_id,
         )
         node_ids = [row["id"] for row in node_rows]
@@ -414,9 +488,11 @@ class ReadModelStore:
               AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
                 OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
             WHERE r.source_entity_id=ANY(%s::uuid[]) AND r.target_entity_id=ANY(%s::uuid[])
+              AND (%s::text[] IS NULL OR r.relationship_type=ANY(%s::text[]))
+              AND r.confidence>=%s::numeric
             ORDER BY r.relationship_type,r.fact_assertion_id
             """,
-            (node_ids, node_ids),
+            (node_ids, node_ids, predicates or None, predicates or None, min_confidence),
             tenant_id=tenant_id,
         )
         aggregate_nodes = [
@@ -448,10 +524,25 @@ class ReadModelStore:
                 tenant_id=tenant_id,
                 depth=depth,
                 kept_real_count=kept_real_count,
+                predicates=predicates,
+                namespaces=namespaces,
+                min_confidence=min_confidence,
             )
             if truncated
             else []
         )
+        highlighted_path = await self._graph_highlight_path(
+            center_id,
+            highlight_to,
+            tenant_id=tenant_id,
+            depth=depth,
+            predicates=predicates,
+            namespaces=namespaces,
+            min_confidence=min_confidence,
+        )
+        visible_node_ids = set(node_ids) | {node.id for node in aggregate_nodes}
+        if any(node_id not in visible_node_ids for node_id in highlighted_path):
+            highlighted_path = []
         return GraphNeighborhood(
             center_id=center_id,
             nodes=[
@@ -471,7 +562,7 @@ class ReadModelStore:
                 for row in edge_rows
                 if row["review_state"] != "REJECTED"
             ] + aggregate_edges,
-            highlighted_path=[],
+            highlighted_path=highlighted_path,
             truncated=truncated,
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
@@ -483,6 +574,9 @@ class ReadModelStore:
         tenant_id: UUID | None,
         depth: int,
         kept_real_count: int,
+        predicates: list[str] | None,
+        namespaces: list[str] | None,
+        min_confidence: float,
     ) -> list[dict[str, Any]]:
         return await self.database.fetch_all(
             _GRAPH_NEIGHBORHOOD_CTE
@@ -492,7 +586,10 @@ class ReadModelStore:
             GROUP BY namespace,entity_type
             ORDER BY min(depth),namespace,entity_type
             """,
-            (center_id, depth, kept_real_count),
+            (
+                predicates or None, namespaces or None, min_confidence,
+                center_id, depth, kept_real_count,
+            ),
             tenant_id=tenant_id,
         )
 
@@ -503,6 +600,9 @@ class ReadModelStore:
         tenant_id: UUID | None,
         depth: int,
         kept_real_count: int,
+        predicates: list[str] | None,
+        namespaces: list[str] | None,
+        min_confidence: float,
     ) -> list[GraphEdge]:
         rows = await self.database.fetch_all(
             _GRAPH_NEIGHBORHOOD_CTE
@@ -525,12 +625,15 @@ class ReadModelStore:
               min(r.confidence) confidence,
               (array_agg(r.fact_assertion_id ORDER BY r.fact_assertion_id))[1:20] citation_fact_ids
             FROM current_relationship r
+            CROSS JOIN filters
             JOIN mapped source ON source.id=r.source_entity_id
             JOIN mapped target ON target.id=r.target_entity_id
             LEFT JOIN identity_assertion ia ON r.relationship_type='SAME_AS'
               AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
                 OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
             WHERE (source.real_id IS NULL OR target.real_id IS NULL)
+              AND (filters.predicates IS NULL OR r.relationship_type=ANY(filters.predicates))
+              AND r.confidence>=filters.min_confidence
               AND coalesce(ia.review_state,'NOT_APPLICABLE')<>'REJECTED'
               AND NOT (
                 source.real_id IS NULL AND target.real_id IS NULL
@@ -544,7 +647,10 @@ class ReadModelStore:
             ORDER BY source.namespace,source.entity_type,target.namespace,target.entity_type,
                      r.relationship_type,r.assertion_class
             """,
-            (center_id, depth, kept_real_count),
+            (
+                predicates or None, namespaces or None, min_confidence,
+                center_id, depth, kept_real_count,
+            ),
             tenant_id=tenant_id,
         )
         edges: list[GraphEdge] = []
@@ -582,6 +688,53 @@ class ReadModelStore:
                 )
             )
         return edges
+
+    async def _graph_highlight_path(
+        self,
+        center_id: UUID,
+        highlight_to: UUID | None,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        predicates: list[str] | None,
+        namespaces: list[str] | None,
+        min_confidence: float,
+    ) -> list[UUID]:
+        if highlight_to is None:
+            return []
+        row = await self.database.fetch_one(
+            """
+            WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
+              VALUES (%s::text[],%s::text[],%s::numeric)
+            ), paths(id,path,depth) AS (
+              SELECT %s::uuid,ARRAY[%s::uuid],0
+              UNION ALL
+              SELECT next_entity.id,paths.path || next_entity.id,paths.depth+1
+              FROM paths
+              CROSS JOIN filters
+              JOIN current_relationship r
+                ON r.source_entity_id=paths.id OR r.target_entity_id=paths.id
+              JOIN entity next_entity ON next_entity.id=CASE
+                WHEN r.source_entity_id=paths.id THEN r.target_entity_id ELSE r.source_entity_id END
+              LEFT JOIN identity_assertion ia ON r.relationship_type='SAME_AS'
+                AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
+                  OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
+              WHERE paths.depth<%s
+                AND NOT next_entity.id=ANY(paths.path)
+                AND (filters.predicates IS NULL OR r.relationship_type=ANY(filters.predicates))
+                AND (filters.namespaces IS NULL OR next_entity.namespace=ANY(filters.namespaces))
+                AND r.confidence>=filters.min_confidence
+                AND coalesce(ia.review_state,'NOT_APPLICABLE')<>'REJECTED'
+            )
+            SELECT path FROM paths WHERE id=%s ORDER BY depth,path LIMIT 1
+            """,
+            (
+                predicates or None, namespaces or None, min_confidence,
+                center_id, center_id, depth, highlight_to,
+            ),
+            tenant_id=tenant_id,
+        )
+        return list(row["path"]) if row else []
 
     async def evidence_detail(self, fact_id: UUID, *, tenant_id: UUID | None) -> EvidenceDetail:
         fact = await self.database.fetch_one(
@@ -645,6 +798,262 @@ class ReadModelStore:
 
     async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse:
         normalized = " ".join(request.question.lower().split())
+        context_ids = request.context_entity_ids or []
+
+        if "unsupported" in normalized and any(word in normalized for word in ("runtime", "node", "python", "java")):
+            rows = await self.database.fetch_all(
+                """
+                WITH RECURSIVE paths(app_id,id,depth,visited,fact_ids) AS (
+                  SELECT e.id,e.id,0,ARRAY[e.id],ARRAY[]::uuid[]
+                  FROM entity e
+                  WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                    AND lower(coalesce(e.properties->>'tier',e.properties->>'criticality',''))
+                        IN ('tier_1','tier-1','tier 1','1','critical')
+                    AND (cardinality(%s::uuid[])=0 OR e.id=ANY(%s::uuid[]))
+                  UNION ALL
+                  SELECT paths.app_id,next_entity.id,paths.depth+1,
+                         paths.visited || next_entity.id,paths.fact_ids || r.fact_assertion_id
+                  FROM paths
+                  JOIN current_relationship r ON r.source_entity_id=paths.id OR r.target_entity_id=paths.id
+                  JOIN entity next_entity ON next_entity.id=CASE
+                    WHEN r.source_entity_id=paths.id THEN r.target_entity_id ELSE r.source_entity_id END
+                  WHERE paths.depth<2 AND NOT next_entity.id=ANY(paths.visited)
+                    AND r.relationship_type IN (
+                      'IMPLEMENTED_BY','IMPLEMENTS','USES','RUNS_ON','DEPENDS_ON','HAS_VERSION'
+                    )
+                )
+                SELECT DISTINCT ON (app.id,runtime.id)
+                       app.id application_id,app.name application_name,
+                       runtime.id runtime_id,runtime.name runtime_name,
+                       a.categorical_value support_state,a.rationale,
+                       paths.fact_ids[array_length(paths.fact_ids,1)] fact_id,
+                       coalesce(sa.name,sa.external_key,'runtime evidence') citation_label
+                FROM paths
+                JOIN entity app ON app.id=paths.app_id
+                JOIN entity runtime ON runtime.id=paths.id
+                  AND runtime.namespace='TECHNOLOGY' AND runtime.entity_type='Runtime'
+                LEFT JOIN assessment a ON a.subject_entity_id=runtime.id
+                  AND a.status='CURRENT' AND lower(a.dimension) IN ('supportability','runtime_support')
+                LEFT JOIN evidence ev
+                  ON ev.fact_assertion_id=paths.fact_ids[array_length(paths.fact_ids,1)]
+                LEFT JOIN source_artifact sa ON sa.id=ev.source_artifact_id
+                WHERE upper(coalesce(a.categorical_value,runtime.properties->>'support_status',''))
+                      IN ('UNSUPPORTED','END_OF_LIFE','EOL')
+                ORDER BY app.id,runtime.id,ev.observed_at DESC
+                """,
+                (context_ids, context_ids),
+                tenant_id=tenant_id,
+            )
+            citations = self._dedupe_citations([
+                Citation(
+                    fact_id=row["fact_id"],
+                    label=row["citation_label"],
+                    href=f"/api/v1/facts/{row['fact_id']}/evidence",
+                )
+                for row in rows if row.get("fact_id")
+            ])
+            result_rows = [
+                {
+                    "application_id": str(row["application_id"]),
+                    "application": row["application_name"],
+                    "runtime_id": str(row["runtime_id"]),
+                    "runtime": row["runtime_name"],
+                    "support_state": row.get("support_state") or "UNSUPPORTED",
+                    "rationale": row.get("rationale"),
+                }
+                for row in rows
+            ]
+            return AskResponse(
+                text=(
+                    f"I found {len(rows)} Tier-1 application"
+                    f"{'s' if len(rows) != 1 else ''} using unsupported runtimes."
+                    if rows else "I found no evidence-backed Tier-1 applications using unsupported runtimes."
+                ),
+                citations=citations,
+                result_kind="TABLE",
+                rows=result_rows,
+            )
+
+        if "why" in normalized and any(word in normalized for word in ("viability", "supportability", "score")):
+            rows = await self.database.fetch_all(
+                """
+                SELECT DISTINCT ON (a.id,f.id)
+                       e.id entity_id,e.name,a.dimension,a.score,a.categorical_value,
+                       a.rationale,f.id fact_id,
+                       coalesce(sa.name,sa.external_key,f.predicate) citation_label
+                FROM entity e
+                JOIN assessment a ON a.subject_entity_id=e.id AND a.status='CURRENT'
+                JOIN assessment_input ai ON ai.assessment_id=a.id
+                JOIN fact_assertion f ON f.id=ai.fact_assertion_id
+                LEFT JOIN evidence ev ON ev.fact_assertion_id=f.id
+                LEFT JOIN source_artifact sa ON sa.id=ev.source_artifact_id
+                WHERE lower(a.dimension) IN ('viability','supportability')
+                  AND (
+                    e.id=ANY(%s::uuid[])
+                    OR (cardinality(%s::uuid[])=0 AND %s LIKE '%%' || lower(e.name) || '%%')
+                    OR (cardinality(%s::uuid[])=0 AND %s LIKE '%%' || lower(split_part(e.name,' ',1)) || '%%')
+                  )
+                ORDER BY a.id,f.id,ev.observed_at DESC
+                """,
+                (context_ids, context_ids, normalized, context_ids, normalized),
+                tenant_id=tenant_id,
+            )
+            if rows:
+                citations = self._dedupe_citations([
+                    Citation(
+                        fact_id=row["fact_id"], label=row["citation_label"],
+                        href=f"/api/v1/facts/{row['fact_id']}/evidence",
+                    ) for row in rows
+                ])
+                result_rows = [{
+                    "entity_id": str(row["entity_id"]), "entity": row["name"],
+                    "dimension": row["dimension"], "score": _number(row["score"]) if row.get("score") is not None else None,
+                    "value": row.get("categorical_value"), "rationale": row["rationale"],
+                } for row in rows]
+                return AskResponse(
+                    text=" ".join(dict.fromkeys(row["rationale"] for row in rows)),
+                    citations=citations, result_kind="ANSWER", rows=result_rows,
+                )
+            return AskResponse(
+                text="I found no evidence-backed viability assessment for that application.",
+                citations=[], result_kind="ANSWER", rows=[],
+            )
+
+        if "indirect" in normalized and any(word in normalized for word in ("depend", "uses", "used by")):
+            if not context_ids:
+                return AskResponse(
+                    text="Select a package or technology before asking for indirect dependents.",
+                    citations=[], result_kind="UNSUPPORTED",
+                )
+            center_id = context_ids[0]
+            rows = await self.database.fetch_all(
+                """
+                WITH RECURSIVE paths(id,depth,visited,fact_ids) AS (
+                  SELECT %s::uuid,0,ARRAY[%s::uuid],ARRAY[]::uuid[]
+                  UNION ALL
+                  SELECT next_entity.id,paths.depth+1,paths.visited || next_entity.id,
+                         paths.fact_ids || r.fact_assertion_id
+                  FROM paths
+                  JOIN current_relationship r ON r.source_entity_id=paths.id OR r.target_entity_id=paths.id
+                  JOIN entity next_entity ON next_entity.id=CASE
+                    WHEN r.source_entity_id=paths.id THEN r.target_entity_id ELSE r.source_entity_id END
+                  WHERE paths.depth<2 AND NOT next_entity.id=ANY(paths.visited)
+                    AND r.relationship_type IN ('DEPENDS_ON','USES','IMPLEMENTED_BY','IMPLEMENTS')
+                )
+                SELECT DISTINCT ON (e.id) e.id,e.name,paths.fact_ids
+                FROM paths JOIN entity e ON e.id=paths.id
+                WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                ORDER BY e.id,paths.depth
+                """,
+                (center_id, center_id),
+                tenant_id=tenant_id,
+            )
+            fact_ids = list(dict.fromkeys(
+                fact_id for row in rows for fact_id in row["fact_ids"]
+            ))
+            citation_rows = await self.database.fetch_all(
+                """
+                SELECT DISTINCT ON (f.id) f.id fact_id,
+                       coalesce(sa.name,sa.external_key,f.predicate) label
+                FROM fact_assertion f
+                LEFT JOIN evidence ev ON ev.fact_assertion_id=f.id
+                LEFT JOIN source_artifact sa ON sa.id=ev.source_artifact_id
+                WHERE f.id=ANY(%s::uuid[]) ORDER BY f.id,ev.observed_at DESC
+                """,
+                (fact_ids,),
+                tenant_id=tenant_id,
+            ) if fact_ids else []
+            graph = None
+            if rows:
+                graph = await self.graph_neighborhood(
+                    center_id,
+                    tenant_id=tenant_id,
+                    depth=2,
+                    real_node_limit=50,
+                    predicates=["DEPENDS_ON", "USES", "IMPLEMENTED_BY", "IMPLEMENTS"],
+                    highlight_to=rows[0]["id"],
+                )
+            return AskResponse(
+                text=(f"I found {len(rows)} indirectly dependent application"
+                      f"{'s' if len(rows) != 1 else ''}."),
+                citations=[Citation(
+                    fact_id=row["fact_id"], label=row["label"],
+                    href=f"/api/v1/facts/{row['fact_id']}/evidence",
+                ) for row in citation_rows],
+                result_kind="GRAPH" if graph else "ANSWER",
+                rows=[{"application_id": str(row["id"]), "application": row["name"]} for row in rows],
+                graph_highlight=graph,
+            )
+
+        if "depend" in normalized:
+            rows = await self.database.fetch_all(
+                """
+                WITH applications AS (
+                  SELECT e.id,e.name
+                  FROM entity e
+                  WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                    AND (
+                      e.id=ANY(%s::uuid[])
+                      OR (cardinality(%s::uuid[])=0 AND %s LIKE '%%' || lower(e.name) || '%%')
+                      OR (cardinality(%s::uuid[])=0 AND %s LIKE '%%' || lower(split_part(e.name,' ',1)) || '%%')
+                    )
+                ), roots AS (
+                  SELECT applications.id application_id,applications.name application_name,
+                         applications.id root_id
+                  FROM applications
+                  UNION
+                  SELECT applications.id,applications.name,
+                         CASE WHEN r.source_entity_id=applications.id
+                           THEN r.target_entity_id ELSE r.source_entity_id END
+                  FROM applications JOIN current_relationship r
+                    ON r.source_entity_id=applications.id OR r.target_entity_id=applications.id
+                  JOIN entity repository ON repository.id=CASE
+                    WHEN r.source_entity_id=applications.id
+                      THEN r.target_entity_id ELSE r.source_entity_id END
+                  WHERE repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+                    AND r.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                )
+                SELECT DISTINCT ON (roots.application_id,object.id,r.relationship_type)
+                       roots.application_id,roots.application_name,
+                       r.relationship_type predicate,object.id object_id,object.name object_name,
+                       r.fact_assertion_id,
+                       coalesce(sa.name,sa.external_key,r.relationship_type) citation_label
+                FROM roots JOIN current_relationship r
+                  ON r.source_entity_id=roots.root_id OR r.target_entity_id=roots.root_id
+                JOIN entity object ON object.id=CASE WHEN r.source_entity_id=roots.root_id
+                  THEN r.target_entity_id ELSE r.source_entity_id END
+                LEFT JOIN evidence ev ON ev.fact_assertion_id=r.fact_assertion_id
+                LEFT JOIN source_artifact sa ON sa.id=ev.source_artifact_id
+                WHERE r.relationship_type IN ('DEPENDS_ON','USES')
+                  AND object.namespace IN ('TECHNOLOGY','OSS')
+                ORDER BY roots.application_id,object.id,r.relationship_type,ev.observed_at DESC
+                """,
+                (context_ids, context_ids, normalized, context_ids, normalized),
+                tenant_id=tenant_id,
+            )
+            if rows:
+                citations = self._dedupe_citations([
+                    Citation(
+                        fact_id=row["fact_assertion_id"], label=row["citation_label"],
+                        href=f"/api/v1/facts/{row['fact_assertion_id']}/evidence",
+                    ) for row in rows
+                ])
+                result_rows = [{
+                    "application_id": str(row["application_id"]),
+                    "application": row["application_name"],
+                    "predicate": row["predicate"],
+                    "technology_id": str(row["object_id"]),
+                    "technology": row["object_name"],
+                } for row in rows]
+                first = rows[0]
+                return AskResponse(
+                    text=(f"{first['application_name']} directly depends on "
+                          f"{first['object_name']}."),
+                    citations=citations,
+                    result_kind="ANSWER" if len(rows) == 1 else "TABLE",
+                    rows=result_rows,
+                )
+
         if any(phrase in normalized for phrase in ("how many", "estate count", "estate summary")):
             summary = await self.estate_summary(tenant_id=tenant_id, cursor=None, limit=1)
             rows = [summary.counts.model_dump(mode="json")]
@@ -656,7 +1065,6 @@ class ReadModelStore:
             )
 
         if any(word in normalized for word in ("depend", "uses", "used by", "relationship")):
-            context_ids = request.context_entity_ids or []
             rows = await self.database.fetch_all(
                 """
                 SELECT r.fact_assertion_id,s.id subject_id,s.name subject_name,r.relationship_type predicate,
@@ -794,21 +1202,110 @@ class ReadModelStore:
             raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
         return row
 
-    async def _related_entities(self, entity_id: UUID, tenant_id: UUID | None, *, depth: int) -> list[dict[str, Any]]:
+    async def _application_related_entities(
+        self,
+        application_id: UUID,
+        tenant_id: UUID | None,
+    ) -> list[dict[str, Any]]:
         return await self.database.fetch_all(
             """
-            WITH RECURSIVE walk(id,depth) AS (
-              SELECT %s::uuid,0
+            WITH direct AS (
+              SELECT r.relationship_type,
+                     CASE WHEN r.source_entity_id=%s THEN r.target_entity_id ELSE r.source_entity_id END id
+              FROM current_relationship r
+              WHERE r.source_entity_id=%s OR r.target_entity_id=%s
+            ), repositories AS (
+              SELECT d.id FROM direct d JOIN entity e ON e.id=d.id
+              WHERE e.namespace='ENTERPRISE' AND e.entity_type='Repository'
+                AND d.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+            ), repository_related AS (
+              SELECT r.relationship_type,
+                     CASE WHEN r.source_entity_id=repositories.id
+                       THEN r.target_entity_id ELSE r.source_entity_id END id
+              FROM repositories JOIN current_relationship r
+                ON r.source_entity_id=repositories.id OR r.target_entity_id=repositories.id
+              WHERE r.relationship_type IN (
+                'DEPENDS_ON','USES','RUNS_ON','DEPLOYED_AS','BUILT_ON','HAS_VERSION'
+              )
+            ), selected AS (
+              SELECT d.id,1 depth FROM direct d JOIN entity e ON e.id=d.id
+              WHERE (
+                e.namespace='BUSINESS'
+                AND d.relationship_type IN ('ENABLED_BY','REQUIRES','PROVIDED_BY','CONTAINS')
+              ) OR (
+                e.namespace='ENTERPRISE' AND e.entity_type='Repository'
+                AND d.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+              ) OR (
+                e.namespace='DEPLOYMENT'
+                AND d.relationship_type IN ('DEPLOYED_AS','RUNS_ON','HOSTED_IN','HOSTED_AT')
+              ) OR (
+                e.namespace IN ('TECHNOLOGY','OSS')
+                AND d.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+              )
               UNION
-              SELECT CASE WHEN r.source_entity_id=w.id THEN r.target_entity_id ELSE r.source_entity_id END,w.depth+1
-              FROM walk w JOIN current_relationship r ON r.source_entity_id=w.id OR r.target_entity_id=w.id
-              WHERE w.depth<%s
+              SELECT rr.id,2 FROM repository_related rr JOIN entity e ON e.id=rr.id
+              WHERE e.namespace IN ('TECHNOLOGY','OSS','DEPLOYMENT')
             )
-            SELECT e.*,min(w.depth) depth,coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at
-            FROM walk w JOIN entity e ON e.id=w.id WHERE w.id<>%s
-            GROUP BY e.id ORDER BY min(w.depth),e.namespace,e.entity_type,e.name,e.id
+            SELECT e.*,min(selected.depth) depth,
+                   coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at
+            FROM selected JOIN entity e ON e.id=selected.id
+            GROUP BY e.id ORDER BY min(selected.depth),e.namespace,e.entity_type,e.name,e.id
             """,
-            (entity_id, depth, entity_id),
+            (application_id, application_id, application_id),
+            tenant_id=tenant_id,
+        )
+
+    async def _technology_related_entities(
+        self,
+        technology_id: UUID,
+        tenant_id: UUID | None,
+    ) -> list[dict[str, Any]]:
+        return await self.database.fetch_all(
+            """
+            WITH direct AS (
+              SELECT r.relationship_type,
+                     CASE WHEN r.source_entity_id=%s THEN r.target_entity_id ELSE r.source_entity_id END id
+              FROM current_relationship r
+              WHERE r.source_entity_id=%s OR r.target_entity_id=%s
+            ), repositories AS (
+              SELECT d.id FROM direct d JOIN entity e ON e.id=d.id
+              WHERE e.namespace='ENTERPRISE' AND e.entity_type='Repository'
+                AND d.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+            ), applications AS (
+              SELECT CASE WHEN r.source_entity_id=repositories.id
+                       THEN r.target_entity_id ELSE r.source_entity_id END id
+              FROM repositories JOIN current_relationship r
+                ON r.source_entity_id=repositories.id OR r.target_entity_id=repositories.id
+              JOIN entity e ON e.id=CASE WHEN r.source_entity_id=repositories.id
+                       THEN r.target_entity_id ELSE r.source_entity_id END
+              WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                AND r.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+            ), selected AS (
+              SELECT d.id,1 depth FROM direct d JOIN entity e ON e.id=d.id
+              WHERE (
+                e.namespace='ENTERPRISE' AND e.entity_type='Repository'
+                AND d.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+              ) OR (
+                e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                AND d.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON')
+              ) OR (
+                e.namespace='TECHNOLOGY'
+                AND d.relationship_type IN ('HAS_VERSION','DEPENDS_ON','USES','ALTERNATIVE_TO')
+              ) OR (
+                e.namespace='OSS'
+                AND d.relationship_type IN (
+                  'PUBLISHED_BY','PUBLISHES','SAME_AS','ALTERNATIVE_TO',
+                  'MIGRATED_TO','DEMONSTRATES'
+                )
+              )
+              UNION SELECT id,2 FROM applications
+            )
+            SELECT e.*,min(selected.depth) depth,
+                   coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at
+            FROM selected JOIN entity e ON e.id=selected.id
+            GROUP BY e.id ORDER BY min(selected.depth),e.namespace,e.entity_type,e.name,e.id
+            """,
+            (technology_id, technology_id, technology_id),
             tenant_id=tenant_id,
         )
 
@@ -897,31 +1394,78 @@ class ReadModelStore:
             ))
         return result
 
-    async def _entity_citations(self, entity_id: UUID, tenant_id: UUID | None) -> list[Citation]:
+    async def _entity_citations_batch(
+        self,
+        entity_ids: list[UUID],
+        tenant_id: UUID | None,
+    ) -> dict[UUID, list[Citation]]:
+        if not entity_ids:
+            return {}
         rows = await self.database.fetch_all(
             """
-            SELECT DISTINCT ON (f.id) f.id fact_id,coalesce(sa.name,sa.external_key,f.predicate) label
-            FROM current_fact f LEFT JOIN evidence e ON e.fact_assertion_id=f.id
-            LEFT JOIN source_artifact sa ON sa.id=e.source_artifact_id
-            WHERE f.subject_entity_id=%s OR f.object_entity_id=%s ORDER BY f.id,e.observed_at DESC LIMIT 10
+            WITH matched AS (
+              SELECT requested.entity_id,f.id fact_id,
+                     coalesce(sa.name,sa.external_key,f.predicate) label,
+                     row_number() OVER (
+                       PARTITION BY requested.entity_id,f.id ORDER BY ev.observed_at DESC,ev.id
+                     ) evidence_rank
+              FROM unnest(%s::uuid[]) requested(entity_id)
+              JOIN current_fact f
+                ON f.subject_entity_id=requested.entity_id OR f.object_entity_id=requested.entity_id
+              LEFT JOIN evidence ev ON ev.fact_assertion_id=f.id
+              LEFT JOIN source_artifact sa ON sa.id=ev.source_artifact_id
+            ), ranked AS (
+              SELECT *,row_number() OVER (
+                PARTITION BY entity_id ORDER BY fact_id
+              ) citation_rank
+              FROM matched WHERE evidence_rank=1
+            )
+            SELECT entity_id,fact_id,label FROM ranked
+            WHERE citation_rank<=10 ORDER BY entity_id,citation_rank
             """,
-            (entity_id, entity_id),
+            (entity_ids,),
             tenant_id=tenant_id,
         )
-        return [Citation(fact_id=row["fact_id"], label=row["label"], href=f"/api/v1/facts/{row['fact_id']}/evidence") for row in rows]
+        grouped: dict[UUID, list[Citation]] = {entity_id: [] for entity_id in entity_ids}
+        for row in rows:
+            grouped[row["entity_id"]].append(Citation(
+                fact_id=row["fact_id"],
+                label=row["label"],
+                href=f"/api/v1/facts/{row['fact_id']}/evidence",
+            ))
+        return grouped
 
-    async def _recommendation_citations(self, recommendation_id: UUID, tenant_id: UUID | None) -> list[Citation]:
+    async def _recommendation_citations_batch(
+        self,
+        recommendation_ids: list[UUID],
+        tenant_id: UUID | None,
+    ) -> dict[UUID, list[Citation]]:
+        if not recommendation_ids:
+            return {}
         rows = await self.database.fetch_all(
             """
-            SELECT DISTINCT ON (f.id) f.id fact_id,coalesce(sa.name,sa.external_key,f.predicate) label
+            SELECT DISTINCT ON (re.recommendation_id,f.id)
+                   re.recommendation_id,f.id fact_id,
+                   coalesce(sa.name,sa.external_key,f.predicate) label
             FROM recommendation_evidence re JOIN fact_assertion f ON f.id=re.fact_assertion_id
-            LEFT JOIN evidence e ON e.fact_assertion_id=f.id LEFT JOIN source_artifact sa ON sa.id=e.source_artifact_id
-            WHERE re.recommendation_id=%s ORDER BY f.id,e.observed_at DESC
+            LEFT JOIN evidence e ON e.fact_assertion_id=f.id
+            LEFT JOIN source_artifact sa ON sa.id=e.source_artifact_id
+            WHERE re.recommendation_id=ANY(%s::uuid[])
+            ORDER BY re.recommendation_id,f.id,e.observed_at DESC
             """,
-            (recommendation_id,),
+            (recommendation_ids,),
             tenant_id=tenant_id,
         )
-        return [Citation(fact_id=row["fact_id"], label=row["label"], href=f"/api/v1/facts/{row['fact_id']}/evidence") for row in rows]
+        grouped: dict[UUID, list[Citation]] = {
+            recommendation_id: [] for recommendation_id in recommendation_ids
+        }
+        for row in rows:
+            grouped[row["recommendation_id"]].append(Citation(
+                fact_id=row["fact_id"],
+                label=row["label"],
+                href=f"/api/v1/facts/{row['fact_id']}/evidence",
+            ))
+        return grouped
 
     @staticmethod
     def _dedupe_entities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

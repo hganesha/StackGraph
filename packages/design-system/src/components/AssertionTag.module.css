@@ -1,0 +1,21 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--sg-space-2);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+  border: var(--sg-border-hairline) solid transparent;
+}
+/* Raw fact: neutral, quiet. */
+.raw {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+  border-color: var(--sg-surface-border);
+}
+/* Reasoned (INFERRED): intelligence violet — this is StackGraph's interpretation. */
+.reasoned {
+  background: var(--sg-color-domain-intelligence-100);
+  color: var(--sg-color-domain-intelligence-800);
+}

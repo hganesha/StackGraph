@@ -1,0 +1,106 @@
+.canvasWrap {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+}
+.truncation {
+  position: absolute;
+  inset-block-start: var(--sg-space-3);
+  inset-inline: var(--sg-space-3);
+  z-index: 5;
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+  box-shadow: var(--sg-elevation-raised);
+}
+
+/* ---- node ---- */
+.node {
+  inline-size: 210px;
+  min-block-size: 68px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--sg-radius-card);
+  transition: box-shadow var(--sg-motion-hover), border-color var(--sg-motion-hover);
+}
+.node:hover {
+  border-color: var(--sg-surface-border-strong);
+}
+.center {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.selected {
+  box-shadow: 0 0 0 2px var(--accent), var(--sg-elevation-raised);
+}
+.aggregate {
+  border-style: dashed;
+  background: var(--sg-surface-sunken);
+}
+.nodeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+}
+.nodeType {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sg-text-muted);
+}
+.nodeLabel {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.handle {
+  opacity: 0;
+}
+
+/* ---- edges ---- */
+.edgePossible :global(.react-flow__edge-path) {
+  stroke-dasharray: 5 4;
+}
+/* Confirmed bridge pulse — only when its selection is active (plan §4). */
+.edgeBridgeActive :global(.react-flow__edge-path) {
+  animation: sgBridgePulse var(--sg-motion-bridge-pulse);
+}
+@keyframes sgBridgePulse {
+  0%,
+  100% {
+    stroke: var(--sg-color-domain-business-500);
+    opacity: 1;
+  }
+  50% {
+    stroke: var(--sg-color-domain-business-300);
+    opacity: 0.65;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edgeBridgeActive :global(.react-flow__edge-path) {
+    animation: none;
+  }
+}
+
+/* Screen-reader-only equivalent list */
+.srList {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

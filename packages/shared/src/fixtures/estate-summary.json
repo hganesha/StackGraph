@@ -1,0 +1,21 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-19T14:10:00Z",
+  "counts": {"applications": 1, "repositories": 1, "services": 1, "technologies": 2},
+  "distributions": {"runtime.node": 1, "deployment.container": 1},
+  "ranked_items": [
+    {
+      "id": "00000000-0000-4000-8000-000000000201",
+      "kind": "Application",
+      "name": "Billing API",
+      "domain": "ENTERPRISE",
+      "priority": {"value": 81, "confidence": 0.91, "confidence_label": "HIGH", "method_version": "priority-v1"},
+      "viability": {"value": 64, "confidence": 0.88, "confidence_label": "HIGH", "method_version": "viability-v1"},
+      "summary": "A tier-1 service with one runtime upgrade opportunity.",
+      "freshness": {"observed_at": "2026-08-19T14:00:00Z", "status": "FRESH", "source_key": "github:repo:123"},
+      "citations": [{"fact_id": "00000000-0000-4000-8000-000000000301", "label": "Repository dependency evidence", "href": "/api/v1/facts/00000000-0000-4000-8000-000000000301/evidence"}]
+    }
+  ],
+  "coverage": {"repositories_total": 1, "repositories_scanned": 1, "facts_with_evidence_ratio": 1},
+  "page_info": {"has_next_page": false, "next_cursor": null}
+}

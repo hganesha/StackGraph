@@ -1,11 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
+import time
 from uuid import UUID
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.config import Settings
+from app.auth import create_session_token
 from app.database import DatabaseReadiness
 from app.errors import APIError
 from app.main import create_app
@@ -39,6 +41,7 @@ class StubDatabase:
 class StubReadModels:
     def __init__(self) -> None:
         self.last_tenant_id = None
+        self.last_actor_key = None
 
     async def estate_summary(self, *, tenant_id, cursor, limit):
         self.last_tenant_id = tenant_id
@@ -62,7 +65,10 @@ class StubReadModels:
     async def modernization(self, *, tenant_id, cursor, limit):
         raise NotImplementedError
 
-    async def graph_neighborhood(self, center_id, *, tenant_id, depth, real_node_limit):
+    async def graph_neighborhood(
+        self, center_id, *, tenant_id, depth, real_node_limit, predicates,
+        namespaces, min_confidence, highlight_to,
+    ):
         raise NotImplementedError
 
     async def evidence_detail(self, fact_id, *, tenant_id):
@@ -71,6 +77,8 @@ class StubReadModels:
     async def review_identity_assertion(
         self, assertion_id, review: IdentityReviewRequest, *, tenant_id, actor_key,
     ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
         return IdentityReviewResult(
             identity_assertion_id=assertion_id,
             review_state="CONFIRMED" if review.decision == "CONFIRM" else "REJECTED",
@@ -79,11 +87,11 @@ class StubReadModels:
         )
 
 
-def app_with_stubs() -> tuple[FastAPI, StubReadModels]:
+def app_with_stubs(settings: Settings | None = None) -> tuple[FastAPI, StubReadModels]:
     read_models = StubReadModels()
     return (
         create_app(
-            settings=Settings(environment="test"),
+            settings=settings or Settings(environment="test"),
             database=StubDatabase(),
             read_models=read_models,
         ),
@@ -109,15 +117,65 @@ def test_estate_summary_is_available_on_contract_and_versioned_paths() -> None:
     assert versioned.json() == direct.json()
 
 
-def test_tenant_header_is_forwarded_to_read_model() -> None:
-    app, store = app_with_stubs()
+def test_development_principal_is_forwarded_and_tenant_header_is_ignored() -> None:
     tenant_id = "00000000-0000-4000-8000-000000000123"
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=UUID(tenant_id)))
     response = asyncio.run(request(
-        app, "GET", "/estate/summary", headers={"X-StackGraph-Tenant-ID": tenant_id},
+        app,
+        "GET",
+        "/estate/summary",
+        headers={"X-StackGraph-Tenant-ID": "00000000-0000-4000-8000-000000000999"},
     ))
 
     assert response.status_code == 200
     assert store.last_tenant_id == UUID(tenant_id)
+
+
+def test_signed_session_supplies_tenant_and_actor() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    token = create_session_token(
+        secret, actor_key="signed-user", tenant_id=tenant_id, expires_at=int(time.time()) + 60,
+    )
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"decision": "CONFIRM", "rationale": "Verified.", "expected_version": 1},
+    ))
+
+    assert response.status_code == 200
+    assert store.last_tenant_id == tenant_id
+    assert store.last_actor_key == "signed-user"
+
+
+def test_signed_session_rejects_missing_expired_and_tampered_tokens() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    app, _ = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    expired = create_session_token(
+        secret, actor_key="signed-user", tenant_id=None, expires_at=int(time.time()) - 1,
+    )
+    valid = create_session_token(
+        secret, actor_key="signed-user", tenant_id=None, expires_at=int(time.time()) + 60,
+    )
+
+    missing = asyncio.run(request(app, "GET", "/estate/summary"))
+    expired_response = asyncio.run(request(
+        app, "GET", "/estate/summary", headers={"Authorization": f"Bearer {expired}"},
+    ))
+    tampered = asyncio.run(request(
+        app, "GET", "/estate/summary", headers={"Authorization": f"Bearer {valid}x"},
+    ))
+
+    assert (missing.status_code, missing.json()["code"]) == (401, "AUTH_REQUIRED")
+    assert (expired_response.status_code, expired_response.json()["code"]) == (401, "SESSION_EXPIRED")
+    assert (tampered.status_code, tampered.json()["code"]) == (401, "INVALID_SESSION")
 
 
 def test_api_errors_use_contract_shape_and_request_id() -> None:

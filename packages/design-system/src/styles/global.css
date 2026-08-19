@@ -1,0 +1,75 @@
+/* Strata global stylesheet. Import order: tokens → reset → base.
+   Self-hosted IBM Plex faces are imported as JS side-effects in apps/web/app/layout.tsx
+   (no third-party runtime font call — plan §7 security, §8.5). */
+@import "../tokens/tokens.css";
+
+/* ---- reset ---- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+img,
+svg {
+  display: block;
+  max-inline-size: 100%;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ---- base ---- */
+body {
+  background: var(--sg-surface-base);
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-narrative);
+  font-size: var(--sg-type-body-size);
+  line-height: var(--sg-type-body-line);
+  font-weight: var(--sg-type-body-weight);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Data-dense but never cramped: monospace anywhere a raw fact is shown. */
+.sg-mono {
+  font-family: var(--sg-font-evidence);
+}
+
+/* Focus is always visible — keyboard-first tool (plan §8.1). */
+:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 2px;
+  border-radius: var(--sg-radius-control);
+}
+
+/* Honor reduced-motion at the root; no component can opt out (plan §8.1). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

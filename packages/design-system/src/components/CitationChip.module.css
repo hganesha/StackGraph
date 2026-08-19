@@ -1,0 +1,26 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-control);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  transition: border-color var(--sg-motion-hover), color var(--sg-motion-hover);
+  max-inline-size: 100%;
+}
+.chip:hover {
+  border-color: var(--sg-color-domain-intelligence-400);
+  color: var(--sg-text-primary);
+}
+.icon {
+  color: var(--sg-color-domain-intelligence-500);
+  flex-shrink: 0;
+}
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

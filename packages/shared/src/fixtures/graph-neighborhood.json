@@ -1,0 +1,23 @@
+{
+  "contract_version": "1.0.0",
+  "center_id": "00000000-0000-4000-8000-000000000204",
+  "nodes": [
+    {"id": "00000000-0000-4000-8000-000000000203", "namespace": "ENTERPRISE", "type": "Repository", "key": "github:repo:123", "label": "billing-svc", "aggregate": false},
+    {"id": "00000000-0000-4000-8000-000000000204", "namespace": "TECHNOLOGY", "type": "PackageVersion", "key": "pkg:npm/axios@1.7.9", "label": "axios 1.7.9", "aggregate": false}
+  ],
+  "edges": [
+    {
+      "id": "00000000-0000-4000-8000-000000000401",
+      "source": "00000000-0000-4000-8000-000000000203",
+      "target": "00000000-0000-4000-8000-000000000204",
+      "predicate": "DEPENDS_ON",
+      "confidence": 1,
+      "assertion_class": "DECLARED",
+      "review_state": "NOT_APPLICABLE",
+      "citation_fact_ids": ["00000000-0000-4000-8000-000000000301"]
+    }
+  ],
+  "highlighted_path": ["00000000-0000-4000-8000-000000000203", "00000000-0000-4000-8000-000000000204"],
+  "truncated": false,
+  "truncation_reason": null
+}

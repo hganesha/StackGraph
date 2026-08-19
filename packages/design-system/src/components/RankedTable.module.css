@@ -1,0 +1,121 @@
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  overflow: hidden;
+}
+.caption {
+  text-align: start;
+  caption-side: top;
+  padding: var(--sg-space-3) var(--sg-space-4);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.table thead th {
+  text-align: start;
+  padding: var(--sg-space-2) var(--sg-space-4);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+  color: var(--sg-text-muted);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+  background: var(--sg-surface-sunken);
+}
+.hNum {
+  text-align: end;
+}
+.hDomain {
+  inline-size: 4rem;
+}
+.hConf {
+  inline-size: 10rem;
+}
+
+.row {
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+  transition: background var(--sg-motion-hover);
+}
+.row:last-child {
+  border-block-end: none;
+}
+.row:hover,
+.row:focus-visible {
+  background: var(--sg-surface-sunken);
+}
+.row td {
+  padding: var(--sg-space-3) var(--sg-space-4);
+  vertical-align: middle;
+}
+.cName {
+  inline-size: 100%;
+}
+.link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.name {
+  color: var(--sg-text-primary);
+  font-weight: 500;
+}
+.summary {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}
+.cNum {
+  text-align: end;
+  font-weight: 500;
+  font-size: var(--sg-type-h3-size);
+  color: var(--sg-text-primary);
+  white-space: nowrap;
+}
+
+/* ---- mobile: each row reflows to a stacked card (no horizontal scroll) ---- */
+@media (max-width: 768px) {
+  .table {
+    border: none;
+    background: none;
+  }
+  .table thead {
+    display: none;
+  }
+  .table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sg-space-3);
+  }
+  .row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "domain name priority"
+      "conf   conf conf";
+    gap: var(--sg-space-2) var(--sg-space-3);
+    align-items: center;
+    padding: var(--sg-space-3);
+    background: var(--sg-surface-card);
+    border: var(--sg-border-hairline) solid var(--sg-surface-border);
+    border-radius: var(--sg-radius-card);
+  }
+  .row td {
+    padding: 0;
+  }
+  .cDomain {
+    grid-area: domain;
+  }
+  .cName {
+    grid-area: name;
+  }
+  .cNum {
+    grid-area: priority;
+    font-size: var(--sg-type-h2-size);
+  }
+  .cConf {
+    grid-area: conf;
+    padding-block-start: var(--sg-space-2);
+    border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+  }
+}

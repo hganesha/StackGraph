@@ -23,7 +23,9 @@ The V0 API read models are available both at their contract paths and under the 
 - `GET /facts/{id}/evidence`
 - `POST /identity-assertions/{id}/review`
 
-Tenant-scoped requests use `X-StackGraph-Tenant-ID`. Identity reviews also accept `X-StackGraph-Actor` for the audit record. These headers are the local-development boundary; production authentication must supply trusted tenant and actor claims rather than forwarding arbitrary client headers.
+In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. For a deployed environment, set `STACKGRAPH_AUTH_MODE=signed_session` and configure a random `STACKGRAPH_AUTH_SESSION_SECRET` of at least 32 characters; the API then requires a signed bearer session containing the tenant and actor claims.
+
+Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_confidence`, and an optional `highlight_to` entity ID in addition to the frozen v1 center, depth, and limit parameters. Traversal and response nodes remain bounded to depth 2 and 50 nodes.
 
 ## Verify
 
@@ -35,7 +37,7 @@ curl --fail http://localhost:8080/health/live
 curl --fail http://localhost:8080/health/ready
 ```
 
-The integration suite queries the running database, exercises the HTTP read models, and verifies an optimistic, audited identity review. Its temporary tenant data is removed after the test.
+The integration suite queries the running database, exercises the HTTP read models, verifies an optimistic audited identity review, and installs a temporary evidence-backed Billing estate that covers every public read endpoint plus deterministic Ask templates. Temporary tenant data is removed after each test.
 
 ## Seed the curated framework catalog
 
