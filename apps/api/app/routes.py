@@ -68,6 +68,10 @@ class ReadModelsProtocol(Protocol):
     ) -> ModernizationRecommendationReviewResult: ...
 
 
+class AskServiceProtocol(Protocol):
+    async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse: ...
+
+
 router = APIRouter()
 
 
@@ -83,6 +87,10 @@ def _principal(request: Request) -> Principal:
 
 def _store(request: Request) -> ReadModelsProtocol:
     return request.app.state.read_models
+
+
+def _ask_service(request: Request) -> AskServiceProtocol:
+    return request.app.state.ask_service
 
 
 @router.get(
@@ -139,7 +147,7 @@ async def list_modernization(
 )
 async def ask_estate(body: AskRequest, request: Request) -> AskResponse:
     principal = _principal(request)
-    return await _store(request).ask(body, tenant_id=principal.tenant_id)
+    return await _ask_service(request).ask(body, tenant_id=principal.tenant_id)
 
 
 @router.get(

@@ -35,6 +35,25 @@ Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_
 
 `STACKGRAPH_GRAPH_READ_MODE=auto` uses the tenant-filtered AGE projection when its fact outbox is current. Pending projection work, missing projection data, a parity mismatch, permission failure, or AGE unavailability automatically falls back to authoritative SQL and emits a structured fallback log. Set the mode to `sql` to disable AGE reads while diagnosing a projection issue; `age` forces an AGE attempt but still preserves the SQL safety fallback.
 
+### Enable AI-backed Ask
+
+`POST /ask` remains deterministic by default. To enable model-assisted query selection and explanation, first apply migrations and sync the versioned prompt catalog:
+
+```shell
+make ai-prompts-sync
+```
+
+Then configure a logical model route, the matching provider credential, and a tenant for local invocation auditing:
+
+```shell
+STACKGRAPH_DEFAULT_TENANT_ID=00000000-0000-4000-8000-000000000001
+STACKGRAPH_AI_ASK_ENABLED=true
+STACKGRAPH_AI_ROUTES_JSON={"default":{"provider":"openrouter","model":"your/model-id"}}
+OPENROUTER_API_KEY=replace-me
+```
+
+The model never receives SQL access and cannot supply entity IDs. It selects one allowlisted deterministic query, the API executes that query under the authenticated tenant, and the model may explain only the returned rows and fact citations. Returned citation IDs are checked against the deterministic tool result. Provider, prompt-catalog, database-audit, context-limit, or output-validation failures use the deterministic Ask response when `STACKGRAPH_AI_ASK_FALLBACK_ENABLED=true`; disabling fallback returns `503 AI_ASK_UNAVAILABLE` instead.
+
 ## Verify
 
 ```shell
