@@ -216,7 +216,7 @@ CREATE TABLE assessment (
   status text NOT NULL DEFAULT 'CURRENT' CHECK(status IN ('CURRENT','SUPERSEDED','WITHDRAWN')), valid_from timestamptz NOT NULL DEFAULT now(), valid_to timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
   CHECK((score IS NOT NULL)<>(categorical_value IS NOT NULL))
 );
-CREATE TABLE assessment_input(tenant_id uuid NOT NULL REFERENCES tenant(id),assessment_id uuid NOT NULL REFERENCES assessment(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(assessment_id,fact_assertion_id));
+CREATE TABLE assessment_input(tenant_id uuid REFERENCES tenant(id),assessment_id uuid NOT NULL REFERENCES assessment(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(assessment_id,fact_assertion_id));
 CREATE TABLE recommendation (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), subject_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   action text NOT NULL CHECK(action IN ('RETAIN','UPGRADE','REMOVE','REPLACE','CONSOLIDATE','REFACTOR','REBUILD','REPLATFORM','RETIRE','INVESTIGATE')),
@@ -225,7 +225,7 @@ CREATE TABLE recommendation (
   counter_signals jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(counter_signals)='array'), status text NOT NULL DEFAULT 'PROPOSED' CHECK(status IN ('PROPOSED','ACCEPTED','REJECTED','PLANNED','IN_PROGRESS','COMPLETED','DISMISSED')),
   created_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE TABLE recommendation_evidence(tenant_id uuid NOT NULL REFERENCES tenant(id),recommendation_id uuid NOT NULL REFERENCES recommendation(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(recommendation_id,fact_assertion_id));
+CREATE TABLE recommendation_evidence(tenant_id uuid REFERENCES tenant(id),recommendation_id uuid NOT NULL REFERENCES recommendation(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(recommendation_id,fact_assertion_id));
 CREATE TABLE recommendation_review(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),recommendation_id uuid NOT NULL REFERENCES recommendation(id) ON DELETE CASCADE,from_status text NOT NULL,to_status text NOT NULL,actor_key text NOT NULL,rationale text,created_at timestamptz NOT NULL DEFAULT now());
 
 CREATE TABLE projection_outbox (

@@ -6,10 +6,14 @@ node_modules/
 dist/
 build/
 coverage/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.py[cod]
 
 .env
 .env.*
 !.env.example
 
 *.log
-
