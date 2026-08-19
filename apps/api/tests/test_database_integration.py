@@ -105,6 +105,9 @@ def test_http_api_queries_seeded_database() -> None:
             """
         ).fetchone()[0]
         fact_id = connection.execute("SELECT id FROM current_fact ORDER BY id LIMIT 1").fetchone()[0]
+        technology_count = connection.execute(
+            "SELECT count(*) FROM entity WHERE namespace='TECHNOLOGY' AND entity_type<>'Capability'"
+        ).fetchone()[0]
 
     async def query_api():
         app = create_app(settings=Settings(environment="test", database_url=database_url))
@@ -127,7 +130,7 @@ def test_http_api_queries_seeded_database() -> None:
     summary, technology, graph, evidence, ask = asyncio.run(query_api())
 
     assert summary.status_code == 200
-    assert summary.json()["counts"]["technologies"] == 192
+    assert summary.json()["counts"]["technologies"] == technology_count
     assert technology.status_code == 200
     assert graph.status_code == 200
     assert graph.json()["truncated"] is True
