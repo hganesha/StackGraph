@@ -1,0 +1,102 @@
+{
+  "graph_name": "stackgraph",
+  "principle": "PostgreSQL is authoritative; AGE is a traversal projection.",
+  "namespaces": {
+    "BUSINESS": [
+      "Organization",
+      "BusinessUnit",
+      "ValueChain",
+      "BusinessFunction",
+      "BusinessProcess",
+      "BusinessCapability"
+    ],
+    "ENTERPRISE": [
+      "Application",
+      "Service",
+      "Component",
+      "API",
+      "Repository"
+    ],
+    "TECHNOLOGY": [
+      "Technology",
+      "Language",
+      "Framework",
+      "Runtime",
+      "Package",
+      "PackageVersion",
+      "Database"
+    ],
+    "DEPLOYMENT": [
+      "Deployment",
+      "Environment",
+      "ComputeTarget",
+      "CloudProvider",
+      "Region",
+      "ContainerImage",
+      "InfrastructureResource"
+    ],
+    "OSS": [
+      "OSSProject",
+      "OSSRepository",
+      "Release",
+      "License",
+      "Maintainer",
+      "ReferenceImplementation",
+      "MigrationPattern",
+      "Ecosystem"
+    ],
+    "INTELLIGENCE": [
+      "Vulnerability",
+      "Finding",
+      "Assessment",
+      "Recommendation",
+      "ModernizationOpportunity",
+      "Standard"
+    ]
+  },
+  "edge_types": [
+    "OWNS",
+    "OPERATES",
+    "CONTAINS",
+    "REQUIRES",
+    "ENABLED_BY",
+    "PROVIDED_BY",
+    "IMPLEMENTED_BY",
+    "DEPENDS_ON",
+    "USES",
+    "CALLS",
+    "EXPOSES",
+    "DEPLOYED_AS",
+    "RUNS_ON",
+    "LOCATED_IN",
+    "HOSTED_IN",
+    "CONNECTS_TO",
+    "HAS_VERSION",
+    "AFFECTED_BY",
+    "ALTERNATIVE_TO",
+    "COMMONLY_USED_WITH",
+    "MIGRATED_TO",
+    "PUBLISHES",
+    "MAINTAINED_BY",
+    "HAS_RELEASE",
+    "USES_LICENSE",
+    "DEMONSTRATES",
+    "BUILT_ON",
+    "PAIRS_WITH",
+    "LIKELY_SUPERSEDED_BY",
+    "TARGETS",
+    "RECOMMENDS"
+  ],
+  "edge_required_properties": [
+    "confidence",
+    "assertion_class"
+  ],
+  "edge_optional_properties": [
+    "first_seen_at",
+    "last_seen_at",
+    "scan_id",
+    "scope",
+    "direct",
+    "evidence_fact_ids"
+  ]
+}

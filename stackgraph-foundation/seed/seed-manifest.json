@@ -1,0 +1,22 @@
+{
+  "seed_id": "framework-landscape-2026",
+  "seed_version": "2026.08.18-foundation.1",
+  "generated_at": "2026-08-18T22:14:29.789231+00:00",
+  "source_file": "framework-landscape-2026.md",
+  "source_sha256": "5828897e8b6e8b1e31589b005f386df350f4fc5ebafa71209294111475a48bf9",
+  "source_total_lines": 466,
+  "hydration": {
+    "technology_records": 192,
+    "category_records": 36,
+    "capability_records": 38,
+    "relationship_records": 101,
+    "assessment_records": 6,
+    "raw_table_rows": 195
+  },
+  "notes": [
+    "Technology records are curated seeds, not live ecosystem truth.",
+    "Compound technology groups are intentionally preserved in this first hydration where the source presents them as a comparison group.",
+    "Future enrichers should resolve compound groups into atomic canonical technologies and attach SAME_AS/CONTAINS relationships.",
+    "Popularity/adoption text is retained as curated_signal; quantitative normalization belongs in a dedicated measured-signal pipeline."
+  ]
+}

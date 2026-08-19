@@ -1,0 +1,182 @@
+[
+  {
+    "id": "ui-rendering-reactivity",
+    "domain_id": "frontend",
+    "name": "UI rendering & reactivity"
+  },
+  {
+    "id": "meta-framework",
+    "domain_id": "frontend",
+    "name": "Meta-framework / SSR / server boundary"
+  },
+  {
+    "id": "client-routing",
+    "domain_id": "frontend",
+    "name": "Client-side routing"
+  },
+  {
+    "id": "server-state",
+    "domain_id": "frontend",
+    "name": "Server state"
+  },
+  {
+    "id": "client-state",
+    "domain_id": "frontend",
+    "name": "Client state"
+  },
+  {
+    "id": "forms-validation",
+    "domain_id": "frontend",
+    "name": "Forms & validation"
+  },
+  {
+    "id": "styling-components",
+    "domain_id": "frontend",
+    "name": "Styling & component libraries"
+  },
+  {
+    "id": "build-tooling",
+    "domain_id": "frontend",
+    "name": "Build tooling"
+  },
+  {
+    "id": "testing",
+    "domain_id": "frontend",
+    "name": "Testing"
+  },
+  {
+    "id": "mobile-desktop",
+    "domain_id": "frontend",
+    "name": "Mobile & desktop"
+  },
+  {
+    "id": "api-gateway-edge",
+    "domain_id": "middleware",
+    "name": "API gateways & edge proxies"
+  },
+  {
+    "id": "service-mesh",
+    "domain_id": "middleware",
+    "name": "Service mesh"
+  },
+  {
+    "id": "messaging-streaming-eventing",
+    "domain_id": "middleware",
+    "name": "Messaging, streaming & eventing"
+  },
+  {
+    "id": "request-pipeline",
+    "domain_id": "middleware",
+    "name": "In-process request middleware"
+  },
+  {
+    "id": "api-contract",
+    "domain_id": "middleware",
+    "name": "API contracts & interchange"
+  },
+  {
+    "id": "cache-session-search",
+    "domain_id": "middleware",
+    "name": "Caching, sessions & search"
+  },
+  {
+    "id": "identity-authorization-secrets",
+    "domain_id": "middleware",
+    "name": "Identity, authorization & secrets"
+  },
+  {
+    "id": "workflow-orchestration",
+    "domain_id": "middleware",
+    "name": "Workflow & orchestration"
+  },
+  {
+    "id": "observability",
+    "domain_id": "middleware",
+    "name": "Observability"
+  },
+  {
+    "id": "js-ts-backend",
+    "domain_id": "backend",
+    "name": "JavaScript / TypeScript backend"
+  },
+  {
+    "id": "python-backend",
+    "domain_id": "backend",
+    "name": "Python backend"
+  },
+  {
+    "id": "jvm-backend",
+    "domain_id": "backend",
+    "name": "Java / Kotlin backend"
+  },
+  {
+    "id": "dotnet-backend",
+    "domain_id": "backend",
+    "name": ".NET backend"
+  },
+  {
+    "id": "go-backend",
+    "domain_id": "backend",
+    "name": "Go backend"
+  },
+  {
+    "id": "rust-backend",
+    "domain_id": "backend",
+    "name": "Rust backend"
+  },
+  {
+    "id": "php-backend",
+    "domain_id": "backend",
+    "name": "PHP backend"
+  },
+  {
+    "id": "ruby-backend",
+    "domain_id": "backend",
+    "name": "Ruby backend"
+  },
+  {
+    "id": "other-backend",
+    "domain_id": "backend",
+    "name": "Other backend ecosystems"
+  },
+  {
+    "id": "compute-target",
+    "domain_id": "deployment",
+    "name": "Compute target"
+  },
+  {
+    "id": "environment",
+    "domain_id": "deployment",
+    "name": "Deployment environment"
+  },
+  {
+    "id": "cloud-provider",
+    "domain_id": "deployment",
+    "name": "Cloud provider"
+  },
+  {
+    "id": "infrastructure-resource",
+    "domain_id": "deployment",
+    "name": "Infrastructure resource"
+  },
+  {
+    "id": "value-chain",
+    "domain_id": "business",
+    "name": "Value chain"
+  },
+  {
+    "id": "business-function",
+    "domain_id": "business",
+    "name": "Business function"
+  },
+  {
+    "id": "business-process",
+    "domain_id": "business",
+    "name": "Business process"
+  },
+  {
+    "id": "business-capability",
+    "domain_id": "business",
+    "name": "Business capability"
+  }
+]

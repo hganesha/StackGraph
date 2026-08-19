@@ -1,0 +1,50 @@
+[
+  {
+    "technology_id": "jquery",
+    "dimension": "new_project_fit",
+    "value": "LOW",
+    "confidence": 0.95,
+    "rationale": "Reference calls it not a choice for new work.",
+    "source_line": 62
+  },
+  {
+    "technology_id": "formik",
+    "dimension": "lifecycle",
+    "value": "SUPERSEDED",
+    "confidence": 0.9,
+    "rationale": "Reference describes Formik as largely superseded.",
+    "source_line": 128
+  },
+  {
+    "technology_id": "styled-components-emotion",
+    "dimension": "trajectory",
+    "value": "DECLINING",
+    "confidence": 0.9,
+    "rationale": "Reference notes declining use due to runtime cost and Server Components.",
+    "source_line": 139
+  },
+  {
+    "technology_id": "webpack",
+    "dimension": "trajectory",
+    "value": "DECLINING",
+    "confidence": 0.85,
+    "rationale": "Reference describes it as former default with clearly negative sentiment.",
+    "source_line": 152
+  },
+  {
+    "technology_id": "cypress",
+    "dimension": "trajectory",
+    "value": "DECLINING_RELATIVE",
+    "confidence": 0.85,
+    "rationale": "Reference says it is losing ground to Playwright.",
+    "source_line": 164
+  },
+  {
+    "technology_id": "react-router-v7-v8",
+    "dimension": "lifecycle",
+    "value": "CURRENT",
+    "confidence": 0.9,
+    "rationale": "Reference identifies v7/v8 as current line and older lines as EOL.",
+    "source_line": 76
+  }
+]

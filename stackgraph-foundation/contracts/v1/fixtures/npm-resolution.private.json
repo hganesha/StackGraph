@@ -1,0 +1,19 @@
+{
+  "scope": "runtime",
+  "direct": true,
+  "requested_spec": "2.4.1",
+  "resolved_version": "2.4.1",
+  "registry_resolution": {
+    "origin": "https://npm.acme.example/",
+    "source": "NPMRC_SCOPE",
+    "scope": "@acme",
+    "config_path": ".npmrc",
+    "custom_registry": true,
+    "lockfile_behavior": "CUSTOM_PINNED",
+    "visibility": "PRIVATE"
+  },
+  "artifact": {
+    "resolved_uri": "https://npm.acme.example/@acme/billing-sdk/-/billing-sdk-2.4.1.tgz",
+    "integrity": "sha512-private-example"
+  }
+}

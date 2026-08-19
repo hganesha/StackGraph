@@ -1,0 +1,26 @@
+{
+  "scanner_contract_version": "1.0.0",
+  "run_id": "00000000-0000-4000-8000-000000000101",
+  "tenant_key": "acme",
+  "target": {
+    "provider": "github",
+    "repository_id": "123",
+    "canonical_key": "github:repo:123",
+    "owner": "acme",
+    "name": "billing-svc",
+    "default_branch": "main"
+  },
+  "snapshot": {
+    "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+    "checkout_root": "/workspace/billing-svc",
+    "requested_at": "2026-08-19T14:00:00Z"
+  },
+  "limits": {"max_files": 100000, "max_bytes": 1073741824, "deadline_seconds": 1200},
+  "registry_policy": {
+    "npm_default_origin": "https://registry.npmjs.org/",
+    "allowed_origins": ["https://registry.npmjs.org/", "https://npm.acme.example/"],
+    "allow_private_metadata": true,
+    "allow_insecure_localhost": false,
+    "redact_auth": true
+  }
+}

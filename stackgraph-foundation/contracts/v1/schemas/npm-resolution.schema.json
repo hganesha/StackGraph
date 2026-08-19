@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/npm-resolution.schema.json",
+  "title": "StackGraph npm dependency resolution metadata",
+  "$defs": {
+    "registryOrigin": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://[^@]+/?$"
+    },
+    "registryResolution": {
+      "type": "object",
+      "required": ["origin", "source", "custom_registry", "lockfile_behavior", "visibility"],
+      "properties": {
+        "origin": {"$ref": "#/$defs/registryOrigin"},
+        "source": {"enum": ["LOCKFILE", "NPMRC_SCOPE", "NPMRC_DEFAULT", "NPM_DEFAULT", "EXPLICIT_TARBALL", "UNKNOWN"]},
+        "scope": {"type": ["string", "null"], "pattern": "^@[a-z0-9._~-]+$"},
+        "config_path": {"type": ["string", "null"]},
+        "custom_registry": {"type": "boolean"},
+        "lockfile_behavior": {"enum": ["CONFIGURED_DEFAULT", "CUSTOM_PINNED", "EXPLICIT_TARBALL", "UNKNOWN"]},
+        "visibility": {"enum": ["PUBLIC", "PRIVATE", "UNKNOWN"]}
+      },
+      "additionalProperties": false
+    },
+    "dependencyProperties": {
+      "type": "object",
+      "required": ["scope", "direct", "requested_spec", "registry_resolution"],
+      "properties": {
+        "scope": {"enum": ["runtime", "development", "optional", "peer", "bundled", "unknown"]},
+        "direct": {"type": "boolean"},
+        "requested_spec": {"type": "string", "minLength": 1},
+        "resolved_version": {"type": "string", "minLength": 1},
+        "registry_resolution": {"$ref": "#/$defs/registryResolution"},
+        "artifact": {
+          "type": "object",
+          "properties": {
+            "resolved_uri": {
+              "type": "string",
+              "format": "uri",
+              "not": {"pattern": "^https?://[^/]*@"}
+            },
+            "integrity": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

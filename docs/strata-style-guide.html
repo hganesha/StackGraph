@@ -1,0 +1,220 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+#strata-root {
+  --business-100:#F6ECD6; --business-500:#D4A843; --business-800:#59471C; --business-900:#352A11;
+  --enterprise-100:#D7DFEB; --enterprise-500:#4A6FA5; --enterprise-800:#1F2F45; --enterprise-900:#131C29;
+  --oss-100:#D0E9E6; --oss-500:#2A9D8F; --oss-800:#12423C; --oss-900:#0B2724;
+  --intel-100:#E2DBEB; --intel-500:#7B5AA6; --intel-800:#342646; --intel-900:#1F172A;
+  --danger-100:#F0D2CF; --danger-500:#B3261E; --danger-900:#2D0A08;
+  --font-sans:'IBM Plex Sans',-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+#strata-root[data-theme="light"]{
+  --base:#FAF9F6; --card:#FFFFFF; --sunken:#F1EFEA; --border:#DEDCD4; --border-strong:#C4C1B7;
+  --text-primary:#1A1B1E; --text-secondary:#4E4D49; --text-muted:#807E76;
+}
+#strata-root[data-theme="dark"]{
+  --base:#14151A; --card:#1C1E24; --sunken:#0E0F13; --border:#2C2E36; --border-strong:#3D4048;
+  --text-primary:#E8E7E2; --text-secondary:#B4B2AA; --text-muted:#7B7A74;
+}
+#strata-root{
+  background:var(--base); color:var(--text-primary); font-family:var(--font-sans);
+  padding:32px 28px 64px; border-radius:10px; transition:background 200ms ease-out,color 200ms ease-out;
+}
+#strata-root *{box-sizing:border-box;}
+#strata-root h1{font-size:24px;font-weight:500;margin:0;letter-spacing:-0.01em;}
+#strata-root h2{font-size:16px;font-weight:600;margin:0 0 4px;}
+#strata-root .eyebrow{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin:0 0 32px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+#strata-root section{margin-top:40px;}
+#strata-root .sub{font-size:13px;color:var(--text-secondary);margin:2px 0 16px;max-width:640px;line-height:1.5;}
+#strata-root .header-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;}
+#strata-root .toggle{font-family:var(--font-mono);font-size:12px;background:var(--card);border:1px solid var(--border-strong);color:var(--text-primary);border-radius:999px;padding:6px 14px;cursor:pointer;transition:background 150ms ease-out;}
+#strata-root .toggle:hover{background:var(--sunken);}
+
+#strata-root .ramp-row{display:grid;grid-template-columns:88px repeat(9,1fr);gap:2px;align-items:center;margin-bottom:6px;}
+#strata-root .ramp-name{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);}
+#strata-root .swatch{height:40px;border-radius:4px;position:relative;}
+#strata-root .swatch .hex{position:absolute;bottom:3px;left:5px;font-family:var(--font-mono);font-size:9px;opacity:0.75;}
+
+#strata-root .type-sample{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border);gap:16px;}
+#strata-root .type-sample .label{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);min-width:110px;}
+
+#strata-root .evidence-vs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+#strata-root .evidence-block{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;}
+#strata-root .evidence-block .tag{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;}
+#strata-root .evidence-block .content{margin-top:8px;font-size:14px;line-height:1.6;}
+#strata-root .evidence-block.mono .content{font-family:var(--font-mono);font-size:13px;}
+#strata-root .evidence-block.sans .content{font-family:var(--font-sans);}
+
+#strata-root .space-row{display:flex;align-items:center;gap:12px;margin-bottom:8px;}
+#strata-root .space-bar{height:14px;background:var(--enterprise-500);border-radius:2px;}
+#strata-root .space-label{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);width:48px;}
+
+#strata-root .badge{font-family:var(--font-mono);font-size:11px;font-weight:500;padding:3px 10px;border-radius:999px;display:inline-flex;letter-spacing:0.02em;}
+#strata-root .badge.biz{background:var(--business-100);color:var(--business-900);}
+#strata-root .badge.ent{background:var(--enterprise-100);color:var(--enterprise-900);}
+#strata-root .badge.oss{background:var(--oss-100);color:var(--oss-900);}
+#strata-root .badge.int{background:var(--intel-100);color:var(--intel-900);}
+
+#strata-root .chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;padding:4px 10px;border:1px solid var(--border-strong);border-radius:999px;}
+#strata-root .chip .bars{display:flex;gap:1px;align-items:flex-end;}
+#strata-root .chip .bars span{width:3px;background:var(--text-muted);display:block;}
+#strata-root .chip .bars span:nth-child(1){height:5px;}
+#strata-root .chip .bars span:nth-child(2){height:8px;}
+#strata-root .chip .bars span:nth-child(3){height:11px;}
+#strata-root .chip.high .bars span{background:var(--text-primary);}
+#strata-root .chip.medium .bars span:nth-child(3){background:var(--border-strong);}
+#strata-root .chip.low{border-color:var(--danger-500);color:var(--danger-500);}
+#strata-root .chip.low .bars span:nth-child(2),#strata-root .chip.low .bars span:nth-child(3){background:var(--border-strong);}
+#strata-root .chip.low .bars span:nth-child(1){background:var(--danger-500);}
+
+#strata-root .connector-row{display:flex;gap:40px;margin-top:16px;flex-wrap:wrap;}
+#strata-root .connector{display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+#strata-root .connector .line{width:180px;height:0;border-top:2px solid var(--intel-500);}
+#strata-root .connector .line.unconfirmed{border-top:1.5px dashed var(--border-strong);}
+#strata-root .connector .line.confirmed{animation:pulse 1.8s ease-in-out infinite;}
+#strata-root .connector .caption{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.35;}}
+@media (prefers-reduced-motion:reduce){#strata-root .connector .line.confirmed{animation:none;}}
+
+#strata-root .ev-row{display:grid;grid-template-columns:130px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:baseline;}
+#strata-root .ev-row .cls{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);}
+#strata-root .ev-row .src{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);display:block;}
+#strata-root .ev-row .desc{font-family:var(--font-sans);font-size:13px;color:var(--text-primary);display:block;margin-top:2px;}
+
+#strata-root .card{background:var(--card);border:1px solid var(--border);border-left:4px solid var(--enterprise-500);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.08);padding:18px 20px;max-width:460px;margin-top:16px;}
+#strata-root .card .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+#strata-root .card .title{font-size:14px;font-weight:600;}
+#strata-root .card .why{margin-top:10px;font-size:13px;line-height:1.6;color:var(--text-secondary);}
+#strata-root .card .migration{margin-top:10px;font-family:var(--font-mono);font-size:12px;color:var(--text-muted);}
+
+#strata-root table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;}
+#strata-root th{text-align:left;font-family:var(--font-mono);font-size:11px;color:var(--text-muted);font-weight:400;text-transform:uppercase;letter-spacing:0.04em;padding:0 8px 8px;border-bottom:1px solid var(--border-strong);}
+#strata-root td{padding:10px 8px;border-bottom:1px solid var(--border);}
+#strata-root td.name{font-family:var(--font-mono);}
+</style>
+
+<div id="strata-root" data-theme="light">
+  <div class="header-row eyebrow">
+    <div>
+      <h1>Strata</h1>
+      <div style="margin-top:4px;">design language for StackGraph — evidence-first, layered, instrument-panel precision</div>
+    </div>
+    <button class="toggle" id="theme-toggle" onclick="strataToggle()">Switch to dark</button>
+  </div>
+
+  <section>
+    <h2>Domain color ramps</h2>
+    <p class="sub">Four ramps, one per graph. A fifth color — danger red — is reserved exclusively for LOW confidence and errors and never appears here.</p>
+    <div class="ramp-row"><span class="ramp-name">business</span>
+      <div class="swatch" style="background:#FCF8F0"></div><div class="swatch" style="background:#F6ECD6"></div><div class="swatch" style="background:#EEDCB4"></div><div class="swatch" style="background:#E5CB8E"></div><div class="swatch" style="background:#DCB865"></div><div class="swatch" style="background:#D4A843"><span class="hex">500</span></div><div class="swatch" style="background:#AE8A37"></div><div class="swatch" style="background:#83682A;color:#fff"></div><div class="swatch" style="background:#59471C;color:#fff"></div>
+    </div>
+    <div class="ramp-row"><span class="ramp-name">enterprise</span>
+      <div class="swatch" style="background:#F1F4F8"></div><div class="swatch" style="background:#D7DFEB"></div><div class="swatch" style="background:#B7C5DB"></div><div class="swatch" style="background:#92A9C9"></div><div class="swatch" style="background:#6B89B5"></div><div class="swatch" style="background:#4A6FA5"><span class="hex" style="color:#fff">500</span></div><div class="swatch" style="background:#3D5B87"></div><div class="swatch" style="background:#2E4566;color:#fff"></div><div class="swatch" style="background:#1F2F45;color:#fff"></div>
+    </div>
+    <div class="ramp-row"><span class="ramp-name">oss</span>
+      <div class="swatch" style="background:#EEF7F6"></div><div class="swatch" style="background:#D0E9E6"></div><div class="swatch" style="background:#AAD8D2"></div><div class="swatch" style="background:#7FC4BC"></div><div class="swatch" style="background:#50AFA3"></div><div class="swatch" style="background:#2A9D8F"><span class="hex" style="color:#fff">500</span></div><div class="swatch" style="background:#228175"></div><div class="swatch" style="background:#1A6159;color:#fff"></div><div class="swatch" style="background:#12423C;color:#fff"></div>
+    </div>
+    <div class="ramp-row"><span class="ramp-name">intelligence</span>
+      <div class="swatch" style="background:#F4F2F8"></div><div class="swatch" style="background:#E2DBEB"></div><div class="swatch" style="background:#CABDDB"></div><div class="swatch" style="background:#B09CCA"></div><div class="swatch" style="background:#9378B6"></div><div class="swatch" style="background:#7B5AA6"><span class="hex" style="color:#fff">500</span></div><div class="swatch" style="background:#654A88"></div><div class="swatch" style="background:#4C3867;color:#fff"></div><div class="swatch" style="background:#342646;color:#fff"></div>
+    </div>
+    <div class="ramp-row"><span class="ramp-name">danger</span>
+      <div class="swatch" style="background:#F9EEED"></div><div class="swatch" style="background:#F0D2CF"></div><div class="swatch" style="background:transparent"></div><div class="swatch" style="background:transparent"></div><div class="swatch" style="background:transparent"></div><div class="swatch" style="background:#B3261E"><span class="hex" style="color:#fff">500</span></div><div class="swatch" style="background:transparent"></div><div class="swatch" style="background:#7A1A15;color:#fff"></div><div class="swatch" style="background:#2D0A08;color:#fff"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Typography maps to evidence class</h2>
+    <p class="sub">Mono is a raw, machine-read fact. Sans is StackGraph's reasoning. The user learns this without a legend.</p>
+    <div class="evidence-vs">
+      <div class="evidence-block mono">
+        <div class="tag">Observed — IBM Plex Mono</div>
+        <div class="content">src/lib/http.ts imports request@2.88.2<br>0 releases in 38 months (deps.dev)</div>
+      </div>
+      <div class="evidence-block sans">
+        <div class="tag">Inferred — IBM Plex Sans</div>
+        <div class="content">Node 18 combined with an abandoned HTTP client suggests this service is due for a supportability review.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Type scale</h2>
+    <div class="type-sample"><span class="label">display / 32</span><span style="font-size:32px;font-weight:500;">81</span></div>
+    <div class="type-sample"><span class="label">h1 / 24</span><span style="font-size:24px;font-weight:500;">Technology Explorer</span></div>
+    <div class="type-sample"><span class="label">h2 / 20</span><span style="font-size:20px;font-weight:500;">Recommendation</span></div>
+    <div class="type-sample"><span class="label">h3 / 16</span><span style="font-size:16px;font-weight:600;">Migration plan</span></div>
+    <div class="type-sample"><span class="label">body / 14</span><span style="font-size:14px;">72 comparable services already use native fetch.</span></div>
+    <div class="type-sample"><span class="label">mono-data / 13</span><span style="font-family:var(--font-mono);font-size:13px;">infra/prod/main.tf · confidence 0.94</span></div>
+    <div class="type-sample"><span class="label">small / 12</span><span style="font-size:12px;color:var(--text-muted);">last scanned 4 hours ago</span></div>
+  </section>
+
+  <section>
+    <h2>Spacing — 8px grid</h2>
+    <div class="space-row"><span class="space-label">4</span><div class="space-bar" style="width:4px;"></div></div>
+    <div class="space-row"><span class="space-label">8</span><div class="space-bar" style="width:8px;"></div></div>
+    <div class="space-row"><span class="space-label">16</span><div class="space-bar" style="width:16px;"></div></div>
+    <div class="space-row"><span class="space-label">24</span><div class="space-bar" style="width:24px;"></div></div>
+    <div class="space-row"><span class="space-label">32</span><div class="space-bar" style="width:32px;"></div></div>
+    <div class="space-row"><span class="space-label">48</span><div class="space-bar" style="width:48px;"></div></div>
+    <div class="space-row"><span class="space-label">64</span><div class="space-bar" style="width:64px;"></div></div>
+  </section>
+
+  <section>
+    <h2>Domain badges &amp; confidence chips</h2>
+    <p class="sub">Badges carry a text code, never color alone. Confidence is a shape (segmented bars), color only at LOW.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <span class="badge biz">BIZ</span><span class="badge ent">ENT</span><span class="badge oss">OSS</span><span class="badge int">INT</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+      <span class="chip high"><span class="bars"><span></span><span></span><span></span></span>HIGH · 0.94</span>
+      <span class="chip medium"><span class="bars"><span></span><span></span><span></span></span>MEDIUM · 0.71</span>
+      <span class="chip low"><span class="bars"><span></span><span></span><span></span></span>LOW · 0.42</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Bridge connector states</h2>
+    <div class="connector-row">
+      <div class="connector"><div class="line confirmed"></div><span class="caption">confirmed · selected · pulses</span></div>
+      <div class="connector"><div class="line unconfirmed"></div><span class="caption">unconfirmed · dashed · static</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Evidence rows</h2>
+    <div class="ev-row"><span class="cls">DECLARED</span><span><span class="src">infra/Dockerfile</span><span class="desc">Bases on node:18-alpine</span></span></div>
+    <div class="ev-row"><span class="cls">OBSERVED</span><span><span class="src">src/lib/http.ts</span><span class="desc">Imports request@2.88.2, no native fetch usage found</span></span></div>
+    <div class="ev-row"><span class="cls">EXTERNAL_MEASURED</span><span><span class="src">deps.dev / OSV</span><span class="desc">0 releases in 38 months, deprecated by maintainer</span></span></div>
+  </section>
+
+  <section>
+    <h2>Recommendation card</h2>
+    <div class="card">
+      <div class="head"><span class="title">Replace request → native fetch</span><span class="chip high"><span class="bars"><span></span><span></span><span></span></span>HIGH · 0.94</span></div>
+      <div class="why">Equivalent capability, already used in 72 comparable services, native to the declared Node 18 runtime, and trending up ecosystem-wide.</div>
+      <div class="migration">17 call sites · 8 files · LOW complexity</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Table row — Software Estate home</h2>
+    <table>
+      <tr><th>Application</th><th>Domain</th><th>Confidence</th><th>Priority</th></tr>
+      <tr><td class="name">billing-svc</td><td><span class="badge ent">ENT</span></td><td><span class="chip high"><span class="bars"><span></span><span></span><span></span></span>HIGH</span></td><td>91</td></tr>
+      <tr><td class="name">customer-profile</td><td><span class="badge ent">ENT</span></td><td><span class="chip medium"><span class="bars"><span></span><span></span><span></span></span>MEDIUM</span></td><td>58</td></tr>
+      <tr><td class="name">legacy-reporting</td><td><span class="badge biz">BIZ</span></td><td><span class="chip low"><span class="bars"><span></span><span></span><span></span></span>LOW</span></td><td>22</td></tr>
+    </table>
+  </section>
+</div>
+
+<script>
+function strataToggle(){
+  var root = document.getElementById('strata-root');
+  var btn = document.getElementById('theme-toggle');
+  var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  root.setAttribute('data-theme', next);
+  btn.textContent = next === 'light' ? 'Switch to dark' : 'Switch to light';
+}
+</script>

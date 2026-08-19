@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/scanner-result.schema.json",
+  "title": "StackGraph scanner result v1",
+  "type": "object",
+  "required": ["scanner_contract_version", "run_id", "source_revision", "extractor", "completeness", "facts", "stats", "diagnostics"],
+  "properties": {
+    "scanner_contract_version": {"const": "1.0.0"},
+    "run_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "source_revision": {"type": "string", "minLength": 1},
+    "extractor": {"$ref": "common.schema.json#/$defs/extractor"},
+    "completeness": {"$ref": "common.schema.json#/$defs/completeness"},
+    "facts": {
+      "type": "array",
+      "items": {"$ref": "fact.schema.json"}
+    },
+    "stats": {
+      "type": "object",
+      "required": ["files_seen", "files_scanned", "facts_emitted", "bytes_read"],
+      "properties": {
+        "files_seen": {"type": "integer", "minimum": 0},
+        "files_scanned": {"type": "integer", "minimum": 0},
+        "facts_emitted": {"type": "integer", "minimum": 0},
+        "bytes_read": {"type": "integer", "minimum": 0},
+        "duration_ms": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["severity", "code", "message"],
+        "properties": {
+          "severity": {"enum": ["INFO", "WARNING", "ERROR"]},
+          "code": {"type": "string", "minLength": 1},
+          "message": {"type": "string", "minLength": 1},
+          "path": {"type": "string"},
+          "details": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"completeness": {"const": "COMPLETE"}}},
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "not": {
+              "type": "array",
+              "contains": {
+                "type": "object",
+                "properties": {"severity": {"const": "ERROR"}},
+                "required": ["severity"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

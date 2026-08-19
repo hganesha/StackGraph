@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json",
+  "title": "StackGraph UI read models v1",
+  "$defs": {
+    "citation": {
+      "type": "object",
+      "required": ["fact_id", "label"],
+      "properties": {
+        "fact_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "label": {"type": "string", "minLength": 1},
+        "href": {"type": "string", "format": "uri-reference"}
+      },
+      "additionalProperties": false
+    },
+    "score": {
+      "type": "object",
+      "required": ["value", "confidence", "confidence_label", "method_version"],
+      "properties": {
+        "value": {"type": "number"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "method_version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "rankedItem": {
+      "type": "object",
+      "required": ["id", "kind", "name", "domain", "priority", "freshness"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "kind": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "domain": {"$ref": "common.schema.json#/$defs/namespace"},
+        "priority": {"$ref": "#/$defs/score"},
+        "viability": {"$ref": "#/$defs/score"},
+        "summary": {"type": "string"},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
+        "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}}
+      },
+      "additionalProperties": false
+    },
+    "estateSummary": {
+      "type": "object",
+      "required": ["contract_version", "as_of", "counts", "distributions", "ranked_items", "coverage"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "counts": {
+          "type": "object",
+          "required": ["applications", "repositories", "services", "technologies"],
+          "properties": {
+            "applications": {"type": "integer", "minimum": 0},
+            "repositories": {"type": "integer", "minimum": 0},
+            "services": {"type": "integer", "minimum": 0},
+            "technologies": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "distributions": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}},
+        "ranked_items": {"type": "array", "items": {"$ref": "#/$defs/rankedItem"}},
+        "coverage": {
+          "type": "object",
+          "required": ["repositories_total", "repositories_scanned", "facts_with_evidence_ratio"],
+          "properties": {
+            "repositories_total": {"type": "integer", "minimum": 0},
+            "repositories_scanned": {"type": "integer", "minimum": 0},
+            "facts_with_evidence_ratio": {"type": "number", "minimum": 0, "maximum": 1}
+          },
+          "additionalProperties": false
+        },
+        "page_info": {"$ref": "common.schema.json#/$defs/pageInfo"}
+      },
+      "additionalProperties": false
+    },
+    "entitySummary": {
+      "type": "object",
+      "required": ["id", "kind", "name"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "kind": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "canonical_key": {"type": "string"},
+        "summary": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "assessmentSummary": {
+      "type": "object",
+      "required": ["id", "dimension", "confidence", "confidence_label", "method_version", "citations"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "dimension": {"type": "string", "minLength": 1},
+        "score": {"type": "number"},
+        "categorical_value": {"type": "string"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "method_version": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string"},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+      },
+      "oneOf": [
+        {"required": ["score"], "not": {"required": ["categorical_value"]}},
+        {"required": ["categorical_value"], "not": {"required": ["score"]}}
+      ],
+      "additionalProperties": false
+    },
+    "recommendationSummary": {
+      "type": "object",
+      "required": ["id", "action", "title", "rationale", "confidence", "confidence_label", "status", "citations"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "action": {"enum": ["RETAIN", "UPGRADE", "REMOVE", "REPLACE", "CONSOLIDATE", "REFACTOR", "REBUILD", "REPLATFORM", "RETIRE", "INVESTIGATE"]},
+        "title": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "status": {"enum": ["PROPOSED", "ACCEPTED", "REJECTED", "PLANNED", "IN_PROGRESS", "COMPLETED", "DISMISSED"]},
+        "estimated_effort": {"enum": ["LOW", "MEDIUM", "HIGH", "UNKNOWN"]},
+        "counter_signals": {"type": "array", "items": {"type": "string"}},
+        "target": {"$ref": "#/$defs/entitySummary"},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+      },
+      "additionalProperties": false
+    },
+    "applicationDetail": {
+      "type": "object",
+      "required": ["contract_version", "application", "business_context", "repositories", "technologies", "deployments", "assessments", "recommendations", "freshness"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "application": {"$ref": "#/$defs/entitySummary"},
+        "business_context": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "repositories": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
+        "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+      },
+      "additionalProperties": false
+    },
+    "technologyDetail": {
+      "type": "object",
+      "required": ["contract_version", "technology", "internal_usage", "packages", "projects", "assessments", "recommendations", "freshness"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "technology": {"$ref": "#/$defs/entitySummary"},
+        "internal_usage": {
+          "type": "object",
+          "required": ["repository_count", "application_count"],
+          "properties": {
+            "repository_count": {"type": "integer", "minimum": 0},
+            "application_count": {"type": "integer", "minimum": 0},
+            "repositories": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}}
+          },
+          "additionalProperties": false
+        },
+        "packages": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "projects": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "registry_sources": {"type": "array", "items": {"$ref": "#/$defs/packageSource"}},
+        "alternatives": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "migration_patterns": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
+        "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+      },
+      "additionalProperties": false
+    },
+    "packageSource": {
+      "type": "object",
+      "required": ["registry_key", "origin", "visibility", "tenant_scoped", "freshness"],
+      "properties": {
+        "registry_key": {"type": "string", "minLength": 1},
+        "origin": {"type": "string", "format": "uri"},
+        "visibility": {"enum": ["PUBLIC", "PRIVATE", "UNKNOWN"]},
+        "tenant_scoped": {"type": "boolean"},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationList": {
+      "type": "object",
+      "required": ["contract_version", "as_of", "opportunities", "page_info"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "opportunities": {"type": "array", "items": {"$ref": "#/$defs/rankedItem"}},
+        "page_info": {"$ref": "common.schema.json#/$defs/pageInfo"}
+      },
+      "additionalProperties": false
+    },
+    "graphNode": {
+      "type": "object",
+      "required": ["id", "namespace", "type", "key", "label", "aggregate"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "namespace": {"$ref": "common.schema.json#/$defs/namespace"},
+        "type": {"type": "string"},
+        "key": {"type": "string"},
+        "label": {"type": "string"},
+        "aggregate": {"type": "boolean"},
+        "member_count": {"type": "integer", "minimum": 1},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"}
+      },
+      "additionalProperties": false
+    },
+    "graphEdge": {
+      "type": "object",
+      "required": ["id", "source", "target", "predicate", "confidence", "assertion_class", "review_state", "citation_fact_ids"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "source": {"$ref": "common.schema.json#/$defs/uuid"},
+        "target": {"$ref": "common.schema.json#/$defs/uuid"},
+        "predicate": {"type": "string"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "assertion_class": {"$ref": "common.schema.json#/$defs/assertionClass"},
+        "review_state": {"enum": ["CONFIRMED", "POSSIBLE", "REJECTED", "NOT_APPLICABLE"]},
+        "citation_fact_ids": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/uuid"}}
+      },
+      "additionalProperties": false
+    },
+    "graphNeighborhood": {
+      "type": "object",
+      "required": ["contract_version", "center_id", "nodes", "edges", "truncated"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "center_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "nodes": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/graphNode"}},
+        "edges": {"type": "array", "items": {"$ref": "#/$defs/graphEdge"}},
+        "highlighted_path": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "truncated": {"type": "boolean"},
+        "truncation_reason": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "evidenceDetail": {
+      "type": "object",
+      "required": ["contract_version", "fact_id", "assertion_class", "confidence", "predicate", "source_revision", "extractor", "evidence", "observed_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "fact_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "assertion_class": {"$ref": "common.schema.json#/$defs/assertionClass"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "predicate": {"type": "string"},
+        "source_revision": {"type": "string"},
+        "extractor": {"$ref": "common.schema.json#/$defs/extractor"},
+        "properties": {"type": "object"},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "object"}},
+        "observed_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "effective_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "closed_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "askRequest": {
+      "type": "object",
+      "required": ["question"],
+      "properties": {
+        "question": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "context_entity_ids": {"type": "array", "maxItems": 20, "items": {"$ref": "common.schema.json#/$defs/uuid"}}
+      },
+      "additionalProperties": false
+    },
+    "askResponse": {
+      "type": "object",
+      "required": ["contract_version", "text", "citations", "result_kind"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "text": {"type": "string", "minLength": 1},
+        "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
+        "result_kind": {"enum": ["ANSWER", "TABLE", "GRAPH", "UNSUPPORTED"]},
+        "rows": {"type": "array", "items": {"type": "object"}},
+        "graph_highlight": {"$ref": "#/$defs/graphNeighborhood"}
+      },
+      "additionalProperties": false
+    },
+    "identityReviewRequest": {
+      "type": "object",
+      "required": ["decision", "rationale", "expected_version"],
+      "properties": {
+        "decision": {"enum": ["CONFIRM", "REJECT"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "expected_version": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "identityReviewResult": {
+      "type": "object",
+      "required": ["contract_version", "identity_assertion_id", "review_state", "version", "reviewed_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "identity_assertion_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "review_state": {"enum": ["CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 2},
+        "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message", "request_id"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "request_id": {"type": "string"},
+        "details": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

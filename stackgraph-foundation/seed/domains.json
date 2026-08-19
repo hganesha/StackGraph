@@ -1,0 +1,37 @@
+[
+  {
+    "id": "frontend",
+    "name": "Frontend",
+    "definition": "Code running in the user's browser/device plus server-side rendering that produces it.",
+    "question": "How does a human see and manipulate state?",
+    "source_line": 24
+  },
+  {
+    "id": "middleware",
+    "name": "Middleware",
+    "definition": "The connective tier between clients, services, and core business logic.",
+    "question": "How do requests, events and data get from A to B safely?",
+    "source_line": 25
+  },
+  {
+    "id": "backend",
+    "name": "Backend",
+    "definition": "Business logic, data access, and the runtime hosting it.",
+    "question": "What is actually true, and who is allowed to change it?",
+    "source_line": 26
+  },
+  {
+    "id": "deployment",
+    "name": "Deployment",
+    "definition": "Declared and observed runtime, compute, environment, cloud/on-prem and infrastructure footprint.",
+    "question": "Where and how does the application run?",
+    "source_line": null
+  },
+  {
+    "id": "business",
+    "name": "Business",
+    "definition": "Value chains, functions, processes and capabilities enabled by applications.",
+    "question": "What business value does the software enable?",
+    "source_line": null
+  }
+]

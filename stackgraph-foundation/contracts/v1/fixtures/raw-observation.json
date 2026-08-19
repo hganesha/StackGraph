@@ -1,0 +1,16 @@
+{
+  "observation_contract_version": "1.0.0",
+  "idempotency_key": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "tenant_key": null,
+  "source": {"key": "deps-dev", "kind": "DEPS_DEV", "adapter_version": "1.0.0", "schema_version": "v3"},
+  "target_key": "pkg:npm/axios@1.7.9",
+  "source_revision": "etag:example-1",
+  "observed_at": "2026-08-19T14:05:00Z",
+  "request": {"uri": "https://api.deps.dev/v3alpha/systems/npm/packages/axios/versions/1.7.9", "etag": "example-1"},
+  "content": {
+    "hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "media_type": "application/json",
+    "size_bytes": 126,
+    "inline": {"versionKey": {"system": "NPM", "name": "axios", "version": "1.7.9"}}
+  }
+}

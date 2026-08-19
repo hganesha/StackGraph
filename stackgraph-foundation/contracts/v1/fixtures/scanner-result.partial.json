@@ -1,0 +1,10 @@
+{
+  "scanner_contract_version": "1.0.0",
+  "run_id": "00000000-0000-4000-8000-000000000102",
+  "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+  "extractor": {"key": "npm-lock", "version": "1.0.0"},
+  "completeness": "PARTIAL",
+  "facts": [],
+  "stats": {"files_seen": 12, "files_scanned": 1, "facts_emitted": 0, "bytes_read": 4096, "duration_ms": 30000},
+  "diagnostics": [{"severity": "ERROR", "code": "DEADLINE_EXCEEDED", "message": "The scanner reached its configured deadline."}]
+}

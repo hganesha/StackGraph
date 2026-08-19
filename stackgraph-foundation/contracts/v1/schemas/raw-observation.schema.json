@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json",
+  "title": "StackGraph raw observation envelope v1",
+  "type": "object",
+  "required": ["observation_contract_version", "idempotency_key", "source", "target_key", "source_revision", "observed_at", "content"],
+  "properties": {
+    "observation_contract_version": {"const": "1.0.0"},
+    "idempotency_key": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "tenant_key": {"type": ["string", "null"]},
+    "source": {
+      "type": "object",
+      "required": ["key", "kind", "adapter_version"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["GITHUB", "PACKAGE_REGISTRY", "DEPS_DEV", "OSV", "OPENSSF", "CURATED"]},
+        "adapter_version": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "target_key": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "observed_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "effective_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "request": {
+      "type": "object",
+      "properties": {
+        "uri": {"type": "string", "format": "uri"},
+        "etag": {"type": "string"},
+        "last_modified": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "content": {
+      "type": "object",
+      "required": ["hash", "media_type", "size_bytes"],
+      "properties": {
+        "hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "media_type": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "inline": {},
+        "blob_uri": {"type": "string", "format": "uri"}
+      },
+      "oneOf": [
+        {"required": ["inline"], "not": {"required": ["blob_uri"]}},
+        {"required": ["blob_uri"], "not": {"required": ["inline"]}}
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

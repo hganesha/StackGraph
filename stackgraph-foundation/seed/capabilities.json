@@ -1,0 +1,230 @@
+[
+  {
+    "id": "ui-rendering",
+    "name": "UI rendering",
+    "domain_id": "frontend",
+    "definition": "Turn application state into interactive UI."
+  },
+  {
+    "id": "server-side-rendering",
+    "name": "Server-side rendering",
+    "domain_id": "frontend",
+    "definition": "Render UI on the server for delivery to clients."
+  },
+  {
+    "id": "application-routing",
+    "name": "Application routing",
+    "domain_id": "frontend",
+    "definition": "Map URLs/navigation to application views."
+  },
+  {
+    "id": "server-state-management",
+    "name": "Server state management",
+    "domain_id": "frontend",
+    "definition": "Cache/synchronize remote authoritative state on the client."
+  },
+  {
+    "id": "client-state-management",
+    "name": "Client state management",
+    "domain_id": "frontend",
+    "definition": "Manage UI-local state that is not authoritative server data."
+  },
+  {
+    "id": "runtime-validation",
+    "name": "Runtime validation",
+    "domain_id": "frontend",
+    "definition": "Validate data structures at runtime."
+  },
+  {
+    "id": "form-state",
+    "name": "Form state",
+    "domain_id": "frontend",
+    "definition": "Manage input state, validation lifecycle and submission."
+  },
+  {
+    "id": "css-styling",
+    "name": "CSS styling",
+    "domain_id": "frontend",
+    "definition": "Author and scope application presentation styles."
+  },
+  {
+    "id": "accessible-ui-primitives",
+    "name": "Accessible UI primitives",
+    "domain_id": "frontend",
+    "definition": "Provide behaviorally correct accessible UI components."
+  },
+  {
+    "id": "build-bundling",
+    "name": "Build & bundling",
+    "domain_id": "frontend",
+    "definition": "Transform/package application source for execution."
+  },
+  {
+    "id": "unit-testing",
+    "name": "Unit testing",
+    "domain_id": "frontend",
+    "definition": "Execute isolated automated tests."
+  },
+  {
+    "id": "e2e-testing",
+    "name": "End-to-end testing",
+    "domain_id": "frontend",
+    "definition": "Automate complete user/browser flows."
+  },
+  {
+    "id": "reverse-proxy",
+    "name": "Reverse proxy",
+    "domain_id": "middleware",
+    "definition": "Proxy, route and terminate network requests."
+  },
+  {
+    "id": "api-gateway",
+    "name": "API gateway",
+    "domain_id": "middleware",
+    "definition": "Govern, authenticate, meter and route APIs."
+  },
+  {
+    "id": "service-mesh",
+    "name": "Service mesh",
+    "domain_id": "middleware",
+    "definition": "Provide service-to-service traffic policy, security and telemetry."
+  },
+  {
+    "id": "durable-event-stream",
+    "name": "Durable event streaming",
+    "domain_id": "middleware",
+    "definition": "Persist ordered/replayable event streams."
+  },
+  {
+    "id": "message-broker",
+    "name": "Message broker",
+    "domain_id": "middleware",
+    "definition": "Queue and route messages with delivery semantics."
+  },
+  {
+    "id": "stream-processing",
+    "name": "Stream processing",
+    "domain_id": "middleware",
+    "definition": "Process stateful/windowed computations over streams."
+  },
+  {
+    "id": "api-contract",
+    "name": "API contract",
+    "domain_id": "middleware",
+    "definition": "Define machine-readable service interfaces."
+  },
+  {
+    "id": "cache",
+    "name": "Caching",
+    "domain_id": "middleware",
+    "definition": "Store reusable data close to consumers to reduce latency/load."
+  },
+  {
+    "id": "session-store",
+    "name": "Session storage",
+    "domain_id": "middleware",
+    "definition": "Persist session/state shared across application instances."
+  },
+  {
+    "id": "full-text-search",
+    "name": "Full-text search",
+    "domain_id": "middleware",
+    "definition": "Index and retrieve text-oriented data."
+  },
+  {
+    "id": "vector-search",
+    "name": "Vector similarity search",
+    "domain_id": "middleware",
+    "definition": "Retrieve items by embedding/vector similarity."
+  },
+  {
+    "id": "identity-provider",
+    "name": "Identity provider",
+    "domain_id": "middleware",
+    "definition": "Authenticate identities and issue identity assertions/tokens."
+  },
+  {
+    "id": "authorization",
+    "name": "Authorization",
+    "domain_id": "middleware",
+    "definition": "Decide whether an actor may perform an action on a resource."
+  },
+  {
+    "id": "secret-management",
+    "name": "Secret management",
+    "domain_id": "middleware",
+    "definition": "Store and issue credentials/secrets securely."
+  },
+  {
+    "id": "durable-workflow",
+    "name": "Durable workflow",
+    "domain_id": "middleware",
+    "definition": "Run long-lived failure-tolerant application workflows."
+  },
+  {
+    "id": "data-orchestration",
+    "name": "Data orchestration",
+    "domain_id": "middleware",
+    "definition": "Schedule and coordinate data pipelines/DAGs."
+  },
+  {
+    "id": "observability-telemetry",
+    "name": "Observability telemetry",
+    "domain_id": "middleware",
+    "definition": "Capture traces, metrics and logs."
+  },
+  {
+    "id": "http-web-api",
+    "name": "HTTP web API",
+    "domain_id": "backend",
+    "definition": "Serve request/response APIs over HTTP."
+  },
+  {
+    "id": "orm-data-access",
+    "name": "ORM / data access",
+    "domain_id": "backend",
+    "definition": "Map application data models and queries to persistent databases."
+  },
+  {
+    "id": "background-jobs",
+    "name": "Background jobs",
+    "domain_id": "backend",
+    "definition": "Execute deferred/asynchronous work."
+  },
+  {
+    "id": "http-client",
+    "name": "HTTP client",
+    "domain_id": "backend",
+    "definition": "Call remote HTTP services."
+  },
+  {
+    "id": "native-runtime-capability",
+    "name": "Native runtime capability",
+    "domain_id": "backend",
+    "definition": "Functionality supplied directly by the language/runtime standard platform."
+  },
+  {
+    "id": "deployment-container",
+    "name": "Container deployment",
+    "domain_id": "deployment",
+    "definition": "Package/run an application as a container."
+  },
+  {
+    "id": "kubernetes-orchestration",
+    "name": "Kubernetes orchestration",
+    "domain_id": "deployment",
+    "definition": "Declare and operate container workloads on Kubernetes."
+  },
+  {
+    "id": "serverless-compute",
+    "name": "Serverless compute",
+    "domain_id": "deployment",
+    "definition": "Run application functions/services on managed event-driven compute."
+  },
+  {
+    "id": "virtual-machine-compute",
+    "name": "Virtual machine compute",
+    "domain_id": "deployment",
+    "definition": "Run application workloads on VM infrastructure."
+  }
+]

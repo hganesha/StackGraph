@@ -1,0 +1,22 @@
+{
+  "contract_version": "1.0.0",
+  "application": {"id": "00000000-0000-4000-8000-000000000201", "kind": "Application", "name": "Billing API", "canonical_key": "application:billing-api"},
+  "business_context": [{"id": "00000000-0000-4000-8000-000000000202", "kind": "BusinessCapability", "name": "Billing"}],
+  "repositories": [{"id": "00000000-0000-4000-8000-000000000203", "kind": "Repository", "name": "billing-svc", "canonical_key": "github:repo:123"}],
+  "technologies": [{"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"}],
+  "deployments": [],
+  "assessments": [
+    {
+      "id": "00000000-0000-4000-8000-000000000205",
+      "dimension": "supportability",
+      "score": 64,
+      "confidence": 0.88,
+      "confidence_label": "HIGH",
+      "method_version": "supportability-v1",
+      "rationale": "The declared dependency is supported and current.",
+      "citations": [{"fact_id": "00000000-0000-4000-8000-000000000301", "label": "package-lock.json"}]
+    }
+  ],
+  "recommendations": [],
+  "freshness": {"observed_at": "2026-08-19T14:00:00Z", "status": "FRESH", "source_key": "github:repo:123"}
+}

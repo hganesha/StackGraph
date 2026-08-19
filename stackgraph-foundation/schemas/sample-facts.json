@@ -1,0 +1,59 @@
+[
+  {
+    "subject": {
+      "namespace": "ENTERPRISE",
+      "type": "Repository",
+      "key": "payments-api",
+      "name": "payments-api"
+    },
+    "predicate": "DEPENDS_ON",
+    "object": {
+      "namespace": "TECHNOLOGY",
+      "type": "Package",
+      "key": "fastapi",
+      "name": "FastAPI"
+    },
+    "assertion_class": "DECLARED",
+    "confidence": 1.0,
+    "properties": {
+      "scope": "runtime",
+      "direct": true
+    },
+    "evidence": [
+      {
+        "type": "MANIFEST",
+        "path": "pyproject.toml",
+        "line_start": 18,
+        "parser": "python-manifest",
+        "parser_version": "0.1.0"
+      }
+    ]
+  },
+  {
+    "subject": {
+      "namespace": "ENTERPRISE",
+      "type": "Repository",
+      "key": "payments-api",
+      "name": "payments-api"
+    },
+    "predicate": "USES",
+    "object": {
+      "namespace": "TECHNOLOGY",
+      "type": "Framework",
+      "key": "fastapi",
+      "name": "FastAPI"
+    },
+    "assertion_class": "OBSERVED",
+    "confidence": 0.99,
+    "properties": {},
+    "evidence": [
+      {
+        "type": "AST_IMPORT",
+        "path": "src/main.py",
+        "line_start": 3,
+        "parser": "python-imports",
+        "parser_version": "0.1.0"
+      }
+    ]
+  }
+]

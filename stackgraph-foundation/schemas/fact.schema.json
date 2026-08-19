@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.local/schemas/fact.json",
+  "$comment": "Compatibility entry point. New code should import contracts/v1/schemas/fact.schema.json directly.",
+  "$ref": "../contracts/v1/schemas/fact.schema.json"
+}

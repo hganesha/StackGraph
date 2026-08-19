@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/scanner-request.schema.json",
+  "title": "StackGraph scanner request v1",
+  "type": "object",
+  "required": ["scanner_contract_version", "run_id", "tenant_key", "target", "snapshot", "limits"],
+  "properties": {
+    "scanner_contract_version": {"const": "1.0.0"},
+    "run_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "tenant_key": {"type": "string", "minLength": 1},
+    "target": {
+      "type": "object",
+      "required": ["provider", "repository_id", "canonical_key", "default_branch"],
+      "properties": {
+        "provider": {"enum": ["github"]},
+        "repository_id": {"type": "string", "minLength": 1},
+        "canonical_key": {"type": "string", "pattern": "^github:repo:[^:]+$"},
+        "owner": {"type": "string"},
+        "name": {"type": "string"},
+        "default_branch": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["source_revision", "checkout_root", "requested_at"],
+      "properties": {
+        "source_revision": {"type": "string", "minLength": 7},
+        "checkout_root": {"type": "string", "minLength": 1},
+        "requested_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "limits": {
+      "type": "object",
+      "required": ["max_files", "max_bytes", "deadline_seconds"],
+      "properties": {
+        "max_files": {"type": "integer", "minimum": 1},
+        "max_bytes": {"type": "integer", "minimum": 1},
+        "deadline_seconds": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "registry_policy": {
+      "type": "object",
+      "required": ["npm_default_origin", "allowed_origins", "allow_private_metadata", "allow_insecure_localhost", "redact_auth"],
+      "properties": {
+        "npm_default_origin": {"$ref": "npm-resolution.schema.json#/$defs/registryOrigin"},
+        "allowed_origins": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "npm-resolution.schema.json#/$defs/registryOrigin"}
+        },
+        "allow_private_metadata": {"type": "boolean"},
+        "allow_insecure_localhost": {"type": "boolean"},
+        "redact_auth": {"const": true}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

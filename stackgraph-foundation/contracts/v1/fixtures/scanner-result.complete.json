@@ -1,0 +1,56 @@
+{
+  "scanner_contract_version": "1.0.0",
+  "run_id": "00000000-0000-4000-8000-000000000101",
+  "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+  "extractor": {"key": "npm-lock", "version": "1.0.0"},
+  "completeness": "COMPLETE",
+  "facts": [
+    {
+      "fact_contract_version": "1.0.0",
+      "idempotency_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "tenant_key": "acme",
+      "subject": {"namespace": "ENTERPRISE", "type": "Repository", "key": "github:repo:123", "name": "billing-svc"},
+      "predicate": "DEPENDS_ON",
+      "object_entity": {"namespace": "TECHNOLOGY", "type": "PackageVersion", "key": "pkg:npm/axios@1.7.9", "name": "axios 1.7.9"},
+      "assertion_class": "DECLARED",
+      "confidence": 1,
+      "observed_at": "2026-08-19T14:00:00Z",
+      "effective_at": "2026-08-19T13:59:00Z",
+      "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+      "extractor": {"key": "npm-lock", "version": "1.0.0"},
+      "properties": {
+        "scope": "runtime",
+        "direct": true,
+        "requested_spec": "^1.7.0",
+        "resolved_version": "1.7.9",
+        "registry_resolution": {
+          "origin": "https://registry.npmjs.org/",
+          "source": "LOCKFILE",
+          "scope": null,
+          "config_path": null,
+          "custom_registry": false,
+          "lockfile_behavior": "CONFIGURED_DEFAULT",
+          "visibility": "PUBLIC"
+        },
+        "artifact": {
+          "resolved_uri": "https://registry.npmjs.org/axios/-/axios-1.7.9.tgz",
+          "integrity": "sha512-example"
+        }
+      },
+      "evidence": [
+        {
+          "type": "LOCKFILE",
+          "source_artifact": {
+            "key": "github:repo:123:package-lock.json",
+            "type": "REPOSITORY_FILE",
+            "revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+            "content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "locator": {"path": "package-lock.json", "json_pointer": "/packages/node_modules~1axios/version"}
+        }
+      ]
+    }
+  ],
+  "stats": {"files_seen": 12, "files_scanned": 2, "facts_emitted": 1, "bytes_read": 18432, "duration_ms": 214},
+  "diagnostics": []
+}

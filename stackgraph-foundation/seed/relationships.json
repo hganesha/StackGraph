@@ -1,0 +1,709 @@
+[
+  {
+    "source": "next-js",
+    "type": "BUILT_ON",
+    "target": "react",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "nuxt",
+    "type": "BUILT_ON",
+    "target": "vue",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "sveltekit",
+    "type": "BUILT_ON",
+    "target": "svelte",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "react-router",
+    "type": "PAIRS_WITH",
+    "target": "react",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "tanstack-router",
+    "type": "PAIRS_WITH",
+    "target": "react",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "pinia",
+    "type": "PAIRS_WITH",
+    "target": "vue",
+    "confidence": 1.0,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "formik",
+    "type": "LIKELY_SUPERSEDED_BY",
+    "target": "react-hook-form",
+    "confidence": 0.85,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "cypress",
+    "type": "ALTERNATIVE_TO",
+    "target": "playwright",
+    "confidence": 0.9,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "webpack",
+    "type": "ALTERNATIVE_TO",
+    "target": "vite",
+    "confidence": 0.8,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "react",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "angular",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "vue",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "svelte",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "solid",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "preact",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "lit",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "qwik",
+    "type": "PROVIDES",
+    "target": "ui-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "next-js",
+    "type": "PROVIDES",
+    "target": "server-side-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "astro",
+    "type": "PROVIDES",
+    "target": "server-side-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "nuxt",
+    "type": "PROVIDES",
+    "target": "server-side-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "sveltekit",
+    "type": "PROVIDES",
+    "target": "server-side-rendering",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "react-router",
+    "type": "PROVIDES",
+    "target": "application-routing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "tanstack-router",
+    "type": "PROVIDES",
+    "target": "application-routing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "vue-router",
+    "type": "PROVIDES",
+    "target": "application-routing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "tanstack-query-react-query-and-vue-svelte-solid-ports",
+    "type": "PROVIDES",
+    "target": "server-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "swr",
+    "type": "PROVIDES",
+    "target": "server-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apollo-client-urql",
+    "type": "PROVIDES",
+    "target": "server-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "rtk-query",
+    "type": "PROVIDES",
+    "target": "server-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "zustand",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "redux-toolkit",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "jotai",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "valtio-mobx",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "xstate",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "pinia",
+    "type": "PROVIDES",
+    "target": "client-state-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "zod",
+    "type": "PROVIDES",
+    "target": "runtime-validation",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "valibot",
+    "type": "PROVIDES",
+    "target": "runtime-validation",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "react-hook-form",
+    "type": "PROVIDES",
+    "target": "form-state",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "tanstack-form",
+    "type": "PROVIDES",
+    "target": "form-state",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "formik",
+    "type": "PROVIDES",
+    "target": "form-state",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "tailwind-css",
+    "type": "PROVIDES",
+    "target": "css-styling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "css-modules",
+    "type": "PROVIDES",
+    "target": "css-styling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "vanilla-extract-panda-css",
+    "type": "PROVIDES",
+    "target": "css-styling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "styled-components-emotion",
+    "type": "PROVIDES",
+    "target": "css-styling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "radix-ui-react-aria-headless-ui",
+    "type": "PROVIDES",
+    "target": "accessible-ui-primitives",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "vite",
+    "type": "PROVIDES",
+    "target": "build-bundling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "rolldown-rspack-esbuild-swc",
+    "type": "PROVIDES",
+    "target": "build-bundling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "turbopack",
+    "type": "PROVIDES",
+    "target": "build-bundling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "webpack",
+    "type": "PROVIDES",
+    "target": "build-bundling",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "vitest",
+    "type": "PROVIDES",
+    "target": "unit-testing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "jest",
+    "type": "PROVIDES",
+    "target": "unit-testing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "playwright",
+    "type": "PROVIDES",
+    "target": "e2e-testing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "cypress",
+    "type": "PROVIDES",
+    "target": "e2e-testing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "nginx",
+    "type": "PROVIDES",
+    "target": "reverse-proxy",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "envoy",
+    "type": "PROVIDES",
+    "target": "reverse-proxy",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "haproxy",
+    "type": "PROVIDES",
+    "target": "reverse-proxy",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "caddy",
+    "type": "PROVIDES",
+    "target": "reverse-proxy",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "traefik",
+    "type": "PROVIDES",
+    "target": "reverse-proxy",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "kong",
+    "type": "PROVIDES",
+    "target": "api-gateway",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apache-apisix-tyk-krakend",
+    "type": "PROVIDES",
+    "target": "api-gateway",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "aws-api-gateway-azure-api-management-google-apigee",
+    "type": "PROVIDES",
+    "target": "api-gateway",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "istio",
+    "type": "PROVIDES",
+    "target": "service-mesh",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "linkerd",
+    "type": "PROVIDES",
+    "target": "service-mesh",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "cilium-cilium-service-mesh",
+    "type": "PROVIDES",
+    "target": "service-mesh",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "consul",
+    "type": "PROVIDES",
+    "target": "service-mesh",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apache-kafka",
+    "type": "PROVIDES",
+    "target": "durable-event-stream",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "rabbitmq",
+    "type": "PROVIDES",
+    "target": "message-broker",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "nats-nats-jetstream",
+    "type": "PROVIDES",
+    "target": "message-broker",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apache-pulsar",
+    "type": "PROVIDES",
+    "target": "durable-event-stream",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apache-flink-kafka-streams-spark-structured-streaming",
+    "type": "PROVIDES",
+    "target": "stream-processing",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "rest-openapi",
+    "type": "PROVIDES",
+    "target": "api-contract",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "graphql-apollo-server-graphql-yoga-hot-chocolate-graphql-java-strawberry",
+    "type": "PROVIDES",
+    "target": "api-contract",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "grpc-protocol-buffers",
+    "type": "PROVIDES",
+    "target": "api-contract",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "trpc",
+    "type": "PROVIDES",
+    "target": "api-contract",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "asyncapi",
+    "type": "PROVIDES",
+    "target": "api-contract",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "redis-valkey",
+    "type": "PROVIDES",
+    "target": "cache",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "memcached",
+    "type": "PROVIDES",
+    "target": "cache",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "varnish-cdn-edge-caches",
+    "type": "PROVIDES",
+    "target": "cache",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "elasticsearch-opensearch",
+    "type": "PROVIDES",
+    "target": "full-text-search",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "meilisearch-typesense",
+    "type": "PROVIDES",
+    "target": "full-text-search",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "pgvector-qdrant-weaviate-milvus",
+    "type": "PROVIDES",
+    "target": "vector-search",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "keycloak",
+    "type": "PROVIDES",
+    "target": "identity-provider",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "auth0-okta-microsoft-entra-id-aws-cognito",
+    "type": "PROVIDES",
+    "target": "identity-provider",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "open-policy-agent-opa-cedar-openfga-spicedb",
+    "type": "PROVIDES",
+    "target": "authorization",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "hashicorp-vault-cloud-secret-managers",
+    "type": "PROVIDES",
+    "target": "secret-management",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "temporal",
+    "type": "PROVIDES",
+    "target": "durable-workflow",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "apache-airflow-dagster-prefect",
+    "type": "PROVIDES",
+    "target": "data-orchestration",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "opentelemetry",
+    "type": "PROVIDES",
+    "target": "observability-telemetry",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "prometheus-grafana",
+    "type": "PROVIDES",
+    "target": "observability-telemetry",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "express",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "fastify",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "hono",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "nestjs",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "fastapi",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "django",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "flask",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "spring-boot",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "asp-net-core",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "gin",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "axum",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "laravel",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  },
+  {
+    "source": "ruby-on-rails",
+    "type": "PROVIDES",
+    "target": "http-web-api",
+    "confidence": 0.95,
+    "assertion_class": "CURATED"
+  }
+]

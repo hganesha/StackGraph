@@ -1,0 +1,20 @@
+{
+  "observation_contract_version": "1.0.0",
+  "idempotency_key": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "tenant_key": null,
+  "source": {"key": "npm-public", "kind": "PACKAGE_REGISTRY", "adapter_version": "1.0.0", "schema_version": "npm-packument-v1"},
+  "target_key": "registry:npm-public:pkg:npm/axios@1.7.9",
+  "source_revision": "etag:npm-axios-example-1",
+  "observed_at": "2026-08-19T14:06:00Z",
+  "request": {"uri": "https://registry.npmjs.org/axios", "etag": "npm-axios-example-1"},
+  "content": {
+    "hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "media_type": "application/json",
+    "size_bytes": 218,
+    "inline": {
+      "name": "axios",
+      "dist-tags": {"latest": "1.7.9"},
+      "versions": {"1.7.9": {"dist": {"tarball": "https://registry.npmjs.org/axios/-/axios-1.7.9.tgz", "integrity": "sha512-example"}}}
+    }
+  }
+}

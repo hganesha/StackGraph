@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/fact.schema.json",
+  "title": "StackGraph normalized fact v1",
+  "type": "object",
+  "required": [
+    "fact_contract_version",
+    "idempotency_key",
+    "subject",
+    "predicate",
+    "assertion_class",
+    "confidence",
+    "observed_at",
+    "source_revision",
+    "extractor",
+    "evidence"
+  ],
+  "properties": {
+    "fact_contract_version": {"const": "1.0.0"},
+    "idempotency_key": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "tenant_key": {"type": "string", "minLength": 1},
+    "subject": {"$ref": "common.schema.json#/$defs/entityRef"},
+    "predicate": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "object_entity": {"$ref": "common.schema.json#/$defs/entityRef"},
+    "object_value": {},
+    "assertion_class": {"$ref": "common.schema.json#/$defs/assertionClass"},
+    "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+    "observed_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "effective_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "source_revision": {"type": "string", "minLength": 1},
+    "extractor": {"$ref": "common.schema.json#/$defs/extractor"},
+    "properties": {"type": "object"},
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/evidence"}
+    }
+  },
+  "oneOf": [
+    {"required": ["object_entity"], "not": {"required": ["object_value"]}},
+    {"required": ["object_value"], "not": {"required": ["object_entity"]}}
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": ["predicate", "extractor", "object_entity"],
+        "properties": {
+          "predicate": {"const": "DEPENDS_ON"},
+          "extractor": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {"key": {"type": "string", "pattern": "^(npm-(lock|manifest)|yarn-lock|pnpm-lock)$"}}
+          },
+          "object_entity": {
+            "type": "object",
+            "required": ["namespace", "type"],
+            "properties": {
+              "namespace": {"const": "TECHNOLOGY"},
+              "type": {"const": "PackageVersion"}
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["properties"],
+        "properties": {
+          "properties": {"$ref": "npm-resolution.schema.json#/$defs/dependencyProperties"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "required": ["type", "source_artifact", "locator"],
+      "properties": {
+        "type": {"type": "string", "minLength": 1},
+        "source_artifact": {"$ref": "common.schema.json#/$defs/sourceArtifactRef"},
+        "locator": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "line_start": {"type": "integer", "minimum": 1},
+            "line_end": {"type": "integer", "minimum": 1},
+            "json_pointer": {"type": "string", "pattern": "^(|/.*)$"},
+            "uri": {"type": "string", "format": "uri"}
+          },
+          "additionalProperties": true
+        },
+        "excerpt_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "metadata": {"type": "object"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

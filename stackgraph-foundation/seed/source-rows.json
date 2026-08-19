@@ -1,0 +1,1886 @@
+[
+  {
+    "source_line": 44,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**React**",
+      "Language": "JS/TS",
+      "Purpose / model": "Component model with a virtual DOM; the default hiring pool. Now leans on Server Components and the compiler rather than manual memoisation",
+      "Adoption": "44.7% (SO 2025); 83.6% usage among JS-survey respondents"
+    }
+  },
+  {
+    "source_line": 45,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Angular**",
+      "Language": "TS",
+      "Purpose / model": "Batteries-included SPA framework — DI container, router, forms, HTTP client all first-party. Signals-based reactivity has largely replaced zone.js change detection",
+      "Adoption": "18.2% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 46,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Vue**",
+      "Language": "JS/TS",
+      "Purpose / model": "Component model with a compiler-optimised reactivity system; gentler ramp than React, strong first-party router/store",
+      "Adoption": "17.6% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 47,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Svelte**",
+      "Language": "JS/TS",
+      "Purpose / model": "Compiler, not a runtime — components compile to direct DOM updates. Runes give explicit, fine-grained reactivity",
+      "Adoption": "7.2% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 48,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Solid**",
+      "Language": "JS/TS",
+      "Purpose / model": "Fine-grained signals with no virtual DOM; ~10% adoption but the **highest satisfaction score five years running** in State of JS",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 49,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Preact**",
+      "Language": "JS/TS",
+      "Purpose / model": "3KB React-API-compatible alternative; used where bundle size is the constraint (embeds, widgets)",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 50,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Lit**",
+      "Language": "JS/TS",
+      "Purpose / model": "Web Components with a thin reactive base class; framework-agnostic design systems",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 51,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**Qwik**",
+      "Language": "JS/TS",
+      "Purpose / model": "Resumability instead of hydration — ships almost no JS until interaction",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 52,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**HTMX / Alpine.js**",
+      "Language": "HTML-first",
+      "Purpose / model": "Hypermedia approach: server returns HTML fragments, tiny client library wires up interactions. The \"no build step\" counter-movement — popular with Rails/Django/Laravel/Go teams",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 53,
+    "section": "1. Frontend",
+    "subsection": "1.1 The core UI layer — rendering and reactivity",
+    "row": {
+      "Framework": "**jQuery**",
+      "Language": "JS",
+      "Purpose / model": "DOM manipulation and AJAX shim from the pre-framework era. Not a choice for new work, but 23.4% of developers still touch it",
+      "Adoption": "—"
+    }
+  },
+  {
+    "source_line": 63,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Next.js**",
+      "Pairs with": "React",
+      "Purpose": "The dominant full-stack React framework: App Router, Server Components, server actions, edge/node runtimes",
+      "Signal": "20.8% (SO 2025); 58.6% among JS-survey respondents; ~45.9M npm downloads/week"
+    }
+  },
+  {
+    "source_line": 64,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Astro**",
+      "Pairs with": "Any (React, Vue, Svelte…)",
+      "Purpose": "Content-first, ships zero JS by default, \"islands\" for interactivity. **Highest satisfaction in the category — 39 points above Next.js**",
+      "Signal": "4.5% (SO 2025), fastest riser"
+    }
+  },
+  {
+    "source_line": 65,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Nuxt**",
+      "Pairs with": "Vue",
+      "Purpose": "Vue's equivalent of Next.js: file routing, SSR/SSG, auto-imports, large module ecosystem",
+      "Signal": "4.0% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 66,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**SvelteKit**",
+      "Pairs with": "Svelte",
+      "Purpose": "Official Svelte app framework — routing, form actions, adapters per host",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 67,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**React Router (v7/v8)**",
+      "Pairs with": "React",
+      "Purpose": "Absorbed Remix v2's loaders/actions; now both *the* React router and a full framework mode. v8 (June 2026) is ESM-only, yearly majors. Remix v2 and React Router v6 are end-of-life",
+      "Signal": "~44.2M downloads/week"
+    }
+  },
+  {
+    "source_line": 68,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Remix v3**",
+      "Pairs with": "—",
+      "Purpose": "Diverged: a zero-dependency full-stack framework that **no longer uses React**. Experimental — do not confuse with Remix v2",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 69,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**TanStack Start**",
+      "Pairs with": "React",
+      "Purpose": "Type-safe full-stack framework built on TanStack Router; the most-mentioned write-in in State of JS 2025",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 70,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Angular SSR / Analog**",
+      "Pairs with": "Angular",
+      "Purpose": "Server rendering and hydration for Angular apps",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 71,
+    "section": "1. Frontend",
+    "subsection": "1.2 Meta-frameworks — routing, SSR, and the server boundary",
+    "row": {
+      "Framework": "**Qwik City**",
+      "Pairs with": "Qwik",
+      "Purpose": "Routing/SSR layer for Qwik",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 77,
+    "section": "1. Frontend",
+    "subsection": "1.3 Client-side routing (when you're not using a meta-framework)",
+    "row": {
+      "Library": "**React Router**",
+      "Ecosystem": "React",
+      "Purpose": "The de facto standard; nested routes, loaders, actions"
+    }
+  },
+  {
+    "source_line": 78,
+    "section": "1. Frontend",
+    "subsection": "1.3 Client-side routing (when you're not using a meta-framework)",
+    "row": {
+      "Library": "**TanStack Router**",
+      "Ecosystem": "React",
+      "Purpose": "Fully type-safe routes and search-param parsing"
+    }
+  },
+  {
+    "source_line": 79,
+    "section": "1. Frontend",
+    "subsection": "1.3 Client-side routing (when you're not using a meta-framework)",
+    "row": {
+      "Library": "**Vue Router**",
+      "Ecosystem": "Vue",
+      "Purpose": "Official router, nested + named views, navigation guards"
+    }
+  },
+  {
+    "source_line": 80,
+    "section": "1. Frontend",
+    "subsection": "1.3 Client-side routing (when you're not using a meta-framework)",
+    "row": {
+      "Library": "**Angular Router**",
+      "Ecosystem": "Angular",
+      "Purpose": "Built in; guards, resolvers, lazy-loaded route modules"
+    }
+  },
+  {
+    "source_line": 81,
+    "section": "1. Frontend",
+    "subsection": "1.3 Client-side routing (when you're not using a meta-framework)",
+    "row": {
+      "Library": "**SvelteKit routing**",
+      "Ecosystem": "Svelte",
+      "Purpose": "Filesystem-based, part of the framework"
+    }
+  },
+  {
+    "source_line": 91,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**TanStack Query** (React Query, and Vue/Svelte/Solid ports)",
+      "Purpose": "Caching, deduplication, background refetch, stale-while-revalidate, optimistic updates. Removes the majority of what people used to write Redux for"
+    }
+  },
+  {
+    "source_line": 92,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**SWR**",
+      "Purpose": "Lighter stale-while-revalidate hook from the Next.js team"
+    }
+  },
+  {
+    "source_line": 93,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Apollo Client / urql**",
+      "Purpose": "GraphQL clients with normalised caching"
+    }
+  },
+  {
+    "source_line": 94,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**RTK Query**",
+      "Purpose": "Data fetching bundled into Redux Toolkit"
+    }
+  },
+  {
+    "source_line": 100,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Zustand**",
+      "Model": "Minimal store, hook-based",
+      "Signal": "**Now leads the category in both usage and satisfaction**, having passed Redux (State of React 2025); ~44.5M downloads/week"
+    }
+  },
+  {
+    "source_line": 101,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Redux Toolkit**",
+      "Model": "Single store, reducers, devtools, time-travel",
+      "Signal": "Still the enterprise default for large, audit-heavy apps; ~35.8M/week for `redux`"
+    }
+  },
+  {
+    "source_line": 102,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Jotai**",
+      "Model": "Atomic — bottom-up primitive atoms",
+      "Signal": "Strong satisfaction, React-idiomatic"
+    }
+  },
+  {
+    "source_line": 103,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Valtio / MobX**",
+      "Model": "Proxy-based observable objects",
+      "Signal": "Mutable-feeling API, less boilerplate"
+    }
+  },
+  {
+    "source_line": 104,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**XState**",
+      "Model": "Statecharts / finite state machines",
+      "Signal": "For genuinely complex flows: wizards, media players, checkout"
+    }
+  },
+  {
+    "source_line": 105,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Pinia**",
+      "Model": "Vue's official store",
+      "Signal": "Replaced Vuex"
+    }
+  },
+  {
+    "source_line": 106,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**NgRx / Angular signals**",
+      "Model": "Redux pattern for Angular / built-in reactivity",
+      "Signal": "Signals are increasingly enough"
+    }
+  },
+  {
+    "source_line": 107,
+    "section": "1. Frontend",
+    "subsection": "1.4 State management and server-state",
+    "row": {
+      "Library": "**Nano Stores / TanStack Store**",
+      "Model": "Framework-agnostic tiny stores",
+      "Signal": "Used in Astro islands and cross-framework design systems"
+    }
+  },
+  {
+    "source_line": 115,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**Zod**",
+      "Ecosystem": "JS/TS (universal)",
+      "Purpose": "TypeScript-first schema declaration and runtime validation; infers static types from schemas. Enormous reach — ~224M npm downloads/week, largely as a transitive dependency across the ecosystem"
+    }
+  },
+  {
+    "source_line": 116,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**Valibot**",
+      "Ecosystem": "JS/TS",
+      "Purpose": "Same idea, modular and far smaller bundle"
+    }
+  },
+  {
+    "source_line": 117,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**React Hook Form**",
+      "Ecosystem": "React",
+      "Purpose": "Uncontrolled-input form state with minimal re-renders; pairs with Zod via resolvers"
+    }
+  },
+  {
+    "source_line": 118,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**TanStack Form**",
+      "Ecosystem": "React/Vue/Solid",
+      "Purpose": "Type-safe, framework-agnostic form state"
+    }
+  },
+  {
+    "source_line": 119,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**Formik**",
+      "Ecosystem": "React",
+      "Purpose": "Older controlled-form library, largely superseded"
+    }
+  },
+  {
+    "source_line": 120,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**VeeValidate**",
+      "Ecosystem": "Vue",
+      "Purpose": "Validation for Vue forms"
+    }
+  },
+  {
+    "source_line": 121,
+    "section": "1. Frontend",
+    "subsection": "1.5 Forms and validation",
+    "row": {
+      "Library": "**Angular Reactive Forms**",
+      "Ecosystem": "Angular",
+      "Purpose": "Built-in typed form model"
+    }
+  },
+  {
+    "source_line": 127,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**Tailwind CSS**",
+      "Purpose": "Utility-first CSS; styling co-located with markup, no naming overhead. ~85.4M downloads/week"
+    }
+  },
+  {
+    "source_line": 128,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**CSS Modules**",
+      "Purpose": "Scoped class names, zero runtime — the boring safe default"
+    }
+  },
+  {
+    "source_line": 129,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**Vanilla Extract / Panda CSS**",
+      "Purpose": "Type-safe CSS authored in TS, compiled to static CSS at build time"
+    }
+  },
+  {
+    "source_line": 130,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**styled-components / Emotion**",
+      "Purpose": "CSS-in-JS. Declining — runtime cost conflicts with Server Components"
+    }
+  },
+  {
+    "source_line": 131,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**shadcn/ui**",
+      "Purpose": "Not a dependency: copy-in Radix + Tailwind components you own and edit"
+    }
+  },
+  {
+    "source_line": 132,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**Radix UI / React Aria / Headless UI**",
+      "Purpose": "Unstyled, accessible behaviour primitives (dialogs, comboboxes, menus) — the accessibility hard parts, no visual opinion"
+    }
+  },
+  {
+    "source_line": 133,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**MUI / Ant Design / Chakra**",
+      "Purpose": "Full opinionated design systems; fastest to a coherent-looking internal tool"
+    }
+  },
+  {
+    "source_line": 134,
+    "section": "1. Frontend",
+    "subsection": "1.6 Styling and component libraries",
+    "row": {
+      "Tool": "**PrimeNG / PrimeVue / Angular Material / Vuetify**",
+      "Purpose": "Framework-specific component suites"
+    }
+  },
+  {
+    "source_line": 140,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**Vite**",
+      "Purpose": "Dev server (native ESM, instant HMR) + production bundler. Effectively the ecosystem standard",
+      "Signal": "**84.4% usage, 98% satisfaction** — the highest-rated tool in State of JS 2025; ~142.9M downloads/week"
+    }
+  },
+  {
+    "source_line": 141,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**Rolldown / Rspack / esbuild / SWC**",
+      "Purpose": "Rust- and Go-based bundlers/transpilers used underneath the tools above",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 142,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**Turbopack**",
+      "Purpose": "Next.js's bundler",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 143,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**webpack**",
+      "Purpose": "The former default; still everywhere in legacy config, but sentiment is clearly negative now",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 144,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**Turborepo / Nx**",
+      "Purpose": "Monorepo task orchestration and caching",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 145,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**pnpm / npm / Bun / Yarn**",
+      "Purpose": "Package management; pnpm's content-addressed store is the monorepo favourite",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 146,
+    "section": "1. Frontend",
+    "subsection": "1.7 Build tooling",
+    "row": {
+      "Tool": "**Biome / ESLint / Oxlint / Prettier**",
+      "Purpose": "Linting and formatting; the Rust-based tools are displacing ESLint+Prettier on speed",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 152,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Vitest**",
+      "Purpose": "Vite-native unit/component test runner",
+      "Signal": "**97% satisfaction, +14pts usage YoY**; ~77.6M/week — closing fast on Jest"
+    }
+  },
+  {
+    "source_line": 153,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Jest**",
+      "Purpose": "The incumbent unit test runner",
+      "Signal": "Still #1 at 74.4% usage, but satisfaction is falling; ~39.5M/week"
+    }
+  },
+  {
+    "source_line": 154,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Playwright**",
+      "Purpose": "Cross-browser end-to-end automation",
+      "Signal": "94% satisfaction, +14pts YoY — the clear E2E winner"
+    }
+  },
+  {
+    "source_line": 155,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Cypress**",
+      "Purpose": "E2E with an interactive runner",
+      "Signal": "Losing ground to Playwright"
+    }
+  },
+  {
+    "source_line": 156,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Testing Library**",
+      "Purpose": "Query DOM the way a user would; discourages testing implementation details",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 157,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Storybook**",
+      "Purpose": "Component workbench, visual review, interaction tests",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 158,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**MSW**",
+      "Purpose": "Network-level API mocking shared across unit, component and E2E tests",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 159,
+    "section": "1. Frontend",
+    "subsection": "1.8 Testing",
+    "row": {
+      "Tool": "**Bun test / node:test / deno test**",
+      "Purpose": "Runtime-bundled test runners — the emerging \"no test framework\" trend",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 167,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**React Native**",
+      "Language": "JS/TS",
+      "Purpose": "Native iOS/Android from React; shares the web hiring pool. New Architecture (Fabric/TurboModules) is now default",
+      "Signal": "~10.4M npm downloads/week; present in 1,350 of the top 10k iOS apps, and in 173 apps earning $1M+/month vs Flutter's 37"
+    }
+  },
+  {
+    "source_line": 168,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**Expo**",
+      "Language": "JS/TS",
+      "Purpose": "The managed toolchain most React Native teams actually use: builds, OTA updates, native modules, routing",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 169,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**Flutter**",
+      "Language": "Dart",
+      "Purpose": "Own rendering engine — pixel-identical across platforms, mobile/web/desktop",
+      "Signal": "177.9k GitHub stars; **11.07%** of new App Store releases vs React Native's 6.75%"
+    }
+  },
+  {
+    "source_line": 170,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**SwiftUI / Jetpack Compose**",
+      "Language": "Swift / Kotlin",
+      "Purpose": "First-party declarative native UI. Best platform fidelity, two codebases",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 171,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**Kotlin Multiplatform + Compose Multiplatform**",
+      "Language": "Kotlin",
+      "Purpose": "Share business logic (and increasingly UI) across Android/iOS/desktop",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 172,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**.NET MAUI**",
+      "Language": "C#",
+      "Purpose": "Cross-platform native UI for .NET shops",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 173,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**Electron**",
+      "Language": "JS/TS",
+      "Purpose": "Desktop apps in Chromium + Node (VS Code, Slack)",
+      "Signal": "~5.2M/week"
+    }
+  },
+  {
+    "source_line": 174,
+    "section": "1. Frontend",
+    "subsection": "1.9 Mobile and desktop",
+    "row": {
+      "Framework": "**Tauri**",
+      "Language": "Rust + web UI",
+      "Purpose": "Same idea with the OS webview and a Rust core — far smaller binaries",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 188,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**NGINX**",
+      "Purpose": "Reverse proxy, load balancer, TLS termination, static serving — the default ingress for two decades"
+    }
+  },
+  {
+    "source_line": 189,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Envoy**",
+      "Purpose": "L7 proxy designed for dynamic service discovery, retries, circuit breaking, deep observability; the data plane under most meshes and modern gateways"
+    }
+  },
+  {
+    "source_line": 190,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Kong**",
+      "Purpose": "API gateway on NGINX/Envoy: auth, rate limiting, quotas, key management, plugin ecosystem"
+    }
+  },
+  {
+    "source_line": 191,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Traefik**",
+      "Purpose": "Cloud-native reverse proxy with automatic service discovery from Kubernetes/Docker labels"
+    }
+  },
+  {
+    "source_line": 192,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**HAProxy**",
+      "Purpose": "High-performance L4/L7 load balancing"
+    }
+  },
+  {
+    "source_line": 193,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Caddy**",
+      "Purpose": "Reverse proxy with automatic HTTPS certificate management"
+    }
+  },
+  {
+    "source_line": 194,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Apache APISIX / Tyk / KrakenD**",
+      "Purpose": "Alternative API gateways — APISIX is etcd-driven and hot-reloadable, KrakenD is stateless and aggregation-focused"
+    }
+  },
+  {
+    "source_line": 195,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**AWS API Gateway / Azure API Management / Google Apigee**",
+      "Purpose": "Managed equivalents with billing, developer portals, usage plans"
+    }
+  },
+  {
+    "source_line": 196,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.1 API gateways and edge proxies",
+    "row": {
+      "Product": "**Kubernetes Gateway API**",
+      "Purpose": "The successor spec to Ingress; implemented by Envoy Gateway, Istio, Cilium, Kong, Traefik"
+    }
+  },
+  {
+    "source_line": 204,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.2 Service mesh",
+    "row": {
+      "Mesh": "**Istio**",
+      "Purpose": "The most feature-complete mesh. Ambient mode removes the per-pod sidecar, cutting the resource overhead that drove earlier complaints"
+    }
+  },
+  {
+    "source_line": 205,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.2 Service mesh",
+    "row": {
+      "Mesh": "**Linkerd**",
+      "Purpose": "Deliberately minimal, Rust micro-proxy, low overhead, fast to operate"
+    }
+  },
+  {
+    "source_line": 206,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.2 Service mesh",
+    "row": {
+      "Mesh": "**Cilium / Cilium Service Mesh**",
+      "Purpose": "eBPF-based networking, security policy and observability at the kernel level — no sidecar at all"
+    }
+  },
+  {
+    "source_line": 207,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.2 Service mesh",
+    "row": {
+      "Mesh": "**Consul**",
+      "Purpose": "Service discovery + mesh, strong outside Kubernetes and in mixed VM estates"
+    }
+  },
+  {
+    "source_line": 213,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Apache Kafka**",
+      "Purpose": "Durable, replayable, partitioned event log. The backbone for event sourcing, CDC and stream processing",
+      "Share": "**39.3%** of the messaging category (~48k companies)"
+    }
+  },
+  {
+    "source_line": 214,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**RabbitMQ**",
+      "Purpose": "Traditional broker: queues, routing/exchange topologies, per-message ack. Best for task distribution and RPC-ish work",
+      "Share": "**29.8%** (~36k domains)"
+    }
+  },
+  {
+    "source_line": 215,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**NATS / NATS JetStream**",
+      "Purpose": "Extremely lightweight pub/sub with optional persistence; low-latency, edge and IoT friendly",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 216,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Apache Pulsar**",
+      "Purpose": "Segmented storage, multi-tenancy, geo-replication; separates compute from storage",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 217,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Apache ActiveMQ / IBM MQ**",
+      "Purpose": "JMS-era enterprise brokers, still ~6% each — heavily present in banking and insurance",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 218,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**AWS SQS/SNS/EventBridge, Azure Service Bus, Google Pub/Sub**",
+      "Purpose": "Managed equivalents; the default when you're already all-in on a cloud",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 219,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Redis Streams**",
+      "Purpose": "Lightweight streaming when Redis is already in the stack",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 220,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Apache Flink / Kafka Streams / Spark Structured Streaming**",
+      "Purpose": "Stream *processing* — windowing, joins, stateful aggregation over those event logs",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 221,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.3 Messaging, streaming and eventing",
+    "row": {
+      "System": "**Debezium**",
+      "Purpose": "Change-data-capture: turns database commits into Kafka events",
+      "Share": "—"
+    }
+  },
+  {
+    "source_line": 229,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "Node/Express, Koa, Fastify (hooks), Hono",
+      "Mechanism": "`(req, res, next)` / `(ctx, next)`",
+      "Typical uses": "Body parsing, CORS, sessions, logging, rate limiting"
+    }
+  },
+  {
+    "source_line": 230,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "ASP.NET Core",
+      "Mechanism": "`IApplicationBuilder.Use(...)` pipeline",
+      "Typical uses": "Auth, HTTPS redirect, exception handling, response compression"
+    }
+  },
+  {
+    "source_line": 231,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "Django",
+      "Mechanism": "`MIDDLEWARE` list",
+      "Typical uses": "Sessions, CSRF, auth, locale, security headers"
+    }
+  },
+  {
+    "source_line": 232,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "Spring",
+      "Mechanism": "`Filter` / `HandlerInterceptor` / WebFilter",
+      "Typical uses": "Security chain, tracing, request logging"
+    }
+  },
+  {
+    "source_line": 233,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "Go",
+      "Mechanism": "`func(http.Handler) http.Handler`",
+      "Typical uses": "Chi and Echo build their entire feature set from this"
+    }
+  },
+  {
+    "source_line": 234,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.4 In-process middleware (the request pipeline)",
+    "row": {
+      "Ecosystem": "Rust/Tower",
+      "Mechanism": "`Layer` / `Service` traits",
+      "Typical uses": "Timeouts, retries, concurrency limits — shared by Axum, Tonic and Hyper"
+    }
+  },
+  {
+    "source_line": 240,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**REST + OpenAPI**",
+      "Purpose": "Resource-oriented HTTP with a machine-readable contract that generates clients, docs and mocks",
+      "When it fits": "The default; widest tooling and cacheability"
+    }
+  },
+  {
+    "source_line": 241,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**GraphQL** (Apollo Server, GraphQL Yoga, Hot Chocolate, graphql-java, Strawberry)",
+      "Purpose": "Client specifies exactly what it needs; one endpoint, typed schema",
+      "When it fits": "Many clients with divergent data needs; mobile bandwidth constraints"
+    }
+  },
+  {
+    "source_line": 242,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**gRPC + Protocol Buffers**",
+      "Purpose": "Binary, HTTP/2, streaming, codegen in every language",
+      "When it fits": "Internal service-to-service, latency-sensitive, polyglot fleets"
+    }
+  },
+  {
+    "source_line": 243,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**tRPC**",
+      "Purpose": "End-to-end TypeScript types with no codegen or schema",
+      "When it fits": "TS monorepos where client and server ship together"
+    }
+  },
+  {
+    "source_line": 244,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**AsyncAPI**",
+      "Purpose": "The OpenAPI equivalent for event-driven/message contracts",
+      "When it fits": "Kafka/AMQP estates that need governance"
+    }
+  },
+  {
+    "source_line": 245,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.5 API contract and interchange",
+    "row": {
+      "Style": "**Webhooks / CloudEvents**",
+      "Purpose": "Push notification of events between systems; CloudEvents standardises the envelope",
+      "When it fits": "Third-party integration"
+    }
+  },
+  {
+    "source_line": 251,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**Redis / Valkey**",
+      "Purpose": "In-memory cache, session store, rate limiter, queue, pub/sub, distributed locks",
+      "Signal": "**28% of all developers** (SO 2025). Valkey is the Linux Foundation fork after Redis's licence change"
+    }
+  },
+  {
+    "source_line": 252,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**Memcached**",
+      "Purpose": "Pure, simple key-value cache",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 253,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**Varnish / CDN edge caches**",
+      "Purpose": "HTTP-layer caching in front of the app",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 254,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**Elasticsearch / OpenSearch**",
+      "Purpose": "Full-text search, log aggregation, analytics",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 255,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**Meilisearch / Typesense**",
+      "Purpose": "Lightweight, fast, typo-tolerant search",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 256,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.6 Caching, sessions and search",
+    "row": {
+      "Tool": "**pgvector / Qdrant / Weaviate / Milvus**",
+      "Purpose": "Vector similarity search for embeddings and RAG",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 262,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Keycloak**",
+      "Purpose": "Self-hosted OIDC/SAML identity provider, federation, SSO"
+    }
+  },
+  {
+    "source_line": 263,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Auth0 / Okta / Microsoft Entra ID / AWS Cognito**",
+      "Purpose": "Managed identity providers"
+    }
+  },
+  {
+    "source_line": 264,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Ory (Kratos/Hydra/Keto)**",
+      "Purpose": "Composable, API-first identity, OAuth2 server and permissions"
+    }
+  },
+  {
+    "source_line": 265,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Auth.js (NextAuth) / Better Auth / Lucia**",
+      "Purpose": "Application-level auth for JS/TS apps"
+    }
+  },
+  {
+    "source_line": 266,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Spring Security / ASP.NET Core Identity / Devise / Django auth**",
+      "Purpose": "Framework-native auth and authorisation"
+    }
+  },
+  {
+    "source_line": 267,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**Open Policy Agent (OPA) / Cedar / OpenFGA / SpiceDB**",
+      "Purpose": "Externalised authorisation — policy as code, relationship-based access control"
+    }
+  },
+  {
+    "source_line": 268,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.7 Identity, authorisation and secrets",
+    "row": {
+      "Tool": "**HashiCorp Vault / cloud secret managers**",
+      "Purpose": "Secret storage, dynamic credentials, encryption as a service"
+    }
+  },
+  {
+    "source_line": 274,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.8 Workflow and orchestration",
+    "row": {
+      "Tool": "**Temporal**",
+      "Purpose": "Durable execution — long-running, failure-tolerant workflows written as ordinary code"
+    }
+  },
+  {
+    "source_line": 275,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.8 Workflow and orchestration",
+    "row": {
+      "Tool": "**Apache Airflow / Dagster / Prefect**",
+      "Purpose": "Scheduled data pipeline orchestration (DAGs)"
+    }
+  },
+  {
+    "source_line": 276,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.8 Workflow and orchestration",
+    "row": {
+      "Tool": "**Camunda / Zeebe**",
+      "Purpose": "BPMN business process orchestration with human tasks"
+    }
+  },
+  {
+    "source_line": 277,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.8 Workflow and orchestration",
+    "row": {
+      "Tool": "**AWS Step Functions / Azure Durable Functions**",
+      "Purpose": "Managed state-machine orchestration"
+    }
+  },
+  {
+    "source_line": 278,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.8 Workflow and orchestration",
+    "row": {
+      "Tool": "**Apache Camel / Spring Integration / MuleSoft**",
+      "Purpose": "Classic enterprise integration patterns — routing, transformation, adapters to legacy systems"
+    }
+  },
+  {
+    "source_line": 284,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**OpenTelemetry**",
+      "Purpose": "Vendor-neutral standard for traces, metrics and logs. The only real answer to \"how do I not get locked in?\""
+    }
+  },
+  {
+    "source_line": 285,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**Prometheus + Grafana**",
+      "Purpose": "Metrics collection, alerting, dashboards"
+    }
+  },
+  {
+    "source_line": 286,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**Jaeger / Tempo / Zipkin**",
+      "Purpose": "Distributed trace storage and query"
+    }
+  },
+  {
+    "source_line": 287,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**Loki / ELK stack**",
+      "Purpose": "Log aggregation"
+    }
+  },
+  {
+    "source_line": 288,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**Sentry**",
+      "Purpose": "Error tracking and performance monitoring, front and back end"
+    }
+  },
+  {
+    "source_line": 289,
+    "section": "2. Middleware — the tier between client and core logic",
+    "subsection": "2.9 Observability",
+    "row": {
+      "Tool": "**Datadog / New Relic / Honeycomb**",
+      "Purpose": "Commercial full-stack observability"
+    }
+  },
+  {
+    "source_line": 301,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**Express**",
+      "Purpose": "Minimal, unopinionated HTTP framework; the lingua franca of Node middleware",
+      "Signal": "19.9% (SO 2025); 79.9% among JS respondents; ~109.9M downloads/week"
+    }
+  },
+  {
+    "source_line": 302,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**Fastify**",
+      "Purpose": "Schema-driven, JSON-schema-validated, notably faster than Express with a plugin/encapsulation model",
+      "Signal": "2.9% (SO 2025); ~10.0M/week"
+    }
+  },
+  {
+    "source_line": 303,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**Hono**",
+      "Purpose": "Ultralight, Web-Standards-based router that runs on Node, Bun, Deno, Cloudflare Workers, Lambda",
+      "Signal": "**S-tier satisfaction (>90%) in State of JS 2025**; ~49.3M/week — an enormous rise"
+    }
+  },
+  {
+    "source_line": 304,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**NestJS**",
+      "Purpose": "Angular-style architecture for Node: DI, modules, decorators, guards, interceptors. The pick when a large team needs enforced structure",
+      "Signal": "6.7% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 305,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**Koa**",
+      "Purpose": "Express's successor from the same authors; async middleware, tiny core",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 306,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**Elysia**",
+      "Purpose": "Bun-first framework with end-to-end type inference",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 307,
+    "section": "3. Backend, by language",
+    "subsection": "3.1 JavaScript / TypeScript (Node, Deno, Bun)",
+    "row": {
+      "Framework": "**tRPC**",
+      "Purpose": "Typed RPC between TS client and TS server, no schema or codegen",
+      "Signal": "—"
+    }
+  },
+  {
+    "source_line": 319,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**FastAPI**",
+      "Purpose": "Async, type-hint-driven API framework; validation and OpenAPI docs generated from Pydantic models. Now the most-used Python web framework"
+    }
+  },
+  {
+    "source_line": 320,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Django**",
+      "Purpose": "Batteries-included: ORM, admin, auth, migrations, templating. Fastest path to a full CRUD product with a back office"
+    }
+  },
+  {
+    "source_line": 321,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Flask**",
+      "Purpose": "Microframework — routing and templating, everything else your choice"
+    }
+  },
+  {
+    "source_line": 322,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Django REST Framework**",
+      "Purpose": "Serialisers, viewsets, auth and permissions on top of Django (20% usage)"
+    }
+  },
+  {
+    "source_line": 323,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Litestar**",
+      "Purpose": "Modern async alternative to FastAPI with more built-in structure"
+    }
+  },
+  {
+    "source_line": 324,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Starlette**",
+      "Purpose": "The ASGI toolkit underneath FastAPI (8%)"
+    }
+  },
+  {
+    "source_line": 325,
+    "section": "3. Backend, by language",
+    "subsection": "3.2 Python",
+    "row": {
+      "Framework": "**Uvicorn / Gunicorn**",
+      "Purpose": "ASGI/WSGI servers that actually run the app"
+    }
+  },
+  {
+    "source_line": 337,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Spring Boot**",
+      "Purpose": "Auto-configured, convention-over-configuration Spring. Ubiquitous in enterprise (14.7% of *all* developers in SO 2025); Spring Boot 4 / Framework 7 landed Nov 2025"
+    }
+  },
+  {
+    "source_line": 338,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Spring ecosystem**",
+      "Purpose": "Spring MVC / WebFlux (blocking vs reactive web), Spring Data (repositories), Spring Security (authn/authz), Spring Cloud (config, discovery, resilience), Spring AI (LLM integration), Spring Batch"
+    }
+  },
+  {
+    "source_line": 339,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Quarkus**",
+      "Purpose": "Kubernetes-native, build-time optimised, excellent GraalVM native-image support — fast startup, low memory"
+    }
+  },
+  {
+    "source_line": 340,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Micronaut**",
+      "Purpose": "Compile-time DI and AOP (no runtime reflection); similar cold-start benefits"
+    }
+  },
+  {
+    "source_line": 341,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Helidon**",
+      "Purpose": "Oracle's lightweight microservice framework; SE (reactive) and MP (MicroProfile) flavours"
+    }
+  },
+  {
+    "source_line": 342,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Jakarta EE 11**",
+      "Purpose": "The vendor-neutral standard (Open Liberty, WildFly, Payara, GlassFish)"
+    }
+  },
+  {
+    "source_line": 343,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Vert.x**",
+      "Purpose": "Event-driven, non-blocking toolkit for high-concurrency workloads"
+    }
+  },
+  {
+    "source_line": 344,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Ktor**",
+      "Purpose": "Kotlin-first async framework, coroutine-based, DSL configuration"
+    }
+  },
+  {
+    "source_line": 345,
+    "section": "3. Backend, by language",
+    "subsection": "3.3 Java / Kotlin (JVM)",
+    "row": {
+      "Framework": "**Micrometer**",
+      "Purpose": "Metrics facade — the OpenTelemetry bridge for JVM apps"
+    }
+  },
+  {
+    "source_line": 357,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**ASP.NET Core**",
+      "Purpose": "Unified web stack: MVC, Razor Pages, Minimal APIs, gRPC, SignalR — all on one middleware pipeline"
+    }
+  },
+  {
+    "source_line": 358,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**Minimal APIs**",
+      "Purpose": "Low-ceremony endpoint definition for microservices"
+    }
+  },
+  {
+    "source_line": 359,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**Blazor**",
+      "Purpose": "C# in the browser via WebAssembly, or server-rendered over SignalR — frontend without JS (7.0%)"
+    }
+  },
+  {
+    "source_line": 360,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**SignalR**",
+      "Purpose": "Real-time bidirectional messaging (WebSockets with fallbacks)"
+    }
+  },
+  {
+    "source_line": 361,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**Orleans**",
+      "Purpose": "Virtual actor model for distributed stateful services"
+    }
+  },
+  {
+    "source_line": 362,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**MassTransit / NServiceBus**",
+      "Purpose": "Service-bus abstractions over RabbitMQ/Azure Service Bus — sagas, retries, outbox"
+    }
+  },
+  {
+    "source_line": 363,
+    "section": "3. Backend, by language",
+    "subsection": "3.4 C# / .NET",
+    "row": {
+      "Framework": "**ASP.NET (Framework)**",
+      "Purpose": "The legacy .NET Framework stack, still at 14.2%"
+    }
+  },
+  {
+    "source_line": 374,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**net/http (stdlib)**",
+      "Purpose": "Now capable enough (method+path routing) that many teams skip frameworks entirely"
+    }
+  },
+  {
+    "source_line": 375,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**Gin**",
+      "Purpose": "Fast HTTP router + middleware, huge ecosystem — the most recommended option"
+    }
+  },
+  {
+    "source_line": 376,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**Echo**",
+      "Purpose": "Similar scope, cleaner API, built-in middleware set"
+    }
+  },
+  {
+    "source_line": 377,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**Chi**",
+      "Purpose": "Idiomatic: 100% compatible with `net/http` handler signatures, composable routers"
+    }
+  },
+  {
+    "source_line": 378,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**Fiber**",
+      "Purpose": "Express-like API on fasthttp; fastest benchmarks, deviates from stdlib interfaces"
+    }
+  },
+  {
+    "source_line": 379,
+    "section": "3. Backend, by language",
+    "subsection": "3.5 Go",
+    "row": {
+      "Framework": "**gRPC-Go / Connect**",
+      "Purpose": "Service-to-service RPC; Connect speaks gRPC and plain HTTP"
+    }
+  },
+  {
+    "source_line": 390,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Axum**",
+      "Purpose": "Ergonomic web framework built on Tokio/Tower/Hyper; composable middleware via Tower `Layer`s. The current default"
+    }
+  },
+  {
+    "source_line": 391,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Actix Web**",
+      "Purpose": "Actor-influenced, consistently at the top of throughput benchmarks"
+    }
+  },
+  {
+    "source_line": 392,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Rocket**",
+      "Purpose": "Ergonomics-first with heavy macro use"
+    }
+  },
+  {
+    "source_line": 393,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Tokio**",
+      "Purpose": "The async runtime everything else sits on"
+    }
+  },
+  {
+    "source_line": 394,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Tower**",
+      "Purpose": "Reusable middleware abstraction (`Service`/`Layer`) shared across the ecosystem"
+    }
+  },
+  {
+    "source_line": 395,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Tonic**",
+      "Purpose": "gRPC implementation on Tokio"
+    }
+  },
+  {
+    "source_line": 396,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**SQLx**",
+      "Purpose": "Async SQL with compile-time-checked queries against a live schema"
+    }
+  },
+  {
+    "source_line": 397,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Diesel / SeaORM**",
+      "Purpose": "Full ORMs — Diesel is sync and type-safe, SeaORM is async"
+    }
+  },
+  {
+    "source_line": 398,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Serde**",
+      "Purpose": "Serialisation/deserialisation — near-universal"
+    }
+  },
+  {
+    "source_line": 399,
+    "section": "3. Backend, by language",
+    "subsection": "3.6 Rust",
+    "row": {
+      "Crate": "**Leptos / Dioxus / Yew**",
+      "Purpose": "Rust frontend frameworks compiling to WebAssembly"
+    }
+  },
+  {
+    "source_line": 407,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**Laravel**",
+      "Purpose": "Full-stack, developer-experience-focused: Eloquent ORM, queues, Blade templates, Livewire/Inertia for reactive UI without a separate SPA"
+    }
+  },
+  {
+    "source_line": 408,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**Symfony**",
+      "Purpose": "Component-based and standards-driven; the reusable components underpin Laravel, Drupal and others"
+    }
+  },
+  {
+    "source_line": 409,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**WordPress**",
+      "Purpose": "CMS, not a framework — but 13.6% of all developers work with it (SO 2025)"
+    }
+  },
+  {
+    "source_line": 410,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**Slim / Laminas / CodeIgniter**",
+      "Purpose": "Microframework and legacy-enterprise options"
+    }
+  },
+  {
+    "source_line": 411,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**Doctrine**",
+      "Purpose": "Data Mapper ORM (Symfony's default); Eloquent is the Active Record counterpart"
+    }
+  },
+  {
+    "source_line": 412,
+    "section": "3. Backend, by language",
+    "subsection": "3.7 PHP",
+    "row": {
+      "Framework": "**Tooling**",
+      "Purpose": "Composer (packages) · PHPUnit 50% · Pest 17% (rising) · PHPStan 36% (static analysis, rising fast) · Rector (automated refactoring)"
+    }
+  },
+  {
+    "source_line": 418,
+    "section": "3. Backend, by language",
+    "subsection": "3.8 Ruby",
+    "row": {
+      "Framework": "**Ruby on Rails**",
+      "Purpose": "The original convention-over-configuration full-stack framework; Active Record, migrations, Action Cable. 5.9% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 419,
+    "section": "3. Backend, by language",
+    "subsection": "3.8 Ruby",
+    "row": {
+      "Framework": "**Hotwire (Turbo + Stimulus)**",
+      "Purpose": "Rails' answer to SPAs: server-rendered HTML over the wire, minimal JS"
+    }
+  },
+  {
+    "source_line": 420,
+    "section": "3. Backend, by language",
+    "subsection": "3.8 Ruby",
+    "row": {
+      "Framework": "**Sidekiq**",
+      "Purpose": "Redis-backed background jobs — near-universal in Rails apps"
+    }
+  },
+  {
+    "source_line": 421,
+    "section": "3. Backend, by language",
+    "subsection": "3.8 Ruby",
+    "row": {
+      "Framework": "**Sinatra / Hanami / Roda**",
+      "Purpose": "Lightweight and alternative-architecture frameworks"
+    }
+  },
+  {
+    "source_line": 422,
+    "section": "3. Backend, by language",
+    "subsection": "3.8 Ruby",
+    "row": {
+      "Framework": "**RSpec / Minitest**",
+      "Purpose": "Testing"
+    }
+  },
+  {
+    "source_line": 428,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Phoenix**",
+      "Language": "Elixir",
+      "Purpose": "Fault-tolerant, massively concurrent web framework on the BEAM VM; 2.4% (SO 2025)"
+    }
+  },
+  {
+    "source_line": 429,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Phoenix LiveView**",
+      "Language": "Elixir",
+      "Purpose": "Real-time server-rendered UI over WebSockets with no client-side framework — the most mature version of this idea"
+    }
+  },
+  {
+    "source_line": 430,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Vapor**",
+      "Language": "Swift",
+      "Purpose": "Server-side Swift"
+    }
+  },
+  {
+    "source_line": 431,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Play / Akka (Pekko)**",
+      "Language": "Scala",
+      "Purpose": "Reactive web and actor-based concurrency"
+    }
+  },
+  {
+    "source_line": 432,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Deno Fresh**",
+      "Language": "TS",
+      "Purpose": "Islands architecture on Deno"
+    }
+  },
+  {
+    "source_line": 433,
+    "section": "3. Backend, by language",
+    "subsection": "3.9 Elixir and other notable ecosystems",
+    "row": {
+      "Framework": "**Shiny / Plumber**",
+      "Language": "R",
+      "Purpose": "Data-science web apps and APIs"
+    }
+  }
+]

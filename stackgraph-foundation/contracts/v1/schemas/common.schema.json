@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/common.schema.json",
+  "title": "StackGraph v1 common types",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "namespace": {
+      "enum": [
+        "BUSINESS",
+        "ENTERPRISE",
+        "TECHNOLOGY",
+        "OSS",
+        "DEPLOYMENT",
+        "INTELLIGENCE"
+      ]
+    },
+    "assertionClass": {
+      "enum": [
+        "DECLARED",
+        "OBSERVED",
+        "INFERRED",
+        "CURATED",
+        "EXTERNAL_MEASURED"
+      ]
+    },
+    "completeness": {
+      "enum": ["COMPLETE", "PARTIAL"]
+    },
+    "entityRef": {
+      "type": "object",
+      "required": ["namespace", "type", "key"],
+      "properties": {
+        "id": {"$ref": "#/$defs/uuid"},
+        "namespace": {"$ref": "#/$defs/namespace"},
+        "type": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "extractor": {
+      "type": "object",
+      "required": ["key", "version"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "sourceArtifactRef": {
+      "type": "object",
+      "required": ["key", "type", "revision"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "uri": {"type": "string", "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "pageInfo": {
+      "type": "object",
+      "required": ["has_next_page"],
+      "properties": {
+        "has_next_page": {"type": "boolean"},
+        "next_cursor": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "confidenceLabel": {
+      "enum": ["HIGH", "MEDIUM", "LOW"]
+    },
+    "freshness": {
+      "type": "object",
+      "required": ["observed_at", "status"],
+      "properties": {
+        "observed_at": {"$ref": "#/$defs/timestamp"},
+        "effective_at": {"$ref": "#/$defs/timestamp"},
+        "status": {"enum": ["FRESH", "STALE", "UNKNOWN"]},
+        "source_key": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

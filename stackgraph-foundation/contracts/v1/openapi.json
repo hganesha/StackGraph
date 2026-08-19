@@ -1,0 +1,90 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "StackGraph read API",
+    "version": "1.0.0",
+    "description": "Fixture-first read and review boundary between the StackGraph UI and backend. All tenant context is derived from authentication, never a client-supplied tenant ID."
+  },
+  "servers": [{"url": "/api/v1"}],
+  "paths": {
+    "/estate/summary": {
+      "get": {
+        "operationId": "getEstateSummary",
+        "parameters": [{"$ref": "#/components/parameters/cursor"}, {"$ref": "#/components/parameters/limit"}],
+        "responses": {"200": {"$ref": "#/components/responses/estateSummary"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/applications/{id}": {
+      "get": {
+        "operationId": "getApplication",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "responses": {"200": {"$ref": "#/components/responses/application"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/technologies/{id}": {
+      "get": {
+        "operationId": "getTechnology",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "responses": {"200": {"$ref": "#/components/responses/technology"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/modernization": {
+      "get": {
+        "operationId": "listModernizationOpportunities",
+        "parameters": [{"$ref": "#/components/parameters/cursor"}, {"$ref": "#/components/parameters/limit"}],
+        "responses": {"200": {"$ref": "#/components/responses/modernization"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/ask": {
+      "post": {
+        "operationId": "askEstate",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/askRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/ask"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/graph/neighborhood": {
+      "get": {
+        "operationId": "getGraphNeighborhood",
+        "parameters": [
+          {"name": "center_id", "in": "query", "required": true, "schema": {"type": "string", "format": "uuid"}},
+          {"name": "depth", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 2, "default": 1}},
+          {"name": "real_node_limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 50, "default": 50}}
+        ],
+        "responses": {"200": {"$ref": "#/components/responses/graph"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/facts/{id}/evidence": {
+      "get": {
+        "operationId": "getFactEvidence",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "responses": {"200": {"$ref": "#/components/responses/evidence"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/identity-assertions/{id}/review": {
+      "post": {
+        "operationId": "reviewIdentityAssertion",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/identityReviewRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/identityReview"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "id": {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}},
+      "cursor": {"name": "cursor", "in": "query", "schema": {"type": "string"}},
+      "limit": {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 100, "default": 50}}
+    },
+    "responses": {
+      "estateSummary": {"description": "Estate summary", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/estateSummary"}}}},
+      "application": {"description": "Application detail", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/applicationDetail"}}}},
+      "technology": {"description": "Technology detail", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/technologyDetail"}}}},
+      "modernization": {"description": "Modernization list", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationList"}}}},
+      "ask": {"description": "Cited answer", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/askResponse"}}}},
+      "graph": {"description": "Bounded graph neighborhood", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/graphNeighborhood"}}}},
+      "evidence": {"description": "Fact evidence", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/evidenceDetail"}}}},
+      "identityReview": {"description": "Reviewed identity assertion", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/identityReviewResult"}}}},
+      "error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/error"}}}}
+    }
+  }
+}

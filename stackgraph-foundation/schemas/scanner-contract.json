@@ -1,0 +1,18 @@
+{
+  "deprecated": true,
+  "replacement": {
+    "version": "1.0.0",
+    "request_schema": "../contracts/v1/schemas/scanner-request.schema.json",
+    "result_schema": "../contracts/v1/schemas/scanner-result.schema.json",
+    "complete_fixture": "../contracts/v1/fixtures/scanner-result.complete.json",
+    "partial_fixture": "../contracts/v1/fixtures/scanner-result.partial.json"
+  },
+  "rules": [
+    "Scanners emit facts, never recommendations.",
+    "Every fact must include evidence.",
+    "A COMPLETE snapshot may close missing prior facts; a PARTIAL snapshot never closes prior facts.",
+    "npm, Yarn, and pnpm dependency facts include effective registry origin and resolution method, with all authentication material redacted.",
+    "Scanner output must be idempotent for identical source revision and extractor version.",
+    "Do not create file, function, class, or symbol graph nodes in V1; retain that detail in evidence locators."
+  ]
+}

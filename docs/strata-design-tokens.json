@@ -1,0 +1,140 @@
+{
+  "color": {
+    "domain": {
+      "business": {
+        "50":  { "$value": "#FCF8F0", "$type": "color", "$description": "Business graph — lightest tint" },
+        "100": { "$value": "#F6ECD6", "$type": "color" },
+        "200": { "$value": "#EEDCB4", "$type": "color" },
+        "300": { "$value": "#E5CB8E", "$type": "color" },
+        "400": { "$value": "#DCB865", "$type": "color" },
+        "500": { "$value": "#D4A843", "$type": "color", "$description": "Business anchor" },
+        "600": { "$value": "#AE8A37", "$type": "color" },
+        "700": { "$value": "#83682A", "$type": "color" },
+        "800": { "$value": "#59471C", "$type": "color" },
+        "900": { "$value": "#352A11", "$type": "color" }
+      },
+      "enterprise": {
+        "50":  { "$value": "#F1F4F8", "$type": "color", "$description": "Enterprise tech graph — lightest tint" },
+        "100": { "$value": "#D7DFEB", "$type": "color" },
+        "200": { "$value": "#B7C5DB", "$type": "color" },
+        "300": { "$value": "#92A9C9", "$type": "color" },
+        "400": { "$value": "#6B89B5", "$type": "color" },
+        "500": { "$value": "#4A6FA5", "$type": "color", "$description": "Enterprise anchor" },
+        "600": { "$value": "#3D5B87", "$type": "color" },
+        "700": { "$value": "#2E4566", "$type": "color" },
+        "800": { "$value": "#1F2F45", "$type": "color" },
+        "900": { "$value": "#131C29", "$type": "color" }
+      },
+      "oss": {
+        "50":  { "$value": "#EEF7F6", "$type": "color", "$description": "OSS reference graph — lightest tint" },
+        "100": { "$value": "#D0E9E6", "$type": "color" },
+        "200": { "$value": "#AAD8D2", "$type": "color" },
+        "300": { "$value": "#7FC4BC", "$type": "color" },
+        "400": { "$value": "#50AFA3", "$type": "color" },
+        "500": { "$value": "#2A9D8F", "$type": "color", "$description": "OSS anchor" },
+        "600": { "$value": "#228175", "$type": "color" },
+        "700": { "$value": "#1A6159", "$type": "color" },
+        "800": { "$value": "#12423C", "$type": "color" },
+        "900": { "$value": "#0B2724", "$type": "color" }
+      },
+      "intelligence": {
+        "50":  { "$value": "#F4F2F8", "$type": "color", "$description": "Intelligence / assessment graph — lightest tint" },
+        "100": { "$value": "#E2DBEB", "$type": "color" },
+        "200": { "$value": "#CABDDB", "$type": "color" },
+        "300": { "$value": "#B09CCA", "$type": "color" },
+        "400": { "$value": "#9378B6", "$type": "color" },
+        "500": { "$value": "#7B5AA6", "$type": "color", "$description": "Intelligence anchor" },
+        "600": { "$value": "#654A88", "$type": "color" },
+        "700": { "$value": "#4C3867", "$type": "color" },
+        "800": { "$value": "#342646", "$type": "color" },
+        "900": { "$value": "#1F172A", "$type": "color" }
+      }
+    },
+    "signal": {
+      "danger": {
+        "50":  { "$value": "#F9EEED", "$type": "color", "$description": "Reserved exclusively for LOW confidence and error states — never used decoratively" },
+        "100": { "$value": "#F0D2CF", "$type": "color" },
+        "500": { "$value": "#B3261E", "$type": "color" },
+        "700": { "$value": "#7A1A15", "$type": "color" },
+        "900": { "$value": "#2D0A08", "$type": "color" }
+      }
+    },
+    "surface": {
+      "light": {
+        "base":   { "$value": "#FAF9F6", "$type": "color" },
+        "card":   { "$value": "#FFFFFF", "$type": "color" },
+        "sunken": { "$value": "#F1EFEA", "$type": "color" },
+        "border": { "$value": "#DEDCD4", "$type": "color" },
+        "border-strong": { "$value": "#C4C1B7", "$type": "color" }
+      },
+      "dark": {
+        "base":   { "$value": "#14151A", "$type": "color" },
+        "card":   { "$value": "#1C1E24", "$type": "color" },
+        "sunken": { "$value": "#0E0F13", "$type": "color" },
+        "border": { "$value": "#2C2E36", "$type": "color" },
+        "border-strong": { "$value": "#3D4048", "$type": "color" }
+      }
+    },
+    "text": {
+      "light": {
+        "primary":   { "$value": "#1A1B1E", "$type": "color" },
+        "secondary": { "$value": "#4E4D49", "$type": "color" },
+        "muted":     { "$value": "#807E76", "$type": "color" }
+      },
+      "dark": {
+        "primary":   { "$value": "#E8E7E2", "$type": "color" },
+        "secondary": { "$value": "#B4B2AA", "$type": "color" },
+        "muted":     { "$value": "#7B7A74", "$type": "color" }
+      }
+    }
+  },
+  "typography": {
+    "family": {
+      "narrative": { "$value": "IBM Plex Sans", "$type": "fontFamily", "$description": "UI chrome, headings, reasoning/INFERRED text, prose" },
+      "evidence":  { "$value": "IBM Plex Mono", "$type": "fontFamily", "$description": "Raw facts: DECLARED/OBSERVED/EXTERNAL_MEASURED evidence, file paths, package names, confidence decimals, node labels" }
+    },
+    "scale": {
+      "display": { "$value": { "fontSize": "32px", "lineHeight": "40px", "fontWeight": "500" }, "$type": "typography", "$description": "Hero metrics only — entropy score, viability delta" },
+      "h1":      { "$value": { "fontSize": "24px", "lineHeight": "32px", "fontWeight": "500" }, "$type": "typography" },
+      "h2":      { "$value": { "fontSize": "20px", "lineHeight": "28px", "fontWeight": "500" }, "$type": "typography" },
+      "h3":      { "$value": { "fontSize": "16px", "lineHeight": "24px", "fontWeight": "600" }, "$type": "typography" },
+      "body":    { "$value": { "fontSize": "14px", "lineHeight": "22px", "fontWeight": "400" }, "$type": "typography", "$description": "Default UI body — 14px for information density, not 16px marketing scale" },
+      "small":   { "$value": { "fontSize": "12px", "lineHeight": "16px", "fontWeight": "400" }, "$type": "typography" },
+      "mono-data": { "$value": { "fontSize": "13px", "lineHeight": "20px", "fontWeight": "400" }, "$type": "typography" }
+    }
+  },
+  "spacing": {
+    "1": { "$value": "4px",  "$type": "dimension" },
+    "2": { "$value": "8px",  "$type": "dimension" },
+    "3": { "$value": "12px", "$type": "dimension" },
+    "4": { "$value": "16px", "$type": "dimension" },
+    "6": { "$value": "24px", "$type": "dimension" },
+    "8": { "$value": "32px", "$type": "dimension" },
+    "12": { "$value": "48px", "$type": "dimension" },
+    "16": { "$value": "64px", "$type": "dimension" }
+  },
+  "radius": {
+    "control": { "$value": "6px",   "$type": "dimension" },
+    "card":    { "$value": "10px",  "$type": "dimension" },
+    "pill":    { "$value": "999px", "$type": "dimension" }
+  },
+  "border": {
+    "hairline": { "$value": "1px", "$type": "dimension" },
+    "connector-confirmed": { "$value": "2px solid", "$type": "border" },
+    "connector-unconfirmed": { "$value": "1.5px dashed", "$type": "border" }
+  },
+  "elevation": {
+    "flat":   { "$value": "none", "$type": "shadow" },
+    "raised": { "$value": { "x": "0", "y": "2px", "blur": "8px", "spread": "0", "color": "#00000014" }, "$type": "shadow", "$description": "Only two elevation levels exist in Strata — flat and raised. Used for evidence drawer, modals, and the recommendation card only." }
+  },
+  "motion": {
+    "hover":    { "$value": "150ms ease-out", "$type": "transition" },
+    "panel":    { "$value": "200ms ease-out", "$type": "transition" },
+    "bridge-pulse": { "$value": "1800ms ease-in-out infinite", "$type": "transition", "$description": "Reserved for the active selection at HIGH confidence (>=0.85) only. Disabled under prefers-reduced-motion." }
+  },
+  "confidence": {
+    "high":   { "threshold": 0.85, "label": "HIGH",   "indicator": "3-bar", "color": "text.primary" },
+    "medium": { "threshold": 0.60, "label": "MEDIUM", "indicator": "2-bar", "color": "text.primary" },
+    "low":    { "threshold": 0.0,  "label": "LOW",    "indicator": "1-bar", "color": "signal.danger.500" }
+  }
+}
