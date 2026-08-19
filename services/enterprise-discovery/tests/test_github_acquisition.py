@@ -18,6 +18,7 @@ from stackgraph_discovery.github_snapshot import (
     SnapshotLimits,
     _github_error_summary,
     manifest_kind,
+    manifest_kind_or_none,
     parse_repository,
 )
 
@@ -26,6 +27,7 @@ COMMIT_SHA = "a" * 40
 TREE_SHA = "b" * 40
 PACKAGE_SHA = "c" * 40
 PYPROJECT_SHA = "d" * 40
+SOURCE_SHA = "f" * 40
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,7 @@ class GitHubAcquisitionTests(unittest.TestCase):
     def test_acquires_only_target_files_and_writes_contract_envelope(self) -> None:
         package = b'{"dependencies":{"react":"19.1.0"}}\n'
         pyproject = b'[project]\nname = "widgets"\n'
+        source = b'import React from "react";\n'
         transport = FakeTransport(
             [
                 repository_response(),
@@ -124,11 +127,18 @@ class GitHubAcquisitionTests(unittest.TestCase):
                                 "sha": PYPROJECT_SHA,
                                 "size": len(pyproject),
                             },
+                            {
+                                "path": "packages/web/src/index.tsx",
+                                "type": "blob",
+                                "sha": SOURCE_SHA,
+                                "size": len(source),
+                            },
                         ],
                     },
                     **{"X-RateLimit-Remaining": "4996"},
                 ),
                 blob(PACKAGE_SHA, package),
+                blob(SOURCE_SHA, source),
                 blob(PYPROJECT_SHA, pyproject),
             ]
         )
@@ -144,13 +154,17 @@ class GitHubAcquisitionTests(unittest.TestCase):
 
             self.assertEqual(result.status, "CHANGED")
             self.assertEqual(result.snapshot.completeness, "COMPLETE")
-            self.assertEqual(len(result.snapshot.files), 2)
+            self.assertEqual(len(result.snapshot.files), 3)
             self.assertEqual(
                 (result.output_path / "files/package.json").read_bytes(), package
             )
             self.assertEqual(
                 (result.output_path / "files/services/api/pyproject.toml").read_bytes(),
                 pyproject,
+            )
+            self.assertEqual(
+                (result.output_path / "files/packages/web/src/index.tsx").read_bytes(),
+                source,
             )
             observation = json.loads(
                 (result.output_path / "raw-observation.json").read_text()
@@ -164,7 +178,7 @@ class GitHubAcquisitionTests(unittest.TestCase):
             self.assertRegex(observation["idempotency_key"], r"^sha256:[a-f0-9]{64}$")
             self.assertNotIn("secret-token", json.dumps(observation))
 
-        self.assertEqual(len(transport.requests), 5)
+        self.assertEqual(len(transport.requests), 6)
         self.assertTrue(
             all(
                 request.headers["Authorization"] == "Bearer secret-token"
@@ -302,7 +316,9 @@ class GitHubAcquisitionTests(unittest.TestCase):
             parse_repository("acme/widgets.git")
         self.assertEqual(manifest_kind("services/api/requirements-dev.txt"), "PYTHON_REQUIREMENTS")
         self.assertEqual(manifest_kind("packages/web/pnpm-lock.yaml"), "PNPM_LOCK")
+        self.assertEqual(manifest_kind("packages/web/src/index.tsx"), "TYPESCRIPT_SOURCE")
         self.assertIsNone(manifest_kind("README.md"))
+        self.assertEqual(manifest_kind_or_none("../index.ts"), "UNSAFE_TARGET")
 
         transport = FakeTransport([])
         with self.assertRaises(ValueError):

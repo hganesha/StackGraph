@@ -43,6 +43,19 @@ EXACT_MANIFEST_NAMES = {
     "uv.lock": "UV_LOCK",
     "Pipfile": "PIPENV_MANIFEST",
     "Pipfile.lock": "PIPENV_LOCK",
+    "stackgraph-runtime.json": "RUNTIME_TRACE",
+}
+
+SOURCE_SUFFIXES = {
+    ".js": "JAVASCRIPT_SOURCE",
+    ".jsx": "JAVASCRIPT_SOURCE",
+    ".mjs": "JAVASCRIPT_SOURCE",
+    ".cjs": "JAVASCRIPT_SOURCE",
+    ".ts": "TYPESCRIPT_SOURCE",
+    ".tsx": "TYPESCRIPT_SOURCE",
+    ".mts": "TYPESCRIPT_SOURCE",
+    ".cts": "TYPESCRIPT_SOURCE",
+    ".py": "PYTHON_SOURCE",
 }
 
 
@@ -445,6 +458,8 @@ def manifest_kind(path: str) -> str | None:
     if len(pure_path.parts) >= 2 and pure_path.parts[-2].lower() == "requirements":
         if lower_name.endswith(".txt"):
             return "PYTHON_REQUIREMENTS"
+    if pure_path.suffix.lower() in SOURCE_SUFFIXES:
+        return SOURCE_SUFFIXES[pure_path.suffix.lower()]
     return None
 
 
@@ -554,7 +569,11 @@ def manifest_kind_or_none(path: str) -> str | None:
         return manifest_kind(path)
     except ValueError:
         name = PurePosixPath(path).name
-        if name in EXACT_MANIFEST_NAMES or name.lower().startswith("requirements"):
+        if (
+            name in EXACT_MANIFEST_NAMES
+            or name.lower().startswith("requirements")
+            or PurePosixPath(name).suffix.lower() in SOURCE_SUFFIXES
+        ):
             return "UNSAFE_TARGET"
         return None
 
