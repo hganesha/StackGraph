@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import psycopg
-from psycopg import Connection
+from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -125,6 +125,7 @@ class ProjectionWorker:
         graph_name: str,
         worker_id: str,
         batch_size: int,
+        app_role: str | None = None,
     ) -> None:
         if graph_name != "stackgraph":
             raise ValueError("only the initialized stackgraph graph is supported")
@@ -132,6 +133,7 @@ class ProjectionWorker:
         self.graph_name = graph_name
         self.worker_id = worker_id
         self.batch_size = batch_size
+        self.app_role = app_role
         self.batches = 0
         self.claimed = 0
         self.processed = 0
@@ -203,6 +205,46 @@ class ProjectionWorker:
             'CREATE INDEX IF NOT EXISTS idx_stackgraph_relationship_properties_gin '
             'ON stackgraph."Relationship" USING gin (properties)'
         )
+        self._secure_projection_tables()
+
+    def _secure_projection_tables(self) -> None:
+        tenant_expression = """
+          nullif(trim(both '"' from ag_catalog.agtype_access_operator(
+            VARIADIC ARRAY[properties,'"tenant_id"'::ag_catalog.agtype]
+          )::text),'null') IS NULL
+          OR nullif(trim(both '"' from ag_catalog.agtype_access_operator(
+            VARIADIC ARRAY[properties,'"tenant_id"'::ag_catalog.agtype]
+          )::text),'null') = nullif(current_setting('app.tenant_id',true),'')
+        """
+        for table, policy in (
+            ('Entity', 'stackgraph_entity_tenant_isolation'),
+            ('Relationship', 'stackgraph_relationship_tenant_isolation'),
+        ):
+            identifier = sql.Identifier("stackgraph", table)
+            self.connection.execute(
+                sql.SQL("ALTER TABLE {} ENABLE ROW LEVEL SECURITY").format(identifier)
+            )
+            exists = self.connection.execute(
+                "SELECT 1 FROM pg_policies WHERE schemaname='stackgraph' AND tablename=%s AND policyname=%s",
+                (table, policy),
+            ).fetchone()
+            if exists is None:
+                self.connection.execute(
+                    sql.SQL("CREATE POLICY {} ON {} USING (").format(
+                        sql.Identifier(policy), identifier,
+                    ) + sql.SQL(tenant_expression) + sql.SQL(")")
+                )
+        if self.app_role is None:
+            return
+        role_exists = self.connection.execute(
+            "SELECT 1 FROM pg_roles WHERE rolname=%s", (self.app_role,),
+        ).fetchone()
+        if role_exists is not None:
+            self.connection.execute(
+                sql.SQL('GRANT SELECT ON stackgraph."Entity", stackgraph."Relationship" TO {}').format(
+                    sql.Identifier(self.app_role)
+                )
+            )
 
     def _claim_jobs(self) -> list[ProjectionJob]:
         rows = self.connection.execute(
@@ -364,6 +406,7 @@ def project_database(
     graph_name: str,
     batch_size: int,
     max_batches: int | None,
+    app_role: str | None = None,
 ) -> ProjectionResult:
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     with psycopg.connect(
@@ -376,6 +419,7 @@ def project_database(
             graph_name=graph_name,
             worker_id=worker_id,
             batch_size=batch_size,
+            app_role=app_role,
         )
         return worker.run_until_empty(max_batches=max_batches)
 
@@ -405,6 +449,7 @@ def main() -> None:
         graph_name=args.graph_name,
         batch_size=args.batch_size,
         max_batches=args.max_batches,
+        app_role=os.environ.get("STACKGRAPH_DB_APP_USER", "stackgraph_app"),
     )
     print(json.dumps(asdict(result), sort_keys=True))
 

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+from collections import defaultdict, deque
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+from app.age_graph import AgeGraphReader, AgeTopology
 from app.database import Database
 from app.errors import APIError
 from app.models import (
@@ -40,6 +44,7 @@ from app.models import (
 
 CONTRACT_VERSION = "1.0.0"
 MAX_GRAPH_NODES = 50
+logger = logging.getLogger(__name__)
 
 _GRAPH_NEIGHBORHOOD_CTE = """
 WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
@@ -137,9 +142,32 @@ def _aggregate_node_id(center_id: UUID, depth: int, namespace: str, entity_type:
     )
 
 
+@dataclass(slots=True)
+class GraphReadMetrics:
+    age_reads: int = 0
+    sql_reads: int = 0
+    lag_fallbacks: int = 0
+    unavailable_fallbacks: int = 0
+    parity_fallbacks: int = 0
+    discovery_limit_fallbacks: int = 0
+
+
+class AgeParityError(RuntimeError):
+    pass
+
+
 class ReadModelStore:
-    def __init__(self, database: Database) -> None:
+    def __init__(
+        self,
+        database: Database,
+        *,
+        graph_read_mode: str = "sql",
+        graph_discovery_limit: int = 5000,
+    ) -> None:
         self.database = database
+        self.graph_read_mode = graph_read_mode
+        self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
+        self.graph_read_metrics = GraphReadMetrics()
 
     async def estate_summary(
         self,
@@ -437,6 +465,123 @@ class ReadModelStore:
         min_confidence: float = 0,
         highlight_to: UUID | None = None,
     ) -> GraphNeighborhood:
+        if self.graph_read_mode != "sql":
+            try:
+                if self.graph_read_mode == "auto":
+                    projection = await self.age_graph.projection_state(tenant_id)
+                    if not projection.current:
+                        self.graph_read_metrics.lag_fallbacks += 1
+                        logger.info(
+                            "graph read using SQL because AGE projection is behind",
+                            extra={
+                                "pending_events": projection.pending_events,
+                                "oldest_pending_seconds": projection.oldest_pending_seconds,
+                            },
+                        )
+                    else:
+                        graph = await self._try_age_graph_neighborhood(
+                            center_id,
+                            tenant_id=tenant_id,
+                            depth=depth,
+                            real_node_limit=real_node_limit,
+                            predicates=predicates,
+                            namespaces=namespaces,
+                            min_confidence=min_confidence,
+                            highlight_to=highlight_to,
+                        )
+                        if graph is not None:
+                            self.graph_read_metrics.age_reads += 1
+                            return graph
+                else:
+                    graph = await self._try_age_graph_neighborhood(
+                        center_id,
+                        tenant_id=tenant_id,
+                        depth=depth,
+                        real_node_limit=real_node_limit,
+                        predicates=predicates,
+                        namespaces=namespaces,
+                        min_confidence=min_confidence,
+                        highlight_to=highlight_to,
+                    )
+                    if graph is not None:
+                        self.graph_read_metrics.age_reads += 1
+                        return graph
+            except APIError:
+                raise
+            except AgeParityError as error:
+                self.graph_read_metrics.parity_fallbacks += 1
+                logger.warning(
+                    "graph read falling back to SQL because AGE differs from current SQL state",
+                    extra={"reason": str(error)},
+                )
+            except Exception as error:
+                self.graph_read_metrics.unavailable_fallbacks += 1
+                logger.warning(
+                    "graph read falling back to SQL because AGE is unavailable",
+                    extra={"error_type": type(error).__name__},
+                )
+        self.graph_read_metrics.sql_reads += 1
+        return await self._sql_graph_neighborhood(
+            center_id,
+            tenant_id=tenant_id,
+            depth=depth,
+            real_node_limit=real_node_limit,
+            predicates=predicates,
+            namespaces=namespaces,
+            min_confidence=min_confidence,
+            highlight_to=highlight_to,
+        )
+
+    async def _try_age_graph_neighborhood(
+        self,
+        center_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        real_node_limit: int,
+        predicates: list[str] | None,
+        namespaces: list[str] | None,
+        min_confidence: float,
+        highlight_to: UUID | None,
+    ) -> GraphNeighborhood | None:
+        await self._get_entity(center_id, tenant_id)
+        if highlight_to is not None:
+            await self._get_entity(highlight_to, tenant_id)
+        topology = await self.age_graph.neighborhood(
+            center_id,
+            tenant_id=tenant_id,
+            depth=depth,
+            predicates=predicates,
+            namespaces=namespaces,
+            min_confidence=min_confidence,
+        )
+        if topology is None:
+            self.graph_read_metrics.parity_fallbacks += 1
+            return None
+        if topology.discovery_capped:
+            self.graph_read_metrics.discovery_limit_fallbacks += 1
+            return None
+        return await self._build_age_graph_neighborhood(
+            center_id,
+            topology,
+            tenant_id=tenant_id,
+            depth=depth,
+            real_node_limit=real_node_limit,
+            highlight_to=highlight_to,
+        )
+
+    async def _sql_graph_neighborhood(
+        self,
+        center_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        real_node_limit: int,
+        predicates: list[str] | None = None,
+        namespaces: list[str] | None = None,
+        min_confidence: float = 0,
+        highlight_to: UUID | None = None,
+    ) -> GraphNeighborhood:
         await self._get_entity(center_id, tenant_id)
         if highlight_to is not None:
             await self._get_entity(highlight_to, tenant_id)
@@ -566,6 +711,208 @@ class ReadModelStore:
             truncated=truncated,
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
+
+    async def _build_age_graph_neighborhood(
+        self,
+        center_id: UUID,
+        topology: AgeTopology,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        real_node_limit: int,
+        highlight_to: UUID | None,
+    ) -> GraphNeighborhood:
+        node_rows = await self.database.fetch_all(
+            """
+            SELECT *,coalesce(last_seen_at,updated_at,created_at) observed_at
+            FROM entity WHERE id=ANY(%s::uuid[])
+            """,
+            (list(topology.node_depths),),
+            tenant_id=tenant_id,
+        )
+        rows_by_id = {row["id"]: row for row in node_rows}
+        missing_nodes = set(topology.node_depths) - set(rows_by_id)
+        if missing_nodes:
+            raise AgeParityError(f"{len(missing_nodes)} AGE nodes are absent from SQL")
+
+        edge_rows = await self.database.fetch_all(
+            """
+            SELECT r.*,coalesce(identity.review_state,'NOT_APPLICABLE') review_state
+            FROM current_relationship r
+            LEFT JOIN LATERAL (
+              SELECT ia.review_state
+              FROM identity_assertion ia
+              WHERE r.relationship_type='SAME_AS'
+                AND ((ia.left_entity_id=r.source_entity_id AND ia.right_entity_id=r.target_entity_id)
+                  OR (ia.right_entity_id=r.source_entity_id AND ia.left_entity_id=r.target_entity_id))
+              ORDER BY ia.updated_at DESC,ia.id LIMIT 1
+            ) identity ON true
+            WHERE r.fact_assertion_id=ANY(%s::uuid[])
+              AND r.source_entity_id=ANY(%s::uuid[])
+              AND r.target_entity_id=ANY(%s::uuid[])
+              AND coalesce(identity.review_state,'NOT_APPLICABLE')<>'REJECTED'
+            ORDER BY r.relationship_type,r.fact_assertion_id
+            """,
+            (list(topology.fact_ids), list(topology.node_depths), list(topology.node_depths)),
+            tenant_id=tenant_id,
+        )
+        sql_fact_ids = {row["fact_assertion_id"] for row in edge_rows}
+        if sql_fact_ids != set(topology.fact_ids):
+            raise AgeParityError(
+                f"AGE returned {len(topology.fact_ids)} facts but SQL hydrated {len(sql_fact_ids)}"
+            )
+
+        ranked_rows = sorted(
+            node_rows,
+            key=lambda row: (
+                topology.node_depths[row["id"]], row["namespace"], row["entity_type"],
+                row["name"], row["id"],
+            ),
+        )
+        total_nodes = len(ranked_rows)
+        truncated = total_nodes > real_node_limit
+        kept_real_count = min(total_nodes, real_node_limit)
+        clusters: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        if truncated:
+            while True:
+                clusters = defaultdict(list)
+                for row in ranked_rows[kept_real_count:]:
+                    clusters[(row["namespace"], row["entity_type"])].append(row)
+                next_kept_count = max(
+                    1,
+                    min(real_node_limit, MAX_GRAPH_NODES - len(clusters)),
+                )
+                if next_kept_count == kept_real_count:
+                    break
+                kept_real_count = next_kept_count
+
+        kept_rows = ranked_rows[:kept_real_count]
+        kept_ids = {row["id"] for row in kept_rows}
+        aggregate_nodes = [
+            GraphNode(
+                id=_aggregate_node_id(center_id, depth, namespace, entity_type),
+                namespace=namespace,
+                type=entity_type,
+                key=f"aggregate:{center_id}:{depth}:{namespace}:{entity_type}",
+                label=(
+                    f"{entity_type} cluster · {len(members)} "
+                    f"{'node' if len(members) == 1 else 'nodes'}"
+                ),
+                aggregate=True,
+                member_count=len(members),
+            )
+            for (namespace, entity_type), members in sorted(clusters.items())
+        ]
+        mapped_ids: dict[UUID, UUID] = {}
+        for row in ranked_rows:
+            mapped_ids[row["id"]] = (
+                row["id"] if row["id"] in kept_ids else _aggregate_node_id(
+                    center_id, depth, row["namespace"], row["entity_type"],
+                )
+            )
+
+        real_edges: list[GraphEdge] = []
+        aggregate_groups: dict[tuple[Any, ...], dict[str, Any]] = {}
+        for row in edge_rows:
+            source_id = mapped_ids[row["source_entity_id"]]
+            target_id = mapped_ids[row["target_entity_id"]]
+            if source_id == target_id:
+                continue
+            if row["source_entity_id"] in kept_ids and row["target_entity_id"] in kept_ids:
+                real_edges.append(GraphEdge(
+                    id=row["fact_assertion_id"],
+                    source=source_id,
+                    target=target_id,
+                    predicate=row["relationship_type"],
+                    confidence=_number(row["confidence"]),
+                    assertion_class=row["assertion_class"],
+                    review_state=row["review_state"],
+                    citation_fact_ids=[row["fact_assertion_id"]],
+                ))
+                continue
+            key = (
+                source_id, target_id, row["relationship_type"],
+                row["assertion_class"], row["review_state"],
+            )
+            group = aggregate_groups.setdefault(key, {
+                "confidence": _number(row["confidence"]), "fact_ids": [],
+            })
+            group["confidence"] = min(group["confidence"], _number(row["confidence"]))
+            if len(group["fact_ids"]) < 20:
+                group["fact_ids"].append(row["fact_assertion_id"])
+
+        aggregate_edges = []
+        for key, group in sorted(aggregate_groups.items(), key=lambda item: tuple(map(str, item[0]))):
+            source_id, target_id, predicate, assertion_class, review_state = key
+            edge_id = uuid5(
+                NAMESPACE_URL,
+                (
+                    f"stackgraph:aggregate-edge:{center_id}:{depth}:{source_id}:"
+                    f"{target_id}:{predicate}:{assertion_class}:{review_state}"
+                ),
+            )
+            aggregate_edges.append(GraphEdge(
+                id=edge_id,
+                source=source_id,
+                target=target_id,
+                predicate=predicate,
+                confidence=group["confidence"],
+                assertion_class=assertion_class,
+                review_state=review_state,
+                citation_fact_ids=group["fact_ids"],
+            ))
+
+        highlighted_path = self._shortest_graph_path(
+            center_id, highlight_to, edge_rows, max_depth=depth,
+        )
+        visible_node_ids = kept_ids | {node.id for node in aggregate_nodes}
+        if any(node_id not in visible_node_ids for node_id in highlighted_path):
+            highlighted_path = []
+        return GraphNeighborhood(
+            center_id=center_id,
+            nodes=[
+                GraphNode(
+                    id=row["id"], namespace=row["namespace"], type=row["entity_type"],
+                    key=row["canonical_key"], label=row["name"], aggregate=False,
+                ) for row in kept_rows
+            ] + aggregate_nodes,
+            edges=real_edges + aggregate_edges,
+            highlighted_path=highlighted_path,
+            truncated=truncated,
+            truncation_reason="REAL_NODE_LIMIT" if truncated else None,
+        )
+
+    @staticmethod
+    def _shortest_graph_path(
+        center_id: UUID,
+        highlight_to: UUID | None,
+        edge_rows: list[dict[str, Any]],
+        *,
+        max_depth: int,
+    ) -> list[UUID]:
+        if highlight_to is None:
+            return []
+        if highlight_to == center_id:
+            return [center_id]
+        adjacent: dict[UUID, set[UUID]] = defaultdict(set)
+        for row in edge_rows:
+            adjacent[row["source_entity_id"]].add(row["target_entity_id"])
+            adjacent[row["target_entity_id"]].add(row["source_entity_id"])
+        queue = deque([(center_id, [center_id])])
+        visited = {center_id}
+        while queue:
+            current, path = queue.popleft()
+            if len(path) - 1 >= max_depth:
+                continue
+            for neighbor in sorted(adjacent[current], key=str):
+                if neighbor in visited:
+                    continue
+                next_path = [*path, neighbor]
+                if neighbor == highlight_to:
+                    return next_path
+                visited.add(neighbor)
+                queue.append((neighbor, next_path))
+        return []
 
     async def _graph_cluster_rows(
         self,

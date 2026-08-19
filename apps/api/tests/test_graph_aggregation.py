@@ -63,6 +63,20 @@ class GraphDatabaseStub:
         raise AssertionError(f"unexpected query: {query}")
 
 
+class LaggedGraphDatabaseStub(GraphDatabaseStub):
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "pending_events" in query:
+            return {"pending_events": 2, "oldest_pending_seconds": 4.5}
+        return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+
+class UnavailableGraphDatabaseStub(GraphDatabaseStub):
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "pending_events" in query:
+            raise RuntimeError("AGE connection unavailable")
+        return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+
 async def aggregate_graph():
     store = ReadModelStore(GraphDatabaseStub())
     return await store.graph_neighborhood(
@@ -92,3 +106,27 @@ def test_aggregate_node_and_edge_ids_are_deterministic() -> None:
 
     assert [node.id for node in first.nodes] == [node.id for node in second.nodes]
     assert [edge.id for edge in first.edges] == [edge.id for edge in second.edges]
+
+
+def test_auto_mode_falls_back_to_sql_when_projection_is_behind() -> None:
+    store = ReadModelStore(LaggedGraphDatabaseStub(), graph_read_mode="auto")
+    graph = asyncio.run(store.graph_neighborhood(
+        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+    ))
+
+    assert graph.truncated
+    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.lag_fallbacks == 1
+    assert store.graph_read_metrics.sql_reads == 1
+
+
+def test_auto_mode_falls_back_to_sql_when_age_is_unavailable() -> None:
+    store = ReadModelStore(UnavailableGraphDatabaseStub(), graph_read_mode="auto")
+    graph = asyncio.run(store.graph_neighborhood(
+        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+    ))
+
+    assert graph.truncated
+    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.unavailable_fallbacks == 1
+    assert store.graph_read_metrics.sql_reads == 1
