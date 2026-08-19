@@ -1,16 +1,16 @@
 {
   "catalog": {
     "key": "stackgraph.modernization-alternatives",
-    "version": "1.0.0",
-    "policy_version": "modernization-ranking/v1"
+    "version": "2.0.0",
+    "policy_version": "modernization-ranking/v2"
   },
   "alternatives": [
-    {"capability": "http-client", "kind": "NATIVE", "key": "runtime:web-fetch", "name": "Native Fetch API", "rationale": "Modern JavaScript runtimes may provide a built-in Fetch API.", "validation_gaps": ["Confirm the deployed runtime version and required interceptor, retry, streaming, and proxy behavior."]},
-    {"capability": "http-client", "kind": "PACKAGE", "key": "pkg:npm/undici", "name": "undici", "rationale": "Curated npm HTTP client alternative.", "validation_gaps": ["Confirm API and runtime compatibility against observed call sites."]},
+    {"capability": "http-client", "kind": "NATIVE", "key": "runtime:web-fetch", "name": "Native Fetch API", "rationale": "Modern JavaScript runtimes may provide a built-in Fetch API.", "provided_symbols": ["fetch", "get", "post", "put", "delete", "request"], "runtime_constraints": {"node": ">=18"}, "license": "RUNTIME", "security_status": "CLEAR", "policy_tags": ["runtime-native"], "behavior_verified": false, "validation_gaps": ["Confirm interceptor, retry, streaming, cancellation, proxy, and error-shape behavior."]},
+    {"capability": "http-client", "kind": "PACKAGE", "key": "pkg:npm/undici", "name": "undici", "rationale": "Curated npm HTTP client alternative.", "provided_symbols": ["fetch", "request", "get", "post"], "runtime_constraints": {"node": ">=18"}, "license": "MIT", "security_status": "UNKNOWN", "policy_tags": ["oss"], "behavior_verified": false, "validation_gaps": ["Confirm API and runtime compatibility against observed call sites."]},
     {"capability": "http-client", "kind": "PACKAGE", "key": "pkg:pypi/httpx", "name": "HTTPX", "rationale": "Curated Python HTTP client alternative.", "validation_gaps": ["Confirm sync/async behavior and framework compatibility."]},
     {"capability": "jwt-token-processing", "kind": "PACKAGE", "key": "pkg:npm/jose", "name": "jose", "rationale": "Curated JOSE/JWT implementation.", "validation_gaps": ["Confirm supported algorithms, key formats, and runtime compatibility."]},
-    {"capability": "rate-control", "kind": "NATIVE", "key": "runtime:local-rate-control", "name": "Local rate-control helper", "rationale": "A small local helper may replace a broad utility dependency when only debounce or throttle is used.", "validation_gaps": ["Validate cancellation, leading/trailing invocation, timer, and concurrency semantics."]},
-    {"capability": "date-time-processing", "kind": "NATIVE", "key": "runtime:temporal-or-intl", "name": "Native date/time APIs", "rationale": "Runtime date/time APIs may cover the observed capability.", "validation_gaps": ["Confirm timezone, locale, parsing, and deployed runtime support."]},
+    {"capability": "rate-control", "kind": "NATIVE", "key": "runtime:local-rate-control", "name": "Local rate-control helper", "rationale": "A small local helper may replace a broad utility dependency when only debounce or throttle is used.", "provided_symbols": ["debounce", "throttle"], "license": "INTERNAL", "security_status": "CLEAR", "policy_tags": ["local-helper"], "behavior_verified": false, "validation_gaps": ["Validate cancellation, leading/trailing invocation, timer, and concurrency semantics."]},
+    {"capability": "date-time-processing", "kind": "NATIVE", "key": "runtime:temporal-or-intl", "name": "Native date/time APIs", "rationale": "Runtime date/time APIs may cover the observed capability.", "provided_symbols": ["date", "format", "parse", "timezone"], "license": "RUNTIME", "security_status": "CLEAR", "policy_tags": ["runtime-native"], "behavior_verified": false, "validation_gaps": ["Confirm timezone, locale, parsing, and deployed runtime support."]},
     {"capability": "schema-validation", "kind": "PACKAGE", "key": "pkg:npm/zod", "name": "Zod", "rationale": "Curated JavaScript schema-validation alternative.", "validation_gaps": ["Confirm schema expressiveness, error shape, and TypeScript inference requirements."]},
     {"capability": "application-logging", "kind": "PACKAGE", "key": "pkg:npm/pino", "name": "Pino", "rationale": "Curated structured logging alternative.", "validation_gaps": ["Confirm transport, redaction, serialization, and operational integration requirements."]}
   ]

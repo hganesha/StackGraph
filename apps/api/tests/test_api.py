@@ -28,8 +28,13 @@ from app.models import (
     IdentityReviewRequest,
     IdentityReviewResult,
     PageInfo,
+    ModernizationCandidateReviewRequest,
+    ModernizationCandidateReviewResult,
     ModernizationRecommendationReviewRequest,
     ModernizationRecommendationReviewResult,
+    ModernizationValidationOutcomeRequest,
+    ModernizationValidationOutcomeResult,
+    Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
 )
 
@@ -163,6 +168,41 @@ class StubReadModels:
             reviewed_at=NOW,
         )
 
+    async def review_modernization_candidate(
+        self, candidate_id, review: ModernizationCandidateReviewRequest,
+        *, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ModernizationCandidateReviewResult(
+            modernization_candidate_id=candidate_id,
+            review_state="CONFIRMED" if review.decision == "CONFIRM" else "REJECTED",
+            version=review.expected_version + 1, reviewed_at=NOW,
+        )
+
+    async def record_modernization_validation_outcome(
+        self, recommendation_id, outcome: ModernizationValidationOutcomeRequest,
+        *, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ModernizationValidationOutcomeResult(
+            id=UUID("00000000-0000-4000-8000-000000000799"),
+            modernization_recommendation_id=recommendation_id,
+            validation_status=outcome.validation_status, reported_at=NOW,
+        )
+
+    async def phase3_intelligence_metrics(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return Phase3IntelligenceMetrics(
+            as_of=NOW, candidate_counts={"CONFIRMED": 1},
+            recommendation_counts={"ACCEPTED": 1}, job_counts={"SUCCEEDED": 1},
+            candidate_review_precision=1.0, recommendation_acceptance_rate=1.0,
+            successful_validation_rate=1.0, evidence_completeness_rate=1.0,
+            retry_count=0, dead_letter_count=0, stale_candidate_count=0,
+            stale_recommendation_count=0, model_invocation_count=0, model_cost_usd=0,
+        )
+
 
 def app_with_stubs(settings: Settings | None = None) -> tuple[FastAPI, StubReadModels]:
     read_models = StubReadModels()
@@ -247,6 +287,34 @@ def test_modernization_review_forwards_tenant_and_actor() -> None:
 
     assert response.status_code == 200
     assert response.json()["review_state"] == "ACCEPTED"
+    assert store.last_tenant_id == tenant_id
+    assert store.last_actor_key == "local-user"
+
+
+def test_modernization_candidate_review_and_validation_metrics_are_exposed() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+    candidate = asyncio.run(request(
+        app, "POST",
+        "/api/v1/modernization-candidates/00000000-0000-4000-8000-000000000702/review",
+        json={"decision": "CONFIRM", "rationale": "Matched implementations verified.", "expected_version": 1},
+    ))
+    outcome = asyncio.run(request(
+        app, "POST",
+        "/api/v1/modernization-recommendations/00000000-0000-4000-8000-000000000708/validation-outcomes",
+        json={
+            "validation_status": "SUCCEEDED", "actual_call_sites": 3,
+            "actual_files": 2, "actual_effort": "LOW", "notes": "Migration checks passed.",
+        },
+    ))
+    metrics = asyncio.run(request(app, "GET", "/api/v1/intelligence/phase-3/metrics"))
+
+    assert candidate.status_code == 200
+    assert candidate.json()["review_state"] == "CONFIRMED"
+    assert outcome.status_code == 200
+    assert outcome.json()["validation_status"] == "SUCCEEDED"
+    assert metrics.status_code == 200
+    assert metrics.json()["candidate_review_precision"] == 1.0
     assert store.last_tenant_id == tenant_id
     assert store.last_actor_key == "local-user"
 

@@ -345,6 +345,20 @@ class DuplicateCapabilityReviewResult(ContractModel):
     reviewed_at: datetime
 
 
+class ModernizationOptionEligibilityModel(ContractModel):
+    capability_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    api_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    behavior_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    runtime_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    license_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    security_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    policy_fit: Literal["PASS", "FAIL", "UNKNOWN"]
+    eligible: bool
+    evidence: dict[str, Any]
+    disqualifiers: list[str]
+    unknowns: list[str]
+
+
 class ModernizationOptionModel(ContractModel):
     id: UUID
     kind: Literal["NATIVE", "INTERNAL", "UPGRADE", "PACKAGE"]
@@ -360,6 +374,24 @@ class ModernizationOptionModel(ContractModel):
     disqualifiers: list[str]
     validation_gaps: list[str]
     supporting_fact_ids: list[UUID]
+    eligibility: ModernizationOptionEligibilityModel | None = None
+
+
+class ModernizationImpactModel(ContractModel):
+    affected_call_sites: int = Field(ge=0)
+    affected_files: int = Field(ge=0)
+    covered_call_sites: int = Field(ge=0)
+    uncovered_call_sites: int = Field(ge=0)
+    affected_test_files: list[str]
+    dynamic_signals: list[str]
+    configuration_touchpoints: list[dict[str, Any]]
+    build_touchpoints: list[dict[str, Any]]
+    deployment_touchpoints: list[dict[str, Any]]
+    evidence_locations: list[dict[str, Any]]
+    confidence: float = Field(ge=0, le=1)
+    effort_points: int = Field(ge=0)
+    effort_model_version: str = Field(min_length=1)
+    limitations: list[str]
 
 
 class ModernizationRecommendationModel(ContractModel):
@@ -407,6 +439,7 @@ class ModernizationCandidateModel(ContractModel):
     stale: bool
     options: list[ModernizationOptionModel]
     recommendation: ModernizationRecommendationModel | None = None
+    impact: ModernizationImpactModel | None = None
 
 
 class RepositoryModernizationIntelligence(ContractModel):
@@ -415,6 +448,20 @@ class RepositoryModernizationIntelligence(ContractModel):
     source_revision: str | None = None
     candidates: list[ModernizationCandidateModel]
     truncated: bool
+
+
+class ModernizationCandidateReviewRequest(ContractModel):
+    decision: Literal["CONFIRM", "REJECT"]
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class ModernizationCandidateReviewResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    modernization_candidate_id: UUID
+    review_state: Literal["CONFIRMED", "REJECTED"]
+    version: int = Field(ge=2)
+    reviewed_at: datetime
 
 
 class ModernizationRecommendationReviewRequest(ContractModel):
@@ -429,6 +476,50 @@ class ModernizationRecommendationReviewResult(ContractModel):
     review_state: Literal["ACCEPTED", "REJECTED", "DISMISSED"]
     version: int = Field(ge=2)
     reviewed_at: datetime
+
+
+class ModernizationValidationOutcomeRequest(ContractModel):
+    validation_status: Literal["SUCCEEDED", "PARTIAL", "FAILED"]
+    actual_call_sites: int | None = Field(default=None, ge=0)
+    actual_files: int | None = Field(default=None, ge=0)
+    actual_effort: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"] | None = None
+    successful_checks: list[str] = Field(default_factory=list)
+    failed_checks: list[str] = Field(default_factory=list)
+    notes: str = Field(min_length=1)
+
+
+class ModernizationValidationOutcomeResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    modernization_recommendation_id: UUID
+    validation_status: Literal["SUCCEEDED", "PARTIAL", "FAILED"]
+    reported_at: datetime
+
+
+class Phase3IntelligenceMetrics(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    candidate_counts: dict[str, int]
+    recommendation_counts: dict[str, int]
+    job_counts: dict[str, int]
+    candidate_review_precision: float | None = Field(default=None, ge=0, le=1)
+    recommendation_acceptance_rate: float | None = Field(default=None, ge=0, le=1)
+    successful_validation_rate: float | None = Field(default=None, ge=0, le=1)
+    affected_call_site_mae: float | None = Field(default=None, ge=0)
+    affected_files_mae: float | None = Field(default=None, ge=0)
+    effort_band_accuracy: float | None = Field(default=None, ge=0, le=1)
+    evidence_completeness_rate: float | None = Field(default=None, ge=0, le=1)
+    queue_lag_seconds_p50: float | None = Field(default=None, ge=0)
+    queue_lag_seconds_p95: float | None = Field(default=None, ge=0)
+    job_latency_ms_p50: float | None = Field(default=None, ge=0)
+    job_latency_ms_p95: float | None = Field(default=None, ge=0)
+    retry_count: int = Field(ge=0)
+    dead_letter_count: int = Field(ge=0)
+    stale_candidate_count: int = Field(ge=0)
+    stale_recommendation_count: int = Field(ge=0)
+    model_invocation_count: int = Field(ge=0)
+    model_cost_usd: float = Field(ge=0)
+    model_latency_ms_p95: float | None = Field(default=None, ge=0)
 
 
 class ErrorResponse(ContractModel):

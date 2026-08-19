@@ -425,6 +425,24 @@
       },
       "additionalProperties": false
     },
+    "modernizationOptionEligibility": {
+      "type": "object",
+      "required": ["capability_fit", "api_fit", "behavior_fit", "runtime_fit", "license_fit", "security_fit", "policy_fit", "eligible", "evidence", "disqualifiers", "unknowns"],
+      "properties": {
+        "capability_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "api_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "behavior_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "runtime_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "license_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "security_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "policy_fit": {"enum": ["PASS", "FAIL", "UNKNOWN"]},
+        "eligible": {"type": "boolean"},
+        "evidence": {"type": "object"},
+        "disqualifiers": {"type": "array", "items": {"type": "string"}},
+        "unknowns": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
     "modernizationOption": {
       "type": "object",
       "required": ["id", "kind", "canonical_key", "name", "compatibility", "rank", "score", "score_components", "rationale", "tradeoffs", "disqualifiers", "validation_gaps", "supporting_fact_ids"],
@@ -442,7 +460,29 @@
         "tradeoffs": {"type": "array", "items": {"type": "string"}},
         "disqualifiers": {"type": "array", "items": {"type": "string"}},
         "validation_gaps": {"type": "array", "items": {"type": "string"}},
-        "supporting_fact_ids": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}}
+        "supporting_fact_ids": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "eligibility": {"$ref": "#/$defs/modernizationOptionEligibility"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationImpact": {
+      "type": "object",
+      "required": ["affected_call_sites", "affected_files", "covered_call_sites", "uncovered_call_sites", "affected_test_files", "dynamic_signals", "configuration_touchpoints", "build_touchpoints", "deployment_touchpoints", "evidence_locations", "confidence", "effort_points", "effort_model_version", "limitations"],
+      "properties": {
+        "affected_call_sites": {"type": "integer", "minimum": 0},
+        "affected_files": {"type": "integer", "minimum": 0},
+        "covered_call_sites": {"type": "integer", "minimum": 0},
+        "uncovered_call_sites": {"type": "integer", "minimum": 0},
+        "affected_test_files": {"type": "array", "items": {"type": "string"}},
+        "dynamic_signals": {"type": "array", "items": {"type": "string"}},
+        "configuration_touchpoints": {"type": "array", "items": {"type": "object"}},
+        "build_touchpoints": {"type": "array", "items": {"type": "object"}},
+        "deployment_touchpoints": {"type": "array", "items": {"type": "object"}},
+        "evidence_locations": {"type": "array", "items": {"type": "object"}},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "effort_points": {"type": "integer", "minimum": 0},
+        "effort_model_version": {"type": "string", "minLength": 1},
+        "limitations": {"type": "array", "items": {"type": "string"}}
       },
       "additionalProperties": false
     },
@@ -494,7 +534,8 @@
         "version": {"type": "integer", "minimum": 1},
         "stale": {"type": "boolean"},
         "options": {"type": "array", "items": {"$ref": "#/$defs/modernizationOption"}},
-        "recommendation": {"$ref": "#/$defs/modernizationRecommendation"}
+        "recommendation": {"$ref": "#/$defs/modernizationRecommendation"},
+        "impact": {"$ref": "#/$defs/modernizationImpact"}
       },
       "additionalProperties": false
     },
@@ -507,6 +548,28 @@
         "source_revision": {"type": "string"},
         "candidates": {"type": "array", "items": {"$ref": "#/$defs/modernizationCandidate"}},
         "truncated": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationCandidateReviewRequest": {
+      "type": "object",
+      "required": ["decision", "rationale", "expected_version"],
+      "properties": {
+        "decision": {"enum": ["CONFIRM", "REJECT"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "expected_version": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "modernizationCandidateReviewResult": {
+      "type": "object",
+      "required": ["contract_version", "modernization_candidate_id", "review_state", "version", "reviewed_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "modernization_candidate_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "review_state": {"enum": ["CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 2},
+        "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
       },
       "additionalProperties": false
     },
@@ -529,6 +592,62 @@
         "review_state": {"enum": ["ACCEPTED", "REJECTED", "DISMISSED"]},
         "version": {"type": "integer", "minimum": 2},
         "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationValidationOutcomeRequest": {
+      "type": "object",
+      "required": ["validation_status", "notes"],
+      "properties": {
+        "validation_status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
+        "actual_call_sites": {"type": "integer", "minimum": 0},
+        "actual_files": {"type": "integer", "minimum": 0},
+        "actual_effort": {"enum": ["LOW", "MEDIUM", "HIGH", "UNKNOWN"]},
+        "successful_checks": {"type": "array", "items": {"type": "string"}},
+        "failed_checks": {"type": "array", "items": {"type": "string"}},
+        "notes": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "modernizationValidationOutcomeResult": {
+      "type": "object",
+      "required": ["contract_version", "id", "modernization_recommendation_id", "validation_status", "reported_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "modernization_recommendation_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "validation_status": {"enum": ["SUCCEEDED", "PARTIAL", "FAILED"]},
+        "reported_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "phase3IntelligenceMetrics": {
+      "type": "object",
+      "required": ["contract_version", "as_of", "candidate_counts", "recommendation_counts", "job_counts", "retry_count", "dead_letter_count", "stale_candidate_count", "stale_recommendation_count", "model_invocation_count", "model_cost_usd"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "candidate_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "recommendation_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "job_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "candidate_review_precision": {"$ref": "common.schema.json#/$defs/confidence"},
+        "recommendation_acceptance_rate": {"$ref": "common.schema.json#/$defs/confidence"},
+        "successful_validation_rate": {"$ref": "common.schema.json#/$defs/confidence"},
+        "affected_call_site_mae": {"type": "number", "minimum": 0},
+        "affected_files_mae": {"type": "number", "minimum": 0},
+        "effort_band_accuracy": {"$ref": "common.schema.json#/$defs/confidence"},
+        "evidence_completeness_rate": {"$ref": "common.schema.json#/$defs/confidence"},
+        "queue_lag_seconds_p50": {"type": "number", "minimum": 0},
+        "queue_lag_seconds_p95": {"type": "number", "minimum": 0},
+        "job_latency_ms_p50": {"type": "number", "minimum": 0},
+        "job_latency_ms_p95": {"type": "number", "minimum": 0},
+        "retry_count": {"type": "integer", "minimum": 0},
+        "dead_letter_count": {"type": "integer", "minimum": 0},
+        "stale_candidate_count": {"type": "integer", "minimum": 0},
+        "stale_recommendation_count": {"type": "integer", "minimum": 0},
+        "model_invocation_count": {"type": "integer", "minimum": 0},
+        "model_cost_usd": {"type": "number", "minimum": 0},
+        "model_latency_ms_p95": {"type": "number", "minimum": 0}
       },
       "additionalProperties": false
     },

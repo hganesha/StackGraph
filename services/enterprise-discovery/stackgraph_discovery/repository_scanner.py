@@ -19,7 +19,7 @@ from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.0.0"
+SCANNER_VERSION = "1.1.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -43,6 +43,15 @@ JS_EXPORT = re.compile(
     r"(?:export\s+(?:declare\s+)?(?:async\s+)?(?:function|class|const|let|var|interface|type|enum)\s+"
     r"|exports\.)([A-Za-z_$][\w$]*)"
 )
+JS_FUNCTION = re.compile(
+    r"(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+"
+    r"(?P<name>[A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{"
+)
+JS_ARROW_FUNCTION = re.compile(
+    r"(?:export\s+)?(?:const|let|var)\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*"
+    r"(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{"
+)
+IDENTIFIER_PART = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|[0-9]+")
 
 
 def canonical_json(value: object) -> str:
@@ -113,6 +122,23 @@ class Reference:
     path: str
     line: int
     symbols: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True, slots=True)
+class CodeUnit:
+    language: str
+    symbol_kind: str
+    qualified_name: str
+    path: str
+    line_start: int
+    line_end: int
+    structural_fingerprint: str
+    semantic_tokens: tuple[str, ...]
+    dependency_keys: tuple[str, ...]
+    covering_tests: tuple[str, ...]
+    dynamic_signals: tuple[str, ...]
+    touchpoints: tuple[Mapping[str, str], ...]
+    vendored: bool
 
 
 @dataclass(slots=True)
@@ -192,6 +218,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
     reachable_files = _reachable_files(contents, local_edges, entrypoints)
     runtime = _runtime_observations(contents, diagnostics)
+    code_units = _scan_code_units(contents, references, local_edges, diagnostics)
     if any(item.severity == "ERROR" for item in diagnostics):
         completeness = "PARTIAL"
     facts = _dependency_facts(
@@ -214,6 +241,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
             source_file_count=sum(1 for path in contents if _is_source(path)),
         )
     )
+    facts.extend(_code_unit_facts(scan_input, code_units))
     duration_ms = max(0, int((time.monotonic() - started) * 1000))
     return {
         "scanner_contract_version": "1.0.0",
@@ -228,6 +256,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
             "facts_emitted": len(facts),
             "bytes_read": bytes_read,
             "duration_ms": duration_ms,
+            "code_units_emitted": len(code_units),
         },
         "diagnostics": [item.as_dict() for item in diagnostics],
     }
@@ -920,6 +949,279 @@ def _runtime_observations(contents: Mapping[str, bytes], diagnostics: list[Diagn
         key = (ecosystem, normalize_package_name(ecosystem, name))
         observed.setdefault(key, set()).add(str(event.get("symbol") or "*"))
     return observed
+
+
+def _scan_code_units(
+    contents: Mapping[str, bytes],
+    references: Iterable[Reference],
+    local_edges: Mapping[str, set[str]],
+    diagnostics: list[Diagnostic],
+    *,
+    max_units: int = 500,
+) -> list[CodeUnit]:
+    dependency_by_path: dict[str, set[str]] = {}
+    for reference in references:
+        dependency_by_path.setdefault(reference.path, set()).add(
+            f"pkg:{reference.ecosystem}/{reference.package_name}"
+        )
+    coverage = _test_coverage_links(contents, local_edges)
+    repository_touchpoints = _repository_touchpoints(contents)
+    units: list[CodeUnit] = []
+    for path in sorted(contents):
+        if len(units) >= max_units:
+            diagnostics.append(Diagnostic(
+                "WARNING", "CODE_UNIT_LIMIT",
+                f"Code-unit analysis stopped after {max_units} units.",
+            ))
+            break
+        suffix = PurePosixPath(path).suffix.lower()
+        content = contents[path]
+        if suffix == ".py":
+            try:
+                tree = ast.parse(content.decode("utf-8"), filename=path)
+            except (UnicodeDecodeError, SyntaxError):
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    continue
+                units.append(CodeUnit(
+                    language="python",
+                    symbol_kind="CLASS" if isinstance(node, ast.ClassDef) else "FUNCTION",
+                    qualified_name=node.name,
+                    path=path,
+                    line_start=int(node.lineno),
+                    line_end=int(getattr(node, "end_lineno", node.lineno)),
+                    structural_fingerprint=sha256_key("python-ast-v1", _ast_shape(node)),
+                    semantic_tokens=tuple(sorted(_python_semantic_tokens(node))),
+                    dependency_keys=tuple(sorted(dependency_by_path.get(path, ()))),
+                    covering_tests=tuple(sorted(coverage.get(path, ()))),
+                    dynamic_signals=_dynamic_signals(path, content),
+                    touchpoints=repository_touchpoints,
+                    vendored=_is_vendored(path),
+                ))
+                if len(units) >= max_units:
+                    break
+        elif suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}:
+            text = content.decode("utf-8", errors="replace")
+            for match in sorted(
+                [*JS_FUNCTION.finditer(text), *JS_ARROW_FUNCTION.finditer(text)],
+                key=lambda item: item.start(),
+            ):
+                body_end = _matching_brace(text, match.end() - 1)
+                if body_end is None:
+                    continue
+                source = text[match.start():body_end + 1]
+                units.append(CodeUnit(
+                    language="javascript",
+                    symbol_kind="FUNCTION",
+                    qualified_name=match.group("name"),
+                    path=path,
+                    line_start=text.count("\n", 0, match.start()) + 1,
+                    line_end=text.count("\n", 0, body_end) + 1,
+                    structural_fingerprint=sha256_key(
+                        "javascript-structure-v1", _javascript_shape(source),
+                    ),
+                    semantic_tokens=tuple(sorted(_identifier_tokens(source))),
+                    dependency_keys=tuple(sorted(dependency_by_path.get(path, ()))),
+                    covering_tests=tuple(sorted(coverage.get(path, ()))),
+                    dynamic_signals=_dynamic_signals(path, content),
+                    touchpoints=repository_touchpoints,
+                    vendored=_is_vendored(path),
+                ))
+                if len(units) >= max_units:
+                    break
+    return units
+
+
+def _code_unit_facts(scan_input: ScanInput, units: Iterable[CodeUnit]) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    for unit in units:
+        value = {
+            "record_kind": "code_implementation_summary",
+            "language": unit.language,
+            "symbol_kind": unit.symbol_kind,
+            "qualified_name": unit.qualified_name,
+            "path": unit.path,
+            "line_start": unit.line_start,
+            "line_end": unit.line_end,
+            "structural_fingerprint": unit.structural_fingerprint,
+            "semantic_tokens": list(unit.semantic_tokens),
+            "dependency_keys": list(unit.dependency_keys),
+            "covering_tests": list(unit.covering_tests),
+            "dynamic_signals": list(unit.dynamic_signals),
+            "touchpoints": [dict(item) for item in unit.touchpoints],
+            "vendored": unit.vendored,
+        }
+        identity = {
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "source_revision": scan_input.source_revision,
+            "path": unit.path,
+            "symbol": unit.qualified_name,
+            "line": unit.line_start,
+            "structure": unit.structural_fingerprint,
+            "extractor": SCANNER_VERSION,
+        }
+        evidence = Evidence(
+            unit.path,
+            "SOURCE_STRUCTURE",
+            _content_hash_from_evidence_context(unit.path, scan_input.checkout_root),
+            {"path": unit.path, "line_start": unit.line_start, "line_end": unit.line_end},
+            sha256_key(unit.structural_fingerprint, unit.semantic_tokens),
+            {"symbol": unit.qualified_name, "language": unit.language},
+        )
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key(identity),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "HAS_PROPERTY",
+            "object_value": value,
+            "assertion_class": "OBSERVED",
+            "confidence": 0.95,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {"analysis_kind": "CODE_IMPLEMENTATION_SUMMARY"},
+            "evidence": [evidence.as_dict(scan_input.repository_key, scan_input.source_revision)],
+        })
+    return facts
+
+
+def _ast_shape(node: ast.AST) -> object:
+    ignored = {"name", "id", "arg", "value", "ctx", "type_comment", "kind"}
+    return [
+        type(node).__name__,
+        *[
+            [field_name, _ast_shape_value(value)]
+            for field_name, value in ast.iter_fields(node)
+            if field_name not in ignored
+        ],
+    ]
+
+
+def _ast_shape_value(value: object) -> object:
+    if isinstance(value, ast.AST):
+        return _ast_shape(value)
+    if isinstance(value, list):
+        return [_ast_shape_value(item) for item in value]
+    if isinstance(value, (str, int, float, complex, bytes)) or value is None:
+        return type(value).__name__
+    return str(type(value).__name__)
+
+
+def _python_semantic_tokens(node: ast.AST) -> set[str]:
+    values: set[str] = set()
+    for child in ast.walk(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            values.update(_identifier_tokens(child.name))
+        elif isinstance(child, ast.Name):
+            values.update(_identifier_tokens(child.id))
+        elif isinstance(child, ast.Attribute):
+            values.update(_identifier_tokens(child.attr))
+    return values
+
+
+def _identifier_tokens(value: str) -> set[str]:
+    return {
+        part.lower()
+        for raw in re.split(r"[^A-Za-z0-9]+", value)
+        for part in IDENTIFIER_PART.findall(raw)
+        if len(part) > 1
+    }
+
+
+def _javascript_shape(source: str) -> str:
+    value = re.sub(r"/\*.*?\*/|//[^\n]*", " ", source, flags=re.S)
+    value = re.sub(r"(?:'[^'\\]*(?:\\.[^'\\]*)*'|\"[^\"\\]*(?:\\.[^\"\\]*)*\"|`[^`]*`)", "STRING", value)
+    value = re.sub(r"\b\d+(?:\.\d+)?\b", "NUMBER", value)
+    value = re.sub(r"\b[A-Za-z_$][\w$]*\b", "ID", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _matching_brace(text: str, start: int) -> int | None:
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index in range(start, len(text)):
+        character = text[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in {"'", '"', "`"}:
+            quote = character
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _test_coverage_links(
+    contents: Mapping[str, bytes], local_edges: Mapping[str, set[str]],
+) -> dict[str, set[str]]:
+    result: dict[str, set[str]] = {}
+    tests = [path for path in contents if _is_test_path(path)]
+    for test_path in tests:
+        pending = list(local_edges.get(test_path, ()))
+        visited: set[str] = set()
+        while pending:
+            path = pending.pop()
+            if path in visited:
+                continue
+            visited.add(path)
+            pending.extend(local_edges.get(path, ()) - visited)
+        for path in visited:
+            result.setdefault(path, set()).add(test_path)
+    return result
+
+
+def _is_test_path(path: str) -> bool:
+    lowered = path.lower()
+    name = PurePosixPath(lowered).name
+    return (
+        "/test/" in f"/{lowered}/" or "/tests/" in f"/{lowered}/"
+        or name.startswith("test_") or ".test." in name or ".spec." in name
+    )
+
+
+def _dynamic_signals(path: str, content: bytes) -> tuple[str, ...]:
+    text = content.decode("utf-8", errors="replace")
+    patterns = {
+        "DYNAMIC_IMPORT": r"\b(?:import\s*\(|require\s*\([^'\"]|importlib\.|__import__\s*\()",
+        "REFLECTION": r"\b(?:getattr|setattr|eval|exec|Reflect\.|Proxy\s*\()",
+        "PLUGIN_LOADING": r"\b(?:plugin|entry_points|load_module|ServiceLoader)\b",
+        "GENERATED_CODE": r"\b(?:generated|codegen|autogenerated)\b",
+    }
+    return tuple(sorted(key for key, pattern in patterns.items() if re.search(pattern, text, re.I)))
+
+
+def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str, str], ...]:
+    values: dict[tuple[str, str], Mapping[str, str]] = {}
+    for path in contents:
+        lowered = path.lower()
+        name = PurePosixPath(lowered).name
+        kind = None
+        if name in {"dockerfile", "compose.yaml", "compose.yml"} or "deploy" in lowered or "/k8s/" in f"/{lowered}/":
+            kind = "DEPLOYMENT"
+        elif name in {"package.json", "pyproject.toml", "requirements.txt", "makefile"} or "build" in name:
+            kind = "BUILD"
+        elif "config" in name or PurePosixPath(lowered).suffix in {".yaml", ".yml", ".toml"}:
+            kind = "CONFIGURATION"
+        if kind:
+            values[(kind, path)] = {"kind": kind, "path": path}
+    return tuple(values[key] for key in sorted(values)[:50])
+
+
+def _is_vendored(path: str) -> bool:
+    return bool({"vendor", "vendored", "third_party", "third-party"} & set(PurePosixPath(path.lower()).parts))
 
 
 def _dependency_facts(

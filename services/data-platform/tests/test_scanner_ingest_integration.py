@@ -108,13 +108,22 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
                 run_id=first_run["id"],
             )
 
-            self.assertEqual(persisted.fact_count, 1)
+            self.assertEqual(persisted.fact_count, 2)
             self.assertEqual(persisted.usage_summary_count, 1)
             self.assertTrue(replay.replayed)
             usage = connection.execute(
                 "SELECT referenced,static_reachability FROM dependency_usage_summary"
             ).fetchone()
             self.assertEqual(usage, {"referenced": True, "static_reachability": "OBSERVED"})
+            code_unit = connection.execute(
+                """
+                SELECT qualified_name,covering_tests,dynamic_signals
+                FROM code_implementation_summary WHERE tenant_id=%s
+                """,
+                (tenant["id"],),
+            ).fetchone()
+            self.assertEqual(code_unit["qualified_name"], "debounceRequest")
+            self.assertEqual(code_unit["covering_tests"], ["src/client.test.ts"])
             queued = connection.execute(
                 """
                 SELECT source_revision,status FROM intelligence_job
@@ -240,6 +249,41 @@ def _result(
                     "content_hash": "sha256:" + "b" * 64,
                 },
                 "locator": {"path": "package.json", "json_pointer": "/dependencies/lodash"},
+            }],
+        })
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key(repository_key, revision, "debounceRequest"),
+            "tenant_key": tenant_key,
+            "subject": {
+                "namespace": "ENTERPRISE", "type": "Repository",
+                "key": repository_key, "name": "scanner-test",
+            },
+            "predicate": "HAS_PROPERTY",
+            "object_value": {
+                "record_kind": "code_implementation_summary",
+                "language": "javascript", "symbol_kind": "FUNCTION",
+                "qualified_name": "debounceRequest", "path": "src/client.ts",
+                "line_start": 4, "line_end": 9,
+                "structural_fingerprint": "sha256:" + "c" * 64,
+                "semantic_tokens": ["debounce", "request"],
+                "dependency_keys": ["pkg:npm/lodash"],
+                "covering_tests": ["src/client.test.ts"],
+                "dynamic_signals": [],
+                "touchpoints": [{"kind": "BUILD", "path": "package.json"}],
+                "vendored": False,
+            },
+            "assertion_class": "OBSERVED", "confidence": 0.95,
+            "observed_at": "2026-08-19T14:00:00Z", "source_revision": revision,
+            "extractor": {"key": "repository-dependency-usage", "version": extractor_version},
+            "properties": {"analysis_kind": "CODE_IMPLEMENTATION_SUMMARY"},
+            "evidence": [{
+                "type": "SOURCE_STRUCTURE",
+                "source_artifact": {
+                    "key": f"{repository_key}:src/client.ts", "type": "REPOSITORY_FILE",
+                    "revision": revision, "content_hash": "sha256:" + "d" * 64,
+                },
+                "locator": {"path": "src/client.ts", "line_start": 4, "line_end": 9},
             }],
         })
     return {

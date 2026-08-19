@@ -33,7 +33,8 @@ const cases = [
   ["contracts/v1/fixtures/identity-review-result.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/identityReviewResult"],
   ["contracts/v1/fixtures/capability-taxonomy.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/capabilityTaxonomy"],
   ["contracts/v1/fixtures/repository-capabilities.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryCapabilityIntelligence"],
-  ["contracts/v1/fixtures/repository-modernization-intelligence.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryModernizationIntelligence"]
+  ["contracts/v1/fixtures/repository-modernization-intelligence.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryModernizationIntelligence"],
+  ["contracts/v1/fixtures/phase3-intelligence-metrics.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/phase3IntelligenceMetrics"]
 ];
 
 let failed = false;

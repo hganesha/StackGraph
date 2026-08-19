@@ -289,6 +289,22 @@ def persist_scanner_result_connection(
             usage_count += int(inserted_usage is not None)
         if fact["predicate"] == "DEPENDS_ON" and object_id is not None:
             _persist_dependency_resolution(connection, tenant_id, fact_id, object_id, fact)
+        code_summary = fact.get("object_value")
+        if (
+            fact["predicate"] == "HAS_PROPERTY"
+            and isinstance(code_summary, Mapping)
+            and code_summary.get("record_kind") == "code_implementation_summary"
+        ):
+            _persist_code_implementation_summary(
+                connection,
+                tenant_id=tenant_id,
+                snapshot_id=snapshot_id,
+                repository_id=subject_id,
+                fact_id=fact_id,
+                source_revision=str(result["source_revision"]),
+                completeness=str(result["completeness"]),
+                value=code_summary,
+            )
 
     connection.execute("SELECT publish_source_snapshot(%s)", (snapshot_id,))
     run_status = "SUCCEEDED" if result["completeness"] == "COMPLETE" else "PARTIAL"
@@ -308,6 +324,56 @@ def persist_scanner_result_connection(
         (target_id,),
     )
     return PersistResult(str(snapshot_id), "PUBLISHED", False, fact_count, usage_count)
+
+
+def _persist_code_implementation_summary(
+    connection: Connection[dict[str, Any]],
+    *,
+    tenant_id: UUID,
+    snapshot_id: UUID,
+    repository_id: UUID,
+    fact_id: UUID,
+    source_revision: str,
+    completeness: str,
+    value: Mapping[str, Any],
+) -> None:
+    required_strings = (
+        "language", "symbol_kind", "qualified_name", "path", "structural_fingerprint",
+    )
+    if any(not isinstance(value.get(key), str) or not value[key] for key in required_strings):
+        raise ValueError("code implementation summary has invalid identity fields")
+    for key in ("semantic_tokens", "dependency_keys", "covering_tests", "dynamic_signals"):
+        if not isinstance(value.get(key), list) or not all(
+            isinstance(item, str) for item in value[key]
+        ):
+            raise ValueError(f"code implementation summary {key} must be a string array")
+    touchpoints = value.get("touchpoints")
+    if not isinstance(touchpoints, list) or not all(isinstance(item, Mapping) for item in touchpoints):
+        raise ValueError("code implementation summary touchpoints must be an object array")
+    line_start = int(value.get("line_start") or 0)
+    line_end = int(value.get("line_end") or 0)
+    limitations = []
+    if completeness != "COMPLETE":
+        limitations.append("repository snapshot was partial")
+    connection.execute(
+        """
+        INSERT INTO code_implementation_summary(
+          tenant_id,source_snapshot_id,repository_entity_id,fact_assertion_id,
+          source_revision,language,symbol_kind,qualified_name,path,line_start,line_end,
+          structural_fingerprint,semantic_tokens,dependency_keys,covering_tests,
+          dynamic_signals,touchpoints,vendored,completeness,limitations
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT(fact_assertion_id) DO NOTHING
+        """,
+        (
+            tenant_id, snapshot_id, repository_id, fact_id, source_revision,
+            value["language"], value["symbol_kind"], value["qualified_name"], value["path"],
+            line_start, line_end, value["structural_fingerprint"], value["semantic_tokens"],
+            value["dependency_keys"], value["covering_tests"], value["dynamic_signals"],
+            Jsonb([dict(item) for item in touchpoints]), bool(value.get("vendored")),
+            completeness, Jsonb(limitations),
+        ),
+    )
 
 
 def persist_api_surface(

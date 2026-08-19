@@ -22,8 +22,12 @@ import type {
   CapabilityInferenceReviewResult,
   DuplicateCapabilityReviewResult,
   RepositoryModernizationIntelligence,
+  ModernizationCandidateReviewResult,
   ModernizationRecommendationReviewRequest,
   ModernizationRecommendationReviewResult,
+  ModernizationValidationOutcomeRequest,
+  ModernizationValidationOutcomeResult,
+  Phase3IntelligenceMetrics,
   ModernizationList,
   TechnologyDetail,
 } from "../contracts/read-models";
@@ -43,6 +47,7 @@ import identityReview from "../fixtures/identity-review-result.json";
 import capabilityTaxonomy from "../fixtures/capability-taxonomy.json";
 import repositoryCapabilities from "../fixtures/repository-capabilities.json";
 import repositoryModernization from "../fixtures/repository-modernization-intelligence.json";
+import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
 
 export interface StackGraphClient {
   getEstateSummary(): Promise<EstateSummary>;
@@ -58,7 +63,10 @@ export interface StackGraphClient {
   reviewCapabilityInference(id: string, body: OptimisticReviewRequest): Promise<CapabilityInferenceReviewResult>;
   reviewDuplicateCapabilityCandidate(id: string, body: OptimisticReviewRequest): Promise<DuplicateCapabilityReviewResult>;
   getRepositoryModernizationIntelligence(id: string, limit?: number): Promise<RepositoryModernizationIntelligence>;
+  reviewModernizationCandidate(id: string, body: OptimisticReviewRequest): Promise<ModernizationCandidateReviewResult>;
   reviewModernizationRecommendation(id: string, body: ModernizationRecommendationReviewRequest): Promise<ModernizationRecommendationReviewResult>;
+  recordModernizationValidationOutcome(id: string, body: ModernizationValidationOutcomeRequest): Promise<ModernizationValidationOutcomeResult>;
+  getPhase3IntelligenceMetrics(): Promise<Phase3IntelligenceMetrics>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
@@ -117,9 +125,21 @@ const fixtureClient: StackGraphClient = {
     await delay();
     return repositoryModernization as RepositoryModernizationIntelligence;
   },
+  async reviewModernizationCandidate(id, body) {
+    await delay();
+    return {contract_version: "1.0.0", modernization_candidate_id: id, review_state: body.decision === "CONFIRM" ? "CONFIRMED" : "REJECTED", version: body.expected_version + 1, reviewed_at: new Date().toISOString()};
+  },
   async reviewModernizationRecommendation(id, body) {
     await delay();
     return {contract_version: "1.0.0", modernization_recommendation_id: id, review_state: body.decision === "ACCEPT" ? "ACCEPTED" : body.decision === "REJECT" ? "REJECTED" : "DISMISSED", version: body.expected_version + 1, reviewed_at: new Date().toISOString()};
+  },
+  async recordModernizationValidationOutcome(id, body) {
+    await delay();
+    return {contract_version: "1.0.0", id: "00000000-0000-4000-8000-000000000799", modernization_recommendation_id: id, validation_status: body.validation_status, reported_at: new Date().toISOString()};
+  },
+  async getPhase3IntelligenceMetrics() {
+    await delay();
+    return phase3Metrics as Phase3IntelligenceMetrics;
   },
 };
 
@@ -180,10 +200,19 @@ const liveClient: StackGraphClient = {
     }),
   getRepositoryModernizationIntelligence: (id, limit = 50) =>
     req(`/repositories/${id}/modernization-intelligence?limit=${limit}`),
+  reviewModernizationCandidate: (id, body) =>
+    req(`/modernization-candidates/${id}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   reviewModernizationRecommendation: (id, body) =>
     req(`/modernization-recommendations/${id}/review`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
+  recordModernizationValidationOutcome: (id, body) =>
+    req(`/modernization-recommendations/${id}/validation-outcomes`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  getPhase3IntelligenceMetrics: () => req("/intelligence/phase-3/metrics"),
 };
 
 export const stackGraphClient: StackGraphClient = isFixtureMode() ? fixtureClient : liveClient;

@@ -333,7 +333,8 @@ CREATE TABLE intelligence_job (
  source_snapshot_id uuid NOT NULL REFERENCES source_snapshot(id) ON DELETE CASCADE,source_revision text NOT NULL,job_kind text NOT NULL CHECK(job_kind IN ('REPOSITORY_MODERNIZATION')),
  status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','RUNNING','SUCCEEDED','FAILED')),available_at timestamptz NOT NULL DEFAULT now(),leased_by text,leased_until timestamptz,
  attempt integer NOT NULL DEFAULT 0 CHECK(attempt>=0),max_attempts integer NOT NULL DEFAULT 5 CHECK(max_attempts>0),last_error jsonb,created_at timestamptz NOT NULL DEFAULT now(),
- started_at timestamptz,completed_at timestamptz,updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,repository_entity_id,source_revision,job_kind)
+ started_at timestamptz,completed_at timestamptz,updated_at timestamptz NOT NULL DEFAULT now(),configuration_fingerprint text NOT NULL DEFAULT 'snapshot-v1',
+ UNIQUE(tenant_id,repository_entity_id,source_revision,job_kind,configuration_fingerprint)
 );
 CREATE TABLE modernization_candidate (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),repository_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
@@ -343,7 +344,7 @@ CREATE TABLE modernization_candidate (
  supporting_fact_ids uuid[] NOT NULL CHECK(cardinality(supporting_fact_ids)>0),counter_evidence_fact_ids uuid[] NOT NULL DEFAULT '{}',source_locations jsonb NOT NULL DEFAULT '[]',validation_gaps jsonb NOT NULL DEFAULT '[]',
  analyzer_key text NOT NULL,analyzer_version text NOT NULL,input_fingerprint text NOT NULL CHECK(input_fingerprint ~ '^sha256:[a-f0-9]{64}$'),analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
  review_state text NOT NULL DEFAULT 'UNREVIEWED' CHECK(review_state IN ('UNREVIEWED','CONFIRMED','REJECTED')),version integer NOT NULL DEFAULT 1 CHECK(version>0),stale_at timestamptz,
- created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
+ source_code_unit_ids uuid[] NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
 );
 CREATE TABLE modernization_option (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_candidate_id uuid NOT NULL REFERENCES modernization_candidate(id) ON DELETE CASCADE,
@@ -366,6 +367,55 @@ CREATE TABLE modernization_recommendation (
 CREATE TABLE modernization_recommendation_review (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_recommendation_id uuid NOT NULL REFERENCES modernization_recommendation(id) ON DELETE CASCADE,
  decision text NOT NULL CHECK(decision IN ('ACCEPT','REJECT','DISMISS')),rationale text NOT NULL,reviewer_actor_key text NOT NULL,prior_version integer NOT NULL CHECK(prior_version>0),
+ resulting_version integer NOT NULL CHECK(resulting_version=prior_version+1),reviewed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE code_implementation_summary (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),source_snapshot_id uuid NOT NULL REFERENCES source_snapshot(id) ON DELETE CASCADE,
+ repository_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL UNIQUE REFERENCES fact_assertion(id) ON DELETE CASCADE,source_revision text NOT NULL,
+ language text NOT NULL CHECK(language IN ('python','javascript')),symbol_kind text NOT NULL CHECK(symbol_kind IN ('FUNCTION','CLASS')),qualified_name text NOT NULL,path text NOT NULL,
+ line_start integer NOT NULL CHECK(line_start>0),line_end integer NOT NULL CHECK(line_end>=line_start),structural_fingerprint text NOT NULL CHECK(structural_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+ semantic_tokens text[] NOT NULL DEFAULT '{}',dependency_keys text[] NOT NULL DEFAULT '{}',covering_tests text[] NOT NULL DEFAULT '{}',dynamic_signals text[] NOT NULL DEFAULT '{}',
+ touchpoints jsonb NOT NULL DEFAULT '[]',vendored boolean NOT NULL DEFAULT false,completeness text NOT NULL CHECK(completeness IN ('COMPLETE','PARTIAL')),limitations jsonb NOT NULL DEFAULT '[]',created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id,repository_entity_id,source_revision,path,qualified_name,line_start,structural_fingerprint)
+);
+CREATE TABLE modernization_policy (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),policy_key text NOT NULL,version text NOT NULL,status text NOT NULL CHECK(status IN ('DRAFT','ACTIVE','RETIRED')),
+ runtime_versions jsonb NOT NULL DEFAULT '{}',allowed_licenses text[] NOT NULL DEFAULT '{}',denied_option_keys text[] NOT NULL DEFAULT '{}',allowed_security_statuses text[] NOT NULL DEFAULT ARRAY['CLEAR','UNKNOWN']::text[],
+ required_policy_tags text[] NOT NULL DEFAULT '{}',metadata jsonb NOT NULL DEFAULT '{}',content_hash text NOT NULL CHECK(content_hash ~ '^sha256:[a-f0-9]{64}$'),created_by text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,policy_key,version)
+);
+CREATE UNIQUE INDEX uq_modernization_policy_active ON modernization_policy(tenant_id,policy_key) WHERE status='ACTIVE';
+CREATE TABLE modernization_internal_component (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),component_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ capability_definition_id uuid NOT NULL REFERENCES capability_definition(id),component_key text NOT NULL,version text NOT NULL,status text NOT NULL CHECK(status IN ('APPROVED','DEPRECATED','BLOCKED')),
+ api_symbols text[] NOT NULL DEFAULT '{}',runtime_constraints jsonb NOT NULL DEFAULT '{}',behavior_claims jsonb NOT NULL DEFAULT '[]',license text,
+ security_status text NOT NULL DEFAULT 'UNKNOWN' CHECK(security_status IN ('CLEAR','WARN','BLOCKED','UNKNOWN')),policy_tags text[] NOT NULL DEFAULT '{}',supporting_fact_ids uuid[] NOT NULL DEFAULT '{}',
+ metadata jsonb NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,component_key,version)
+);
+CREATE TABLE modernization_option_evaluation (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_option_id uuid NOT NULL UNIQUE REFERENCES modernization_option(id) ON DELETE CASCADE,
+ policy_id uuid REFERENCES modernization_policy(id),capability_fit text NOT NULL CHECK(capability_fit IN ('PASS','FAIL','UNKNOWN')),api_fit text NOT NULL CHECK(api_fit IN ('PASS','FAIL','UNKNOWN')),
+ behavior_fit text NOT NULL CHECK(behavior_fit IN ('PASS','FAIL','UNKNOWN')),runtime_fit text NOT NULL CHECK(runtime_fit IN ('PASS','FAIL','UNKNOWN')),license_fit text NOT NULL CHECK(license_fit IN ('PASS','FAIL','UNKNOWN')),
+ security_fit text NOT NULL CHECK(security_fit IN ('PASS','FAIL','UNKNOWN')),policy_fit text NOT NULL CHECK(policy_fit IN ('PASS','FAIL','UNKNOWN')),eligible boolean NOT NULL,
+ evidence jsonb NOT NULL DEFAULT '{}',disqualifiers jsonb NOT NULL DEFAULT '[]',unknowns jsonb NOT NULL DEFAULT '[]',evaluated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE modernization_impact (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_candidate_id uuid NOT NULL UNIQUE REFERENCES modernization_candidate(id) ON DELETE CASCADE,
+ affected_call_sites integer NOT NULL CHECK(affected_call_sites>=0),affected_files integer NOT NULL CHECK(affected_files>=0),covered_call_sites integer NOT NULL CHECK(covered_call_sites>=0),
+ uncovered_call_sites integer NOT NULL CHECK(uncovered_call_sites>=0),affected_test_files text[] NOT NULL DEFAULT '{}',dynamic_signals text[] NOT NULL DEFAULT '{}',
+ configuration_touchpoints jsonb NOT NULL DEFAULT '[]',build_touchpoints jsonb NOT NULL DEFAULT '[]',deployment_touchpoints jsonb NOT NULL DEFAULT '[]',evidence_locations jsonb NOT NULL DEFAULT '[]',
+ confidence numeric(5,4) NOT NULL CHECK(confidence BETWEEN 0 AND 1),effort_points integer NOT NULL CHECK(effort_points>=0),effort_model_version text NOT NULL,limitations jsonb NOT NULL DEFAULT '[]',
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE modernization_validation_outcome (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_recommendation_id uuid NOT NULL REFERENCES modernization_recommendation(id) ON DELETE CASCADE,
+ validation_status text NOT NULL CHECK(validation_status IN ('SUCCEEDED','PARTIAL','FAILED')),actual_call_sites integer CHECK(actual_call_sites IS NULL OR actual_call_sites>=0),
+ actual_files integer CHECK(actual_files IS NULL OR actual_files>=0),actual_effort text CHECK(actual_effort IS NULL OR actual_effort IN ('LOW','MEDIUM','HIGH','UNKNOWN')),
+ successful_checks text[] NOT NULL DEFAULT '{}',failed_checks text[] NOT NULL DEFAULT '{}',notes text NOT NULL,reporter_actor_key text NOT NULL,reported_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE modernization_candidate_review (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_candidate_id uuid NOT NULL REFERENCES modernization_candidate(id) ON DELETE CASCADE,
+ decision text NOT NULL CHECK(decision IN ('CONFIRM','REJECT')),rationale text NOT NULL,reviewer_actor_key text NOT NULL,prior_version integer NOT NULL CHECK(prior_version>0),
  resulting_version integer NOT NULL CHECK(resulting_version=prior_version+1),reviewed_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -420,7 +470,7 @@ BEGIN
     ON repository.tenant_id=NEW.tenant_id AND repository.namespace='ENTERPRISE'
    AND repository.entity_type='Repository' AND repository.canonical_key=target.target_key
   WHERE target.id=NEW.ingest_target_id
-  ON CONFLICT(tenant_id,repository_entity_id,source_revision,job_kind) DO NOTHING;
+  ON CONFLICT DO NOTHING;
  END IF;
  RETURN NEW;
 END $$;
@@ -447,11 +497,16 @@ CREATE INDEX idx_intelligence_job_claim ON intelligence_job(status,available_at,
 CREATE INDEX idx_modernization_candidate_repository ON modernization_candidate(tenant_id,repository_entity_id,source_revision,review_state);
 CREATE INDEX idx_modernization_option_candidate ON modernization_option(modernization_candidate_id,rank);
 CREATE INDEX idx_modernization_recommendation_repository ON modernization_recommendation(tenant_id,repository_entity_id,source_revision,review_state);
+CREATE INDEX idx_code_implementation_repository ON code_implementation_summary(tenant_id,repository_entity_id,source_revision,path);
+CREATE INDEX idx_code_implementation_structure ON code_implementation_summary(tenant_id,structural_fingerprint,source_revision);
+CREATE INDEX idx_code_implementation_tokens ON code_implementation_summary USING gin(semantic_tokens);
+CREATE INDEX idx_modernization_internal_capability ON modernization_internal_component(tenant_id,capability_definition_id,status);
+CREATE INDEX idx_modernization_validation_recommendation ON modernization_validation_outcome(tenant_id,modernization_recommendation_id,reported_at DESC);
 
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','projection_outbox','dead_letter','freshness_state'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END $$;
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
@@ -465,5 +520,6 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('004_ai_prompt_catalog.sql','0a2ac20afaa0a3f51f2227f22a79f8e3dc7cb7dc9fc394ec5fb2d6e0b7e34e24'),
  ('005_dependency_usage_analysis.sql','98263f1f32158e24b75518348dbe26bf66d68cd5d0d5e01596496850b9d08e74'),
  ('006_capability_intelligence.sql','100fd356a97e4d2fb2cd3eeecb2a53735971ef1751731ef5cda9a7820ccf2fa4'),
- ('007_modernization_intelligence.sql','bed4bc45230cff1a69e646e028b80cbb196522a377e9000fe1ae76c97e8ff918');
+ ('007_modernization_intelligence.sql','bed4bc45230cff1a69e646e028b80cbb196522a377e9000fe1ae76c97e8ff918'),
+ ('008_phase3_gap_closure.sql','056ecbe038a3fb008868b0e8845b0b6a071479b6352970c44388219fe662b270');
 COMMIT;

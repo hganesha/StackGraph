@@ -92,6 +92,35 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                 Jsonb({"capability_fit": 0.99}), facts,
             ),
         ).fetchone()
+        connection.execute(
+            """
+            INSERT INTO modernization_option_evaluation(
+              tenant_id,modernization_option_id,capability_fit,api_fit,behavior_fit,
+              runtime_fit,license_fit,security_fit,policy_fit,eligible,evidence,
+              disqualifiers,unknowns
+            ) VALUES (%s,%s,'PASS','PASS','PASS','PASS','UNKNOWN','UNKNOWN','PASS',true,%s,'[]',%s)
+            """,
+            (
+                tenant["id"], option["id"], Jsonb({"observed_in_repository": True}),
+                Jsonb(["License and security status require policy validation."]),
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO modernization_impact(
+              tenant_id,modernization_candidate_id,affected_call_sites,affected_files,
+              covered_call_sites,uncovered_call_sites,affected_test_files,dynamic_signals,
+              configuration_touchpoints,build_touchpoints,deployment_touchpoints,
+              evidence_locations,confidence,effort_points,effort_model_version,limitations
+            ) VALUES (%s,%s,2,1,1,1,%s,'{}','[]',%s,'[]',%s,0.72,6,'phase3-effort/v2',%s)
+            """,
+            (
+                tenant["id"], candidate["id"], ["src/client.test.ts"],
+                Jsonb([{"kind": "BUILD", "path": "package.json"}]),
+                Jsonb([{"path": "src/client.ts", "line_start": 8}]),
+                Jsonb(["One call site has no statically linked test."]),
+            ),
+        )
         recommendation = connection.execute(
             """
             INSERT INTO modernization_recommendation(
@@ -125,6 +154,10 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                 read = await client.get(
                     f"/api/v1/repositories/{repository['id']}/modernization-intelligence"
                 )
+                candidate_review = await client.post(
+                    f"/api/v1/modernization-candidates/{candidate['id']}/review",
+                    json={"decision": "CONFIRM", "rationale": "Structure verified.", "expected_version": 1},
+                )
                 review = await client.post(
                     f"/api/v1/modernization-recommendations/{recommendation['id']}/review",
                     json={"decision": "ACCEPT", "rationale": "Migration validated.", "expected_version": 1},
@@ -133,6 +166,16 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                     f"/api/v1/modernization-recommendations/{recommendation['id']}/review",
                     json={"decision": "REJECT", "rationale": "Stale decision.", "expected_version": 1},
                 )
+                outcome = await client.post(
+                    f"/api/v1/modernization-recommendations/{recommendation['id']}/validation-outcomes",
+                    json={
+                        "validation_status": "SUCCEEDED", "actual_call_sites": 3,
+                        "actual_files": 1, "actual_effort": "LOW",
+                        "successful_checks": ["unit", "integration"],
+                        "notes": "Migration validation passed.",
+                    },
+                )
+                metrics = await client.get("/api/v1/intelligence/phase-3/metrics")
         other_tenant_app = create_app(settings=Settings(
             environment="test", database_url=database_url, default_tenant_id=uuid4(),
         ))
@@ -144,14 +187,22 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                 cross_tenant = await other_tenant_client.get(
                     f"/api/v1/repositories/{repository['id']}/modernization-intelligence"
                 )
-        return read, review, conflict, cross_tenant
+        return read, candidate_review, review, conflict, outcome, metrics, cross_tenant
 
-    read, review, conflict, cross_tenant = asyncio.run(query_api())
+    read, candidate_review, review, conflict, outcome, metrics, cross_tenant = asyncio.run(query_api())
     assert read.status_code == 200, read.text
     assert read.json()["candidates"][0]["recommendation"]["affected_call_sites"] == 2
     assert read.json()["candidates"][0]["options"][0]["canonical_key"] == "pkg:npm/axios"
+    assert read.json()["candidates"][0]["options"][0]["eligibility"]["eligible"] is True
+    assert read.json()["candidates"][0]["impact"]["covered_call_sites"] == 1
+    assert candidate_review.status_code == 200
+    assert candidate_review.json()["review_state"] == "CONFIRMED"
     assert review.status_code == 200
     assert review.json()["review_state"] == "ACCEPTED"
     assert conflict.status_code == 409
     assert conflict.json()["code"] == "VERSION_CONFLICT"
+    assert outcome.status_code == 200
+    assert metrics.status_code == 200
+    assert metrics.json()["candidate_review_precision"] == 1.0
+    assert metrics.json()["affected_call_site_mae"] == 1.0
     assert cross_tenant.status_code == 404

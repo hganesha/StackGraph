@@ -105,12 +105,34 @@
         "responses": {"200": {"$ref": "#/components/responses/repositoryModernizationIntelligence"}, "default": {"$ref": "#/components/responses/error"}}
       }
     },
+    "/modernization-candidates/{id}/review": {
+      "post": {
+        "operationId": "reviewModernizationCandidate",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationCandidateReviewRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/modernizationCandidateReview"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
     "/modernization-recommendations/{id}/review": {
       "post": {
         "operationId": "reviewModernizationRecommendation",
         "parameters": [{"$ref": "#/components/parameters/id"}],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationRecommendationReviewRequest"}}}},
         "responses": {"200": {"$ref": "#/components/responses/modernizationRecommendationReview"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/modernization-recommendations/{id}/validation-outcomes": {
+      "post": {
+        "operationId": "recordModernizationValidationOutcome",
+        "parameters": [{"$ref": "#/components/parameters/id"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationValidationOutcomeRequest"}}}},
+        "responses": {"200": {"$ref": "#/components/responses/modernizationValidationOutcome"}, "409": {"$ref": "#/components/responses/error"}, "default": {"$ref": "#/components/responses/error"}}
+      }
+    },
+    "/intelligence/phase-3/metrics": {
+      "get": {
+        "operationId": "getPhase3IntelligenceMetrics",
+        "responses": {"200": {"$ref": "#/components/responses/phase3IntelligenceMetrics"}, "default": {"$ref": "#/components/responses/error"}}
       }
     }
   },
@@ -134,7 +156,10 @@
       "capabilityInferenceReview": {"description": "Reviewed capability inference", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/capabilityInferenceReviewResult"}}}},
       "duplicateCapabilityReview": {"description": "Reviewed duplicate-capability candidate", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/duplicateCapabilityReviewResult"}}}},
       "repositoryModernizationIntelligence": {"description": "Evidence-backed repository modernization candidates and recommendations", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/repositoryModernizationIntelligence"}}}},
+      "modernizationCandidateReview": {"description": "Reviewed modernization candidate", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationCandidateReviewResult"}}}},
       "modernizationRecommendationReview": {"description": "Reviewed modernization recommendation", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationRecommendationReviewResult"}}}},
+      "modernizationValidationOutcome": {"description": "Recorded modernization validation outcome", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/modernizationValidationOutcomeResult"}}}},
+      "phase3IntelligenceMetrics": {"description": "Tenant-scoped Phase 3 quality and operations metrics", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/phase3IntelligenceMetrics"}}}},
       "error": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "./schemas/read-models.schema.json#/$defs/error"}}}}
     }
   }

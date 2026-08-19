@@ -367,6 +367,38 @@ export interface ModernizationOption {
   disqualifiers: string[];
   validation_gaps: string[];
   supporting_fact_ids: UUID[];
+  eligibility?: ModernizationOptionEligibility;
+}
+
+export interface ModernizationOptionEligibility {
+  capability_fit: "PASS" | "FAIL" | "UNKNOWN";
+  api_fit: "PASS" | "FAIL" | "UNKNOWN";
+  behavior_fit: "PASS" | "FAIL" | "UNKNOWN";
+  runtime_fit: "PASS" | "FAIL" | "UNKNOWN";
+  license_fit: "PASS" | "FAIL" | "UNKNOWN";
+  security_fit: "PASS" | "FAIL" | "UNKNOWN";
+  policy_fit: "PASS" | "FAIL" | "UNKNOWN";
+  eligible: boolean;
+  evidence: Record<string, unknown>;
+  disqualifiers: string[];
+  unknowns: string[];
+}
+
+export interface ModernizationImpact {
+  affected_call_sites: number;
+  affected_files: number;
+  covered_call_sites: number;
+  uncovered_call_sites: number;
+  affected_test_files: string[];
+  dynamic_signals: string[];
+  configuration_touchpoints: Array<Record<string, unknown>>;
+  build_touchpoints: Array<Record<string, unknown>>;
+  deployment_touchpoints: Array<Record<string, unknown>>;
+  evidence_locations: Array<Record<string, unknown>>;
+  confidence: Confidence;
+  effort_points: number;
+  effort_model_version: string;
+  limitations: string[];
 }
 
 export interface ModernizationRecommendation {
@@ -411,6 +443,7 @@ export interface ModernizationCandidate {
   stale: boolean;
   options: ModernizationOption[];
   recommendation?: ModernizationRecommendation;
+  impact?: ModernizationImpact;
 }
 
 export interface RepositoryModernizationIntelligence {
@@ -433,6 +466,58 @@ export interface ModernizationRecommendationReviewResult {
   review_state: "ACCEPTED" | "REJECTED" | "DISMISSED";
   version: number;
   reviewed_at: Timestamp;
+}
+
+export interface ModernizationCandidateReviewResult {
+  contract_version: "1.0.0";
+  modernization_candidate_id: UUID;
+  review_state: "CONFIRMED" | "REJECTED";
+  version: number;
+  reviewed_at: Timestamp;
+}
+
+export interface ModernizationValidationOutcomeRequest {
+  validation_status: "SUCCEEDED" | "PARTIAL" | "FAILED";
+  actual_call_sites?: number;
+  actual_files?: number;
+  actual_effort?: Effort;
+  successful_checks?: string[];
+  failed_checks?: string[];
+  notes: string;
+}
+
+export interface ModernizationValidationOutcomeResult {
+  contract_version: "1.0.0";
+  id: UUID;
+  modernization_recommendation_id: UUID;
+  validation_status: "SUCCEEDED" | "PARTIAL" | "FAILED";
+  reported_at: Timestamp;
+}
+
+export interface Phase3IntelligenceMetrics {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  candidate_counts: Record<string, number>;
+  recommendation_counts: Record<string, number>;
+  job_counts: Record<string, number>;
+  candidate_review_precision?: number;
+  recommendation_acceptance_rate?: number;
+  successful_validation_rate?: number;
+  affected_call_site_mae?: number;
+  affected_files_mae?: number;
+  effort_band_accuracy?: number;
+  evidence_completeness_rate?: number;
+  queue_lag_seconds_p50?: number;
+  queue_lag_seconds_p95?: number;
+  job_latency_ms_p50?: number;
+  job_latency_ms_p95?: number;
+  retry_count: number;
+  dead_letter_count: number;
+  stale_candidate_count: number;
+  stale_recommendation_count: number;
+  model_invocation_count: number;
+  model_cost_usd: number;
+  model_latency_ms_p95?: number;
 }
 
 export interface ApiError {

@@ -11,7 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from stackgraph_ai.capability_worker import analyze_repository
-from stackgraph_ai.modernization_worker import analyze_modernization, work_jobs
+from stackgraph_ai.modernization_worker import analyze_modernization, enqueue_reanalysis, work_jobs
 
 
 DATABASE_URL = os.getenv("STACKGRAPH_TEST_DATABASE_URL")
@@ -128,6 +128,70 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
                     ),
                 )
 
+            structural_fingerprint = f"sha256:{(fingerprint_seed + 90):064x}"
+            for index, path in enumerate(("src/http_primary.py", "src/http_legacy.py"), 1):
+                fact = connection.execute(
+                    """
+                    INSERT INTO fact_assertion(
+                      tenant_id,source_snapshot_id,subject_entity_id,predicate,object_value,
+                      assertion_class,confidence,logical_key,idempotency_key,source_revision,
+                      extractor_key,extractor_version,properties,observed_at
+                    ) VALUES (%s,%s,%s,'HAS_PROPERTY',%s,'OBSERVED',0.92,%s,%s,'revision-1',
+                              'repository-dependency-usage','1.1.0',%s,now()) RETURNING id
+                    """,
+                    (
+                        tenant["id"], snapshot["id"], repository["id"],
+                        Jsonb({"record_kind": "code_implementation_summary"}),
+                        f"sha256:{(fingerprint_seed + index + 100):064x}",
+                        f"sha256:{(fingerprint_seed + index + 110):064x}",
+                        Jsonb({"record_kind": "code_implementation_summary"}),
+                    ),
+                ).fetchone()
+                code_artifact = connection.execute(
+                    """
+                    INSERT INTO source_artifact(
+                      tenant_id,source_system_id,external_key,artifact_type,source_revision,
+                      content_hash,metadata,observed_at
+                    ) VALUES (%s,%s,%s,'REPOSITORY_FILE','revision-1',%s,'{}',now()) RETURNING id
+                    """,
+                    (
+                        tenant["id"], source["id"], path,
+                        f"sha256:{(fingerprint_seed + index + 120):064x}",
+                    ),
+                ).fetchone()
+                connection.execute(
+                    """
+                    INSERT INTO evidence(
+                      tenant_id,fact_assertion_id,source_artifact_id,evidence_type,
+                      locator,metadata,observed_at
+                    ) VALUES (%s,%s,%s,'SOURCE_LOCATION',%s,'{}',now())
+                    """,
+                    (
+                        tenant["id"], fact["id"], code_artifact["id"],
+                        Jsonb({"path": path, "line_start": 10, "line_end": 20}),
+                    ),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO code_implementation_summary(
+                      tenant_id,source_snapshot_id,repository_entity_id,fact_assertion_id,
+                      source_revision,language,symbol_kind,qualified_name,path,line_start,line_end,
+                      structural_fingerprint,semantic_tokens,dependency_keys,covering_tests,
+                      dynamic_signals,touchpoints,vendored,completeness,limitations
+                    ) VALUES (%s,%s,%s,%s,'revision-1','python','FUNCTION',%s,%s,10,20,%s,
+                              %s,%s,%s,%s,%s,false,'COMPLETE',%s)
+                    """,
+                    (
+                        tenant["id"], snapshot["id"], repository["id"], fact["id"],
+                        f"http_client_{index}", path, structural_fingerprint,
+                        ["http", "client", "request"], ["pkg:pypi/requests@2.0.0"],
+                        ["tests/test_http.py"] if index == 1 else [],
+                        ["REFLECTION"] if index == 2 else [],
+                        Jsonb([{"kind": "BUILD", "path": "pyproject.toml"}]),
+                        Jsonb(["Runtime equivalence is not proven."] if index == 2 else []),
+                    ),
+                )
+
         first = asyncio.run(analyze_repository(
             DATABASE_URL,
             tenant_id=tenant["id"],
@@ -161,16 +225,43 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
             alternatives_path=ALTERNATIVES,
         )
 
-        self.assertEqual(modernization.candidates, 1)
-        self.assertEqual(modernization.recommendations, 1)
-        self.assertEqual(replay.replayed_candidates, 1)
-        self.assertEqual(replay.replayed_recommendations, 1)
+        self.assertEqual(modernization.candidates, 2)
+        self.assertEqual(modernization.recommendations, 2)
+        self.assertEqual(replay.replayed_candidates, 2)
+        self.assertEqual(replay.replayed_recommendations, 2)
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
             recommendation = connection.execute(
                 """
-                SELECT action,estimated_effort,affected_call_sites,array_length(supporting_fact_ids,1) evidence_count
-                FROM modernization_recommendation
-                WHERE tenant_id=%s AND repository_entity_id=%s AND stale_at IS NULL
+                SELECT recommendation.action,recommendation.estimated_effort,
+                       recommendation.affected_call_sites,
+                       array_length(recommendation.supporting_fact_ids,1) evidence_count
+                FROM modernization_recommendation recommendation
+                JOIN modernization_candidate candidate
+                  ON candidate.id=recommendation.modernization_candidate_id
+                WHERE recommendation.tenant_id=%s AND recommendation.repository_entity_id=%s
+                  AND recommendation.stale_at IS NULL
+                  AND candidate.candidate_kind='DEPENDENCY_CONSOLIDATION'
+                """,
+                (tenant["id"], repository["id"]),
+            ).fetchone()
+            structural = connection.execute(
+                """
+                SELECT candidate.source_code_unit_ids,recommendation.action,
+                       impact.affected_call_sites,impact.uncovered_call_sites,
+                       impact.dynamic_signals,impact.build_touchpoints,
+                       evaluation.eligible,evaluation.behavior_fit
+                FROM modernization_candidate candidate
+                JOIN modernization_recommendation recommendation
+                  ON recommendation.modernization_candidate_id=candidate.id
+                JOIN modernization_impact impact
+                  ON impact.modernization_candidate_id=candidate.id
+                JOIN modernization_option option
+                  ON option.id=recommendation.selected_option_id
+                JOIN modernization_option_evaluation evaluation
+                  ON evaluation.modernization_option_id=option.id
+                WHERE candidate.tenant_id=%s AND candidate.repository_entity_id=%s
+                  AND candidate.candidate_kind='INTERNAL_DUPLICATION'
+                  AND candidate.stale_at IS NULL
                 """,
                 (tenant["id"], repository["id"]),
             ).fetchone()
@@ -178,13 +269,23 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
         self.assertEqual(recommendation["estimated_effort"], "LOW")
         self.assertEqual(recommendation["affected_call_sites"], 1)
         self.assertEqual(recommendation["evidence_count"], 2)
+        self.assertEqual(len(structural["source_code_unit_ids"]), 2)
+        self.assertEqual(structural["action"], "REFACTOR")
+        self.assertEqual(structural["affected_call_sites"], 2)
+        self.assertEqual(structural["uncovered_call_sites"], 1)
+        self.assertEqual(structural["dynamic_signals"], ["REFLECTION"])
+        self.assertEqual(structural["build_touchpoints"], [{"kind": "BUILD", "path": "pyproject.toml"}])
+        self.assertTrue(structural["eligible"])
+        self.assertEqual(structural["behavior_fit"], "PASS")
 
         with psycopg.connect(DATABASE_URL) as connection:
             job = connection.execute(
                 """
                 INSERT INTO intelligence_job(
-                  tenant_id,repository_entity_id,source_snapshot_id,source_revision,job_kind
-                ) VALUES (%s,%s,%s,'revision-1','REPOSITORY_MODERNIZATION') RETURNING id
+                  tenant_id,repository_entity_id,source_snapshot_id,source_revision,job_kind,
+                  available_at
+                ) VALUES (%s,%s,%s,'revision-1','REPOSITORY_MODERNIZATION',
+                          TIMESTAMPTZ '2000-01-01 00:00:00+00') RETURNING id
                 """,
                 (tenant["id"], repository["id"], snapshot["id"]),
             ).fetchone()
@@ -202,6 +303,100 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
                 (job[0],),
             ).fetchone()
         self.assertEqual(completed, {"status": "SUCCEEDED", "attempt": 1})
+
+        first_job, created, configuration_fingerprint = enqueue_reanalysis(
+            DATABASE_URL, tenant_id=tenant["id"], repository_id=repository["id"],
+            capability_catalog_dir=CATALOG, alternatives_path=ALTERNATIVES,
+        )
+        replay_job, replay_created, replay_fingerprint = enqueue_reanalysis(
+            DATABASE_URL, tenant_id=tenant["id"], repository_id=repository["id"],
+            capability_catalog_dir=CATALOG, alternatives_path=ALTERNATIVES,
+        )
+        self.assertTrue(created)
+        self.assertFalse(replay_created)
+        self.assertEqual(first_job, replay_job)
+        self.assertEqual(configuration_fingerprint, replay_fingerprint)
+        self.assertRegex(configuration_fingerprint, r"^sha256:[a-f0-9]{64}$")
+
+        with psycopg.connect(DATABASE_URL) as connection:
+            policy_id = connection.execute(
+                """
+                INSERT INTO modernization_policy(
+                  tenant_id,policy_key,version,status,runtime_versions,allowed_licenses,
+                  allowed_security_statuses,required_policy_tags,content_hash,created_by
+                ) VALUES (%s,'production','1','ACTIVE',%s,%s,%s,%s,%s,'integration-test')
+                RETURNING id
+                """,
+                (
+                    tenant["id"], Jsonb({"node": "20.11.0"}), ["MIT", "RUNTIME"],
+                    ["CLEAR"], ["runtime-native"], "sha256:" + "a" * 64,
+                ),
+            ).fetchone()[0]
+        policy_job, policy_created, policy_fingerprint = enqueue_reanalysis(
+            DATABASE_URL, tenant_id=tenant["id"], repository_id=repository["id"],
+            capability_catalog_dir=CATALOG, alternatives_path=ALTERNATIVES,
+        )
+        self.assertTrue(policy_created)
+        self.assertNotEqual(policy_job, first_job)
+        self.assertNotEqual(policy_fingerprint, configuration_fingerprint)
+
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                """
+                UPDATE modernization_policy
+                SET allowed_security_statuses=%s,updated_at=now() WHERE id=%s
+                """,
+                (["CLEAR", "WARN"], policy_id),
+            )
+        changed_job, changed_created, changed_fingerprint = enqueue_reanalysis(
+            DATABASE_URL, tenant_id=tenant["id"], repository_id=repository["id"],
+            capability_catalog_dir=CATALOG, alternatives_path=ALTERNATIVES,
+        )
+        self.assertTrue(changed_created)
+        self.assertNotEqual(changed_job, policy_job)
+        self.assertNotEqual(changed_fingerprint, policy_fingerprint)
+
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            capability = connection.execute(
+                """
+                SELECT capability_definition_id
+                FROM capability_inference
+                WHERE tenant_id=%s AND repository_entity_id=%s AND stale_at IS NULL
+                ORDER BY capability_definition_id LIMIT 1
+                """,
+                (tenant["id"], repository["id"]),
+            ).fetchone()
+            component = connection.execute(
+                """
+                INSERT INTO entity(
+                  tenant_id,namespace,entity_type,canonical_key,name,properties
+                ) VALUES (%s,'ENTERPRISE','Service',%s,'Approved HTTP component','{}')
+                RETURNING id
+                """,
+                (tenant["id"], f"internal:http:{uuid4()}"),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO modernization_internal_component(
+                  tenant_id,component_entity_id,capability_definition_id,
+                  component_key,version,status,api_symbols,runtime_constraints,
+                  behavior_claims,license,security_status,policy_tags
+                ) VALUES (%s,%s,%s,'internal:http-client','1.0.0','APPROVED',%s,%s,
+                          %s,'MIT','CLEAR',%s)
+                """,
+                (
+                    tenant["id"], component["id"], capability["capability_definition_id"],
+                    ["get"], Jsonb({"node": ">=18"}), Jsonb([{"verified": True}]),
+                    ["runtime-native"],
+                ),
+            )
+        component_job, component_created, component_fingerprint = enqueue_reanalysis(
+            DATABASE_URL, tenant_id=tenant["id"], repository_id=repository["id"],
+            capability_catalog_dir=CATALOG, alternatives_path=ALTERNATIVES,
+        )
+        self.assertTrue(component_created)
+        self.assertNotEqual(component_job, changed_job)
+        self.assertNotEqual(component_fingerprint, changed_fingerprint)
 
 
 if __name__ == "__main__":
