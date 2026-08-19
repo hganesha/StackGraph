@@ -1,0 +1,20 @@
+{
+  "name": "@acme/billing-sdk",
+  "dist-tags": {"latest": "2.4.1", "next": "3.0.0-beta.1"},
+  "versions": {
+    "2.4.1": {
+      "name": "@acme/billing-sdk",
+      "version": "2.4.1",
+      "license": "MIT",
+      "engines": {"node": ">=18"},
+      "repository": {"type": "git", "url": "git+https://github.com/acme/billing-sdk.git"},
+      "deprecated": "Use @acme/payments-sdk instead",
+      "dist": {
+        "tarball": "https://npm.acme.example/repository/npm/@acme/billing-sdk/-/billing-sdk-2.4.1.tgz",
+        "integrity": "sha512-private-example",
+        "shasum": "0123456789abcdef0123456789abcdef01234567"
+      }
+    }
+  },
+  "time": {"2.4.1": "2026-07-01T12:00:00.000Z"}
+}
