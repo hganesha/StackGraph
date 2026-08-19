@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     contracts_dir: Path = Path("/contracts/v1")
     graph_read_mode: Literal["auto", "age", "sql"] = "auto"
     graph_discovery_limit: int = Field(default=5000, ge=50, le=50000)
+    ai_ask_enabled: bool = False
+    ai_ask_route: str = "default"
+    ai_ask_fallback_enabled: bool = True
+    ai_ask_max_evidence_chars: int = Field(default=50_000, ge=1_024, le=200_000)
 
     @model_validator(mode="after")
     def validate_auth(self) -> "Settings":

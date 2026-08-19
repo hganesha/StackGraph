@@ -7,16 +7,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /code
 
-COPY requirements.txt ./
+COPY apps/api/requirements.txt ./
 RUN pip install --no-cache-dir --requirement requirements.txt
 
 FROM base AS development
 
-COPY requirements-dev.txt ./
+COPY apps/api/requirements-dev.txt ./
 RUN pip install --no-cache-dir --requirement requirements-dev.txt
 
-COPY app ./app
-COPY tests ./tests
+COPY apps/api/app ./app
+COPY apps/api/tests ./tests
+COPY services/intelligence/ai-services/stackgraph_ai ./stackgraph_ai
+COPY services/intelligence/ai-services/prompts ./prompts
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
@@ -25,7 +27,9 @@ FROM base AS runtime
 RUN addgroup --system stackgraph \
     && adduser --system --ingroup stackgraph --home /nonexistent --no-create-home stackgraph
 
-COPY --chown=stackgraph:stackgraph app ./app
+COPY --chown=stackgraph:stackgraph apps/api/app ./app
+COPY --chown=stackgraph:stackgraph services/intelligence/ai-services/stackgraph_ai ./stackgraph_ai
+COPY --chown=stackgraph:stackgraph services/intelligence/ai-services/prompts ./prompts
 
 USER stackgraph
 

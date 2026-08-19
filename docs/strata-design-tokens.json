@@ -79,12 +79,12 @@
       "light": {
         "primary":   { "$value": "#1A1B1E", "$type": "color" },
         "secondary": { "$value": "#4E4D49", "$type": "color" },
-        "muted":     { "$value": "#807E76", "$type": "color" }
+        "muted":     { "$value": "#6E6D62", "$type": "color", "$description": "Adjusted for WCAG AA (>=4.5:1) on all light surfaces" }
       },
       "dark": {
         "primary":   { "$value": "#E8E7E2", "$type": "color" },
         "secondary": { "$value": "#B4B2AA", "$type": "color" },
-        "muted":     { "$value": "#7B7A74", "$type": "color" }
+        "muted":     { "$value": "#8B8A82", "$type": "color", "$description": "Adjusted for WCAG AA (>=4.5:1) on all dark surfaces" }
       }
     }
   },

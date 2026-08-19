@@ -1,0 +1,82 @@
+{
+  "contract_version": "1.0.0",
+  "repository": {
+    "id": "00000000-0000-4000-8000-000000000701",
+    "kind": "Repository",
+    "name": "billing-api",
+    "canonical_key": "github:repo:billing-api"
+  },
+  "source_revision": "revision-1",
+  "candidates": [
+    {
+      "id": "00000000-0000-4000-8000-000000000702",
+      "source_revision": "revision-1",
+      "capability": {
+        "key": "http-client",
+        "name": "HTTP Client",
+        "description": "Issue outbound HTTP requests and process responses.",
+        "aliases": []
+      },
+      "kind": "DEPENDENCY_CONSOLIDATION",
+      "subjects": [
+        {"id": "00000000-0000-4000-8000-000000000703", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"},
+        {"id": "00000000-0000-4000-8000-000000000704", "kind": "PackageVersion", "name": "undici 7.0.0", "canonical_key": "pkg:npm/undici@7.0.0"}
+      ],
+      "confidence": 0.97,
+      "summary": "Two active dependencies appear to provide HTTP Client; two evidence locations were found.",
+      "supporting_fact_ids": [
+        "00000000-0000-4000-9000-000000000705",
+        "00000000-0000-4000-9000-000000000706"
+      ],
+      "counter_evidence_fact_ids": [],
+      "source_locations": [{"path": "src/client.ts", "line_start": 8}],
+      "validation_gaps": ["Static similarity and shared capability do not prove behavioral equivalence."],
+      "analyzer": {"key": "repository-modernization-intelligence", "version": "1.0.0"},
+      "review_state": "UNREVIEWED",
+      "version": 1,
+      "stale": false,
+      "options": [
+        {
+          "id": "00000000-0000-4000-8000-000000000707",
+          "kind": "PACKAGE",
+          "canonical_key": "pkg:npm/axios",
+          "name": "axios 1.7.9",
+          "target_entity": {"id": "00000000-0000-4000-8000-000000000703", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"},
+          "compatibility": "OBSERVED",
+          "rank": 1,
+          "score": 0.91,
+          "score_components": {"capability_fit": 0.99, "migration_surface": 0.8, "evidence_completeness": 1.0},
+          "rationale": "Already referenced in this repository for the required capability.",
+          "tradeoffs": ["The other observed dependency usage still requires migration."],
+          "disqualifiers": [],
+          "validation_gaps": [],
+          "supporting_fact_ids": ["00000000-0000-4000-9000-000000000705"]
+        }
+      ],
+      "recommendation": {
+        "id": "00000000-0000-4000-8000-000000000708",
+        "selected_option_id": "00000000-0000-4000-8000-000000000707",
+        "action": "CONSOLIDATE",
+        "objective": "DEPENDENCY_CONSOLIDATION",
+        "title": "Consolidate HTTP Client dependencies on axios",
+        "rationale": "Retaining the most-used observed dependency minimizes the replacement surface.",
+        "confidence": 0.91,
+        "estimated_effort": "LOW",
+        "affected_call_sites": 2,
+        "affected_files": 1,
+        "validation_gaps": ["Confirm retry and interceptor behavior."],
+        "migration_plan": ["Validate behavior.", "Replace affected call sites.", "Remove the superseded dependency."],
+        "rollback_plan": ["Restore the prior manifest and lockfile."],
+        "supporting_fact_ids": ["00000000-0000-4000-9000-000000000705", "00000000-0000-4000-9000-000000000706"],
+        "counter_evidence_fact_ids": [],
+        "counter_signals": ["Runtime usage is unknown."],
+        "policy_version": "modernization-ranking/v1",
+        "review_state": "UNREVIEWED",
+        "version": 1,
+        "stale": false,
+        "created_at": "2026-08-19T20:00:00Z"
+      }
+    }
+  ],
+  "truncated": false
+}

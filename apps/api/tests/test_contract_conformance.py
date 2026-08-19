@@ -37,3 +37,18 @@ def test_http_response_conforms_to_frozen_estate_schema() -> None:
 
     assert response.status_code == 200
     ContractValidator(Path(CONTRACTS)).validate_read_model("estateSummary", response.json())
+
+
+def test_capability_and_modernization_fixtures_conform_to_frozen_schemas() -> None:
+    fixtures = Path(CONTRACTS) / "fixtures"
+    validator = ContractValidator(Path(CONTRACTS))
+    validator.validate_read_model(
+        "capabilityTaxonomy", load_json(fixtures / "capability-taxonomy.json"),
+    )
+    validator.validate_read_model(
+        "repositoryCapabilityIntelligence", load_json(fixtures / "repository-capabilities.json"),
+    )
+    validator.validate_read_model(
+        "repositoryModernizationIntelligence",
+        load_json(fixtures / "repository-modernization-intelligence.json"),
+    )

@@ -220,6 +220,7 @@ def test_age_and_sql_neighborhoods_have_canonical_parity() -> None:
 
 def test_identity_review_is_atomic_and_audited() -> None:
     database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
     tenant_id = "00000000-0000-4000-8000-000000009001"
     left_id = "00000000-0000-4000-8000-000000009002"
     right_id = "00000000-0000-4000-8000-000000009003"
@@ -228,7 +229,7 @@ def test_identity_review_is_atomic_and_audited() -> None:
     def configure_tenant(connection) -> None:
         connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
 
-    with psycopg.connect(database_url) as connection:
+    with psycopg.connect(admin_database_url) as connection:
         configure_tenant(connection)
         connection.execute(
             "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'api-integration-test','API integration test')",
@@ -288,7 +289,7 @@ def test_identity_review_is_atomic_and_audited() -> None:
             ).fetchone()
             assert review == ("integration-test", "CONFIRM")
     finally:
-        with psycopg.connect(database_url) as connection:
+        with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
             connection.execute("DELETE FROM projection_outbox WHERE aggregate_id=%s", (assertion_id,))
             connection.execute("DELETE FROM identity_assertion_review WHERE identity_assertion_id=%s", (assertion_id,))
@@ -299,7 +300,8 @@ def test_identity_review_is_atomic_and_audited() -> None:
 
 def test_golden_billing_vertical_slice() -> None:
     database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
-    install_golden_billing(database_url)
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    install_golden_billing(admin_database_url)
 
     async def query_api():
         app = create_app(settings=Settings(
@@ -390,4 +392,4 @@ def test_golden_billing_vertical_slice() -> None:
         assert responses["indirectAsk"].json()["result_kind"] == "GRAPH"
         assert responses["indirectAsk"].json()["graph_highlight"]["highlighted_path"]
     finally:
-        remove_golden_billing(database_url)
+        remove_golden_billing(admin_database_url)

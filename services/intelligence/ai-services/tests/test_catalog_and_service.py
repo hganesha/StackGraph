@@ -71,6 +71,22 @@ class FakeRecorder:
 
 
 class PromptCatalogTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deployable_prompt_catalog_is_valid(self) -> None:
+        prompts_dir = Path(__file__).resolve().parent.parent / "prompts"
+
+        prompts = LocalPromptCatalog(prompts_dir).definitions()
+
+        self.assertEqual(
+            {prompt.key for prompt in prompts},
+            {"ask.estate", "ask.explain", "capability.inference"},
+        )
+        explanation = next(prompt for prompt in prompts if prompt.key == "ask.explain")
+        self.assertIsNotNone(explanation.output_schema)
+        self.assertEqual(
+            explanation.metadata["policy_version"],
+            "evidence-first-explanation/v1",
+        )
+
     async def test_local_catalog_resolves_active_and_exact_versions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

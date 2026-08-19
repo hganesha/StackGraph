@@ -222,7 +222,7 @@
 .send {
   padding: var(--sg-space-3) var(--sg-space-6);
   background: var(--sg-color-domain-enterprise-500);
-  color: #fff;
+  color: var(--sg-on-accent);
   border-radius: var(--sg-radius-control);
   font-weight: 500;
 }

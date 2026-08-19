@@ -10,13 +10,22 @@ from app.models import (
     ApplicationDetail,
     AskRequest,
     AskResponse,
+    CapabilityInferenceReviewRequest,
+    CapabilityInferenceReviewResult,
+    CapabilityTaxonomyResponse,
+    DuplicateCapabilityReviewRequest,
+    DuplicateCapabilityReviewResult,
     EstateSummary,
     EvidenceDetail,
     GraphNeighborhood,
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
+    ModernizationRecommendationReviewRequest,
+    ModernizationRecommendationReviewResult,
     Namespace,
+    RepositoryCapabilityIntelligence,
+    RepositoryModernizationIntelligence,
     TechnologyDetail,
 )
 
@@ -36,6 +45,31 @@ class ReadModelsProtocol(Protocol):
     async def review_identity_assertion(
         self, assertion_id: UUID, review: IdentityReviewRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> IdentityReviewResult: ...
+    async def capability_taxonomy(
+        self, *, tenant_id: UUID | None, version: str | None,
+    ) -> CapabilityTaxonomyResponse: ...
+    async def repository_capabilities(
+        self, repository_id: UUID, *, tenant_id: UUID | None,
+    ) -> RepositoryCapabilityIntelligence: ...
+    async def review_capability_inference(
+        self, inference_id: UUID, review: CapabilityInferenceReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> CapabilityInferenceReviewResult: ...
+    async def review_duplicate_capability_candidate(
+        self, candidate_id: UUID, review: DuplicateCapabilityReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> DuplicateCapabilityReviewResult: ...
+    async def repository_modernization_intelligence(
+        self, repository_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> RepositoryModernizationIntelligence: ...
+    async def review_modernization_recommendation(
+        self, recommendation_id: UUID, review: ModernizationRecommendationReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationRecommendationReviewResult: ...
+
+
+class AskServiceProtocol(Protocol):
+    async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse: ...
 
 
 router = APIRouter()
@@ -53,6 +87,10 @@ def _principal(request: Request) -> Principal:
 
 def _store(request: Request) -> ReadModelsProtocol:
     return request.app.state.read_models
+
+
+def _ask_service(request: Request) -> AskServiceProtocol:
+    return request.app.state.ask_service
 
 
 @router.get(
@@ -109,7 +147,7 @@ async def list_modernization(
 )
 async def ask_estate(body: AskRequest, request: Request) -> AskResponse:
     principal = _principal(request)
-    return await _store(request).ask(body, tenant_id=principal.tenant_id)
+    return await _ask_service(request).ask(body, tenant_id=principal.tenant_id)
 
 
 @router.get(
@@ -159,5 +197,101 @@ async def review_identity_assertion(
 ) -> IdentityReviewResult:
     principal = _principal(request)
     return await _store(request).review_identity_assertion(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/capabilities/taxonomy", response_model=CapabilityTaxonomyResponse,
+    response_model_exclude_none=True, operation_id="getCapabilityTaxonomy",
+    tags=["intelligence"],
+)
+async def get_capability_taxonomy(
+    request: Request,
+    version: str | None = None,
+) -> CapabilityTaxonomyResponse:
+    principal = _principal(request)
+    return await _store(request).capability_taxonomy(
+        tenant_id=principal.tenant_id, version=version,
+    )
+
+
+@router.get(
+    "/repositories/{id}/capabilities", response_model=RepositoryCapabilityIntelligence,
+    response_model_exclude_none=True, operation_id="getRepositoryCapabilities",
+    tags=["intelligence"],
+)
+async def get_repository_capabilities(
+    id: UUID,
+    request: Request,
+) -> RepositoryCapabilityIntelligence:
+    principal = _principal(request)
+    return await _store(request).repository_capabilities(
+        id, tenant_id=principal.tenant_id,
+    )
+
+
+@router.post(
+    "/capability-inferences/{id}/review", response_model=CapabilityInferenceReviewResult,
+    response_model_exclude_none=True, operation_id="reviewCapabilityInference",
+    tags=["intelligence"],
+)
+async def review_capability_inference(
+    id: UUID,
+    body: CapabilityInferenceReviewRequest,
+    request: Request,
+) -> CapabilityInferenceReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_capability_inference(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/duplicate-capability-candidates/{id}/review", response_model=DuplicateCapabilityReviewResult,
+    response_model_exclude_none=True, operation_id="reviewDuplicateCapabilityCandidate",
+    tags=["intelligence"],
+)
+async def review_duplicate_capability_candidate(
+    id: UUID,
+    body: DuplicateCapabilityReviewRequest,
+    request: Request,
+) -> DuplicateCapabilityReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_duplicate_capability_candidate(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/repositories/{id}/modernization-intelligence",
+    response_model=RepositoryModernizationIntelligence,
+    response_model_exclude_none=True, operation_id="getRepositoryModernizationIntelligence",
+    tags=["intelligence"],
+)
+async def get_repository_modernization_intelligence(
+    id: UUID,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> RepositoryModernizationIntelligence:
+    principal = _principal(request)
+    return await _store(request).repository_modernization_intelligence(
+        id, tenant_id=principal.tenant_id, limit=limit,
+    )
+
+
+@router.post(
+    "/modernization-recommendations/{id}/review",
+    response_model=ModernizationRecommendationReviewResult,
+    response_model_exclude_none=True, operation_id="reviewModernizationRecommendation",
+    tags=["intelligence"],
+)
+async def review_modernization_recommendation(
+    id: UUID,
+    body: ModernizationRecommendationReviewRequest,
+    request: Request,
+) -> ModernizationRecommendationReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_modernization_recommendation(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )

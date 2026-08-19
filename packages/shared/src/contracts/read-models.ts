@@ -265,6 +265,176 @@ export interface IdentityReviewResult {
   reviewed_at: Timestamp;
 }
 
+export interface CapabilityDefinition {
+  key: string;
+  name: string;
+  description: string;
+  parent_key?: string;
+  aliases: string[];
+}
+
+export interface CapabilityTaxonomy {
+  contract_version: "1.0.0";
+  key: string;
+  version: string;
+  name: string;
+  description: string;
+  content_hash: string;
+  capabilities: CapabilityDefinition[];
+}
+
+export interface CapabilityInference {
+  id: UUID;
+  subject: EntitySummary;
+  capability: CapabilityDefinition;
+  source_revision: string;
+  assertion_class: "CURATED" | "INFERRED";
+  confidence: Confidence;
+  confidence_band: ConfidenceLabel;
+  supporting_fact_ids: UUID[];
+  counter_evidence_fact_ids: UUID[];
+  taxonomy_key: string;
+  taxonomy_version: string;
+  analyzer: { key: string; version: string };
+  model_provider?: string;
+  model_name?: string;
+  policy_version: string;
+  rationale: string;
+  review_state: "UNREVIEWED" | "CONFIRMED" | "REJECTED";
+  version: number;
+  stale: boolean;
+  created_at: Timestamp;
+}
+
+export interface DuplicateCapabilityCandidate {
+  id: UUID;
+  capability: CapabilityDefinition;
+  source_revision: string;
+  dependencies: EntitySummary[];
+  capability_inference_ids: UUID[];
+  supporting_fact_ids: UUID[];
+  confidence: Confidence;
+  summary: string;
+  limitations: string[];
+  review_state: "UNREVIEWED" | "CONFIRMED" | "REJECTED";
+  version: number;
+  stale: boolean;
+}
+
+export interface RepositoryCapabilityIntelligence {
+  contract_version: "1.0.0";
+  repository: EntitySummary;
+  taxonomy_key?: string;
+  taxonomy_version?: string;
+  inferences: CapabilityInference[];
+  duplicate_candidates: DuplicateCapabilityCandidate[];
+}
+
+export interface OptimisticReviewRequest {
+  decision: "CONFIRM" | "REJECT";
+  rationale: string;
+  expected_version: number;
+}
+
+export interface CapabilityInferenceReviewResult {
+  contract_version: "1.0.0";
+  capability_inference_id: UUID;
+  review_state: "CONFIRMED" | "REJECTED";
+  version: number;
+  reviewed_at: Timestamp;
+}
+
+export interface DuplicateCapabilityReviewResult {
+  contract_version: "1.0.0";
+  duplicate_capability_candidate_id: UUID;
+  review_state: "CONFIRMED" | "REJECTED";
+  version: number;
+  reviewed_at: Timestamp;
+}
+
+export interface ModernizationOption {
+  id: UUID;
+  kind: "NATIVE" | "INTERNAL" | "UPGRADE" | "PACKAGE";
+  canonical_key: string;
+  name: string;
+  target_entity?: EntitySummary;
+  compatibility: "OBSERVED" | "COMPATIBLE" | "UNKNOWN" | "INCOMPATIBLE";
+  rank: number;
+  score: Confidence;
+  score_components: Record<string, number>;
+  rationale: string;
+  tradeoffs: string[];
+  disqualifiers: string[];
+  validation_gaps: string[];
+  supporting_fact_ids: UUID[];
+}
+
+export interface ModernizationRecommendation {
+  id: UUID;
+  selected_option_id?: UUID;
+  action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
+  objective: string;
+  title: string;
+  rationale: string;
+  confidence: Confidence;
+  estimated_effort: Effort;
+  affected_call_sites: number;
+  affected_files: number;
+  validation_gaps: string[];
+  migration_plan: string[];
+  rollback_plan: string[];
+  supporting_fact_ids: UUID[];
+  counter_evidence_fact_ids: UUID[];
+  counter_signals: string[];
+  policy_version: string;
+  review_state: "UNREVIEWED" | "ACCEPTED" | "REJECTED" | "DISMISSED";
+  version: number;
+  stale: boolean;
+  created_at: Timestamp;
+}
+
+export interface ModernizationCandidate {
+  id: UUID;
+  source_revision: string;
+  capability?: CapabilityDefinition;
+  kind: "DEPENDENCY_CONSOLIDATION" | "INTERNAL_DUPLICATION" | "VENDORED_DUPLICATION" | "NATIVE_REPLACEMENT";
+  subjects: EntitySummary[];
+  confidence: Confidence;
+  summary: string;
+  supporting_fact_ids: UUID[];
+  counter_evidence_fact_ids: UUID[];
+  source_locations: Array<Record<string, unknown>>;
+  validation_gaps: string[];
+  analyzer: { key: string; version: string };
+  review_state: "UNREVIEWED" | "CONFIRMED" | "REJECTED";
+  version: number;
+  stale: boolean;
+  options: ModernizationOption[];
+  recommendation?: ModernizationRecommendation;
+}
+
+export interface RepositoryModernizationIntelligence {
+  contract_version: "1.0.0";
+  repository: EntitySummary;
+  source_revision?: string;
+  candidates: ModernizationCandidate[];
+  truncated: boolean;
+}
+
+export interface ModernizationRecommendationReviewRequest {
+  decision: "ACCEPT" | "REJECT" | "DISMISS";
+  rationale: string;
+  expected_version: number;
+}
+
+export interface ModernizationRecommendationReviewResult {
+  contract_version: "1.0.0";
+  modernization_recommendation_id: UUID;
+  review_state: "ACCEPTED" | "REJECTED" | "DISMISSED";
+  version: number;
+  reviewed_at: Timestamp;
+}
+
 export interface ApiError {
   code: string;
   message: string;

@@ -40,6 +40,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.shell}>
+      <a href="#main" className={styles.skipLink}>
+        Skip to content
+      </a>
       <TopBar onToggleNav={() => setNavOpen((v) => !v)} navOpen={navOpen} />
       <div className={styles.body}>
         <LeftRail open={navOpen} compact={fullBleed} onNavigate={() => setNavOpen(false)} />

@@ -111,7 +111,7 @@
 .primary,
 .primaryWide {
   background: var(--sg-color-domain-enterprise-500);
-  color: #fff;
+  color: var(--sg-on-accent);
   border-color: transparent;
 }
 .primaryWide {

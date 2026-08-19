@@ -1,0 +1,9 @@
+.git/
+.claude/
+.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.py[cod]
+node_modules/
+apps/web/.next/

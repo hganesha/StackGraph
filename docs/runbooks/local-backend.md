@@ -22,12 +22,37 @@ The V0 API read models are available both at their contract paths and under the 
 - `GET /graph/neighborhood`
 - `GET /facts/{id}/evidence`
 - `POST /identity-assertions/{id}/review`
+- `GET /capabilities/taxonomy`
+- `GET /repositories/{id}/capabilities`
+- `POST /capability-inferences/{id}/review`
+- `POST /duplicate-capability-candidates/{id}/review`
+- `GET /repositories/{id}/modernization-intelligence`
+- `POST /modernization-recommendations/{id}/review`
 
 In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. For a deployed environment, set `STACKGRAPH_AUTH_MODE=signed_session` and configure a random `STACKGRAPH_AUTH_SESSION_SECRET` of at least 32 characters; the API then requires a signed bearer session containing the tenant and actor claims.
 
 Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_confidence`, and an optional `highlight_to` entity ID in addition to the frozen v1 center, depth, and limit parameters. Traversal and response nodes remain bounded to depth 2 and 50 nodes.
 
 `STACKGRAPH_GRAPH_READ_MODE=auto` uses the tenant-filtered AGE projection when its fact outbox is current. Pending projection work, missing projection data, a parity mismatch, permission failure, or AGE unavailability automatically falls back to authoritative SQL and emits a structured fallback log. Set the mode to `sql` to disable AGE reads while diagnosing a projection issue; `age` forces an AGE attempt but still preserves the SQL safety fallback.
+
+### Enable AI-backed Ask
+
+`POST /ask` remains deterministic by default. To enable model-assisted query selection and explanation, first apply migrations and sync the versioned prompt catalog:
+
+```shell
+make ai-prompts-sync
+```
+
+Then configure a logical model route, the matching provider credential, and a tenant for local invocation auditing:
+
+```shell
+STACKGRAPH_DEFAULT_TENANT_ID=00000000-0000-4000-8000-000000000001
+STACKGRAPH_AI_ASK_ENABLED=true
+STACKGRAPH_AI_ROUTES_JSON={"default":{"provider":"openrouter","model":"your/model-id"}}
+OPENROUTER_API_KEY=replace-me
+```
+
+The model never receives SQL access and cannot supply entity IDs. It selects one allowlisted deterministic query, the API executes that query under the authenticated tenant, and the model may explain only the returned rows and fact citations. Returned citation IDs are checked against the deterministic tool result. Provider, prompt-catalog, database-audit, context-limit, or output-validation failures use the deterministic Ask response when `STACKGRAPH_AI_ASK_FALLBACK_ENABLED=true`; disabling fallback returns `503 AI_ASK_UNAVAILABLE` instead.
 
 ## Verify
 
@@ -49,6 +74,8 @@ GRAPH_CENTER_ID=<entity-uuid> GRAPH_REQUESTS=50 \
 The benchmark reports min/mean/p50/p95/max latency and fails if the response exceeds the 50-node contract or the optional p95 gate.
 
 The integration suite queries the running database, exercises the HTTP read models, verifies an optimistic audited identity review, and installs a temporary evidence-backed Billing estate that covers every public read endpoint plus deterministic Ask templates. Temporary tenant data is removed after each test.
+
+Complete repository dependency-usage snapshots automatically enqueue capability and modernization intelligence. See `docs/runbooks/capability-modernization-intelligence.md` for direct execution, queued workers, review APIs, retry behavior, and limitations.
 
 ## Seed the curated framework catalog
 
