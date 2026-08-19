@@ -1,0 +1,1297 @@
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import json
+import re
+import sys
+import time
+import tomllib
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+from typing import Any, Iterable, Mapping
+from urllib.parse import quote
+
+from .github_snapshot import manifest_kind
+from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
+
+
+SCANNER_KEY = "repository-dependency-usage"
+SCANNER_VERSION = "1.0.0"
+PYPI_NORMALIZE = re.compile(r"[-_.]+")
+REQUIREMENT = re.compile(
+    r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
+)
+JS_IMPORT = re.compile(
+    r"(?:import\s+(?P<clause>[^;\n]*?)\s+from\s+|import\s*\(|require\s*\()"
+    r"[\"'](?P<module>[^\"']+)[\"']"
+)
+JS_SIDE_EFFECT_IMPORT = re.compile(r"import\s*[\"'](?P<module>[^\"']+)[\"']")
+JS_REQUIRE_DESTRUCTURE = re.compile(
+    r"(?:const|let|var)\s*\{(?P<symbols>[^}]+)\}\s*=\s*require\s*\(\s*"
+    r"[\"'](?P<module>[^\"']+)[\"']\s*\)"
+)
+JS_REQUIRE_MEMBER = re.compile(
+    r"require\s*\(\s*[\"'](?P<module>[^\"']+)[\"']\s*\)\.(?P<symbol>[A-Za-z_$][\w$]*)"
+)
+JS_LOCAL_IMPORT = re.compile(
+    r"(?:from\s+|import\s*\(|require\s*\()\s*[\"'](?P<module>\.{1,2}/[^\"']+)[\"']"
+)
+JS_EXPORT = re.compile(
+    r"(?:export\s+(?:declare\s+)?(?:async\s+)?(?:function|class|const|let|var|interface|type|enum)\s+"
+    r"|exports\.)([A-Za-z_$][\w$]*)"
+)
+
+
+def canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def sha256_key(*parts: object) -> str:
+    payload = "\x1f".join(part if isinstance(part, str) else canonical_json(part) for part in parts)
+    return f"sha256:{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"
+
+
+def content_hash(content: bytes) -> str:
+    return f"sha256:{hashlib.sha256(content).hexdigest()}"
+
+
+@dataclass(frozen=True, slots=True)
+class Diagnostic:
+    severity: str
+    code: str
+    message: str
+    path: str | None = None
+    details: Mapping[str, Any] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "severity": self.severity,
+            "code": self.code,
+            "message": self.message,
+        }
+        if self.path is not None:
+            value["path"] = self.path
+        if self.details is not None:
+            value["details"] = dict(self.details)
+        return value
+
+
+@dataclass(frozen=True, slots=True)
+class Evidence:
+    path: str
+    evidence_type: str
+    content_hash: str
+    locator: Mapping[str, Any]
+    excerpt_hash: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def as_dict(self, repository_key: str, source_revision: str) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "type": self.evidence_type,
+            "source_artifact": {
+                "key": f"{repository_key}:{self.path}",
+                "type": "REPOSITORY_FILE",
+                "revision": source_revision,
+                "content_hash": self.content_hash,
+            },
+            "locator": dict(self.locator),
+        }
+        if self.excerpt_hash is not None:
+            value["excerpt_hash"] = self.excerpt_hash
+        if self.metadata:
+            value["metadata"] = dict(self.metadata)
+        return value
+
+
+@dataclass(slots=True)
+class Reference:
+    ecosystem: str
+    package_name: str
+    path: str
+    line: int
+    symbols: set[str] = field(default_factory=set)
+
+
+@dataclass(slots=True)
+class Dependency:
+    ecosystem: str
+    name: str
+    requested_spec: str
+    scope: str
+    direct: bool
+    component_path: str
+    declaration: Evidence
+    resolved_version: str | None = None
+    resolution_evidence: Evidence | None = None
+    registry_properties: Mapping[str, Any] | None = None
+    artifact_properties: Mapping[str, Any] | None = None
+
+    @property
+    def normalized_name(self) -> str:
+        return normalize_package_name(self.ecosystem, self.name)
+
+    @property
+    def package_purl(self) -> str:
+        encoded = quote(self.normalized_name, safe="/" if self.ecosystem == "npm" else "")
+        return f"pkg:{self.ecosystem}/{encoded}"
+
+    @property
+    def entity_key(self) -> str:
+        if self.resolved_version:
+            version = quote(self.resolved_version, safe=".-_~+")
+            public_key = f"{self.package_purl}@{version}"
+        else:
+            public_key = self.package_purl
+        registry = self.registry_properties or {}
+        if registry.get("visibility") in {"PRIVATE", "UNKNOWN"} and registry.get("custom_registry"):
+            origin = str(registry.get("origin") or "")
+            registry_key = f"npm-{hashlib.sha256(origin.encode()).hexdigest()[:16]}"
+            return f"registry:{registry_key}:{public_key}"
+        return public_key
+
+    @property
+    def entity_type(self) -> str:
+        return "PackageVersion" if self.resolved_version else "Package"
+
+
+@dataclass(frozen=True, slots=True)
+class ScanInput:
+    run_id: str
+    tenant_key: str
+    repository_key: str
+    repository_name: str
+    source_revision: str
+    checkout_root: Path
+    observed_at: str
+    max_files: int
+    max_bytes: int
+    deadline_seconds: int
+
+
+def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
+    started = time.monotonic()
+    scan_input = _parse_request(request)
+    diagnostics: list[Diagnostic] = []
+    files, completeness, bytes_read = _discover_files(scan_input, diagnostics, started)
+    contents: dict[str, bytes] = {}
+    for relative, path in files.items():
+        try:
+            contents[relative] = path.read_bytes()
+        except OSError as error:
+            completeness = "PARTIAL"
+            diagnostics.append(Diagnostic("ERROR", "FILE_READ_FAILED", type(error).__name__, relative))
+
+    dependencies: list[Dependency] = []
+    dependencies.extend(_scan_npm(contents, diagnostics))
+    dependencies.extend(_scan_python(contents, diagnostics))
+    dependencies = _dedupe_dependencies(dependencies)
+
+    references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
+    reachable_files = _reachable_files(contents, local_edges, entrypoints)
+    runtime = _runtime_observations(contents, diagnostics)
+    if any(item.severity == "ERROR" for item in diagnostics):
+        completeness = "PARTIAL"
+    facts = _dependency_facts(
+        scan_input,
+        dependencies,
+        references,
+        reachable_files,
+        runtime,
+        completeness,
+        source_file_count=sum(1 for path in contents if _is_source(path)),
+    )
+    facts.extend(
+        _usage_findings(
+            scan_input,
+            dependencies,
+            references,
+            reachable_files,
+            runtime,
+            completeness,
+            source_file_count=sum(1 for path in contents if _is_source(path)),
+        )
+    )
+    duration_ms = max(0, int((time.monotonic() - started) * 1000))
+    return {
+        "scanner_contract_version": "1.0.0",
+        "run_id": scan_input.run_id,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "completeness": completeness,
+        "facts": facts,
+        "stats": {
+            "files_seen": len(files),
+            "files_scanned": len(contents),
+            "facts_emitted": len(facts),
+            "bytes_read": bytes_read,
+            "duration_ms": duration_ms,
+        },
+        "diagnostics": [item.as_dict() for item in diagnostics],
+    }
+
+
+def _parse_request(request: Mapping[str, Any]) -> ScanInput:
+    if request.get("scanner_contract_version") != "1.0.0":
+        raise ValueError("scanner_contract_version must be 1.0.0")
+    target = request.get("target")
+    snapshot = request.get("snapshot")
+    limits = request.get("limits")
+    if not isinstance(target, Mapping) or not isinstance(snapshot, Mapping) or not isinstance(limits, Mapping):
+        raise ValueError("scanner request requires target, snapshot, and limits objects")
+    root = Path(str(snapshot.get("checkout_root") or "")).resolve()
+    if not root.is_dir():
+        raise ValueError("snapshot.checkout_root must be an existing directory")
+    values = {
+        "max_files": int(limits.get("max_files") or 0),
+        "max_bytes": int(limits.get("max_bytes") or 0),
+        "deadline_seconds": int(limits.get("deadline_seconds") or 0),
+    }
+    if any(value <= 0 for value in values.values()):
+        raise ValueError("scanner limits must be positive")
+    requested_at = str(snapshot.get("requested_at") or "")
+    datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    repository_name = str(target.get("name") or target.get("canonical_key") or "repository")
+    return ScanInput(
+        run_id=str(request.get("run_id") or ""),
+        tenant_key=str(request.get("tenant_key") or ""),
+        repository_key=str(target.get("canonical_key") or ""),
+        repository_name=repository_name,
+        source_revision=str(snapshot.get("source_revision") or ""),
+        checkout_root=root,
+        observed_at=requested_at,
+        **values,
+    )
+
+
+def _discover_files(
+    scan_input: ScanInput,
+    diagnostics: list[Diagnostic],
+    started: float,
+) -> tuple[dict[str, Path], str, int]:
+    selected: dict[str, Path] = {}
+    total_bytes = 0
+    completeness = "COMPLETE"
+    for path in sorted(scan_input.checkout_root.rglob("*")):
+        if time.monotonic() - started > scan_input.deadline_seconds:
+            diagnostics.append(Diagnostic("ERROR", "SCAN_DEADLINE", "Scanner deadline exceeded"))
+            return selected, "PARTIAL", total_bytes
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(scan_input.checkout_root).as_posix()
+        if manifest_kind(relative) is None:
+            continue
+        size = path.stat().st_size
+        if len(selected) >= scan_input.max_files or total_bytes + size > scan_input.max_bytes:
+            completeness = "PARTIAL"
+            diagnostics.append(
+                Diagnostic("WARNING", "SCAN_LIMIT", "A scanner file or byte limit was reached", relative)
+            )
+            continue
+        selected[relative] = path
+        total_bytes += size
+    return selected, completeness, total_bytes
+
+
+def _decode_json(content: bytes, path: str, diagnostics: list[Diagnostic]) -> Any | None:
+    try:
+        return json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        diagnostics.append(Diagnostic("ERROR", "INVALID_JSON", str(error), path))
+        return None
+
+
+def _decode_toml(content: bytes, path: str, diagnostics: list[Diagnostic]) -> Any | None:
+    try:
+        return tomllib.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        diagnostics.append(Diagnostic("ERROR", "INVALID_TOML", str(error), path))
+        return None
+
+
+def _scan_npm(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    dependencies: list[Dependency] = []
+    npmrcs: dict[str, NpmConfig] = {}
+    for path, content in contents.items():
+        if PurePosixPath(path).name != ".npmrc":
+            continue
+        try:
+            npmrcs[str(PurePosixPath(path).parent)] = parse_npmrc(
+                content.decode("utf-8", errors="replace")
+            )
+        except ValueError as error:
+            diagnostics.append(Diagnostic("ERROR", "INVALID_NPM_CONFIG", str(error), path))
+    manifests = [path for path in contents if PurePosixPath(path).name == "package.json"]
+    for path in manifests:
+        document = _decode_json(contents[path], path, diagnostics)
+        if not isinstance(document, Mapping):
+            continue
+        directory = str(PurePosixPath(path).parent)
+        lock_path = _nearest_file(
+            contents,
+            directory,
+            ("package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"),
+        )
+        locked = _npm_lock_entries(contents.get(lock_path), lock_path, diagnostics) if lock_path else {}
+        config_path, config = _nearest_npm_config(npmrcs, directory)
+        for field, scope in (
+            ("dependencies", "runtime"),
+            ("devDependencies", "development"),
+            ("optionalDependencies", "optional"),
+            ("peerDependencies", "peer"),
+            ("bundledDependencies", "bundled"),
+        ):
+            values = document.get(field)
+            if isinstance(values, list):
+                values = {str(name): "bundled" for name in values}
+            if not isinstance(values, Mapping):
+                continue
+            for name, raw_spec in values.items():
+                if not isinstance(name, str) or not isinstance(raw_spec, (str, int, float)):
+                    continue
+                spec = str(raw_spec)
+                lock = locked.get(name.lower())
+                dependency = _npm_dependency(
+                    name,
+                    spec,
+                    scope,
+                    directory,
+                    path,
+                    contents[path],
+                    f"/{field}/{_json_pointer(name)}",
+                    lock,
+                    lock_path,
+                    contents.get(lock_path) if lock_path else None,
+                    config,
+                    config_path,
+                    diagnostics,
+                )
+                if dependency:
+                    dependencies.append(dependency)
+        direct_names = {item.normalized_name for item in dependencies if item.component_path == directory}
+        for name, lock in locked.items():
+            if normalize_package_name("npm", name) in direct_names:
+                continue
+            dependency = _npm_dependency(
+                name,
+                str(lock.get("version") or "unknown"),
+                "unknown",
+                directory,
+                lock_path or path,
+                contents.get(lock_path or path, b""),
+                str(lock.get("pointer") or ""),
+                lock,
+                lock_path,
+                contents.get(lock_path) if lock_path else None,
+                config,
+                config_path,
+                diagnostics,
+                direct=False,
+            )
+            if dependency:
+                dependencies.append(dependency)
+    return dependencies
+
+
+def _npm_lock_entries(content: bytes | None, path: str | None, diagnostics: list[Diagnostic]) -> dict[str, dict[str, Any]]:
+    if content is None or path is None:
+        return {}
+    name = PurePosixPath(path).name
+    if name == "yarn.lock":
+        return _yarn_lock_entries(content, path)
+    if name == "pnpm-lock.yaml":
+        return _pnpm_lock_entries(content, path)
+    document = _decode_json(content, path, diagnostics)
+    if not isinstance(document, Mapping):
+        return {}
+    entries: dict[str, dict[str, Any]] = {}
+    packages = document.get("packages")
+    if isinstance(packages, Mapping):
+        for package_path, value in packages.items():
+            if not isinstance(package_path, str) or not isinstance(value, Mapping) or "node_modules/" not in package_path:
+                continue
+            name = package_path.rsplit("node_modules/", 1)[1]
+            if not name or "/node_modules/" in name:
+                continue
+            entries.setdefault(name.lower(), {
+                **value,
+                "pointer": f"/packages/{_json_pointer(package_path)}",
+            })
+    legacy = document.get("dependencies")
+    if isinstance(legacy, Mapping):
+        for name, value in legacy.items():
+            if isinstance(name, str) and isinstance(value, Mapping):
+                entries.setdefault(name.lower(), {
+                    **value,
+                    "pointer": f"/dependencies/{_json_pointer(name)}",
+                })
+    return entries
+
+
+def _yarn_lock_entries(content: bytes, path: str) -> dict[str, dict[str, Any]]:
+    text = content.decode("utf-8", errors="replace")
+    entries: dict[str, dict[str, Any]] = {}
+    current_name: str | None = None
+    current: dict[str, Any] = {}
+    start_line = 0
+
+    def flush(end_line: int) -> None:
+        if current_name and current.get("version"):
+            current["locator"] = {
+                "path": path,
+                "line_start": start_line,
+                "line_end": max(start_line, end_line),
+            }
+            entries.setdefault(current_name.lower(), dict(current))
+
+    for line_number, line in enumerate(text.splitlines(), 1):
+        if line and not line[0].isspace() and line.rstrip().endswith(":"):
+            flush(line_number - 1)
+            selector = line.rstrip()[:-1].split(",", 1)[0].strip().strip('"\'')
+            current_name = _yarn_selector_name(selector)
+            current = {}
+            start_line = line_number
+            continue
+        if current_name is None:
+            continue
+        field = re.match(
+            r"^\s+(version|resolved|integrity)\s*(?::\s*|\s+)(.+?)\s*$",
+            line,
+        )
+        if not field:
+            continue
+        key, value = field.groups()
+        value = value.strip().strip('"\'')
+        if key == "resolved" and not value.startswith(("http://", "https://")):
+            continue
+        current[key] = value
+    flush(len(text.splitlines()))
+    return entries
+
+
+def _yarn_selector_name(selector: str) -> str | None:
+    selector = selector.removeprefix("__metadata:")
+    if "@" not in selector[1:]:
+        return None
+    name = selector.rsplit("@", 1)[0]
+    return name or None
+
+
+def _pnpm_lock_entries(content: bytes, path: str) -> dict[str, dict[str, Any]]:
+    text = content.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    entries: dict[str, dict[str, Any]] = {}
+    in_packages = False
+    current_name: str | None = None
+    current: dict[str, Any] = {}
+    start_line = 0
+
+    def flush(end_line: int) -> None:
+        if current_name and current.get("version"):
+            current["locator"] = {
+                "path": path,
+                "line_start": start_line,
+                "line_end": max(start_line, end_line),
+            }
+            entries.setdefault(current_name.lower(), dict(current))
+
+    for line_number, line in enumerate(lines, 1):
+        if line == "packages:":
+            in_packages = True
+            continue
+        if in_packages and line and not line[0].isspace():
+            flush(line_number - 1)
+            break
+        if not in_packages:
+            continue
+        header = re.match(r"^  ([^\s].*?):\s*$", line)
+        if header:
+            flush(line_number - 1)
+            current_name, version = _pnpm_package_key(header.group(1).strip().strip('"\''))
+            current = {"version": version} if version else {}
+            start_line = line_number
+            continue
+        if current_name:
+            integrity = re.search(r"\bintegrity:\s*([^,}\s]+)", line)
+            if integrity:
+                current["integrity"] = integrity.group(1).strip('"\'')
+    else:
+        flush(len(lines))
+    return entries
+
+
+def _pnpm_package_key(value: str) -> tuple[str | None, str | None]:
+    value = value.removeprefix("/").split("(", 1)[0]
+    if value.startswith("@") and "@" in value[1:]:
+        name, version = value.rsplit("@", 1)
+    elif "@" in value:
+        name, version = value.rsplit("@", 1)
+    elif "/" in value:
+        name, version = value.rsplit("/", 1)
+    else:
+        return None, None
+    return (name or None), (version or None)
+
+
+def _npm_dependency(
+    name: str,
+    requested_spec: str,
+    scope: str,
+    component_path: str,
+    declaration_path: str,
+    declaration_content: bytes,
+    pointer: str,
+    lock: Mapping[str, Any] | None,
+    lock_path: str | None,
+    lock_content: bytes | None,
+    npm_config: NpmConfig,
+    config_path: str | None,
+    diagnostics: list[Diagnostic],
+    *,
+    direct: bool = True,
+) -> Dependency | None:
+    declaration = Evidence(
+        declaration_path,
+        "MANIFEST" if direct else "LOCKFILE",
+        content_hash(declaration_content),
+        {"path": declaration_path, "json_pointer": pointer},
+        sha256_key(requested_spec),
+    )
+    version = str(lock.get("version")) if lock and lock.get("version") else None
+    resolution_evidence = None
+    registry = None
+    artifact = None
+    if version:
+        try:
+            resolution = resolve_npm_dependency(
+                name,
+                requested_spec=requested_spec,
+                resolved_version=version,
+                npm_config=npm_config,
+                config_path=config_path,
+                resolved_uri=str(lock.get("resolved")) if lock and lock.get("resolved") else None,
+                integrity=str(lock.get("integrity")) if lock and lock.get("integrity") else None,
+            )
+        except ValueError as error:
+            diagnostics.append(Diagnostic("WARNING", "NPM_RESOLUTION_SKIPPED", str(error), lock_path or declaration_path))
+            return None
+        resolution_properties = resolution.fact_properties(
+            dependency_scope=scope,
+            direct=direct,
+        )
+        registry = resolution_properties["registry_resolution"]
+        artifact = resolution_properties.get("artifact")
+        if lock_path and lock_content is not None:
+            resolution_evidence = Evidence(
+                lock_path,
+                "LOCKFILE",
+                content_hash(lock_content),
+                lock.get("locator") or {
+                    "path": lock_path,
+                    "json_pointer": str(lock.get("pointer") or ""),
+                },
+                sha256_key(version),
+            )
+    return Dependency(
+        ecosystem="npm",
+        name=name,
+        requested_spec=requested_spec or version or "unknown",
+        scope=scope,
+        direct=direct,
+        component_path=component_path,
+        declaration=declaration,
+        resolved_version=version,
+        resolution_evidence=resolution_evidence,
+        registry_properties=registry,
+        artifact_properties=artifact,
+    )
+
+
+def _nearest_npm_config(configs: Mapping[str, NpmConfig], directory: str) -> tuple[str | None, NpmConfig]:
+    for parent in _parents(directory):
+        if parent in configs:
+            path = f"{parent}/.npmrc" if parent != "." else ".npmrc"
+            return path, configs[parent]
+    return None, parse_npmrc("")
+
+
+def _scan_python(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    dependencies: list[Dependency] = []
+    lock_entries: dict[str, tuple[str, str, str, bytes]] = {}
+    for path, content in contents.items():
+        name = PurePosixPath(path).name
+        if name in {"poetry.lock", "uv.lock"}:
+            document = _decode_toml(content, path, diagnostics)
+            if isinstance(document, Mapping) and isinstance(document.get("package"), list):
+                for index, package in enumerate(document["package"]):
+                    if isinstance(package, Mapping) and package.get("name") and package.get("version"):
+                        normalized = normalize_package_name("pypi", str(package["name"]))
+                        lock_entries[normalized] = (
+                            str(package["version"]), path, f"/package/{index}", content,
+                        )
+        elif name == "Pipfile.lock":
+            document = _decode_json(content, path, diagnostics)
+            if isinstance(document, Mapping):
+                for group in ("default", "develop"):
+                    values = document.get(group)
+                    if isinstance(values, Mapping):
+                        for package_name, value in values.items():
+                            if isinstance(value, Mapping):
+                                version = str(value.get("version") or "").removeprefix("==")
+                                if version:
+                                    lock_entries[normalize_package_name("pypi", str(package_name))] = (
+                                        version, path, f"/{group}/{_json_pointer(str(package_name))}", content,
+                                    )
+    for path, content in contents.items():
+        name = PurePosixPath(path).name
+        if name == "pyproject.toml":
+            document = _decode_toml(content, path, diagnostics)
+            if not isinstance(document, Mapping):
+                continue
+            project = document.get("project")
+            if isinstance(project, Mapping):
+                for index, requirement in enumerate(project.get("dependencies") or []):
+                    dependency = _python_requirement(
+                        str(requirement), "runtime", path, content,
+                        {"path": path, "json_pointer": f"/project/dependencies/{index}"}, lock_entries,
+                    )
+                    if dependency:
+                        dependencies.append(dependency)
+                optional = project.get("optional-dependencies")
+                if isinstance(optional, Mapping):
+                    for group, requirements in optional.items():
+                        if isinstance(requirements, list):
+                            for index, requirement in enumerate(requirements):
+                                dependency = _python_requirement(
+                                    str(requirement), "development" if str(group).lower() in {"dev", "test", "docs"} else "optional",
+                                    path, content,
+                                    {"path": path, "json_pointer": f"/project/optional-dependencies/{_json_pointer(str(group))}/{index}"},
+                                    lock_entries,
+                                )
+                                if dependency:
+                                    dependencies.append(dependency)
+            tool = document.get("tool")
+            poetry = tool.get("poetry") if isinstance(tool, Mapping) else None
+            if isinstance(poetry, Mapping):
+                groups: list[tuple[str, Mapping[str, Any]]] = []
+                base = poetry.get("dependencies")
+                if isinstance(base, Mapping):
+                    groups.append(("runtime", base))
+                group_values = poetry.get("group")
+                if isinstance(group_values, Mapping):
+                    for group_name, group in group_values.items():
+                        if isinstance(group, Mapping) and isinstance(group.get("dependencies"), Mapping):
+                            groups.append(("development" if str(group_name).lower() in {"dev", "test"} else "optional", group["dependencies"]))
+                for scope, values in groups:
+                    for package_name, spec in values.items():
+                        if str(package_name).lower() == "python":
+                            continue
+                        requested = spec if isinstance(spec, str) else canonical_json(spec)
+                        dependency = _python_requirement(
+                            f"{package_name}{requested if str(requested).startswith(('=', '<', '>', '~', '!', '^')) else ' ' + str(requested)}",
+                            scope, path, content,
+                            {"path": path, "json_pointer": f"/tool/poetry/dependencies/{_json_pointer(str(package_name))}"},
+                            lock_entries,
+                            explicit_name=str(package_name),
+                            explicit_spec=str(requested),
+                        )
+                        if dependency:
+                            dependencies.append(dependency)
+        elif name.lower().startswith("requirements") and name.lower().endswith(".txt"):
+            text = content.decode("utf-8", errors="replace")
+            for line_number, line in enumerate(text.splitlines(), 1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith(("#", "-")):
+                    continue
+                dependency = _python_requirement(
+                    stripped, "development" if any(word in name.lower() for word in ("dev", "test")) else "runtime",
+                    path, content, {"path": path, "line_start": line_number, "line_end": line_number}, lock_entries,
+                )
+                if dependency:
+                    dependencies.append(dependency)
+    declared_keys = {
+        (dependency.normalized_name, dependency.resolved_version)
+        for dependency in dependencies if dependency.ecosystem == "pypi"
+    }
+    for name, (version, path, pointer, content) in lock_entries.items():
+        if (name, version) in declared_keys:
+            continue
+        evidence = Evidence(
+            path, "LOCKFILE", content_hash(content),
+            {"path": path, "json_pointer": pointer}, sha256_key(version),
+        )
+        dependencies.append(Dependency(
+            ecosystem="pypi",
+            name=name,
+            requested_spec=version,
+            scope="unknown",
+            direct=False,
+            component_path=str(PurePosixPath(path).parent),
+            declaration=evidence,
+            resolved_version=version,
+            resolution_evidence=evidence,
+        ))
+    return dependencies
+
+
+def _python_requirement(
+    requirement: str,
+    scope: str,
+    path: str,
+    content: bytes,
+    locator: Mapping[str, Any],
+    lock_entries: Mapping[str, tuple[str, str, str, bytes]],
+    *,
+    explicit_name: str | None = None,
+    explicit_spec: str | None = None,
+) -> Dependency | None:
+    match = REQUIREMENT.match(requirement)
+    if match is None and explicit_name is None:
+        return None
+    name = explicit_name or match.group(1)
+    spec = explicit_spec or (match.group(2) if match else None) or "*"
+    normalized = normalize_package_name("pypi", name)
+    locked = lock_entries.get(normalized)
+    version = locked[0] if locked else _exact_python_version(spec)
+    resolution_evidence = None
+    if locked:
+        resolution_evidence = Evidence(
+            locked[1], "LOCKFILE", content_hash(locked[3]),
+            {"path": locked[1], "json_pointer": locked[2]}, sha256_key(locked[0]),
+        )
+    directory = str(PurePosixPath(path).parent)
+    return Dependency(
+        ecosystem="pypi",
+        name=name,
+        requested_spec=spec,
+        scope=scope,
+        direct=True,
+        component_path=directory,
+        declaration=Evidence(
+            path, "MANIFEST", content_hash(content), locator, sha256_key(requirement),
+        ),
+        resolved_version=version,
+        resolution_evidence=resolution_evidence,
+    )
+
+
+def _scan_sources(
+    contents: Mapping[str, bytes],
+    dependencies: Iterable[Dependency],
+    diagnostics: list[Diagnostic],
+) -> tuple[list[Reference], dict[str, set[str]], set[str]]:
+    dependency_names = {
+        (dependency.ecosystem, dependency.normalized_name)
+        for dependency in dependencies
+    }
+    references: list[Reference] = []
+    local_edges: dict[str, set[str]] = {}
+    entrypoints: set[str] = set()
+    for path, content in contents.items():
+        suffix = PurePosixPath(path).suffix.lower()
+        if suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}:
+            text = content.decode("utf-8", errors="replace")
+            references.extend(_javascript_references(path, text, dependency_names))
+            local_edges[path] = {
+                resolved for module in JS_LOCAL_IMPORT.findall(text)
+                if (resolved := _resolve_local_module(path, module, contents)) is not None
+            }
+        elif suffix == ".py":
+            try:
+                tree = ast.parse(content.decode("utf-8"), filename=path)
+            except (UnicodeDecodeError, SyntaxError) as error:
+                diagnostics.append(Diagnostic("WARNING", "PYTHON_PARSE_FAILED", str(error), path))
+                continue
+            python_refs, local = _python_references(path, tree, dependency_names, contents)
+            references.extend(python_refs)
+            local_edges[path] = local
+        if PurePosixPath(path).name.lower() in {
+            "main.py", "app.py", "manage.py", "__main__.py", "index.js", "index.ts", "server.js", "server.ts",
+        }:
+            entrypoints.add(path)
+    entrypoints.update(_manifest_entrypoints(contents))
+    return references, local_edges, entrypoints
+
+
+def _javascript_references(
+    path: str,
+    text: str,
+    dependency_names: set[tuple[str, str]],
+) -> list[Reference]:
+    references: dict[tuple[str, int], Reference] = {}
+    for pattern in (JS_IMPORT, JS_SIDE_EFFECT_IMPORT):
+        for match in pattern.finditer(text):
+            module = match.group("module")
+            package = _javascript_package(module)
+            if package is None or ("npm", package) not in dependency_names:
+                continue
+            line = text.count("\n", 0, match.start()) + 1
+            reference = references.setdefault((package, line), Reference("npm", package, path, line))
+            clause = match.groupdict().get("clause")
+            if clause:
+                reference.symbols.update(_javascript_symbols(clause, module))
+            elif module != package:
+                reference.symbols.add(module[len(package):].lstrip("/"))
+    for match in JS_REQUIRE_DESTRUCTURE.finditer(text):
+        package = _javascript_package(match.group("module"))
+        if package and ("npm", package) in dependency_names:
+            line = text.count("\n", 0, match.start()) + 1
+            reference = references.setdefault((package, line), Reference("npm", package, path, line))
+            reference.symbols.update(
+                value.strip().split(":", 1)[0].strip()
+                for value in match.group("symbols").split(",") if value.strip()
+            )
+    for match in JS_REQUIRE_MEMBER.finditer(text):
+        package = _javascript_package(match.group("module"))
+        if package and ("npm", package) in dependency_names:
+            line = text.count("\n", 0, match.start()) + 1
+            references.setdefault((package, line), Reference("npm", package, path, line)).symbols.add(match.group("symbol"))
+    return list(references.values())
+
+
+def _python_references(
+    path: str,
+    tree: ast.AST,
+    dependency_names: set[tuple[str, str]],
+    contents: Mapping[str, bytes],
+) -> tuple[list[Reference], set[str]]:
+    references: list[Reference] = []
+    local: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".", 1)[0]
+                package = _match_python_distribution(root, dependency_names)
+                if package:
+                    references.append(Reference("pypi", package, path, node.lineno, {"*"}))
+                elif (resolved := _resolve_python_local(path, alias.name, 0, contents)):
+                    local.add(resolved)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            root = module.split(".", 1)[0]
+            package = _match_python_distribution(root, dependency_names) if node.level == 0 else None
+            if package:
+                references.append(Reference(
+                    "pypi", package, path, node.lineno,
+                    {alias.name for alias in node.names},
+                ))
+            elif (resolved := _resolve_python_local(path, module, node.level, contents)):
+                local.add(resolved)
+    return references, local
+
+
+def _reachable_files(
+    contents: Mapping[str, bytes],
+    local_edges: Mapping[str, set[str]],
+    entrypoints: set[str],
+) -> set[str] | None:
+    valid = {path for path in entrypoints if path in contents}
+    if not valid:
+        return None
+    visited: set[str] = set()
+    pending = list(valid)
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        visited.add(path)
+        pending.extend(local_edges.get(path, set()) - visited)
+    return visited
+
+
+def _runtime_observations(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> dict[tuple[str, str], set[str]] | None:
+    path = next((item for item in contents if PurePosixPath(item).name == "stackgraph-runtime.json"), None)
+    if path is None:
+        return None
+    document = _decode_json(contents[path], path, diagnostics)
+    if not isinstance(document, Mapping) or not isinstance(document.get("events"), list):
+        diagnostics.append(Diagnostic("WARNING", "INVALID_RUNTIME_TRACE", "Runtime trace requires an events array", path))
+        return None
+    observed: dict[tuple[str, str], set[str]] = {}
+    for event in document["events"]:
+        if not isinstance(event, Mapping):
+            continue
+        ecosystem = str(event.get("ecosystem") or "").lower()
+        name = str(event.get("package") or "")
+        if ecosystem not in {"npm", "pypi"} or not name:
+            continue
+        key = (ecosystem, normalize_package_name(ecosystem, name))
+        observed.setdefault(key, set()).add(str(event.get("symbol") or "*"))
+    return observed
+
+
+def _dependency_facts(
+    scan_input: ScanInput,
+    dependencies: list[Dependency],
+    references: list[Reference],
+    reachable_files: set[str] | None,
+    runtime: dict[tuple[str, str], set[str]] | None,
+    completeness: str,
+    source_file_count: int,
+) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    for dependency in dependencies:
+        key = (dependency.ecosystem, dependency.normalized_name)
+        matches = [reference for reference in references if (reference.ecosystem, reference.package_name) == key]
+        symbols = sorted({symbol for reference in matches for symbol in reference.symbols})
+        usage = {
+            "declared": True,
+            "resolved": dependency.resolved_version is not None,
+            "referenced": bool(matches),
+            "reference_count": len(matches),
+            "referenced_symbols": symbols,
+            "static_reachability": (
+                "UNKNOWN" if reachable_files is None else
+                "OBSERVED" if any(reference.path in reachable_files for reference in matches) else
+                "NOT_OBSERVED"
+            ),
+            "runtime_observed": (
+                "UNKNOWN" if runtime is None else "OBSERVED" if key in runtime else "NOT_OBSERVED"
+            ),
+            "source_files_scanned": source_file_count,
+            "limitations": _usage_limitations(dependency.ecosystem, completeness, reachable_files, runtime),
+        }
+        properties: dict[str, Any] = {
+            "ecosystem": dependency.ecosystem,
+            "scope": dependency.scope,
+            "direct": dependency.direct,
+            "requested_spec": dependency.requested_spec,
+            "component_path": dependency.component_path,
+            "usage": usage,
+        }
+        if dependency.resolved_version:
+            properties["resolved_version"] = dependency.resolved_version
+        if dependency.registry_properties:
+            properties["registry_resolution"] = dict(dependency.registry_properties)
+        if dependency.artifact_properties:
+            properties["artifact"] = dict(dependency.artifact_properties)
+        evidence = [dependency.declaration]
+        if dependency.resolution_evidence and dependency.resolution_evidence != dependency.declaration:
+            evidence.append(dependency.resolution_evidence)
+        for reference in matches:
+            evidence.append(Evidence(
+                reference.path,
+                "SOURCE_REFERENCE",
+                _content_hash_from_evidence_context(reference.path, scan_input.checkout_root),
+                {"path": reference.path, "line_start": reference.line, "line_end": reference.line},
+                sha256_key(reference.path, reference.line, sorted(reference.symbols)),
+                {"symbols": sorted(reference.symbols)},
+            ))
+        object_entity = {
+            "namespace": "TECHNOLOGY",
+            "type": dependency.entity_type,
+            "key": dependency.entity_key,
+            "name": f"{dependency.normalized_name}{' ' + dependency.resolved_version if dependency.resolved_version else ''}",
+        }
+        identity = {
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "predicate": "DEPENDS_ON",
+            "object": dependency.entity_key,
+            "component": dependency.component_path,
+            "scope": dependency.scope,
+            "direct": dependency.direct,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key(identity),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "DEPENDS_ON",
+            "object_entity": object_entity,
+            "assertion_class": "DECLARED",
+            "confidence": 1,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": properties,
+            "evidence": [item.as_dict(scan_input.repository_key, scan_input.source_revision) for item in evidence],
+        })
+    return facts
+
+
+def _usage_findings(
+    scan_input: ScanInput,
+    dependencies: list[Dependency],
+    references: list[Reference],
+    reachable_files: set[str] | None,
+    runtime: dict[tuple[str, str], set[str]] | None,
+    completeness: str,
+    source_file_count: int,
+) -> list[dict[str, Any]]:
+    if completeness != "COMPLETE" or source_file_count == 0:
+        return []
+    facts: list[dict[str, Any]] = []
+    for dependency in dependencies:
+        if not dependency.direct:
+            continue
+        key = (dependency.ecosystem, dependency.normalized_name)
+        matches = [reference for reference in references if (reference.ecosystem, reference.package_name) == key]
+        symbols = sorted({symbol for reference in matches for symbol in reference.symbols})
+        finding_type = None
+        confidence = 0.0
+        if not matches and (runtime is None or key not in runtime):
+            finding_type = "UNUSED_DECLARED_DEPENDENCY_CANDIDATE"
+            confidence = 0.65 if runtime is None else 0.8
+        elif matches and "*" not in symbols and 0 < len(symbols) <= 3:
+            finding_type = "NARROW_USE_DEPENDENCY_CANDIDATE"
+            confidence = 0.72
+        if finding_type is None:
+            continue
+        limitations = _usage_limitations(dependency.ecosystem, completeness, reachable_files, runtime)
+        value = {
+            "finding_type": finding_type,
+            "dependency_key": dependency.entity_key,
+            "package": dependency.normalized_name,
+            "scope": dependency.scope,
+            "reference_count": len(matches),
+            "referenced_symbols": symbols,
+            "denominator": "public API size unknown until artifact analysis",
+            "limitations": limitations,
+        }
+        evidence = [dependency.declaration.as_dict(scan_input.repository_key, scan_input.source_revision)]
+        evidence.extend(Evidence(
+            reference.path,
+            "SOURCE_REFERENCE",
+            _content_hash_from_evidence_context(reference.path, scan_input.checkout_root),
+            {"path": reference.path, "line_start": reference.line, "line_end": reference.line},
+            sha256_key(reference.path, reference.line, sorted(reference.symbols)),
+        ).as_dict(scan_input.repository_key, scan_input.source_revision) for reference in matches)
+        identity = {
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "finding": finding_type,
+            "dependency": dependency.entity_key,
+            "component": dependency.component_path,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key(identity),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "HAS_PROPERTY",
+            "object_value": value,
+            "assertion_class": "OBSERVED",
+            "confidence": confidence,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {
+                "analysis_fingerprint": sha256_key(
+                    scan_input.repository_key, scan_input.source_revision, SCANNER_VERSION,
+                    dependency.entity_key, finding_type,
+                ),
+                "review_state": "UNREVIEWED",
+            },
+            "evidence": evidence,
+        })
+    return facts
+
+
+def _repository_ref(scan_input: ScanInput) -> dict[str, str]:
+    return {
+        "namespace": "ENTERPRISE",
+        "type": "Repository",
+        "key": scan_input.repository_key,
+        "name": scan_input.repository_name,
+    }
+
+
+def _usage_limitations(
+    ecosystem: str,
+    completeness: str,
+    reachable_files: set[str] | None,
+    runtime: Mapping[tuple[str, str], set[str]] | None,
+) -> list[str]:
+    values = [
+        "dynamic imports, reflection, generated code, plugins, and framework conventions may be missed",
+        "distribution-to-import-name matching is heuristic" if ecosystem == "pypi" else "bundler aliases and custom module resolvers may be missed",
+    ]
+    if completeness != "COMPLETE":
+        values.append("repository scan was partial")
+    if reachable_files is None:
+        values.append("no deterministic entry point was identified; static reachability is unknown")
+    if runtime is None:
+        values.append("no runtime trace was supplied")
+    return values
+
+
+def normalize_package_name(ecosystem: str, value: str) -> str:
+    name = value.strip().lower()
+    return PYPI_NORMALIZE.sub("-", name) if ecosystem == "pypi" else name
+
+
+def _dedupe_dependencies(dependencies: Iterable[Dependency]) -> list[Dependency]:
+    indexed: dict[tuple[str, str, str, str, bool, str | None], Dependency] = {}
+    for item in dependencies:
+        key = (
+            item.ecosystem, item.normalized_name, item.component_path,
+            item.scope, item.direct, item.resolved_version,
+        )
+        indexed.setdefault(key, item)
+    return list(indexed.values())
+
+
+def _nearest_file(contents: Mapping[str, bytes], directory: str, names: tuple[str, ...]) -> str | None:
+    for parent in _parents(directory):
+        for name in names:
+            candidate = f"{parent}/{name}" if parent != "." else name
+            if candidate in contents:
+                return candidate
+    return None
+
+
+def _parents(directory: str) -> Iterable[str]:
+    current = PurePosixPath(directory)
+    while True:
+        value = current.as_posix()
+        yield value
+        if value == ".":
+            return
+        current = current.parent
+
+
+def _json_pointer(value: str) -> str:
+    return value.replace("~", "~0").replace("/", "~1")
+
+
+def _exact_python_version(spec: str) -> str | None:
+    match = re.fullmatch(r"\s*==\s*([A-Za-z0-9][A-Za-z0-9._+!-]*)\s*", spec)
+    return match.group(1) if match else None
+
+
+def _javascript_package(module: str) -> str | None:
+    if module.startswith((".", "/", "#", "node:", "http:" , "https:")):
+        return None
+    parts = module.split("/")
+    return "/".join(parts[:2]) if module.startswith("@") and len(parts) >= 2 else parts[0]
+
+
+def _javascript_symbols(clause: str, module: str) -> set[str]:
+    values: set[str] = set()
+    named = re.search(r"\{([^}]+)\}", clause)
+    if named:
+        values.update(
+            item.strip().split(" as ", 1)[0].strip()
+            for item in named.group(1).split(",") if item.strip()
+        )
+    if "* as" in clause:
+        values.add("*")
+    prefix = _javascript_package(module)
+    if prefix and module != prefix:
+        values.add(module[len(prefix):].lstrip("/"))
+    if clause.strip() and not named and "* as" not in clause:
+        values.add("default")
+    return values
+
+
+def _match_python_distribution(root: str, dependency_names: set[tuple[str, str]]) -> str | None:
+    normalized_import = root.lower().replace("_", "-")
+    candidates = [name for ecosystem, name in dependency_names if ecosystem == "pypi" and name.replace("_", "-") == normalized_import]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _resolve_local_module(path: str, module: str, contents: Mapping[str, bytes]) -> str | None:
+    base = PurePosixPath(path).parent.joinpath(module)
+    candidates = [base, *[PurePosixPath(str(base) + suffix) for suffix in (".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs")]]
+    candidates.extend(base / name for name in ("index.js", "index.ts", "index.jsx", "index.tsx"))
+    for candidate in candidates:
+        normalized = _collapse_posix(candidate)
+        if normalized in contents:
+            return normalized
+    return None
+
+
+def _resolve_python_local(path: str, module: str, level: int, contents: Mapping[str, bytes]) -> str | None:
+    base = PurePosixPath(path).parent
+    for _ in range(max(0, level - 1)):
+        base = base.parent
+    parts = [part for part in module.split(".") if part]
+    candidate = base.joinpath(*parts)
+    for value in (PurePosixPath(str(candidate) + ".py"), candidate / "__init__.py"):
+        normalized = _collapse_posix(value)
+        if normalized in contents:
+            return normalized
+    return None
+
+
+def _collapse_posix(path: PurePosixPath) -> str:
+    parts: list[str] = []
+    for part in path.parts:
+        if part == "..":
+            if parts:
+                parts.pop()
+        elif part not in {".", ""}:
+            parts.append(part)
+    return "/".join(parts)
+
+
+def _manifest_entrypoints(contents: Mapping[str, bytes]) -> set[str]:
+    entrypoints: set[str] = set()
+    for path, content in contents.items():
+        if PurePosixPath(path).name == "package.json":
+            try:
+                document = json.loads(content)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(document, Mapping):
+                continue
+            directory = PurePosixPath(path).parent
+            for field in ("main", "module"):
+                if isinstance(document.get(field), str):
+                    entrypoints.add(_collapse_posix(directory / document[field]))
+            binary = document.get("bin")
+            values = [binary] if isinstance(binary, str) else list(binary.values()) if isinstance(binary, Mapping) else []
+            for value in values:
+                if isinstance(value, str):
+                    entrypoints.add(_collapse_posix(directory / value))
+    return entrypoints
+
+
+def _content_hash_from_evidence_context(path: str, checkout_root: Path) -> str:
+    try:
+        resolved = (checkout_root / path).resolve()
+        if not resolved.is_relative_to(checkout_root) or not resolved.is_file():
+            raise OSError
+        return content_hash(resolved.read_bytes())
+    except OSError:
+        return sha256_key(path, "unavailable")
+
+
+def _is_source(path: str) -> bool:
+    return PurePosixPath(path).suffix.lower() in {
+        ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".py",
+    }
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Scan a repository snapshot for dependency and usage evidence")
+    parser.add_argument("request", type=Path)
+    parser.add_argument("--output", type=Path)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        request = json.loads(args.request.read_text(encoding="utf-8"))
+        result = scan_repository(request)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        print(json.dumps({"error": type(error).__name__, "message": str(error)}), file=sys.stderr)
+        return 2
+    output = json.dumps(result, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        args.output.write_text(output, encoding="utf-8")
+    else:
+        print(output, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

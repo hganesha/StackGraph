@@ -1,0 +1,201 @@
+from __future__ import annotations
+
+import json
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from stackgraph_discovery.repository_scanner import scan_repository
+
+try:
+    from jsonschema import Draft202012Validator, FormatChecker
+    from referencing import Registry, Resource
+except ImportError:  # runtime scanner has no schema-validation dependency
+    Draft202012Validator = None
+
+
+REVISION = "a" * 40
+
+
+def request(root: Path, *, max_files: int = 100) -> dict:
+    return {
+        "scanner_contract_version": "1.0.0",
+        "run_id": "00000000-0000-4000-8000-000000000101",
+        "tenant_key": "acme",
+        "target": {
+            "provider": "github",
+            "repository_id": "123",
+            "canonical_key": "github:repo:123",
+            "name": "billing-api",
+            "default_branch": "main",
+        },
+        "snapshot": {
+            "source_revision": REVISION,
+            "checkout_root": str(root),
+            "requested_at": "2026-08-19T14:00:00Z",
+        },
+        "limits": {
+            "max_files": max_files,
+            "max_bytes": 1_000_000,
+            "deadline_seconds": 30,
+        },
+    }
+
+
+class RepositoryScannerTests(unittest.TestCase):
+    @unittest.skipUnless(Draft202012Validator, "jsonschema is not installed")
+    def test_generated_result_validates_frozen_scanner_contract(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "requirements.txt").write_text("requests==2.32.3\n")
+            (root / "main.py").write_text("import requests\nrequests.get('https://example.test')\n")
+            result = scan_repository(request(root))
+
+        contracts = Path(__file__).resolve().parents[3] / "stackgraph-foundation/contracts/v1/schemas"
+        schemas = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in contracts.glob("*.schema.json")
+        ]
+        registry = Registry().with_resources(
+            (schema["$id"], Resource.from_contents(schema)) for schema in schemas
+        )
+        scanner_schema = next(schema for schema in schemas if schema["$id"].endswith("scanner-result.schema.json"))
+
+        Draft202012Validator(
+            scanner_schema,
+            registry=registry,
+            format_checker=FormatChecker(),
+        ).validate(result)
+
+    def test_npm_lock_and_typescript_import_emit_resolved_usage_and_narrow_candidate(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({
+                "name": "billing-api",
+                "dependencies": {"lodash": "^4.17.0"},
+            }))
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {
+                    "": {"dependencies": {"lodash": "^4.17.0"}},
+                    "node_modules/lodash": {
+                        "version": "4.17.21",
+                        "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+                        "integrity": "sha512-example",
+                    },
+                },
+            }))
+            (root / "index.ts").write_text(
+                "import { debounce, get as read } from 'lodash';\nconsole.log(debounce, read);\n"
+            )
+
+            result = scan_repository(request(root))
+
+        self.assertEqual(result["completeness"], "COMPLETE")
+        dependency = next(fact for fact in result["facts"] if fact["predicate"] == "DEPENDS_ON")
+        self.assertEqual(dependency["object_entity"]["key"], "pkg:npm/lodash@4.17.21")
+        self.assertTrue(dependency["properties"]["usage"]["referenced"])
+        self.assertEqual(
+            dependency["properties"]["usage"]["referenced_symbols"],
+            ["debounce", "get"],
+        )
+        self.assertEqual(dependency["properties"]["usage"]["static_reachability"], "OBSERVED")
+        finding = next(fact for fact in result["facts"] if fact["predicate"] == "HAS_PROPERTY")
+        self.assertEqual(finding["object_value"]["finding_type"], "NARROW_USE_DEPENDENCY_CANDIDATE")
+        self.assertGreaterEqual(len(dependency["evidence"]), 3)
+
+    def test_python_lock_import_and_reachability_are_distinct_measurements(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "pyproject.toml").write_text(
+                '[project]\nname="analytics"\ndependencies=["pandas>=2"]\n'
+            )
+            (root / "uv.lock").write_text(
+                'version=1\n[[package]]\nname="pandas"\nversion="2.2.3"\n'
+            )
+            (root / "main.py").write_text("from pandas import DataFrame\nprint(DataFrame)\n")
+
+            result = scan_repository(request(root))
+
+        dependency = next(fact for fact in result["facts"] if fact["predicate"] == "DEPENDS_ON")
+        self.assertEqual(dependency["object_entity"]["key"], "pkg:pypi/pandas@2.2.3")
+        usage = dependency["properties"]["usage"]
+        self.assertTrue(usage["resolved"])
+        self.assertTrue(usage["referenced"])
+        self.assertEqual(usage["referenced_symbols"], ["DataFrame"])
+        self.assertEqual(usage["static_reachability"], "OBSERVED")
+        self.assertEqual(usage["runtime_observed"], "UNKNOWN")
+
+    def test_yarn_and_pnpm_locks_resolve_manifest_dependencies_with_line_evidence(self) -> None:
+        locks = {
+            "yarn.lock": (
+                'lodash@^4.17.0:\n'
+                '  version "4.17.21"\n'
+                '  resolved "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz"\n'
+                '  integrity sha512-example\n'
+            ),
+            "pnpm-lock.yaml": (
+                "lockfileVersion: '9.0'\n"
+                "packages:\n"
+                "  lodash@4.17.21:\n"
+                "    resolution: {integrity: sha512-example}\n"
+            ),
+        }
+        for lock_name, lock_content in locks.items():
+            with self.subTest(lock=lock_name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "package.json").write_text(json.dumps({
+                    "dependencies": {"lodash": "^4.17.0"},
+                }))
+                (root / lock_name).write_text(lock_content)
+                (root / "index.js").write_text("const lodash = require('lodash');\n")
+
+                result = scan_repository(request(root))
+
+                dependency = next(
+                    fact for fact in result["facts"] if fact["predicate"] == "DEPENDS_ON"
+                )
+                self.assertEqual(dependency["object_entity"]["key"], "pkg:npm/lodash@4.17.21")
+                lock_evidence = next(
+                    item for item in dependency["evidence"] if item["type"] == "LOCKFILE"
+                )
+                self.assertEqual(lock_evidence["locator"]["path"], lock_name)
+                self.assertGreaterEqual(lock_evidence["locator"]["line_start"], 1)
+
+    def test_complete_scan_surfaces_unused_candidate_but_partial_scan_does_not(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"left-pad": "1.3.0"}}))
+            (root / "index.js").write_text("console.log('no imports');\n")
+            complete = scan_repository(request(root))
+            partial = scan_repository(request(root, max_files=1))
+
+        unused = [
+            fact for fact in complete["facts"]
+            if fact["predicate"] == "HAS_PROPERTY"
+            and fact["object_value"]["finding_type"] == "UNUSED_DECLARED_DEPENDENCY_CANDIDATE"
+        ]
+        self.assertEqual(len(unused), 1)
+        self.assertEqual(partial["completeness"], "PARTIAL")
+        self.assertFalse(any(fact["predicate"] == "HAS_PROPERTY" for fact in partial["facts"]))
+
+    def test_runtime_trace_is_reported_separately_from_static_reference(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "requirements.txt").write_text("requests==2.32.3\n")
+            (root / "main.py").write_text("print('loaded indirectly')\n")
+            (root / "stackgraph-runtime.json").write_text(json.dumps({
+                "events": [{"ecosystem": "pypi", "package": "requests", "symbol": "get", "count": 3}],
+            }))
+
+            result = scan_repository(request(root))
+
+        dependency = next(fact for fact in result["facts"] if fact["predicate"] == "DEPENDS_ON")
+        usage = dependency["properties"]["usage"]
+        self.assertFalse(usage["referenced"])
+        self.assertEqual(usage["runtime_observed"], "OBSERVED")
+        self.assertFalse(any(fact["predicate"] == "HAS_PROPERTY" for fact in result["facts"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

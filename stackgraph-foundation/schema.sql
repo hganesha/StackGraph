@@ -209,6 +209,26 @@ CREATE FUNCTION require_fact_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN IF NOT EXISTS(SELECT 1 FROM evidence WHERE fact_assertion_id=NEW.id) THEN RAISE EXCEPTION 'fact_assertion % must have evidence',NEW.id; END IF; RETURN NEW; END $$;
 CREATE CONSTRAINT TRIGGER trg_require_fact_evidence AFTER INSERT OR UPDATE ON fact_assertion DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION require_fact_evidence();
 
+CREATE TABLE package_api_surface (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), package_version_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+  ecosystem text NOT NULL CHECK(ecosystem IN ('npm','pypi')), artifact_checksum text NOT NULL CHECK(artifact_checksum ~ '^sha256:[a-f0-9]{64}$'),
+  analyzer_key text NOT NULL, analyzer_version text NOT NULL, analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+  public_symbol_count integer NOT NULL CHECK(public_symbol_count>=0), symbols jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(symbols)='array'),
+  completeness text NOT NULL CHECK(completeness IN ('COMPLETE','PARTIAL')), limitations jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(limitations)='array'),
+  stats jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(stats)='object'), analyzed_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE NULLS NOT DISTINCT(tenant_id,analysis_fingerprint),
+  UNIQUE NULLS NOT DISTINCT(tenant_id,package_version_entity_id,artifact_checksum,analyzer_key,analyzer_version)
+);
+CREATE TABLE dependency_usage_summary (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL REFERENCES tenant(id), source_snapshot_id uuid NOT NULL REFERENCES source_snapshot(id) ON DELETE CASCADE,
+  dependency_fact_assertion_id uuid NOT NULL UNIQUE REFERENCES fact_assertion(id) ON DELETE CASCADE, declared boolean NOT NULL, resolved boolean NOT NULL,
+  referenced boolean NOT NULL, static_reachability text NOT NULL CHECK(static_reachability IN ('OBSERVED','NOT_OBSERVED','UNKNOWN')),
+  runtime_observed text NOT NULL CHECK(runtime_observed IN ('OBSERVED','NOT_OBSERVED','UNKNOWN')), reference_count integer NOT NULL CHECK(reference_count>=0),
+  referenced_symbols jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(referenced_symbols)='array'), source_files_scanned integer NOT NULL CHECK(source_files_scanned>=0),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(limitations)='array'), analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE assessment (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), subject_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   assessment_type text NOT NULL, dimension text NOT NULL, score numeric(8,4), categorical_value text, confidence numeric(5,4) NOT NULL CHECK(confidence BETWEEN 0 AND 1),
@@ -283,7 +303,7 @@ BEGIN
   WITH closed AS (
    UPDATE fact_assertion f SET system_to=now() FROM source_snapshot old
     WHERE f.source_snapshot_id=old.id AND old.ingest_target_id=s.ingest_target_id AND old.extractor_key=s.extractor_key
-    AND old.extractor_version=s.extractor_version AND old.id<>s.id AND f.system_to IS NULL
+    AND old.id<>s.id AND f.system_to IS NULL
     RETURNING f.id,f.tenant_id
   )
   INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)
@@ -308,6 +328,8 @@ CREATE INDEX idx_fact_subject_predicate ON fact_assertion(subject_entity_id,pred
 CREATE INDEX idx_fact_snapshot ON fact_assertion(source_snapshot_id);
 CREATE INDEX idx_fact_logical_current ON fact_assertion(tenant_id,logical_key) WHERE system_to IS NULL;
 CREATE INDEX idx_evidence_fact ON evidence(fact_assertion_id);
+CREATE INDEX idx_package_api_surface_lookup ON package_api_surface(package_version_entity_id,analyzed_at DESC);
+CREATE INDEX idx_dependency_usage_snapshot ON dependency_usage_summary(source_snapshot_id,referenced,static_reachability);
 CREATE INDEX idx_assessment_subject ON assessment(subject_entity_id,assessment_type,dimension,status);
 CREATE INDEX idx_recommendation_subject ON recommendation(subject_entity_id,status);
 CREATE INDEX idx_projection_outbox_claim ON projection_outbox(processed_at,available_at,leased_until);
@@ -315,6 +337,6 @@ CREATE INDEX idx_projection_outbox_claim ON projection_outbox(processed_at,avail
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','projection_outbox','dead_letter','freshness_state'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','projection_outbox','dead_letter','freshness_state'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END $$;
 COMMIT;
