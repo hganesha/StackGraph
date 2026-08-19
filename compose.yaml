@@ -123,5 +123,14 @@ services:
       database:
         condition: service_healthy
 
+  npm-registry:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_NPM_REGISTRY_TOKEN: ${STACKGRAPH_NPM_REGISTRY_TOKEN:-}
+    entrypoint: ["python", "-m", "stackgraph_data.npm_registry_cli"]
+    command: ["--help"]
+
 volumes:
   stackgraph_postgres_data:

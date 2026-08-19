@@ -54,3 +54,14 @@ python -m unittest discover -s tests -v
 ```
 
 Tests use an in-memory HTTP transport and never call GitHub.
+
+## npm registry resolution
+
+`stackgraph_discovery.npm_resolution` converts repository-owned `.npmrc` and
+lockfile evidence into the registry-qualified dependency contract consumed by
+registry acquisition. It records public-default portability, custom-registry
+pinning, scoped registry selection, artifact integrity, and visibility without
+retaining credential values or reading worker-host npm configuration.
+
+See [the npm registry ingestion runbook](../../docs/runbooks/npm-registry-ingestion.md)
+for the acquisition boundary and local commands.

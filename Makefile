@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch
 
 backend-up:
 	docker compose up --build -d database api
@@ -49,3 +49,7 @@ depsdev-run:
 
 depsdev-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/depsdev-smoke.sql'
+
+npm-registry-fetch:
+	@test -n "$(PURL)" || (echo "PURL is required" >&2; exit 2)
+	docker compose run --rm npm-registry "$(PURL)" $(NPM_REGISTRY_ARGS)
