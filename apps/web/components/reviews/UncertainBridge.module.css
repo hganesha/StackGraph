@@ -38,7 +38,7 @@
 }
 .confirm {
   background: var(--sg-color-domain-oss-500);
-  color: #fff;
+  color: var(--sg-on-accent);
   border-color: transparent;
 }
 .reject {
@@ -83,7 +83,7 @@
 }
 .primary {
   background: var(--sg-color-domain-enterprise-500);
-  color: #fff;
+  color: var(--sg-on-accent);
   border-color: transparent;
 }
 .primary:disabled {

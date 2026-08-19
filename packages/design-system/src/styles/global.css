@@ -3,6 +3,11 @@
    (no third-party runtime font call — plan §7 security, §8.5). */
 @import "../tokens/tokens.css";
 
+:root {
+  /* Text/icon color on a saturated domain-500 fill. Constant across themes. */
+  --sg-on-accent: #ffffff; /* stylelint-disable-line color-no-hex -- the one literal; components use the token */
+}
+
 /* ---- reset ---- */
 *,
 *::before,

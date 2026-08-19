@@ -11,7 +11,11 @@
     "build": "pnpm --filter @stackgraph/web build",
     "tokens": "node packages/design-system/scripts/generate-tokens.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint"
+    "lint": "pnpm -r --if-present lint",
+    "lint:css": "stylelint \"{apps,packages}/**/*.css\""
+  },
+  "devDependencies": {
+    "stylelint": "^16.12.0"
   },
   "workspaces": [
     "apps/*",
