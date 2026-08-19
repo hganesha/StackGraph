@@ -216,7 +216,7 @@ CREATE TABLE assessment (
   status text NOT NULL DEFAULT 'CURRENT' CHECK(status IN ('CURRENT','SUPERSEDED','WITHDRAWN')), valid_from timestamptz NOT NULL DEFAULT now(), valid_to timestamptz, created_at timestamptz NOT NULL DEFAULT now(),
   CHECK((score IS NOT NULL)<>(categorical_value IS NOT NULL))
 );
-CREATE TABLE assessment_input(tenant_id uuid NOT NULL REFERENCES tenant(id),assessment_id uuid NOT NULL REFERENCES assessment(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(assessment_id,fact_assertion_id));
+CREATE TABLE assessment_input(tenant_id uuid REFERENCES tenant(id),assessment_id uuid NOT NULL REFERENCES assessment(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id),PRIMARY KEY(assessment_id,fact_assertion_id));
 CREATE TABLE recommendation (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), subject_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
   action text NOT NULL CHECK(action IN ('RETAIN','UPGRADE','REMOVE','REPLACE','CONSOLIDATE','REFACTOR','REBUILD','REPLATFORM','RETIRE','INVESTIGATE')),
@@ -252,9 +252,16 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'source snapshot % not found',p_snapshot_id; END IF;
  IF s.status<>'STAGED' THEN RAISE EXCEPTION 'source snapshot % is not staged',p_snapshot_id; END IF;
  IF s.completeness='COMPLETE' THEN
-  UPDATE fact_assertion f SET system_to=now() FROM source_snapshot old
-   WHERE f.source_snapshot_id=old.id AND old.ingest_target_id=s.ingest_target_id AND old.extractor_key=s.extractor_key
-   AND old.extractor_version=s.extractor_version AND old.id<>s.id AND f.system_to IS NULL;
+  WITH closed AS (
+   UPDATE fact_assertion f SET system_to=now() FROM source_snapshot old
+    WHERE f.source_snapshot_id=old.id AND old.ingest_target_id=s.ingest_target_id AND old.extractor_key=s.extractor_key
+    AND old.extractor_version=s.extractor_version AND old.id<>s.id AND f.system_to IS NULL
+    RETURNING f.id,f.tenant_id
+  )
+  INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)
+  SELECT closed.tenant_id,'FACT',closed.id,'CLOSE','snapshot:'||p_snapshot_id::text||':close:'||closed.id::text,
+   jsonb_build_object('closed_by_source_snapshot_id',p_snapshot_id)
+  FROM closed ON CONFLICT(dedupe_key) DO NOTHING;
  END IF;
  UPDATE source_snapshot SET status='PUBLISHED',published_at=now() WHERE id=p_snapshot_id;
  INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)

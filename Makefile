@@ -1,0 +1,34 @@
+.PHONY: backend-up backend-down backend-logs backend-test backend-verify database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify
+
+backend-up:
+	docker compose up --build -d database api
+
+backend-down:
+	docker compose down
+
+backend-logs:
+	docker compose logs -f database api
+
+backend-test:
+	docker compose run --rm --no-deps api python -m pytest
+
+backend-verify:
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/smoke.sql'
+
+database-migrate:
+	docker compose run --rm migrate
+
+database-seed: database-migrate
+	docker compose run --rm seed
+
+database-seed-test:
+	docker compose run --rm --no-deps seed python -m unittest discover -s tests -v
+
+database-seed-verify:
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/seed-smoke.sql'
+
+database-project: database-migrate
+	docker compose run --rm projection
+
+database-project-verify:
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/projection-smoke.sql'
