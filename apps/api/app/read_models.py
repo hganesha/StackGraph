@@ -42,16 +42,23 @@ from app.models import (
     InternalUsage,
     ModernizationList,
     ModernizationCandidateModel,
+    ModernizationCandidateReviewRequest,
+    ModernizationCandidateReviewResult,
+    ModernizationImpactModel,
     ModernizationOptionModel,
+    ModernizationOptionEligibilityModel,
     ModernizationRecommendationModel,
     ModernizationRecommendationReviewRequest,
     ModernizationRecommendationReviewResult,
+    ModernizationValidationOutcomeRequest,
+    ModernizationValidationOutcomeResult,
     PackageSource,
     PageInfo,
     RankedItem,
     RecommendationSummary,
     RepositoryCapabilityIntelligence,
     RepositoryModernizationIntelligence,
+    Phase3IntelligenceMetrics,
     Score,
     TechnologyDetail,
 )
@@ -1815,9 +1822,22 @@ class ReadModelStore:
         option_rows = await self.database.fetch_all(
             """
             SELECT option.*,entity.namespace target_namespace,entity.entity_type target_type,
-                   entity.canonical_key target_key,entity.name target_name
+                   entity.canonical_key target_key,entity.name target_name,
+                   evaluation.capability_fit eligibility_capability_fit,
+                   evaluation.api_fit eligibility_api_fit,
+                   evaluation.behavior_fit eligibility_behavior_fit,
+                   evaluation.runtime_fit eligibility_runtime_fit,
+                   evaluation.license_fit eligibility_license_fit,
+                   evaluation.security_fit eligibility_security_fit,
+                   evaluation.policy_fit eligibility_policy_fit,
+                   evaluation.eligible eligibility_eligible,
+                   evaluation.evidence eligibility_evidence,
+                   evaluation.disqualifiers eligibility_disqualifiers,
+                   evaluation.unknowns eligibility_unknowns
             FROM modernization_option option
             LEFT JOIN entity ON entity.id=option.target_entity_id
+            LEFT JOIN modernization_option_evaluation evaluation
+              ON evaluation.modernization_option_id=option.id
             WHERE option.modernization_candidate_id=ANY(%s::uuid[])
             ORDER BY option.modernization_candidate_id,option.rank,option.id
             """,
@@ -1829,6 +1849,14 @@ class ReadModelStore:
             SELECT * FROM modernization_recommendation
             WHERE modernization_candidate_id=ANY(%s::uuid[]) AND stale_at IS NULL
             ORDER BY modernization_candidate_id,created_at DESC,id
+            """,
+            (candidate_ids or [repository_id],),
+            tenant_id=tenant_id,
+        )
+        impact_rows = await self.database.fetch_all(
+            """
+            SELECT * FROM modernization_impact
+            WHERE modernization_candidate_id=ANY(%s::uuid[])
             """,
             (candidate_ids or [repository_id],),
             tenant_id=tenant_id,
@@ -1847,6 +1875,21 @@ class ReadModelStore:
                     id=row["target_entity_id"], kind=row["target_type"],
                     name=row["target_name"], canonical_key=row["target_key"],
                 )
+            eligibility = None
+            if row["eligibility_capability_fit"] is not None:
+                eligibility = ModernizationOptionEligibilityModel(
+                    capability_fit=row["eligibility_capability_fit"],
+                    api_fit=row["eligibility_api_fit"],
+                    behavior_fit=row["eligibility_behavior_fit"],
+                    runtime_fit=row["eligibility_runtime_fit"],
+                    license_fit=row["eligibility_license_fit"],
+                    security_fit=row["eligibility_security_fit"],
+                    policy_fit=row["eligibility_policy_fit"],
+                    eligible=row["eligibility_eligible"],
+                    evidence=dict(row["eligibility_evidence"]),
+                    disqualifiers=list(row["eligibility_disqualifiers"]),
+                    unknowns=list(row["eligibility_unknowns"]),
+                )
             options[row["modernization_candidate_id"]].append(ModernizationOptionModel(
                 id=row["id"], kind=row["option_kind"], canonical_key=row["canonical_key"],
                 name=row["name"], target_entity=target, compatibility=row["compatibility"],
@@ -1855,7 +1898,25 @@ class ReadModelStore:
                 rationale=row["rationale"], tradeoffs=list(row["tradeoffs"]),
                 disqualifiers=list(row["disqualifiers"]), validation_gaps=list(row["validation_gaps"]),
                 supporting_fact_ids=list(row["supporting_fact_ids"]),
+                eligibility=eligibility,
             ))
+        impacts = {
+            row["modernization_candidate_id"]: ModernizationImpactModel(
+                affected_call_sites=row["affected_call_sites"],
+                affected_files=row["affected_files"],
+                covered_call_sites=row["covered_call_sites"],
+                uncovered_call_sites=row["uncovered_call_sites"],
+                affected_test_files=list(row["affected_test_files"]),
+                dynamic_signals=list(row["dynamic_signals"]),
+                configuration_touchpoints=list(row["configuration_touchpoints"]),
+                build_touchpoints=list(row["build_touchpoints"]),
+                deployment_touchpoints=list(row["deployment_touchpoints"]),
+                evidence_locations=list(row["evidence_locations"]),
+                confidence=_number(row["confidence"]), effort_points=row["effort_points"],
+                effort_model_version=row["effort_model_version"],
+                limitations=list(row["limitations"]),
+            ) for row in impact_rows
+        }
         recommendations = {
             row["modernization_candidate_id"]: ModernizationRecommendationModel(
                 id=row["id"], selected_option_id=row["selected_option_id"], action=row["action"],
@@ -1884,12 +1945,65 @@ class ReadModelStore:
             review_state=row["review_state"], version=row["version"],
             stale=row["stale_at"] is not None, options=options[row["id"]],
             recommendation=recommendations.get(row["id"]),
+            impact=impacts.get(row["id"]),
         ) for row in rows]
         return RepositoryModernizationIntelligence(
             repository=_entity(repository),
             source_revision=rows[0]["source_revision"] if rows else None,
             candidates=candidates,
             truncated=truncated,
+        )
+
+    async def review_modernization_candidate(
+        self,
+        candidate_id: UUID,
+        review: ModernizationCandidateReviewRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> ModernizationCandidateReviewResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to review a candidate.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM modernization_candidate WHERE id=%s FOR UPDATE",
+                (candidate_id,),
+            )
+            candidate = await cursor.fetchone()
+            if candidate is None:
+                raise APIError(404, "MODERNIZATION_CANDIDATE_NOT_FOUND", "The candidate was not found.")
+            if candidate["version"] != review.expected_version:
+                raise APIError(
+                    409, "VERSION_CONFLICT", "The candidate changed before review.",
+                    {"expected_version": review.expected_version, "actual_version": candidate["version"]},
+                )
+            if candidate["review_state"] != "UNREVIEWED":
+                raise APIError(409, "ALREADY_REVIEWED", "The candidate has already been reviewed.")
+            reviewed_at = datetime.now(UTC)
+            review_state = {"CONFIRM": "CONFIRMED", "REJECT": "REJECTED"}[review.decision]
+            new_version = candidate["version"] + 1
+            await connection.execute(
+                """
+                INSERT INTO modernization_candidate_review(
+                  tenant_id,modernization_candidate_id,decision,rationale,
+                  reviewer_actor_key,prior_version,resulting_version,reviewed_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    tenant_id, candidate_id, review.decision, review.rationale,
+                    actor_key, candidate["version"], new_version, reviewed_at,
+                ),
+            )
+            await connection.execute(
+                """
+                UPDATE modernization_candidate
+                SET review_state=%s,version=%s,updated_at=%s WHERE id=%s
+                """,
+                (review_state, new_version, reviewed_at, candidate_id),
+            )
+        return ModernizationCandidateReviewResult(
+            modernization_candidate_id=candidate_id, review_state=review_state,
+            version=new_version, reviewed_at=reviewed_at,
         )
 
     async def review_modernization_recommendation(
@@ -1944,6 +2058,191 @@ class ReadModelStore:
             review_state=review_state,
             version=new_version,
             reviewed_at=reviewed_at,
+        )
+
+    async def record_modernization_validation_outcome(
+        self,
+        recommendation_id: UUID,
+        outcome: ModernizationValidationOutcomeRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> ModernizationValidationOutcomeResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to report validation.")
+        reported_at = datetime.now(UTC)
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT id,review_state FROM modernization_recommendation WHERE id=%s FOR UPDATE",
+                (recommendation_id,),
+            )
+            recommendation = await cursor.fetchone()
+            if recommendation is None:
+                raise APIError(
+                    404, "MODERNIZATION_RECOMMENDATION_NOT_FOUND",
+                    "The recommendation was not found.",
+                )
+            if recommendation["review_state"] != "ACCEPTED":
+                raise APIError(
+                    409, "RECOMMENDATION_NOT_ACCEPTED",
+                    "Validation outcomes can be reported only for accepted recommendations.",
+                )
+            cursor = await connection.execute(
+                """
+                INSERT INTO modernization_validation_outcome(
+                  tenant_id,modernization_recommendation_id,validation_status,
+                  actual_call_sites,actual_files,actual_effort,successful_checks,
+                  failed_checks,notes,reporter_actor_key,reported_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """,
+                (
+                    tenant_id, recommendation_id, outcome.validation_status,
+                    outcome.actual_call_sites, outcome.actual_files, outcome.actual_effort,
+                    outcome.successful_checks, outcome.failed_checks, outcome.notes,
+                    actor_key, reported_at,
+                ),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+        return ModernizationValidationOutcomeResult(
+            id=row["id"], modernization_recommendation_id=recommendation_id,
+            validation_status=outcome.validation_status, reported_at=reported_at,
+        )
+
+    async def phase3_intelligence_metrics(
+        self,
+        *,
+        tenant_id: UUID | None,
+    ) -> Phase3IntelligenceMetrics:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required for intelligence metrics.")
+        candidate_rows = await self.database.fetch_all(
+            """
+            SELECT review_state,count(*) count FROM modernization_candidate
+            WHERE stale_at IS NULL GROUP BY review_state
+            """,
+            tenant_id=tenant_id,
+        )
+        recommendation_rows = await self.database.fetch_all(
+            """
+            SELECT review_state,count(*) count FROM modernization_recommendation
+            WHERE stale_at IS NULL GROUP BY review_state
+            """,
+            tenant_id=tenant_id,
+        )
+        job_rows = await self.database.fetch_all(
+            "SELECT status,count(*) count FROM intelligence_job GROUP BY status",
+            tenant_id=tenant_id,
+        )
+        aggregate = await self.database.fetch_one(
+            """
+            SELECT
+              (SELECT percentile_cont(0.5) WITHIN GROUP (
+                 ORDER BY greatest(0,extract(epoch FROM (coalesce(started_at,now())-created_at)))
+               ) FROM intelligence_job) queue_lag_p50,
+              (SELECT percentile_cont(0.95) WITHIN GROUP (
+                 ORDER BY greatest(0,extract(epoch FROM (coalesce(started_at,now())-created_at)))
+               ) FROM intelligence_job) queue_lag_p95,
+              (SELECT percentile_cont(0.5) WITHIN GROUP (
+                 ORDER BY extract(epoch FROM (completed_at-started_at))*1000
+               ) FROM intelligence_job WHERE completed_at IS NOT NULL AND started_at IS NOT NULL) latency_p50,
+              (SELECT percentile_cont(0.95) WITHIN GROUP (
+                 ORDER BY extract(epoch FROM (completed_at-started_at))*1000
+               ) FROM intelligence_job WHERE completed_at IS NOT NULL AND started_at IS NOT NULL) latency_p95,
+              (SELECT coalesce(sum(greatest(attempt-1,0)),0) FROM intelligence_job) retry_count,
+              (SELECT count(*) FROM dead_letter WHERE source_kind='INTELLIGENCE_JOB') dead_letter_count,
+              (SELECT count(*) FROM modernization_candidate WHERE stale_at IS NOT NULL) stale_candidates,
+              (SELECT count(*) FROM modernization_recommendation WHERE stale_at IS NOT NULL) stale_recommendations,
+              (SELECT count(*) FROM ai_model_invocation WHERE tenant_id=%s) model_invocations,
+              (SELECT coalesce(sum(actual_cost_usd),0) FROM ai_model_invocation WHERE tenant_id=%s) model_cost,
+              (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms)
+                 FROM ai_model_invocation WHERE tenant_id=%s AND duration_ms IS NOT NULL) model_latency_p95,
+              (SELECT avg(CASE WHEN cardinality(candidate.supporting_fact_ids)>0 AND impact.id IS NOT NULL
+                               THEN 1.0 ELSE 0.0 END)
+                 FROM modernization_candidate candidate
+                 LEFT JOIN modernization_impact impact
+                   ON impact.modernization_candidate_id=candidate.id
+                 WHERE candidate.stale_at IS NULL) evidence_completeness,
+              (SELECT avg(abs(outcome.actual_call_sites-recommendation.affected_call_sites))
+                 FROM modernization_validation_outcome outcome
+                 JOIN modernization_recommendation recommendation
+                   ON recommendation.id=outcome.modernization_recommendation_id
+                 WHERE outcome.actual_call_sites IS NOT NULL) call_site_mae,
+              (SELECT avg(abs(outcome.actual_files-recommendation.affected_files))
+                 FROM modernization_validation_outcome outcome
+                 JOIN modernization_recommendation recommendation
+                   ON recommendation.id=outcome.modernization_recommendation_id
+                 WHERE outcome.actual_files IS NOT NULL) files_mae,
+              (SELECT avg((outcome.actual_effort=recommendation.estimated_effort)::int::numeric)
+                 FROM modernization_validation_outcome outcome
+                 JOIN modernization_recommendation recommendation
+                   ON recommendation.id=outcome.modernization_recommendation_id
+                 WHERE outcome.actual_effort IS NOT NULL AND outcome.actual_effort<>'UNKNOWN') effort_accuracy,
+              (SELECT avg((validation_status='SUCCEEDED')::int::numeric)
+                 FROM modernization_validation_outcome) validation_success
+            """,
+            (tenant_id, tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        assert aggregate is not None
+        candidate_counts = {row["review_state"]: int(row["count"]) for row in candidate_rows}
+        recommendation_counts = {
+            row["review_state"]: int(row["count"]) for row in recommendation_rows
+        }
+        job_counts = {row["status"]: int(row["count"]) for row in job_rows}
+        candidate_reviewed = candidate_counts.get("CONFIRMED", 0) + candidate_counts.get("REJECTED", 0)
+        recommendation_reviewed = sum(
+            recommendation_counts.get(state, 0) for state in ("ACCEPTED", "REJECTED", "DISMISSED")
+        )
+        return Phase3IntelligenceMetrics(
+            as_of=datetime.now(UTC), candidate_counts=candidate_counts,
+            recommendation_counts=recommendation_counts, job_counts=job_counts,
+            candidate_review_precision=(
+                candidate_counts.get("CONFIRMED", 0) / candidate_reviewed
+                if candidate_reviewed else None
+            ),
+            recommendation_acceptance_rate=(
+                recommendation_counts.get("ACCEPTED", 0) / recommendation_reviewed
+                if recommendation_reviewed else None
+            ),
+            successful_validation_rate=(
+                _number(aggregate["validation_success"]) if aggregate["validation_success"] is not None else None
+            ),
+            affected_call_site_mae=(
+                _number(aggregate["call_site_mae"]) if aggregate["call_site_mae"] is not None else None
+            ),
+            affected_files_mae=(
+                _number(aggregate["files_mae"]) if aggregate["files_mae"] is not None else None
+            ),
+            effort_band_accuracy=(
+                _number(aggregate["effort_accuracy"]) if aggregate["effort_accuracy"] is not None else None
+            ),
+            evidence_completeness_rate=(
+                _number(aggregate["evidence_completeness"])
+                if aggregate["evidence_completeness"] is not None else None
+            ),
+            queue_lag_seconds_p50=(
+                _number(aggregate["queue_lag_p50"]) if aggregate["queue_lag_p50"] is not None else None
+            ),
+            queue_lag_seconds_p95=(
+                _number(aggregate["queue_lag_p95"]) if aggregate["queue_lag_p95"] is not None else None
+            ),
+            job_latency_ms_p50=(
+                _number(aggregate["latency_p50"]) if aggregate["latency_p50"] is not None else None
+            ),
+            job_latency_ms_p95=(
+                _number(aggregate["latency_p95"]) if aggregate["latency_p95"] is not None else None
+            ),
+            retry_count=int(aggregate["retry_count"]),
+            dead_letter_count=int(aggregate["dead_letter_count"]),
+            stale_candidate_count=int(aggregate["stale_candidates"]),
+            stale_recommendation_count=int(aggregate["stale_recommendations"]),
+            model_invocation_count=int(aggregate["model_invocations"]),
+            model_cost_usd=_number(aggregate["model_cost"]),
+            model_latency_ms_p95=(
+                _number(aggregate["model_latency_p95"])
+                if aggregate["model_latency_p95"] is not None else None
+            ),
         )
 
     @staticmethod

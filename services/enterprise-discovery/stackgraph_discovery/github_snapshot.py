@@ -44,6 +44,12 @@ EXACT_MANIFEST_NAMES = {
     "Pipfile": "PIPENV_MANIFEST",
     "Pipfile.lock": "PIPENV_LOCK",
     "stackgraph-runtime.json": "RUNTIME_TRACE",
+    "Dockerfile": "DEPLOYMENT_CONFIG",
+    "docker-compose.yml": "DEPLOYMENT_CONFIG",
+    "docker-compose.yaml": "DEPLOYMENT_CONFIG",
+    "compose.yml": "DEPLOYMENT_CONFIG",
+    "compose.yaml": "DEPLOYMENT_CONFIG",
+    "Makefile": "BUILD_CONFIG",
 }
 
 SOURCE_SUFFIXES = {
@@ -460,6 +466,12 @@ def manifest_kind(path: str) -> str | None:
             return "PYTHON_REQUIREMENTS"
     if pure_path.suffix.lower() in SOURCE_SUFFIXES:
         return SOURCE_SUFFIXES[pure_path.suffix.lower()]
+    lowered_parts = tuple(part.lower() for part in pure_path.parts)
+    if pure_path.suffix.lower() in {".yaml", ".yml", ".toml"} and any(
+        part in {".github", "workflows", "deploy", "deployment", "k8s", "kubernetes", "config"}
+        for part in lowered_parts
+    ):
+        return "BUILD_OR_DEPLOYMENT_CONFIG"
     return None
 
 

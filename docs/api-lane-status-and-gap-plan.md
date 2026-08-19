@@ -1,146 +1,140 @@
 # API lane status and gap plan
 
-**Reviewed and implemented:** 2026-08-19  
-**Branch:** `codex/api-phase-3-plan`  
+**Updated:** 2026-08-19
+
+**Implementation branch:** `phase-3-gap`
+
 **Scope:** Backend read API, dependency/capability intelligence, modernization intelligence, and AI-backed Ask.
 
 ## Executive assessment
 
-The API lane is implemented through an evidence-backed first Phase 3 vertical slice on this branch.
-Phases 0 and 1 were already complete. This branch closes the Phase 2 shipment gaps, adds the Phase 3
-dependency-consolidation pipeline, and ports provider-backed Ask onto the current architecture.
+The backend API lane is now implemented through Phase 3. The original dependency-consolidation slice has
+been extended with persisted code-unit evidence, internal and vendored duplication detection, native and
+approved-internal alternatives, compatible-upgrade discovery, explicit eligibility gates, richer impact
+evidence, validation outcomes, quality metrics, and configuration-aware reanalysis.
 
-Phase 3 is not complete in its broadest product sense. The delivered slice detects multiple observed
-dependencies serving the same capability, ranks bounded observed/curated alternatives, calculates exact
-known impact, and persists reviewable migration recommendations. Internal-code duplication, copied or
-vendored similarity, runtime and policy compatibility proof, test-coverage mapping, calibration, and
-production telemetry remain open.
-
-The branch is ready for review, but it has not been pushed, opened as a pull request, or merged.
+This does not make Phase 3 operationally finished in production. The branch still needs review and merge;
+each tenant needs governed policy and internal-component data; and precision, scope error, effort error, and
+acceptance targets need to be calibrated on real reviewed migrations. Phase 4 remains deliberately deferred.
 
 ## Status by phase
 
 | Phase | Status | Delivered outcome | Remaining boundary |
 | --- | --- | --- | --- |
-| API foundation | Complete | Versioned `/api/v1` read models, auth-derived tenancy, CORS, structured errors, bounded graph reads, evidence, and audited review | Product UI adoption remains outside this backend lane |
-| Phase 0 | Complete for npm/PyPI | Exact package identity, scanner ingestion, evidence, enrichment, refresh/replay, and AGE projection | New ecosystems are Phase 4 work |
-| Phase 1 | Complete | Deterministic imports, symbols, reachability, runtime signals, unused/narrow-use findings, and package API surfaces | No dedicated unused/narrow-use product endpoint |
-| Phase 2 | Complete on branch | Versioned capability taxonomy, curated mappings, constrained inference, duplicate-capability candidates, audited review, automatic jobs, replay, RLS, contracts, and runbook | Taxonomy breadth and editorial governance should expand with measured demand |
-| Phase 3 | First vertical slice complete | Dependency-consolidation candidates, bounded alternatives, impact/effort, migration and rollback plans, audited review, stale/replay behavior, API and shared client | Broader semantic duplication, compatibility proof, calibration, and telemetry remain |
-| AI-backed Ask | Complete on branch | Allowlisted deterministic tool selection, tenant-scoped execution, validated citations, structured explanation, provider routing, and safe deterministic fallback | Production route credentials, cost/latency telemetry, and operational rollout |
-| Phase 4 | Deferred | None intentionally | Broader ecosystems, cohorts, trajectory, and public migration intelligence |
+| API foundation | Complete | Versioned `/api/v1` models, auth-derived tenancy, RLS, structured errors, bounded reads, evidence, and audited review | Product UI adoption is outside this backend lane |
+| Phase 0 | Complete for npm/PyPI | Exact package identity, ingestion, evidence, enrichment, refresh/replay, and AGE projection | Additional ecosystems are Phase 4 |
+| Phase 1 | Complete | Imports, symbols, reachability, runtime signals, unused/narrow-use findings, and package API surfaces | A dedicated findings product surface remains optional |
+| Phase 2 | Complete | Versioned taxonomy, curated/constrained inference, duplicate-capability candidates, review, durable jobs, replay, RLS, and contracts | Taxonomy breadth and editorial governance grow with measured demand |
+| Phase 3 backend | Complete on branch | Dependency and internal duplication, bounded alternatives, eligibility, impact, migration/rollback plans, review/outcomes, metrics, replay, and selective reanalysis | Production policy population, calibration, alerting, review, and merge |
+| AI-backed Ask | Complete on branch | Allowlisted deterministic tools, tenant-scoped execution, validated citations, provider routing, and deterministic fallback | Production credentials, budgets, and rollout |
+| Phase 4 | Deferred | None intentionally | More ecosystems, cohorts, trajectory, and public migration intelligence |
 
-## What this branch completes
+## Phase 3 completion inventory
 
-### Phase 2 closure
+### Evidence acquisition and persistence
 
-- Commits the previously uncommitted capability-intelligence work and rebases it onto current main.
-- Adds golden capability fixtures and validates them in JSON Schema, OpenAPI, Python, and TypeScript.
-- Adds optimistic, audited duplicate-candidate review.
-- Schedules idempotent intelligence jobs after complete repository usage snapshots.
-- Implements leasing, retry, terminal failure, dead-letter, and replay behavior.
-- Verifies API queries with the application database role and explicit cross-tenant RLS denial.
-- Adds a capability/modernization operations runbook and CI for contracts, types, services, migrations, and RLS.
+- Python and JavaScript code units are extracted with stable structural fingerprints and semantic tokens.
+- Code units retain repository, revision, symbol, line range, dependency keys, and source-fact identity.
+- Deterministic local-import analysis links tests to code units without claiming runtime coverage.
+- Dynamic imports, reflection, plugin loading, generated code, configuration, build, deployment, and vendored
+  paths are persisted as evidence or explicit limitations.
+- Complete scanner results persist code-unit facts and summaries under the same tenant and snapshot boundary.
 
-### Phase 3A: dependency consolidation
+### Candidate generation and alternatives
 
-- Converts Phase 2 duplicate-capability results into versioned modernization candidates.
-- Builds a bounded alternative universe containing observed packages plus curated native/package options.
-- Prevents unobserved alternatives with unknown compatibility from outranking observed dependencies.
-- Derives affected references and files from persisted source evidence.
-- Emits ordinal effort, explicit validation gaps, counter-signals, migration steps, and rollback steps.
-- Persists deterministic input and analysis fingerprints for idempotent replay.
-- Stales superseded results only after complete newer snapshots.
-- Exposes bounded repository modernization reads and optimistic recommendation review with audit history.
+- Multiple dependencies serving one capability continue to produce consolidation candidates.
+- Repeated internal implementations are detected within the tenant; vendored matches are labeled separately.
+- A single observed dependency can produce a native, compatible-upgrade, or approved-internal replacement
+  candidate when the bounded catalog contains an applicable option.
+- Structural similarity proposes review; it never asserts behavioral equivalence.
 
-### Provider-backed Ask
+### Eligibility and recommendation safety
 
-- The model selects only an allowlisted deterministic estate query; it cannot provide SQL or entity IDs.
-- The API executes the query under the authenticated tenant before any explanation is generated.
-- Explanations may cite only fact IDs returned by the deterministic tool result.
-- Provider, prompt, database-audit, context-limit, or validation failures safely fall back to deterministic Ask by default.
+- Every alternative records capability, API, behavior, runtime, license, security, and tenant-policy fit.
+- A failed dimension disqualifies the option. Missing evidence remains `UNKNOWN` and cannot be converted into
+  favorable compatibility.
+- `REPLACE` is emitted only for a fully eligible alternative; otherwise the action remains `INVESTIGATE`.
+- Tenant policy, approved internal components, catalog version, and analyzer version participate in replay
+  fingerprints.
+
+### Impact, feedback, and operations
+
+- Impact records affected and uncovered call sites, affected files/tests, dynamic signals, config/build/deploy
+  touchpoints, evidence locations, confidence, limitations, and versioned effort points.
+- Candidate confirmation/rejection and recommendation acceptance/dismissal use optimistic concurrency and audit.
+- Accepted recommendations can receive validation outcomes with actual scope, effort, checks, and notes.
+- The Phase 3 metrics endpoint reports candidate precision, recommendation acceptance, validation success,
+  affected-scope error, effort accuracy, evidence completeness, queue lag/latency, retries, dead letters,
+  stale results, and available AI cost/latency data.
+- `make intelligence-requeue` creates an idempotent job for the current analyzer, catalog, taxonomy, and policy
+  configuration even when the repository revision is unchanged.
 
 ## Remaining gap register
 
 | Priority | Gap | Why it matters | Exit condition |
 | --- | --- | --- | --- |
-| P0 | Branch is not yet reviewed or merged | The implementation is not a shared release until normal review and CI complete | Push branch, open PR, obtain review, run CI from a fresh checkout, and merge |
-| P0 | Internal semantic-duplication generators | Dependency consolidation finds only one important class of duplication | Detect internal wrapper/dependency overlap and repeated internal implementations with evidence and tenant isolation |
-| P0 | Compatibility and policy filtering | Curated alternatives remain `UNKNOWN`; ranking cannot claim safe replacement | Evaluate runtime/framework version, required behavior, license, security, and tenant policy; expose disqualifiers and unknowns |
-| P1 | Test and dynamic-behavior impact evidence | Static call sites alone cannot prove migration safety | Map tests to affected behavior and persist reflection, plugin, generated-code, and runtime-observation gaps |
-| P1 | Effort/quality calibration | Ordinal effort and ranking are explainable but not yet measured | Build a reviewed migration corpus and publish precision, acceptance, affected-scope error, and effort-band error |
-| P1 | Production observability | Jobs are durable, but operating quality is not visible enough | Add queue lag, retry/dead-letter, stale-result, latency, model-cost, acceptance, and dismissal metrics with alerts |
-| P1 | Phase 1 findings product surface | Unused/narrow-use evidence is available mainly as downstream input | Add a bounded findings endpoint/review flow or explicitly document recommendations as the only supported surface |
-| P1 | Taxonomy governance | The starter catalog proves the mechanism but does not provide broad coverage | Define ownership, coverage targets, aliases/hierarchy rules, version upgrade, deprecation, and retirement workflow |
-| P2 | Broader alternative sources | Tenant-approved internal components and compatible upgrades are not yet populated | Add governed internal/native mappings and upgrade discovery after compatibility gates exist |
-| P2 | Phase 4 reference intelligence | Broader signals would improve ranking but can create unbounded crawling and weak evidence | Add NuGet and bounded cohorts only after Phase 3 quality gates are met |
+| P0 | Review, push, CI, and merge | The implementation is not shared until normal delivery gates complete | Push `phase-3-gap`, open a focused PR, pass fresh hosted CI, review migration/RLS/worker semantics, and merge |
+| P0 | Tenant policy and internal catalog rollout | Safe decisions depend on real runtime, license, security, and ownership rules | Each production tenant has a versioned active policy and governed approved-internal records |
+| P1 | Calibration corpus and quality thresholds | The system exposes measurement but has no representative production baseline yet | Review a representative migration corpus and set precision, acceptance, scope-error, and effort-accuracy targets |
+| P1 | Dashboards and alert routing | Metrics are queryable but not yet connected to operational ownership | Publish dashboards and alerts for queue lag, terminal failures, stale results, latency, cost, and quality regressions |
+| P1 | Runtime behavior evidence | Static tests and dynamic-risk flags do not prove behavior equivalence | Attach bounded runtime/validation evidence where available and preserve `UNKNOWN` where it is not |
+| P1 | Taxonomy and alternative stewardship | Catalog quality degrades without ownership and lifecycle rules | Assign owners and define review, versioning, deprecation, and security-refresh procedures |
+| P2 | Scanner language breadth | Code-unit duplication currently targets Python and JavaScript/TypeScript syntax | Add languages only with deterministic extraction, fixtures, and the same tenant/evidence guarantees |
+| P2 | Phase 4 reference intelligence | Broader signals may improve ranking but can create weak or unbounded evidence | Add ecosystems and bounded cohorts only after Phase 3 production quality gates hold |
 
 ## Gap execution plan
 
-### Work package 1 — ship the branch
+### Work package 1 — deliver the branch
 
-1. Push `codex/api-phase-3-plan` and open a focused pull request containing commits `1ddc246`, `a8f00ab`, and `fab7928` plus this status document.
-2. Require the API-lane workflow on a fresh hosted runner.
-3. Review migration `007`, RLS policies, queue trigger semantics, and the AI Ask trust boundary.
-4. Merge without mixing unrelated UI changes.
+1. Push `phase-3-gap` and open a focused pull request.
+2. Require contract, type, service, fresh-schema, migration, API integration, and RLS checks.
+3. Review migration `008`, policy defaults, reanalysis uniqueness, optimistic review, and metrics queries.
+4. Merge without mixing unrelated UI work.
 
-**Gate:** current main can bootstrap a fresh database and pass contracts, types, API, data, intelligence, and RLS checks.
+**Gate:** a fresh checkout bootstraps migrations 001–008 and passes the same isolated verification suite.
 
-### Work package 2 — broaden duplication candidates
+### Work package 2 — configure production safely
 
-Implement candidates in increasing-risk order:
+1. Publish a tenant policy with deployed runtime versions and approved license/security constraints.
+2. Register only owned and supported internal components with evidence-backed API and behavior claims.
+3. Requeue repositories under the new configuration fingerprint.
+4. Sample `UNKNOWN`, disqualified, internal-duplication, and replacement results before wider exposure.
 
-1. internal wrapper versus dependency API usage;
-2. repeated internal implementations within a tenant;
-3. copied, forked, or vendored code;
-4. native runtime functionality that supersedes a dependency.
+**Gate:** every recommendation explains its policy version, included/excluded options, evidence, unknowns, and
+disqualifiers.
 
-Deterministic structure, symbols, checksums, call sites, and tests remain authoritative. Models or embeddings
-may propose similarity, but cannot assert behavioral equivalence.
+### Work package 3 — calibrate and operate
 
-**Gate:** replay is idempotent, no comparison crosses tenants, limitations are persisted, and a reviewed fixture set establishes precision.
+1. Record candidate decisions, recommendation decisions, and post-migration validation outcomes.
+2. Establish baselines for precision, acceptance, validation success, scope error, and effort accuracy.
+3. Set quality thresholds and alerts; investigate regressions by analyzer/catalog/policy version.
+4. Promote catalog or scoring changes only after replaying the calibration set.
 
-### Work package 3 — prove alternative eligibility
+**Gate:** Phase 3 has owned dashboards, measurable quality targets, and an auditable promotion process.
 
-Add runtime/framework constraints, required API and behavior fit, compatible upgrades, license/policy rules,
-vulnerability posture, maintenance health, release trajectory, and approved internal-component sources. Missing
-evidence remains `UNKNOWN` and cannot become a favorable score.
+### Work package 4 — expand cautiously
 
-**Gate:** every included/excluded option exposes its source, disqualifiers, unknowns, and score components.
+Add runtime evidence, languages, ecosystems, and reference cohorts one bounded source at a time. New sources
+must preserve tenant isolation, deterministic provenance, replay, staleness, explicit unknowns, and review.
 
-### Work package 4 — improve impact and migration confidence
-
-Persist exact affected imports, symbols, wrappers, tests, uncovered behavior, dynamic loading, configuration,
-build, and deployment touch points. Calibrate ordinal effort against accepted migrations before considering
-time estimates.
-
-**Gate:** every count resolves to evidence and prediction error is measurable against reviewed outcomes.
-
-### Work package 5 — operate and measure
-
-Add selective reevaluation and metrics for repository revision, analyzer/taxonomy/policy version, queue lag,
-retry/dead-letter, latency, stale results, model cost, review outcomes, and evidence completeness.
-
-**Gate:** the Phase 3 pipeline can be replayed, monitored, explained, and rolled back without losing reviewed history.
+**Gate:** no expansion weakens the Phase 3 evidence or eligibility invariants.
 
 ## Verification evidence
 
-The implementation was verified against an isolated fresh PostgreSQL/Apache AGE database and rebuilt service images.
+The implementation was verified from rebuilt images against an isolated fresh PostgreSQL/Apache AGE database.
 
 | Check | Result |
 | --- | ---: |
-| API unit, contract, auth, RLS, and PostgreSQL integration | 38 passed |
-| Data platform unit and PostgreSQL integration | 31 passed |
-| Intelligence unit and PostgreSQL integration | 19 passed |
-| Contract fixture validation | 18 fixtures valid |
-| Shared TypeScript typecheck | Passed |
-| Web TypeScript typecheck | Passed |
-| Python compilation and `git diff --check` | Passed |
+| Fresh schema and migration checksum verification | Migrations 001–008 valid |
+| API unit, contract, PostgreSQL/AGE integration, auth, and RLS | 39 passed |
+| Data-platform unit and PostgreSQL integration | 31 passed |
+| Intelligence unit and PostgreSQL integration | 22 passed |
+| Repository scanner | 25 passed; frozen-schema test skipped because the production image omits `jsonschema` |
+| Contract fixture validation | 19 fixtures valid |
 
-## Definition of done through full Phase 3
+## Definition of done
 
-The lane is fully complete through Phase 3 when the branch is merged and a repository snapshot automatically
-produces tenant-isolated, versioned, stale-aware, bounded, explainable, and reviewable usage, capability,
-duplication, alternative, impact, and recommendation results; compatibility and policy gates are evidence-backed;
-AI Ask uses deterministic tenant-scoped tools and validated citations; and precision, impact error, effort error,
-latency, and review outcomes are measured in production.
+The Phase 3 backend implementation is complete when this branch is reviewed, green in hosted CI, and merged.
+Phase 3 is production-complete when active tenant policies and approved internal catalogs are governed,
+configuration changes are selectively replayed, reviewed outcomes establish quality thresholds, and queue,
+latency, cost, staleness, precision, scope-error, and effort-error metrics have owned alerts.

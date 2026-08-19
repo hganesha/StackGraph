@@ -21,11 +21,16 @@ from app.models import (
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
+    ModernizationCandidateReviewRequest,
+    ModernizationCandidateReviewResult,
     ModernizationRecommendationReviewRequest,
     ModernizationRecommendationReviewResult,
+    ModernizationValidationOutcomeRequest,
+    ModernizationValidationOutcomeResult,
     Namespace,
     RepositoryCapabilityIntelligence,
     RepositoryModernizationIntelligence,
+    Phase3IntelligenceMetrics,
     TechnologyDetail,
 )
 
@@ -66,6 +71,17 @@ class ReadModelsProtocol(Protocol):
         self, recommendation_id: UUID, review: ModernizationRecommendationReviewRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> ModernizationRecommendationReviewResult: ...
+    async def review_modernization_candidate(
+        self, candidate_id: UUID, review: ModernizationCandidateReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationCandidateReviewResult: ...
+    async def record_modernization_validation_outcome(
+        self, recommendation_id: UUID, outcome: ModernizationValidationOutcomeRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationValidationOutcomeResult: ...
+    async def phase3_intelligence_metrics(
+        self, *, tenant_id: UUID | None,
+    ) -> Phase3IntelligenceMetrics: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -281,6 +297,23 @@ async def get_repository_modernization_intelligence(
 
 
 @router.post(
+    "/modernization-candidates/{id}/review",
+    response_model=ModernizationCandidateReviewResult,
+    response_model_exclude_none=True, operation_id="reviewModernizationCandidate",
+    tags=["intelligence"],
+)
+async def review_modernization_candidate(
+    id: UUID,
+    body: ModernizationCandidateReviewRequest,
+    request: Request,
+) -> ModernizationCandidateReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_modernization_candidate(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
     "/modernization-recommendations/{id}/review",
     response_model=ModernizationRecommendationReviewResult,
     response_model_exclude_none=True, operation_id="reviewModernizationRecommendation",
@@ -295,3 +328,31 @@ async def review_modernization_recommendation(
     return await _store(request).review_modernization_recommendation(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
+
+
+@router.post(
+    "/modernization-recommendations/{id}/validation-outcomes",
+    response_model=ModernizationValidationOutcomeResult,
+    response_model_exclude_none=True, operation_id="recordModernizationValidationOutcome",
+    tags=["intelligence"],
+)
+async def record_modernization_validation_outcome(
+    id: UUID,
+    body: ModernizationValidationOutcomeRequest,
+    request: Request,
+) -> ModernizationValidationOutcomeResult:
+    principal = _principal(request)
+    return await _store(request).record_modernization_validation_outcome(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/intelligence/phase-3/metrics",
+    response_model=Phase3IntelligenceMetrics,
+    response_model_exclude_none=True, operation_id="getPhase3IntelligenceMetrics",
+    tags=["intelligence"],
+)
+async def get_phase3_intelligence_metrics(request: Request) -> Phase3IntelligenceMetrics:
+    principal = _principal(request)
+    return await _store(request).phase3_intelligence_metrics(tenant_id=principal.tenant_id)

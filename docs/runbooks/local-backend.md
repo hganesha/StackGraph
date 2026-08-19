@@ -27,7 +27,10 @@ The V0 API read models are available both at their contract paths and under the 
 - `POST /capability-inferences/{id}/review`
 - `POST /duplicate-capability-candidates/{id}/review`
 - `GET /repositories/{id}/modernization-intelligence`
+- `POST /modernization-candidates/{id}/review`
 - `POST /modernization-recommendations/{id}/review`
+- `POST /modernization-recommendations/{id}/validation-outcomes`
+- `GET /intelligence/phase-3/metrics`
 
 In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. For a deployed environment, set `STACKGRAPH_AUTH_MODE=signed_session` and configure a random `STACKGRAPH_AUTH_SESSION_SECRET` of at least 32 characters; the API then requires a signed bearer session containing the tenant and actor claims.
 

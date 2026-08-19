@@ -196,6 +196,60 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(usage["runtime_observed"], "OBSERVED")
         self.assertFalse(any(fact["predicate"] == "HAS_PROPERTY" for fact in result["facts"]))
 
+    def test_code_units_capture_structure_tests_dynamic_gaps_and_touchpoints(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({"dependencies": {"axios": "1.7.0"}}))
+            (root / "index.ts").write_text(
+                "import axios from 'axios';\n"
+                "export function fetchInvoice(id: string) {\n"
+                "  return axios.get('/invoice/' + id);\n"
+                "}\n"
+            )
+            (root / "index.test.ts").write_text(
+                "import { fetchInvoice } from './index';\n"
+                "test('invoice', () => fetchInvoice('1'));\n"
+            )
+            (root / "plugins.ts").write_text(
+                "export function loadPlugin(name: string) { return import(name); }\n"
+            )
+            (root / "compose.yaml").write_text("services: {}\n")
+
+            result = scan_repository(request(root))
+
+        summaries = [
+            fact["object_value"] for fact in result["facts"]
+            if fact["predicate"] == "HAS_PROPERTY"
+            and fact["object_value"].get("record_kind") == "code_implementation_summary"
+        ]
+        invoice = next(item for item in summaries if item["qualified_name"] == "fetchInvoice")
+        plugin = next(item for item in summaries if item["qualified_name"] == "loadPlugin")
+        self.assertRegex(invoice["structural_fingerprint"], r"^sha256:[a-f0-9]{64}$")
+        self.assertIn("pkg:npm/axios", invoice["dependency_keys"])
+        self.assertEqual(invoice["covering_tests"], ["index.test.ts"])
+        self.assertIn({"kind": "DEPLOYMENT", "path": "compose.yaml"}, invoice["touchpoints"])
+        self.assertIn("DYNAMIC_IMPORT", plugin["dynamic_signals"])
+        self.assertEqual(result["stats"]["code_units_emitted"], len(summaries))
+
+    def test_python_structural_fingerprint_ignores_local_names_and_literals(self) -> None:
+        with TemporaryDirectory() as first_directory, TemporaryDirectory() as second_directory:
+            first = Path(first_directory)
+            second = Path(second_directory)
+            (first / "main.py").write_text("def calculate_total(value):\n    return value + 1\n")
+            (second / "main.py").write_text("def sum_amount(amount):\n    return amount + 9\n")
+
+            first_result = scan_repository(request(first))
+            second_result = scan_repository(request(second))
+
+        def fingerprint(result):
+            return next(
+                fact["object_value"]["structural_fingerprint"]
+                for fact in result["facts"]
+                if fact["object_value"].get("record_kind") == "code_implementation_summary"
+            )
+
+        self.assertEqual(fingerprint(first_result), fingerprint(second_result))
+
 
 if __name__ == "__main__":
     unittest.main()
