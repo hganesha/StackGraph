@@ -2,6 +2,9 @@
 
 **Updated:** 2026-08-19
 
+See [API lane status and gap plan](./api-lane-status-and-gap-plan.md) for the detailed completion evidence,
+remaining Phase 3 gaps, delivery sequence, and definition of done.
+
 ## Outcome
 
 The API lane is implemented through the first evidence-backed Phase 3 vertical slice.
@@ -10,6 +13,7 @@ The API lane is implemented through the first evidence-backed Phase 3 vertical s
 - Phase 1: deterministic import, symbol, reachability, runtime, unused/narrow-use, and package API-surface analysis are complete.
 - Phase 2: versioned capability taxonomy, curated mappings, constrained AI inference, duplicate-capability detection, human review, automatic scheduling, and API contracts are complete.
 - Phase 3: dependency-consolidation candidates, bounded alternatives, deterministic call-site/file impact, effort bands, counter-signals, migration/rollback plans, audited review, replay, staleness, and API/shared-client contracts are implemented.
+- AI-backed Ask: allowlisted deterministic query selection, tenant-scoped execution, validated citations, provider-neutral explanation, and safe fallback are implemented.
 - Phase 4 remains deliberately deferred.
 
 Phase 3 currently covers the safest initial slice: multiple observed dependencies serving the same capability. Internal-code semantic duplication, copied/vendored similarity, calibrated test-coverage mapping, ecosystem trajectory, and automatically verified package/runtime compatibility remain future expansion areas. Curated but unobserved alternatives stay `UNKNOWN` and cannot outrank an observed dependency.
