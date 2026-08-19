@@ -30,7 +30,10 @@ const cases = [
   ["contracts/v1/fixtures/graph-neighborhood.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/graphNeighborhood"],
   ["contracts/v1/fixtures/evidence-detail.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/evidenceDetail"],
   ["contracts/v1/fixtures/ask-response.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/askResponse"],
-  ["contracts/v1/fixtures/identity-review-result.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/identityReviewResult"]
+  ["contracts/v1/fixtures/identity-review-result.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/identityReviewResult"],
+  ["contracts/v1/fixtures/capability-taxonomy.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/capabilityTaxonomy"],
+  ["contracts/v1/fixtures/repository-capabilities.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryCapabilityIntelligence"],
+  ["contracts/v1/fixtures/repository-modernization-intelligence.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryModernizationIntelligence"]
 ];
 
 let failed = false;

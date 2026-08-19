@@ -13,14 +13,19 @@ from app.models import (
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
+    DuplicateCapabilityReviewRequest,
+    DuplicateCapabilityReviewResult,
     EstateSummary,
     EvidenceDetail,
     GraphNeighborhood,
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
+    ModernizationRecommendationReviewRequest,
+    ModernizationRecommendationReviewResult,
     Namespace,
     RepositoryCapabilityIntelligence,
+    RepositoryModernizationIntelligence,
     TechnologyDetail,
 )
 
@@ -50,6 +55,17 @@ class ReadModelsProtocol(Protocol):
         self, inference_id: UUID, review: CapabilityInferenceReviewRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> CapabilityInferenceReviewResult: ...
+    async def review_duplicate_capability_candidate(
+        self, candidate_id: UUID, review: DuplicateCapabilityReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> DuplicateCapabilityReviewResult: ...
+    async def repository_modernization_intelligence(
+        self, repository_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> RepositoryModernizationIntelligence: ...
+    async def review_modernization_recommendation(
+        self, recommendation_id: UUID, review: ModernizationRecommendationReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationRecommendationReviewResult: ...
 
 
 router = APIRouter()
@@ -219,5 +235,55 @@ async def review_capability_inference(
 ) -> CapabilityInferenceReviewResult:
     principal = _principal(request)
     return await _store(request).review_capability_inference(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/duplicate-capability-candidates/{id}/review", response_model=DuplicateCapabilityReviewResult,
+    response_model_exclude_none=True, operation_id="reviewDuplicateCapabilityCandidate",
+    tags=["intelligence"],
+)
+async def review_duplicate_capability_candidate(
+    id: UUID,
+    body: DuplicateCapabilityReviewRequest,
+    request: Request,
+) -> DuplicateCapabilityReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_duplicate_capability_candidate(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/repositories/{id}/modernization-intelligence",
+    response_model=RepositoryModernizationIntelligence,
+    response_model_exclude_none=True, operation_id="getRepositoryModernizationIntelligence",
+    tags=["intelligence"],
+)
+async def get_repository_modernization_intelligence(
+    id: UUID,
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> RepositoryModernizationIntelligence:
+    principal = _principal(request)
+    return await _store(request).repository_modernization_intelligence(
+        id, tenant_id=principal.tenant_id, limit=limit,
+    )
+
+
+@router.post(
+    "/modernization-recommendations/{id}/review",
+    response_model=ModernizationRecommendationReviewResult,
+    response_model_exclude_none=True, operation_id="reviewModernizationRecommendation",
+    tags=["intelligence"],
+)
+async def review_modernization_recommendation(
+    id: UUID,
+    body: ModernizationRecommendationReviewRequest,
+    request: Request,
+) -> ModernizationRecommendationReviewResult:
+    principal = _principal(request)
+    return await _store(request).review_modernization_recommendation(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )

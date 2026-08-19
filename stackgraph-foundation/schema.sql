@@ -320,9 +320,54 @@ CREATE TABLE duplicate_capability_candidate (
  capability_inference_ids uuid[] NOT NULL CHECK(cardinality(capability_inference_ids)>=2),supporting_fact_ids uuid[] NOT NULL CHECK(cardinality(supporting_fact_ids)>=2),
  confidence numeric(5,4) NOT NULL CHECK(confidence BETWEEN 0 AND 1),analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
  summary text NOT NULL,limitations jsonb NOT NULL DEFAULT '[]',review_state text NOT NULL DEFAULT 'UNREVIEWED' CHECK(review_state IN ('UNREVIEWED','CONFIRMED','REJECTED')),
- stale_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
+ version integer NOT NULL DEFAULT 1 CHECK(version>0),stale_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
 );
 CREATE INDEX idx_duplicate_capability_repository ON duplicate_capability_candidate(tenant_id,repository_entity_id,source_revision,review_state);
+CREATE TABLE duplicate_capability_candidate_review (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),duplicate_capability_candidate_id uuid NOT NULL REFERENCES duplicate_capability_candidate(id) ON DELETE CASCADE,
+ decision text NOT NULL CHECK(decision IN ('CONFIRM','REJECT')),rationale text NOT NULL,reviewer_actor_key text NOT NULL,prior_version integer NOT NULL CHECK(prior_version>0),
+ resulting_version integer NOT NULL CHECK(resulting_version=prior_version+1),reviewed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE intelligence_job (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),repository_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ source_snapshot_id uuid NOT NULL REFERENCES source_snapshot(id) ON DELETE CASCADE,source_revision text NOT NULL,job_kind text NOT NULL CHECK(job_kind IN ('REPOSITORY_MODERNIZATION')),
+ status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','RUNNING','SUCCEEDED','FAILED')),available_at timestamptz NOT NULL DEFAULT now(),leased_by text,leased_until timestamptz,
+ attempt integer NOT NULL DEFAULT 0 CHECK(attempt>=0),max_attempts integer NOT NULL DEFAULT 5 CHECK(max_attempts>0),last_error jsonb,created_at timestamptz NOT NULL DEFAULT now(),
+ started_at timestamptz,completed_at timestamptz,updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,repository_entity_id,source_revision,job_kind)
+);
+CREATE TABLE modernization_candidate (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),repository_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ source_revision text NOT NULL,duplicate_capability_candidate_id uuid REFERENCES duplicate_capability_candidate(id) ON DELETE CASCADE,capability_definition_id uuid REFERENCES capability_definition(id),
+ candidate_kind text NOT NULL CHECK(candidate_kind IN ('DEPENDENCY_CONSOLIDATION','INTERNAL_DUPLICATION','VENDORED_DUPLICATION','NATIVE_REPLACEMENT')),
+ subject_entity_ids uuid[] NOT NULL CHECK(cardinality(subject_entity_ids)>0),confidence numeric(5,4) NOT NULL CHECK(confidence BETWEEN 0 AND 1),summary text NOT NULL,
+ supporting_fact_ids uuid[] NOT NULL CHECK(cardinality(supporting_fact_ids)>0),counter_evidence_fact_ids uuid[] NOT NULL DEFAULT '{}',source_locations jsonb NOT NULL DEFAULT '[]',validation_gaps jsonb NOT NULL DEFAULT '[]',
+ analyzer_key text NOT NULL,analyzer_version text NOT NULL,input_fingerprint text NOT NULL CHECK(input_fingerprint ~ '^sha256:[a-f0-9]{64}$'),analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+ review_state text NOT NULL DEFAULT 'UNREVIEWED' CHECK(review_state IN ('UNREVIEWED','CONFIRMED','REJECTED')),version integer NOT NULL DEFAULT 1 CHECK(version>0),stale_at timestamptz,
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
+);
+CREATE TABLE modernization_option (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_candidate_id uuid NOT NULL REFERENCES modernization_candidate(id) ON DELETE CASCADE,
+ option_kind text NOT NULL CHECK(option_kind IN ('NATIVE','INTERNAL','UPGRADE','PACKAGE')),canonical_key text NOT NULL,name text NOT NULL,target_entity_id uuid REFERENCES entity(id),
+ compatibility text NOT NULL CHECK(compatibility IN ('OBSERVED','COMPATIBLE','UNKNOWN','INCOMPATIBLE')),rank integer NOT NULL CHECK(rank>0),score numeric(7,4) NOT NULL CHECK(score BETWEEN 0 AND 1),
+ score_components jsonb NOT NULL,rationale text NOT NULL,tradeoffs jsonb NOT NULL DEFAULT '[]',disqualifiers jsonb NOT NULL DEFAULT '[]',validation_gaps jsonb NOT NULL DEFAULT '[]',
+ supporting_fact_ids uuid[] NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(modernization_candidate_id,canonical_key)
+);
+CREATE TABLE modernization_recommendation (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),repository_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ modernization_candidate_id uuid NOT NULL REFERENCES modernization_candidate(id) ON DELETE CASCADE,selected_option_id uuid REFERENCES modernization_option(id),source_revision text NOT NULL,
+ action text NOT NULL CHECK(action IN ('CONSOLIDATE','REPLACE','UPGRADE','REFACTOR','INVESTIGATE')),objective text NOT NULL,title text NOT NULL,rationale text NOT NULL,
+ confidence numeric(5,4) NOT NULL CHECK(confidence BETWEEN 0 AND 1),estimated_effort text NOT NULL CHECK(estimated_effort IN ('LOW','MEDIUM','HIGH','UNKNOWN')),
+ affected_call_sites integer NOT NULL CHECK(affected_call_sites>=0),affected_files integer NOT NULL CHECK(affected_files>=0),validation_gaps jsonb NOT NULL DEFAULT '[]',
+ migration_plan jsonb NOT NULL,rollback_plan jsonb NOT NULL,supporting_fact_ids uuid[] NOT NULL CHECK(cardinality(supporting_fact_ids)>0),counter_evidence_fact_ids uuid[] NOT NULL DEFAULT '{}',
+ counter_signals jsonb NOT NULL DEFAULT '[]',policy_version text NOT NULL,input_fingerprint text NOT NULL CHECK(input_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+ analysis_fingerprint text NOT NULL CHECK(analysis_fingerprint ~ '^sha256:[a-f0-9]{64}$'),review_state text NOT NULL DEFAULT 'UNREVIEWED' CHECK(review_state IN ('UNREVIEWED','ACCEPTED','REJECTED','DISMISSED')),
+ version integer NOT NULL DEFAULT 1 CHECK(version>0),stale_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,analysis_fingerprint)
+);
+CREATE TABLE modernization_recommendation_review (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_recommendation_id uuid NOT NULL REFERENCES modernization_recommendation(id) ON DELETE CASCADE,
+ decision text NOT NULL CHECK(decision IN ('ACCEPT','REJECT','DISMISS')),rationale text NOT NULL,reviewer_actor_key text NOT NULL,prior_version integer NOT NULL CHECK(prior_version>0),
+ resulting_version integer NOT NULL CHECK(resulting_version=prior_version+1),reviewed_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE projection_outbox (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, tenant_id uuid REFERENCES tenant(id), aggregate_type text NOT NULL CHECK(aggregate_type IN ('ENTITY','FACT','ASSESSMENT','RECOMMENDATION','IDENTITY_ASSERTION')),
@@ -365,6 +410,23 @@ BEGIN
  FROM fact_assertion f WHERE f.source_snapshot_id=p_snapshot_id ON CONFLICT(dedupe_key) DO NOTHING;
 END $$;
 
+CREATE FUNCTION enqueue_repository_intelligence_on_publish() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.status='PUBLISHED' AND OLD.status IS DISTINCT FROM NEW.status
+    AND NEW.completeness='COMPLETE' AND NEW.extractor_key='repository-dependency-usage' THEN
+  INSERT INTO intelligence_job(tenant_id,repository_entity_id,source_snapshot_id,source_revision,job_kind)
+  SELECT NEW.tenant_id,repository.id,NEW.id,NEW.source_revision,'REPOSITORY_MODERNIZATION'
+  FROM ingest_target target JOIN entity repository
+    ON repository.tenant_id=NEW.tenant_id AND repository.namespace='ENTERPRISE'
+   AND repository.entity_type='Repository' AND repository.canonical_key=target.target_key
+  WHERE target.id=NEW.ingest_target_id
+  ON CONFLICT(tenant_id,repository_entity_id,source_revision,job_kind) DO NOTHING;
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER source_snapshot_enqueue_repository_intelligence AFTER UPDATE OF status ON source_snapshot
+FOR EACH ROW EXECUTE FUNCTION enqueue_repository_intelligence_on_publish();
+
 CREATE INDEX idx_ingest_run_claim ON ingest_run(status,available_at,lease_expires_at);
 CREATE INDEX idx_ingest_item_claim ON ingest_item(status,available_at,lease_expires_at);
 CREATE INDEX idx_ingest_target_due ON ingest_target(enabled,next_due_at,priority);
@@ -381,14 +443,27 @@ CREATE INDEX idx_dependency_usage_snapshot ON dependency_usage_summary(source_sn
 CREATE INDEX idx_assessment_subject ON assessment(subject_entity_id,assessment_type,dimension,status);
 CREATE INDEX idx_recommendation_subject ON recommendation(subject_entity_id,status);
 CREATE INDEX idx_projection_outbox_claim ON projection_outbox(processed_at,available_at,leased_until);
+CREATE INDEX idx_intelligence_job_claim ON intelligence_job(status,available_at,leased_until,created_at);
+CREATE INDEX idx_modernization_candidate_repository ON modernization_candidate(tenant_id,repository_entity_id,source_revision,review_state);
+CREATE INDEX idx_modernization_option_candidate ON modernization_option(modernization_candidate_id,rank);
+CREATE INDEX idx_modernization_recommendation_repository ON modernization_recommendation(tenant_id,repository_entity_id,source_revision,review_state);
 
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','projection_outbox','dead_letter','freshness_state'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','projection_outbox','dead_letter','freshness_state'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END $$;
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
 ALTER TABLE capability_mapping ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_mapping_visibility ON capability_mapping USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
+CREATE TABLE schema_migration(version text PRIMARY KEY,checksum text NOT NULL CHECK(checksum ~ '^[a-f0-9]{64}$'),applied_at timestamptz NOT NULL DEFAULT now());
+INSERT INTO schema_migration(version,checksum) VALUES
+ ('001_allow_global_assessment_inputs.sql','c15c6c623d9bb3514f3729f020ceff265cad1c5d630cd8b93d57c4a0702e16de'),
+ ('002_emit_projection_closure_events.sql','2efc6f909027fc518da4909f16bceb8bb1d97c05123e92cd19a18adc343b96ec'),
+ ('003_allow_global_recommendation_evidence.sql','031fcc0430b8502fdeee5593cd522e6b3ee2a6f0aa037481d389c81a51df861f'),
+ ('004_ai_prompt_catalog.sql','0a2ac20afaa0a3f51f2227f22a79f8e3dc7cb7dc9fc394ec5fb2d6e0b7e34e24'),
+ ('005_dependency_usage_analysis.sql','98263f1f32158e24b75518348dbe26bf66d68cd5d0d5e01596496850b9d08e74'),
+ ('006_capability_intelligence.sql','100fd356a97e4d2fb2cd3eeecb2a53735971ef1751731ef5cda9a7820ccf2fa4'),
+ ('007_modernization_intelligence.sql','bed4bc45230cff1a69e646e028b80cbb196522a377e9000fe1ae76c97e8ff918');
 COMMIT;

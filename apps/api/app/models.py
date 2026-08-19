@@ -304,6 +304,7 @@ class DuplicateCapabilityCandidateSummary(ContractModel):
     summary: str = Field(min_length=1)
     limitations: list[str] = Field(min_length=1)
     review_state: Literal["UNREVIEWED", "CONFIRMED", "REJECTED"]
+    version: int = Field(ge=1)
     stale: bool
 
 
@@ -326,6 +327,106 @@ class CapabilityInferenceReviewResult(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     capability_inference_id: UUID
     review_state: Literal["CONFIRMED", "REJECTED"]
+    version: int = Field(ge=2)
+    reviewed_at: datetime
+
+
+class DuplicateCapabilityReviewRequest(ContractModel):
+    decision: Literal["CONFIRM", "REJECT"]
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class DuplicateCapabilityReviewResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    duplicate_capability_candidate_id: UUID
+    review_state: Literal["CONFIRMED", "REJECTED"]
+    version: int = Field(ge=2)
+    reviewed_at: datetime
+
+
+class ModernizationOptionModel(ContractModel):
+    id: UUID
+    kind: Literal["NATIVE", "INTERNAL", "UPGRADE", "PACKAGE"]
+    canonical_key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    target_entity: EntitySummary | None = None
+    compatibility: Literal["OBSERVED", "COMPATIBLE", "UNKNOWN", "INCOMPATIBLE"]
+    rank: int = Field(ge=1)
+    score: float = Field(ge=0, le=1)
+    score_components: dict[str, float]
+    rationale: str = Field(min_length=1)
+    tradeoffs: list[str]
+    disqualifiers: list[str]
+    validation_gaps: list[str]
+    supporting_fact_ids: list[UUID]
+
+
+class ModernizationRecommendationModel(ContractModel):
+    id: UUID
+    selected_option_id: UUID | None = None
+    action: Literal["CONSOLIDATE", "REPLACE", "UPGRADE", "REFACTOR", "INVESTIGATE"]
+    objective: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    estimated_effort: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"]
+    affected_call_sites: int = Field(ge=0)
+    affected_files: int = Field(ge=0)
+    validation_gaps: list[str]
+    migration_plan: list[str] = Field(min_length=1)
+    rollback_plan: list[str] = Field(min_length=1)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    counter_evidence_fact_ids: list[UUID]
+    counter_signals: list[str]
+    policy_version: str = Field(min_length=1)
+    review_state: Literal["UNREVIEWED", "ACCEPTED", "REJECTED", "DISMISSED"]
+    version: int = Field(ge=1)
+    stale: bool
+    created_at: datetime
+
+
+class ModernizationCandidateModel(ContractModel):
+    id: UUID
+    source_revision: str = Field(min_length=1)
+    capability: CapabilityDefinitionModel | None = None
+    kind: Literal[
+        "DEPENDENCY_CONSOLIDATION", "INTERNAL_DUPLICATION",
+        "VENDORED_DUPLICATION", "NATIVE_REPLACEMENT",
+    ]
+    subjects: list[EntitySummary] = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    summary: str = Field(min_length=1)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    counter_evidence_fact_ids: list[UUID]
+    source_locations: list[dict[str, Any]]
+    validation_gaps: list[str]
+    analyzer: Extractor
+    review_state: Literal["UNREVIEWED", "CONFIRMED", "REJECTED"]
+    version: int = Field(ge=1)
+    stale: bool
+    options: list[ModernizationOptionModel]
+    recommendation: ModernizationRecommendationModel | None = None
+
+
+class RepositoryModernizationIntelligence(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    source_revision: str | None = None
+    candidates: list[ModernizationCandidateModel]
+    truncated: bool
+
+
+class ModernizationRecommendationReviewRequest(ContractModel):
+    decision: Literal["ACCEPT", "REJECT", "DISMISS"]
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class ModernizationRecommendationReviewResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    modernization_recommendation_id: UUID
+    review_state: Literal["ACCEPTED", "REJECTED", "DISMISSED"]
     version: int = Field(ge=2)
     reviewed_at: datetime
 

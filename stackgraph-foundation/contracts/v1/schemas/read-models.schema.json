@@ -351,7 +351,7 @@
     },
     "duplicateCapabilityCandidate": {
       "type": "object",
-      "required": ["id", "capability", "source_revision", "dependencies", "capability_inference_ids", "supporting_fact_ids", "confidence", "summary", "limitations", "review_state", "stale"],
+      "required": ["id", "capability", "source_revision", "dependencies", "capability_inference_ids", "supporting_fact_ids", "confidence", "summary", "limitations", "review_state", "version", "stale"],
       "properties": {
         "id": {"$ref": "common.schema.json#/$defs/uuid"},
         "capability": {"$ref": "#/$defs/capabilityDefinition"},
@@ -363,6 +363,7 @@
         "summary": {"type": "string", "minLength": 1},
         "limitations": {"type": "array", "minItems": 1, "items": {"type": "string"}},
         "review_state": {"enum": ["UNREVIEWED", "CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 1},
         "stale": {"type": "boolean"}
       },
       "additionalProperties": false
@@ -397,6 +398,135 @@
         "contract_version": {"const": "1.0.0"},
         "capability_inference_id": {"$ref": "common.schema.json#/$defs/uuid"},
         "review_state": {"enum": ["CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 2},
+        "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "duplicateCapabilityReviewRequest": {
+      "type": "object",
+      "required": ["decision", "rationale", "expected_version"],
+      "properties": {
+        "decision": {"enum": ["CONFIRM", "REJECT"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "expected_version": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "duplicateCapabilityReviewResult": {
+      "type": "object",
+      "required": ["contract_version", "duplicate_capability_candidate_id", "review_state", "version", "reviewed_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "duplicate_capability_candidate_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "review_state": {"enum": ["CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 2},
+        "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationOption": {
+      "type": "object",
+      "required": ["id", "kind", "canonical_key", "name", "compatibility", "rank", "score", "score_components", "rationale", "tradeoffs", "disqualifiers", "validation_gaps", "supporting_fact_ids"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "kind": {"enum": ["NATIVE", "INTERNAL", "UPGRADE", "PACKAGE"]},
+        "canonical_key": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "target_entity": {"$ref": "#/$defs/entitySummary"},
+        "compatibility": {"enum": ["OBSERVED", "COMPATIBLE", "UNKNOWN", "INCOMPATIBLE"]},
+        "rank": {"type": "integer", "minimum": 1},
+        "score": {"$ref": "common.schema.json#/$defs/confidence"},
+        "score_components": {"type": "object", "additionalProperties": {"type": "number"}},
+        "rationale": {"type": "string", "minLength": 1},
+        "tradeoffs": {"type": "array", "items": {"type": "string"}},
+        "disqualifiers": {"type": "array", "items": {"type": "string"}},
+        "validation_gaps": {"type": "array", "items": {"type": "string"}},
+        "supporting_fact_ids": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}}
+      },
+      "additionalProperties": false
+    },
+    "modernizationRecommendation": {
+      "type": "object",
+      "required": ["id", "action", "objective", "title", "rationale", "confidence", "estimated_effort", "affected_call_sites", "affected_files", "validation_gaps", "migration_plan", "rollback_plan", "supporting_fact_ids", "counter_evidence_fact_ids", "counter_signals", "policy_version", "review_state", "version", "stale", "created_at"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "selected_option_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "action": {"enum": ["CONSOLIDATE", "REPLACE", "UPGRADE", "REFACTOR", "INVESTIGATE"]},
+        "objective": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "estimated_effort": {"enum": ["LOW", "MEDIUM", "HIGH", "UNKNOWN"]},
+        "affected_call_sites": {"type": "integer", "minimum": 0},
+        "affected_files": {"type": "integer", "minimum": 0},
+        "validation_gaps": {"type": "array", "items": {"type": "string"}},
+        "migration_plan": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "rollback_plan": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "supporting_fact_ids": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "counter_evidence_fact_ids": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "counter_signals": {"type": "array", "items": {"type": "string"}},
+        "policy_version": {"type": "string", "minLength": 1},
+        "review_state": {"enum": ["UNREVIEWED", "ACCEPTED", "REJECTED", "DISMISSED"]},
+        "version": {"type": "integer", "minimum": 1},
+        "stale": {"type": "boolean"},
+        "created_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationCandidate": {
+      "type": "object",
+      "required": ["id", "source_revision", "kind", "subjects", "confidence", "summary", "supporting_fact_ids", "counter_evidence_fact_ids", "source_locations", "validation_gaps", "analyzer", "review_state", "version", "stale", "options"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "source_revision": {"type": "string", "minLength": 1},
+        "capability": {"$ref": "#/$defs/capabilityDefinition"},
+        "kind": {"enum": ["DEPENDENCY_CONSOLIDATION", "INTERNAL_DUPLICATION", "VENDORED_DUPLICATION", "NATIVE_REPLACEMENT"]},
+        "subjects": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/entitySummary"}},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "summary": {"type": "string", "minLength": 1},
+        "supporting_fact_ids": {"type": "array", "minItems": 1, "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "counter_evidence_fact_ids": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/uuid"}},
+        "source_locations": {"type": "array", "items": {"type": "object"}},
+        "validation_gaps": {"type": "array", "items": {"type": "string"}},
+        "analyzer": {"$ref": "common.schema.json#/$defs/extractor"},
+        "review_state": {"enum": ["UNREVIEWED", "CONFIRMED", "REJECTED"]},
+        "version": {"type": "integer", "minimum": 1},
+        "stale": {"type": "boolean"},
+        "options": {"type": "array", "items": {"$ref": "#/$defs/modernizationOption"}},
+        "recommendation": {"$ref": "#/$defs/modernizationRecommendation"}
+      },
+      "additionalProperties": false
+    },
+    "repositoryModernizationIntelligence": {
+      "type": "object",
+      "required": ["contract_version", "repository", "candidates", "truncated"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "repository": {"$ref": "#/$defs/entitySummary"},
+        "source_revision": {"type": "string"},
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/modernizationCandidate"}},
+        "truncated": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "modernizationRecommendationReviewRequest": {
+      "type": "object",
+      "required": ["decision", "rationale", "expected_version"],
+      "properties": {
+        "decision": {"enum": ["ACCEPT", "REJECT", "DISMISS"]},
+        "rationale": {"type": "string", "minLength": 1},
+        "expected_version": {"type": "integer", "minimum": 1}
+      },
+      "additionalProperties": false
+    },
+    "modernizationRecommendationReviewResult": {
+      "type": "object",
+      "required": ["contract_version", "modernization_recommendation_id", "review_state", "version", "reviewed_at"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "modernization_recommendation_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "review_state": {"enum": ["ACCEPTED", "REJECTED", "DISMISSED"]},
         "version": {"type": "integer", "minimum": 2},
         "reviewed_at": {"$ref": "common.schema.json#/$defs/timestamp"}
       },

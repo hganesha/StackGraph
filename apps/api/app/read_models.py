@@ -25,6 +25,8 @@ from app.models import (
     CapabilityTaxonomyResponse,
     Citation,
     Coverage,
+    DuplicateCapabilityReviewRequest,
+    DuplicateCapabilityReviewResult,
     DuplicateCapabilityCandidateSummary,
     EntitySummary,
     EstateCounts,
@@ -39,11 +41,17 @@ from app.models import (
     IdentityReviewResult,
     InternalUsage,
     ModernizationList,
+    ModernizationCandidateModel,
+    ModernizationOptionModel,
+    ModernizationRecommendationModel,
+    ModernizationRecommendationReviewRequest,
+    ModernizationRecommendationReviewResult,
     PackageSource,
     PageInfo,
     RankedItem,
     RecommendationSummary,
     RepositoryCapabilityIntelligence,
+    RepositoryModernizationIntelligence,
     Score,
     TechnologyDetail,
 )
@@ -1653,6 +1661,7 @@ class ReadModelStore:
             summary=row["summary"],
             limitations=list(row["limitations"]),
             review_state=row["review_state"],
+            version=row["version"],
             stale=row["stale_at"] is not None,
         ) for row in duplicate_rows]
         first = rows[0] if rows else None
@@ -1713,6 +1722,225 @@ class ReadModelStore:
             )
         return CapabilityInferenceReviewResult(
             capability_inference_id=inference_id,
+            review_state=review_state,
+            version=new_version,
+            reviewed_at=reviewed_at,
+        )
+
+    async def review_duplicate_capability_candidate(
+        self,
+        candidate_id: UUID,
+        review: DuplicateCapabilityReviewRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> DuplicateCapabilityReviewResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to review a candidate.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM duplicate_capability_candidate WHERE id=%s FOR UPDATE",
+                (candidate_id,),
+            )
+            candidate = await cursor.fetchone()
+            if candidate is None:
+                raise APIError(404, "DUPLICATE_CAPABILITY_NOT_FOUND", "The duplicate candidate was not found.")
+            if candidate["version"] != review.expected_version:
+                raise APIError(
+                    409, "VERSION_CONFLICT", "The duplicate candidate changed before review.",
+                    {"expected_version": review.expected_version, "actual_version": candidate["version"]},
+                )
+            if candidate["review_state"] != "UNREVIEWED":
+                raise APIError(409, "ALREADY_REVIEWED", "The duplicate candidate has already been reviewed.")
+            reviewed_at = datetime.now(UTC)
+            review_state = "CONFIRMED" if review.decision == "CONFIRM" else "REJECTED"
+            new_version = candidate["version"] + 1
+            await connection.execute(
+                """
+                INSERT INTO duplicate_capability_candidate_review(
+                  tenant_id,duplicate_capability_candidate_id,decision,rationale,
+                  reviewer_actor_key,prior_version,resulting_version,reviewed_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    tenant_id, candidate_id, review.decision, review.rationale,
+                    actor_key, candidate["version"], new_version, reviewed_at,
+                ),
+            )
+            await connection.execute(
+                """
+                UPDATE duplicate_capability_candidate
+                SET review_state=%s,version=%s,updated_at=%s WHERE id=%s
+                """,
+                (review_state, new_version, reviewed_at, candidate_id),
+            )
+        return DuplicateCapabilityReviewResult(
+            duplicate_capability_candidate_id=candidate_id,
+            review_state=review_state,
+            version=new_version,
+            reviewed_at=reviewed_at,
+        )
+
+    async def repository_modernization_intelligence(
+        self,
+        repository_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        limit: int,
+    ) -> RepositoryModernizationIntelligence:
+        repository = await self._get_entity(
+            repository_id, tenant_id, namespace="ENTERPRISE", entity_type="Repository",
+        )
+        rows = await self.database.fetch_all(
+            """
+            SELECT candidate.*,capability.capability_key,capability.name capability_name,
+                   capability.description capability_description,
+                   capability.parent_capability_key,capability.aliases
+            FROM modernization_candidate candidate
+            LEFT JOIN capability_definition capability
+              ON capability.id=candidate.capability_definition_id
+            WHERE candidate.repository_entity_id=%s AND candidate.stale_at IS NULL
+            ORDER BY candidate.confidence DESC,candidate.created_at,candidate.id
+            LIMIT %s
+            """,
+            (repository_id, limit + 1),
+            tenant_id=tenant_id,
+        )
+        truncated = len(rows) > limit
+        rows = rows[:limit]
+        candidate_ids = [row["id"] for row in rows]
+        subject_ids = sorted({
+            entity_id for row in rows for entity_id in row["subject_entity_ids"]
+        }, key=str)
+        option_rows = await self.database.fetch_all(
+            """
+            SELECT option.*,entity.namespace target_namespace,entity.entity_type target_type,
+                   entity.canonical_key target_key,entity.name target_name
+            FROM modernization_option option
+            LEFT JOIN entity ON entity.id=option.target_entity_id
+            WHERE option.modernization_candidate_id=ANY(%s::uuid[])
+            ORDER BY option.modernization_candidate_id,option.rank,option.id
+            """,
+            (candidate_ids or [repository_id],),
+            tenant_id=tenant_id,
+        )
+        recommendation_rows = await self.database.fetch_all(
+            """
+            SELECT * FROM modernization_recommendation
+            WHERE modernization_candidate_id=ANY(%s::uuid[]) AND stale_at IS NULL
+            ORDER BY modernization_candidate_id,created_at DESC,id
+            """,
+            (candidate_ids or [repository_id],),
+            tenant_id=tenant_id,
+        )
+        subject_rows = await self.database.fetch_all(
+            "SELECT * FROM entity WHERE id=ANY(%s::uuid[])",
+            (subject_ids or [repository_id],),
+            tenant_id=tenant_id,
+        )
+        subjects = {row["id"]: _entity(row) for row in subject_rows}
+        options: dict[UUID, list[ModernizationOptionModel]] = defaultdict(list)
+        for row in option_rows:
+            target = None
+            if row["target_entity_id"] is not None:
+                target = EntitySummary(
+                    id=row["target_entity_id"], kind=row["target_type"],
+                    name=row["target_name"], canonical_key=row["target_key"],
+                )
+            options[row["modernization_candidate_id"]].append(ModernizationOptionModel(
+                id=row["id"], kind=row["option_kind"], canonical_key=row["canonical_key"],
+                name=row["name"], target_entity=target, compatibility=row["compatibility"],
+                rank=row["rank"], score=_number(row["score"]),
+                score_components={key: _number(value) for key, value in row["score_components"].items()},
+                rationale=row["rationale"], tradeoffs=list(row["tradeoffs"]),
+                disqualifiers=list(row["disqualifiers"]), validation_gaps=list(row["validation_gaps"]),
+                supporting_fact_ids=list(row["supporting_fact_ids"]),
+            ))
+        recommendations = {
+            row["modernization_candidate_id"]: ModernizationRecommendationModel(
+                id=row["id"], selected_option_id=row["selected_option_id"], action=row["action"],
+                objective=row["objective"], title=row["title"], rationale=row["rationale"],
+                confidence=_number(row["confidence"]), estimated_effort=row["estimated_effort"],
+                affected_call_sites=row["affected_call_sites"], affected_files=row["affected_files"],
+                validation_gaps=list(row["validation_gaps"]), migration_plan=list(row["migration_plan"]),
+                rollback_plan=list(row["rollback_plan"]), supporting_fact_ids=list(row["supporting_fact_ids"]),
+                counter_evidence_fact_ids=list(row["counter_evidence_fact_ids"]),
+                counter_signals=list(row["counter_signals"]), policy_version=row["policy_version"],
+                review_state=row["review_state"], version=row["version"],
+                stale=row["stale_at"] is not None, created_at=row["created_at"],
+            )
+            for row in recommendation_rows
+        }
+        candidates = [ModernizationCandidateModel(
+            id=row["id"], source_revision=row["source_revision"],
+            capability=self._capability_definition(row) if row["capability_definition_id"] else None,
+            kind=row["candidate_kind"],
+            subjects=[subjects[item] for item in row["subject_entity_ids"] if item in subjects],
+            confidence=_number(row["confidence"]), summary=row["summary"],
+            supporting_fact_ids=list(row["supporting_fact_ids"]),
+            counter_evidence_fact_ids=list(row["counter_evidence_fact_ids"]),
+            source_locations=list(row["source_locations"]), validation_gaps=list(row["validation_gaps"]),
+            analyzer=Extractor(key=row["analyzer_key"], version=row["analyzer_version"]),
+            review_state=row["review_state"], version=row["version"],
+            stale=row["stale_at"] is not None, options=options[row["id"]],
+            recommendation=recommendations.get(row["id"]),
+        ) for row in rows]
+        return RepositoryModernizationIntelligence(
+            repository=_entity(repository),
+            source_revision=rows[0]["source_revision"] if rows else None,
+            candidates=candidates,
+            truncated=truncated,
+        )
+
+    async def review_modernization_recommendation(
+        self,
+        recommendation_id: UUID,
+        review: ModernizationRecommendationReviewRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> ModernizationRecommendationReviewResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to review a recommendation.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM modernization_recommendation WHERE id=%s FOR UPDATE",
+                (recommendation_id,),
+            )
+            recommendation = await cursor.fetchone()
+            if recommendation is None:
+                raise APIError(404, "MODERNIZATION_RECOMMENDATION_NOT_FOUND", "The recommendation was not found.")
+            if recommendation["version"] != review.expected_version:
+                raise APIError(
+                    409, "VERSION_CONFLICT", "The recommendation changed before review.",
+                    {"expected_version": review.expected_version, "actual_version": recommendation["version"]},
+                )
+            if recommendation["review_state"] != "UNREVIEWED":
+                raise APIError(409, "ALREADY_REVIEWED", "The recommendation has already been reviewed.")
+            reviewed_at = datetime.now(UTC)
+            review_state = {"ACCEPT": "ACCEPTED", "REJECT": "REJECTED", "DISMISS": "DISMISSED"}[review.decision]
+            new_version = recommendation["version"] + 1
+            await connection.execute(
+                """
+                INSERT INTO modernization_recommendation_review(
+                  tenant_id,modernization_recommendation_id,decision,rationale,
+                  reviewer_actor_key,prior_version,resulting_version,reviewed_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    tenant_id, recommendation_id, review.decision, review.rationale,
+                    actor_key, recommendation["version"], new_version, reviewed_at,
+                ),
+            )
+            await connection.execute(
+                """
+                UPDATE modernization_recommendation
+                SET review_state=%s,version=%s,updated_at=%s WHERE id=%s
+                """,
+                (review_state, new_version, reviewed_at, recommendation_id),
+            )
+        return ModernizationRecommendationReviewResult(
+            modernization_recommendation_id=recommendation_id,
             review_state=review_state,
             version=new_version,
             reviewed_at=reviewed_at,

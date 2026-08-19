@@ -22,6 +22,12 @@ The V0 API read models are available both at their contract paths and under the 
 - `GET /graph/neighborhood`
 - `GET /facts/{id}/evidence`
 - `POST /identity-assertions/{id}/review`
+- `GET /capabilities/taxonomy`
+- `GET /repositories/{id}/capabilities`
+- `POST /capability-inferences/{id}/review`
+- `POST /duplicate-capability-candidates/{id}/review`
+- `GET /repositories/{id}/modernization-intelligence`
+- `POST /modernization-recommendations/{id}/review`
 
 In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. For a deployed environment, set `STACKGRAPH_AUTH_MODE=signed_session` and configure a random `STACKGRAPH_AUTH_SESSION_SECRET` of at least 32 characters; the API then requires a signed bearer session containing the tenant and actor claims.
 
@@ -49,6 +55,8 @@ GRAPH_CENTER_ID=<entity-uuid> GRAPH_REQUESTS=50 \
 The benchmark reports min/mean/p50/p95/max latency and fails if the response exceeds the 50-node contract or the optional p95 gate.
 
 The integration suite queries the running database, exercises the HTTP read models, verifies an optimistic audited identity review, and installs a temporary evidence-backed Billing estate that covers every public read endpoint plus deterministic Ask templates. Temporary tenant data is removed after each test.
+
+Complete repository dependency-usage snapshots automatically enqueue capability and modernization intelligence. See `docs/runbooks/capability-modernization-intelligence.md` for direct execution, queued workers, review APIs, retry behavior, and limitations.
 
 ## Seed the curated framework catalog
 

@@ -19,7 +19,8 @@ pytestmark = pytest.mark.skipif(
 
 def test_capability_read_models_and_optimistic_review() -> None:
     database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
-    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
         tenant = connection.execute(
             "INSERT INTO tenant(tenant_key,name) VALUES (%s,'Capability API test') RETURNING id",
             (f"capability-api-{uuid4()}",),

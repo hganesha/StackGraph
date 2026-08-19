@@ -115,6 +115,16 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
                 "SELECT referenced,static_reachability FROM dependency_usage_summary"
             ).fetchone()
             self.assertEqual(usage, {"referenced": True, "static_reachability": "OBSERVED"})
+            queued = connection.execute(
+                """
+                SELECT source_revision,status FROM intelligence_job
+                WHERE tenant_id=%s AND repository_entity_id=(
+                  SELECT id FROM entity WHERE tenant_id=%s AND canonical_key=%s
+                )
+                """,
+                (tenant["id"], tenant["id"], repository_key),
+            ).fetchone()
+            self.assertEqual(queued, {"source_revision": "revision-1", "status": "PENDING"})
 
             second_run = connection.execute(
                 """
@@ -140,11 +150,13 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
             )
 
             old_fact = connection.execute(
-                "SELECT system_to FROM fact_assertion WHERE source_revision='revision-1'"
+                "SELECT system_to FROM fact_assertion WHERE tenant_id=%s AND source_revision='revision-1'",
+                (tenant["id"],),
             ).fetchone()
             self.assertIsNotNone(old_fact["system_to"])
             close_event = connection.execute(
-                "SELECT operation FROM projection_outbox WHERE operation='CLOSE'"
+                "SELECT operation FROM projection_outbox WHERE tenant_id=%s AND operation='CLOSE'",
+                (tenant["id"],),
             ).fetchone()
             self.assertEqual(close_event["operation"], "CLOSE")
         finally:
