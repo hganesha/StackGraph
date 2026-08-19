@@ -1,0 +1,33 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  white-space: nowrap;
+}
+.bars {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+}
+.seg {
+  inline-size: 4px;
+  block-size: 12px;
+  border-radius: 1px;
+  background: var(--sg-surface-border-strong);
+}
+.seg.on {
+  background: var(--sg-text-secondary);
+}
+.label {
+  font-size: var(--sg-type-small-size);
+  letter-spacing: 0.03em;
+  color: var(--sg-text-secondary);
+}
+
+/* The single, deliberate appearance of danger in the whole system. */
+.low .seg.on {
+  background: var(--sg-color-signal-danger-500);
+}
+.low .label {
+  color: var(--sg-color-signal-danger-500);
+}

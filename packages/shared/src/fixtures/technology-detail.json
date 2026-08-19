@@ -1,0 +1,25 @@
+{
+  "contract_version": "1.0.0",
+  "technology": {"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"},
+  "internal_usage": {
+    "repository_count": 1,
+    "application_count": 1,
+    "repositories": [{"id": "00000000-0000-4000-8000-000000000203", "kind": "Repository", "name": "billing-svc", "canonical_key": "github:repo:123"}]
+  },
+  "packages": [{"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"}],
+  "projects": [{"id": "00000000-0000-4000-8000-000000000206", "kind": "OSSProject", "name": "Axios"}],
+  "registry_sources": [
+    {
+      "registry_key": "npm-public",
+      "origin": "https://registry.npmjs.org/",
+      "visibility": "PUBLIC",
+      "tenant_scoped": false,
+      "freshness": {"observed_at": "2026-08-19T14:05:00Z", "status": "FRESH", "source_key": "npm-public"}
+    }
+  ],
+  "alternatives": [],
+  "migration_patterns": [],
+  "assessments": [],
+  "recommendations": [],
+  "freshness": {"observed_at": "2026-08-19T14:05:00Z", "status": "FRESH", "source_key": "deps-dev"}
+}

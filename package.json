@@ -1,0 +1,20 @@
+{
+  "name": "stackgraph",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @stackgraph/web dev",
+    "build": "pnpm --filter @stackgraph/web build",
+    "tokens": "node packages/design-system/scripts/generate-tokens.mjs",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "pnpm -r --if-present lint"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

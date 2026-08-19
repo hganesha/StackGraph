@@ -1,0 +1,35 @@
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-2) var(--sg-space-4);
+  background: var(--sg-surface-sunken);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+  overflow-x: auto;
+}
+.item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sg-space-2);
+  white-space: nowrap;
+}
+.k {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.v {
+  color: var(--sg-text-secondary);
+}
+.sep {
+  inline-size: 1px;
+  block-size: 12px;
+  background: var(--sg-surface-border-strong);
+}
+.spacer {
+  flex: 1;
+}
+.contract .v {
+  color: var(--sg-text-muted);
+}

@@ -1,0 +1,15 @@
+StackGraph graph-ui
+Copyright 2026 StackGraph
+
+This package's bounded, read-only graph canvas — its React Flow (@xyflow/react)
+setup and its Dagre (@dagrejs/dagre) left-to-right auto-layout approach — is
+derived from patterns in the Ladder Graph project, used under the Apache License,
+Version 2.0. See the Ladder Graph LICENSE for terms.
+
+  Ladder Graph — https://github.com/ (Apache-2.0)
+
+Adaptations for StackGraph (not present in the original): read-only mode with no
+connect/delete/drag-persist, StackGraph contract node/edge types (no LGIR/YAML),
+domain-badged nodes, dashed "uncertain bridge" edges, selection-scoped bridge
+pulse, aggregate cluster nodes, a hard ~50 real-node render cap, and Strata design
+tokens replacing all Ladder-specific colors, fonts, and icons.

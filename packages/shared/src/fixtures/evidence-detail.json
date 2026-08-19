@@ -1,0 +1,28 @@
+{
+  "contract_version": "1.0.0",
+  "fact_id": "00000000-0000-4000-8000-000000000301",
+  "assertion_class": "DECLARED",
+  "confidence": 1,
+  "predicate": "DEPENDS_ON",
+  "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+  "extractor": {"key": "npm-lock", "version": "1.0.0"},
+  "properties": {
+    "scope": "runtime",
+    "direct": true,
+    "requested_spec": "^1.7.0",
+    "resolved_version": "1.7.9",
+    "registry_resolution": {
+      "origin": "https://registry.npmjs.org/",
+      "source": "LOCKFILE",
+      "scope": null,
+      "config_path": null,
+      "custom_registry": false,
+      "lockfile_behavior": "CONFIGURED_DEFAULT",
+      "visibility": "PUBLIC"
+    }
+  },
+  "evidence": [{"type": "LOCKFILE", "path": "package-lock.json", "json_pointer": "/packages/node_modules~1axios/version"}],
+  "observed_at": "2026-08-19T14:00:00Z",
+  "effective_at": "2026-08-19T13:59:00Z",
+  "closed_at": null
+}
