@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 operations-snapshot recovery-drill fresh-integration
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify oss-catalog-import depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 operations-snapshot recovery-drill fresh-integration
 
 backend-up:
 	docker compose up --build -d database api
@@ -39,6 +39,9 @@ database-project: database-migrate
 
 database-project-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/projection-smoke.sql'
+
+oss-catalog-import: database-migrate
+	docker compose run --rm oss-catalog $(OSS_CATALOG_ARGS)
 
 depsdev-enqueue:
 	@test -n "$(PURL)" || (echo "PURL is required" >&2; exit 2)
