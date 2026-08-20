@@ -1,0 +1,104 @@
+name: Release and deploy pilot
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: .
+            file: apps/api/Dockerfile
+            target: runtime
+            build_args: ""
+          - name: web
+            context: .
+            file: apps/web/Dockerfile
+            target: runtime
+            build_args: |
+              NEXT_PUBLIC_API_BASE_URL=${{ vars.STACKGRAPH_PUBLIC_URL }}
+              NEXT_PUBLIC_AUTH_REQUIRED=true
+          - name: data
+            context: services/data-platform
+            file: services/data-platform/Dockerfile
+            target: ""
+            build_args: ""
+          - name: discovery
+            context: services/enterprise-discovery
+            file: services/enterprise-discovery/Dockerfile
+            target: ""
+            build_args: ""
+          - name: control-loop
+            context: .
+            file: services/enterprise-discovery/Dockerfile.control-loop
+            target: ""
+            build_args: ""
+          - name: intelligence
+            context: services/intelligence/ai-services
+            file: services/intelligence/ai-services/Dockerfile
+            target: ""
+            build_args: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/stackgraph-${{ matrix.name }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository_owner }}/stackgraph-${{ matrix.name }}:latest
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/stackgraph-${{ matrix.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: pilot
+    concurrency: stackgraph-pilot
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.STACKGRAPH_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.STACKGRAPH_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          install -m 600 /dev/null ~/.ssh/stackgraph_deploy
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/stackgraph_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Pull, migrate, deploy, and verify
+        env:
+          DEPLOY_HOST: ${{ secrets.STACKGRAPH_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.STACKGRAPH_DEPLOY_USER }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          PUBLIC_URL: ${{ vars.STACKGRAPH_PUBLIC_URL }}
+        run: |
+          ssh -i ~/.ssh/stackgraph_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd /opt/stackgraph && git fetch --tags --force origin && git checkout --detach 'refs/tags/$RELEASE_TAG' && STACKGRAPH_RELEASE_TAG='$RELEASE_TAG' STACKGRAPH_REGISTRY_OWNER='$REPOSITORY_OWNER' ./scripts/deploy_production.sh"
+          curl --fail --retry 12 --retry-delay 5 "$PUBLIC_URL/health/ready"

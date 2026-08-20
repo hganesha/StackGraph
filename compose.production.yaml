@@ -1,0 +1,193 @@
+name: stackgraph-production
+
+services:
+  database:
+    environment:
+      POSTGRES_DB: ${STACKGRAPH_DB_NAME:-stackgraph}
+      POSTGRES_USER: ${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}
+      POSTGRES_PASSWORD: ${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}
+      STACKGRAPH_DB_APP_USER: ${STACKGRAPH_DB_APP_USER:-stackgraph_app}
+      STACKGRAPH_DB_APP_PASSWORD: ${STACKGRAPH_DB_APP_PASSWORD:?set STACKGRAPH_DB_APP_PASSWORD}
+    ports: !reset []
+
+  api:
+    image: ${STACKGRAPH_API_IMAGE:-ghcr.io/hganesha/stackgraph-api:latest}
+    pull_policy: always
+    build:
+      target: runtime
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      STACKGRAPH_ENVIRONMENT: production
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_APP_USER:-stackgraph_app}:${STACKGRAPH_DB_APP_PASSWORD:?set STACKGRAPH_DB_APP_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CORS_ALLOWED_ORIGINS: https://${STACKGRAPH_DOMAIN:?set STACKGRAPH_DOMAIN}
+      STACKGRAPH_AUTH_MODE: oidc
+      STACKGRAPH_AUTH_SESSION_SECRET: ""
+      STACKGRAPH_AUTH_SESSION_KEYS_JSON: ${STACKGRAPH_AUTH_SESSION_KEYS_JSON:?set STACKGRAPH_AUTH_SESSION_KEYS_JSON}
+      STACKGRAPH_AUTH_SESSION_ACTIVE_KID: ${STACKGRAPH_AUTH_SESSION_ACTIVE_KID:?set STACKGRAPH_AUTH_SESSION_ACTIVE_KID}
+      STACKGRAPH_AUTH_SESSION_AUDIENCE: ${STACKGRAPH_AUTH_SESSION_AUDIENCE:-stackgraph-api}
+      STACKGRAPH_AUTH_COOKIE_SECURE: "true"
+      STACKGRAPH_OIDC_ISSUER: ${STACKGRAPH_OIDC_ISSUER:?set STACKGRAPH_OIDC_ISSUER}
+      STACKGRAPH_OIDC_CLIENT_ID: ${STACKGRAPH_OIDC_CLIENT_ID:?set STACKGRAPH_OIDC_CLIENT_ID}
+      STACKGRAPH_OIDC_CLIENT_SECRET: ${STACKGRAPH_OIDC_CLIENT_SECRET:?set STACKGRAPH_OIDC_CLIENT_SECRET}
+      STACKGRAPH_OIDC_REDIRECT_URI: https://${STACKGRAPH_DOMAIN}/api/v1/auth/callback
+      STACKGRAPH_OIDC_TENANT_CLAIM: ${STACKGRAPH_OIDC_TENANT_CLAIM:-stackgraph_tenant_id}
+      STACKGRAPH_OIDC_GROUPS_CLAIM: ${STACKGRAPH_OIDC_GROUPS_CLAIM:-groups}
+      STACKGRAPH_OIDC_GROUP_CAPABILITIES_JSON: ${STACKGRAPH_OIDC_GROUP_CAPABILITIES_JSON:-{"stackgraph-view":"view","stackgraph-review":"review","stackgraph-execute":"execute","stackgraph-admin":"admin"}}
+      STACKGRAPH_DEFAULT_TENANT_ID: ${STACKGRAPH_DEFAULT_TENANT_ID:?set STACKGRAPH_DEFAULT_TENANT_ID}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:?set STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY}
+      STACKGRAPH_METRICS_BEARER_TOKEN: ${STACKGRAPH_METRICS_BEARER_TOKEN:?set STACKGRAPH_METRICS_BEARER_TOKEN}
+      STACKGRAPH_SENTRY_DSN: ${STACKGRAPH_SENTRY_DSN:-}
+      STACKGRAPH_RATE_LIMIT_REQUESTS_PER_MINUTE: ${STACKGRAPH_RATE_LIMIT_REQUESTS_PER_MINUTE:-300}
+      STACKGRAPH_RATE_LIMIT_ASK_PER_MINUTE: ${STACKGRAPH_RATE_LIMIT_ASK_PER_MINUTE:-20}
+      STACKGRAPH_REQUEST_BODY_MAX_BYTES: ${STACKGRAPH_REQUEST_BODY_MAX_BYTES:-1048576}
+    ports: !reset []
+    volumes: !reset []
+
+  web:
+    image: ${STACKGRAPH_WEB_IMAGE:-ghcr.io/hganesha/stackgraph-web:latest}
+    pull_policy: always
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://${STACKGRAPH_DOMAIN}
+        NEXT_PUBLIC_AUTH_REQUIRED: "true"
+    environment:
+      STACKGRAPH_WEB_AUTH_REQUIRED: "true"
+    ports: !reset []
+
+  migrate:
+    image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
+    pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+
+  depsdev-continuous:
+    image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
+    pull_policy: always
+
+  osv-continuous:
+    image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
+    pull_policy: always
+
+  projection-continuous:
+    image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
+    pull_policy: always
+
+  github-webhook:
+    image: ${STACKGRAPH_DISCOVERY_IMAGE:-ghcr.io/hganesha/stackgraph-discovery:latest}
+    pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:?set GITHUB_WEBHOOK_SECRET}
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_S3_ENDPOINT: http://object-storage:9000
+      AWS_ACCESS_KEY_ID: ${STACKGRAPH_OBJECT_STORE_ACCESS_KEY:?set STACKGRAPH_OBJECT_STORE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${STACKGRAPH_OBJECT_STORE_SECRET_KEY:?set STACKGRAPH_OBJECT_STORE_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    ports: !reset []
+
+  github-control-loop:
+    image: ${STACKGRAPH_CONTROL_LOOP_IMAGE:-ghcr.io/hganesha/stackgraph-control-loop:latest}
+    pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?set GITHUB_APP_ID}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:?set GITHUB_APP_PRIVATE_KEY}
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_S3_ENDPOINT: http://object-storage:9000
+      AWS_ACCESS_KEY_ID: ${STACKGRAPH_OBJECT_STORE_ACCESS_KEY:?set STACKGRAPH_OBJECT_STORE_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${STACKGRAPH_OBJECT_STORE_SECRET_KEY:?set STACKGRAPH_OBJECT_STORE_SECRET_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+
+  intelligence-continuous:
+    image: ${STACKGRAPH_INTELLIGENCE_IMAGE:-ghcr.io/hganesha/stackgraph-intelligence:latest}
+    pull_policy: always
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DOMAIN: ${STACKGRAPH_DOMAIN:?set STACKGRAPH_DOMAIN}
+      STACKGRAPH_TLS_EMAIL: ${STACKGRAPH_TLS_EMAIL:?set STACKGRAPH_TLS_EMAIL}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./infrastructure/production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - stackgraph_caddy_data:/data
+      - stackgraph_caddy_config:/config
+    depends_on:
+      api: {condition: service_healthy}
+      web: {condition: service_healthy}
+      github-webhook: {condition: service_healthy}
+
+  object-storage:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${STACKGRAPH_OBJECT_STORE_ACCESS_KEY:?set STACKGRAPH_OBJECT_STORE_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${STACKGRAPH_OBJECT_STORE_SECRET_KEY:?set STACKGRAPH_OBJECT_STORE_SECRET_KEY}
+    volumes: [stackgraph_object_storage:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  object-storage-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    restart: "no"
+    depends_on:
+      object-storage: {condition: service_healthy}
+    environment:
+      STACKGRAPH_OBJECT_STORE_ACCESS_KEY: ${STACKGRAPH_OBJECT_STORE_ACCESS_KEY:?set STACKGRAPH_OBJECT_STORE_ACCESS_KEY}
+      STACKGRAPH_OBJECT_STORE_SECRET_KEY: ${STACKGRAPH_OBJECT_STORE_SECRET_KEY:?set STACKGRAPH_OBJECT_STORE_SECRET_KEY}
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_RETENTION_DAYS: ${STACKGRAPH_EVIDENCE_RETENTION_DAYS:-30}
+    entrypoint: ["/bin/sh", "/config/initialize.sh"]
+    volumes: ["./infrastructure/object-storage/initialize.sh:/config/initialize.sh:ro"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ./infrastructure/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - stackgraph_prometheus_data:/prometheus
+    secrets: [metrics_token]
+    depends_on:
+      api: {condition: service_healthy}
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/alertmanager/render-and-run.sh"]
+    environment:
+      STACKGRAPH_ALERT_WEBHOOK_URL: ${STACKGRAPH_ALERT_WEBHOOK_URL:?set STACKGRAPH_ALERT_WEBHOOK_URL}
+    volumes:
+      - ./infrastructure/observability/alertmanager.template.yml:/etc/alertmanager/alertmanager.template.yml:ro
+      - ./infrastructure/observability/render-and-run.sh:/etc/alertmanager/render-and-run.sh:ro
+      - stackgraph_alertmanager_data:/alertmanager
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${STACKGRAPH_GRAFANA_ADMIN_USER:-stackgraph}
+      GF_SECURITY_ADMIN_PASSWORD: ${STACKGRAPH_GRAFANA_ADMIN_PASSWORD:?set STACKGRAPH_GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infrastructure/observability/grafana:/etc/grafana/provisioning:ro
+      - stackgraph_grafana_data:/var/lib/grafana
+    depends_on: [prometheus]
+
+secrets:
+  metrics_token:
+    environment: STACKGRAPH_METRICS_BEARER_TOKEN
+
+volumes:
+  stackgraph_caddy_data:
+  stackgraph_caddy_config:
+  stackgraph_object_storage:
+  stackgraph_prometheus_data:
+  stackgraph_alertmanager_data:
+  stackgraph_grafana_data:

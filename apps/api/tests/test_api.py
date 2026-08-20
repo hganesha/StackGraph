@@ -68,6 +68,28 @@ class StubDatabase:
         return DatabaseReadiness(connected=True, age_installed=True, schema_installed=True)
 
 
+class MetricsStubDatabase(StubDatabase):
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        return {
+            "ingest_queue_age_seconds": 0,
+            "expired_ingest_leases": 0,
+            "unreplayed_dead_letters": 0,
+            "projection_queue_age_seconds": 0,
+            "intelligence_queue_age_seconds": 0,
+            "failed_intelligence_jobs": 0,
+            "webhook_processing_age_seconds": 0,
+            "failed_webhooks": 0,
+            "stale_or_error_sources": 0,
+            "failed_ai_invocations_24h": 0,
+            "throttled_or_exhausted_quotas": 0,
+            "active_ingest_runs": 0,
+            "pending_projection_events": 0,
+            "active_intelligence_jobs": 0,
+            "ai_cost_usd_24h": 0,
+            "ai_latency_ms_24h": 0,
+        }
+
+
 class StubReadModels:
     def __init__(self) -> None:
         self.last_tenant_id = None
@@ -524,6 +546,31 @@ def test_development_principal_is_forwarded_and_tenant_header_is_ignored() -> No
     assert store.last_tenant_id == UUID(tenant_id)
 
 
+def test_request_body_limit_rejects_oversized_payload() -> None:
+    app, _ = app_with_stubs(Settings(environment="test", request_body_max_bytes=1024))
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/ask",
+        content=b"x" * 1025,
+        headers={"Content-Type": "application/json"},
+    ))
+    assert response.status_code == 413
+    assert response.json()["code"] == "REQUEST_TOO_LARGE"
+
+
+def test_per_actor_rate_limit_returns_retry_metadata() -> None:
+    app, _ = app_with_stubs(Settings(
+        environment="test",
+        rate_limit_requests_per_minute=1,
+    ))
+    first = asyncio.run(request(app, "GET", "/api/v1/estate/summary"))
+    second = asyncio.run(request(app, "GET", "/api/v1/estate/summary"))
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.headers["Retry-After"] == "60"
+
+
 def test_signed_session_supplies_tenant_and_actor() -> None:
     secret = "a-test-session-secret-with-at-least-32-characters"
     tenant_id = UUID("00000000-0000-4000-8000-000000000123")
@@ -697,6 +744,28 @@ def test_api_errors_use_contract_shape_and_request_id() -> None:
         "message": "The requested entity was not found.",
         "request_id": request_id,
     }
+
+
+def test_metrics_are_prometheus_formatted_and_bearer_protected() -> None:
+    read_models = StubReadModels()
+    app = create_app(
+        settings=Settings(environment="test", metrics_bearer_token="metrics-test-token"),
+        database=MetricsStubDatabase(),
+        read_models=read_models,
+    )
+
+    denied = asyncio.run(request(app, "GET", "/metrics"))
+    allowed = asyncio.run(request(
+        app,
+        "GET",
+        "/metrics",
+        headers={"Authorization": "Bearer metrics-test-token"},
+    ))
+
+    assert denied.status_code == 401
+    assert allowed.status_code == 200
+    assert 'stackgraph_operational_signal{signal="ingest_queue_age_seconds"} 0' in allowed.text
+    assert 'owner="discovery-on-call"' in allowed.text
 
 
 def test_ask_rejects_unknown_fields() -> None:

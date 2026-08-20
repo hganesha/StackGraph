@@ -80,7 +80,7 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
       </section>
 
       <section className={styles.section} aria-label="Recommendations">
-        <h2 className={styles.h2}>Recommendations</h2>
+        <h2 className={styles.h2}>Investigative recommendations</h2>
         <div className={styles.recs}>
           {data.recommendations.map((r) => (
             <article key={r.id} className={styles.rec}>

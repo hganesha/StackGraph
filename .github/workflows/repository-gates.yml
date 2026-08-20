@@ -1,0 +1,29 @@
+name: Scheduled repository gates
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+jobs:
+  fresh-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: make fresh-integration
+      - if: always()
+        run: docker compose down -v
+
+  recovery-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: make recovery-drill
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recovery-drill
+          path: artifacts/recovery/
+      - if: always()
+        run: docker compose down -v

@@ -14,6 +14,8 @@ export const config = {
   dataSource: (process.env.NEXT_PUBLIC_DATA_SOURCE as DataSource | undefined) ?? "live",
   /** Base URL of the live read API. Contract mounts read models under /api/v1. */
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
+  /** Production login guard; API remains the source of truth for authorization. */
+  authRequired: process.env.NEXT_PUBLIC_AUTH_REQUIRED === "true",
 } as const;
 
 export const isFixtureMode = () => config.dataSource === "fixtures";

@@ -16,6 +16,11 @@ export default function ModernizationPage() {
         <p className={styles.subtitle}>What to do, in what order — ranked by opportunity, not by noise.</p>
       </header>
 
+      <aside className={styles.investigative} aria-label="Pilot recommendation status">
+        <strong>Investigative during the pilot.</strong> Rankings support review and discovery; they do not
+        become governed recommendations until tenant policy and calibration are approved.
+      </aside>
+
       <section className={styles.hero} aria-label="Portfolio metrics">
         {isLoading || !data ? (
           <div className={styles.heroSkeleton}>

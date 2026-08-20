@@ -18,5 +18,8 @@ Estate Health product surface and by deployment monitoring.
 | Failed AI calls in 24h | any | `intelligence-on-call` | Check provider/model routing; deterministic results remain authoritative. |
 | Active provider throttling/exhaustion | any | `discovery-on-call` | Respect the recorded reset/backoff time; reduce concurrency or request budget before replay. |
 
-Deployments should scrape the JSON at least once per minute and route each alert to the named owner.
-AI spend and latency are reported without an alert threshold because budgets are tenant-specific.
+The production topology scrapes the API's bearer-protected Prometheus `/metrics` endpoint every
+30 seconds. `infrastructure/observability/alerts.yml` evaluates every threshold above and
+Alertmanager groups delivery by the named owner. `make production-alert-test` exercises the
+configured webhook path. The JSON CLI remains available for ad-hoc snapshots. AI spend and
+latency are reported without an alert threshold because budgets are tenant-specific.

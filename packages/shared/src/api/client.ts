@@ -534,13 +534,21 @@ const fixtureClient: StackGraphClient = {
   },
 };
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+async function req<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
   const res = await fetch(`${config.apiBaseUrl}/api/v1${path}`, {
     ...init,
     headers: { Accept: "application/json", ...(init?.headers ?? {}) },
     // Tenant comes from the session cookie, never a client-supplied field (contract §31 / plan §7).
     credentials: "include",
   });
+  if (res.status === 401 && allowRefresh && !path.startsWith("/auth/")) {
+    const refreshed = await fetch(`${config.apiBaseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+    if (refreshed.ok) return req<T>(path, init, false);
+  }
   if (!res.ok) {
     let detail: unknown;
     try {

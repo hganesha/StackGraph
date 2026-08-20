@@ -1,4 +1,6 @@
 import logging
+import secrets
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Protocol
@@ -6,14 +8,18 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.auth import Authenticator
+from app.auth import Authenticator, DatabaseTokenRevocationStore, NullTokenRevocationStore
+from app.auth_routes import OIDCClient, router as auth_router
+from app.abuse import RateLimiter, RequestBodyLimitMiddleware
 from app.config import Settings, get_settings
 from app.database import Database, DatabaseReadiness
 from app.errors import APIError
+from app.observability import configure_logging
+from app.operations import QUERY as OPERATIONS_QUERY, normalize_metrics, prometheus_text
 from app.read_models import ReadModelStore
 from app.routes import AskServiceProtocol, ReadModelsProtocol, router
 
@@ -37,6 +43,16 @@ def create_app(
     ask_service: AskServiceProtocol | None = None,
 ) -> FastAPI:
     app_settings = settings or get_settings()
+    configure_logging(app_settings.log_level)
+    if app_settings.sentry_dsn:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=app_settings.sentry_dsn,
+            environment=app_settings.environment,
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
     app_database = database or Database(app_settings)
 
     @asynccontextmanager
@@ -92,7 +108,14 @@ def create_app(
             fallback_enabled=app_settings.ai_ask_fallback_enabled,
             max_evidence_chars=app_settings.ai_ask_max_evidence_chars,
         )
-    application.state.authenticator = Authenticator(app_settings)
+    revocations = (
+        DatabaseTokenRevocationStore(app_database)
+        if hasattr(app_database, "fetch_one")
+        else NullTokenRevocationStore()
+    )
+    application.state.authenticator = Authenticator(app_settings, revocations)
+    application.state.oidc_client = OIDCClient(app_settings)
+    application.state.rate_limiter = RateLimiter(app_database)
 
     application.add_middleware(
         CORSMiddleware,
@@ -101,14 +124,10 @@ def create_app(
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
-
-    @application.middleware("http")
-    async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]
-        request_id = request.headers.get("X-Request-ID") or str(uuid4())
-        request.state.request_id = request_id
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = request_id
-        return response
+    application.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_bytes=app_settings.request_body_max_bytes,
+    )
 
     def error_payload(request: Request, code: str, message: str, details: dict | None = None) -> dict:
         payload: dict = {
@@ -119,6 +138,79 @@ def create_app(
         if details is not None:
             payload["details"] = details
         return payload
+
+    @application.middleware("http")
+    async def request_context(request: Request, call_next):  # type: ignore[no-untyped-def]
+        started_at = time.perf_counter()
+        inbound_request_id = request.headers.get("X-Request-ID", "")
+        request_id = inbound_request_id[:128] if inbound_request_id.isprintable() else ""
+        request_id = request_id or str(uuid4())
+        request.state.request_id = request_id
+        path = request.url.path
+        public_path = (
+            path.startswith("/health/")
+            or path == "/metrics"
+            or path.startswith("/auth/")
+            or path.startswith("/api/v1/auth/")
+        )
+        remaining: int | None = None
+        if not public_path and request.method != "OPTIONS":
+            try:
+                principal = await application.state.authenticator.authenticate(
+                    request.headers.get("Authorization"),
+                    request.cookies.get("stackgraph_session"),
+                )
+                request.state.principal = principal
+                bucket = "ask" if path.endswith("/ask") else "general"
+                limit = (
+                    app_settings.rate_limit_ask_per_minute
+                    if bucket == "ask"
+                    else app_settings.rate_limit_requests_per_minute
+                )
+                allowed, remaining = await application.state.rate_limiter.check(
+                    tenant_id=principal.tenant_id,
+                    actor_key=principal.actor_key,
+                    bucket=bucket,
+                    limit=limit,
+                )
+                if not allowed:
+                    response = JSONResponse(
+                        error_payload(
+                            request,
+                            "RATE_LIMITED",
+                            "The per-tenant request limit has been exceeded.",
+                            {"bucket": bucket, "retry_after_seconds": 60},
+                        ),
+                        status_code=429,
+                        headers={"Retry-After": "60", "X-RateLimit-Remaining": "0"},
+                    )
+                    response.headers["X-Request-ID"] = request_id
+                    return response
+            except APIError as error:
+                response = JSONResponse(
+                    error_payload(request, error.code, error.message, error.details),
+                    status_code=error.status_code,
+                )
+                response.headers["X-Request-ID"] = request_id
+                return response
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        if remaining is not None:
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
+        principal = getattr(request.state, "principal", None)
+        logger.info(
+            "request.complete",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": path,
+                "status_code": response.status_code,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "tenant_id": getattr(principal, "tenant_id", None),
+                "actor_key": getattr(principal, "actor_key", None),
+            },
+        )
+        return response
 
     @application.exception_handler(APIError)
     async def handle_api_error(request: Request, error: APIError) -> JSONResponse:
@@ -174,8 +266,31 @@ def create_app(
         response.status_code = status.HTTP_200_OK
         return payload
 
+    @application.get("/metrics", include_in_schema=False, response_class=PlainTextResponse)
+    async def metrics(request: Request) -> PlainTextResponse:
+        configured_token = app_settings.metrics_bearer_token
+        authorization = request.headers.get("Authorization", "")
+        supplied_token = authorization.removeprefix("Bearer ").strip() if authorization.startswith("Bearer ") else ""
+        if not configured_token or not secrets.compare_digest(configured_token, supplied_token):
+            raise APIError(401, "METRICS_AUTH_REQUIRED", "A valid metrics bearer token is required.")
+        if not hasattr(app_database, "fetch_one"):
+            raise APIError(503, "METRICS_UNAVAILABLE", "Operational metrics require a database connection.")
+        row = await app_database.fetch_one(  # type: ignore[attr-defined]
+            OPERATIONS_QUERY,
+            tenant_id=app_settings.default_tenant_id,
+        )
+        if row is None:
+            raise APIError(503, "METRICS_UNAVAILABLE", "Operational metrics could not be collected.")
+        return PlainTextResponse(
+            prometheus_text(normalize_metrics(row)),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
     application.include_router(router)
     application.include_router(router, prefix="/api/v1", include_in_schema=False)
+    application.include_router(auth_router)
+    application.include_router(auth_router, prefix="/api/v1", include_in_schema=False)
 
     return application
 

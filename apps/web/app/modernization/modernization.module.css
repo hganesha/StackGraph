@@ -20,6 +20,16 @@
 .hero {
   max-inline-size: 320px;
 }
+.investigative {
+  padding: var(--sg-space-3) var(--sg-space-4);
+  border-inline-start: 3px solid var(--sg-color-domain-intelligence-500);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-color-domain-intelligence-100);
+  color: var(--sg-color-domain-intelligence-800);
+}
+.investigative strong {
+  margin-inline-end: var(--sg-space-1);
+}
 .heroSkeleton {
   display: flex;
   flex-direction: column;

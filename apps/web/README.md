@@ -26,6 +26,15 @@ pnpm build
 pnpm typecheck
 ```
 
+Build and run the non-root standalone container from the repository root:
+
+```bash
+docker compose up --build web
+```
+
+`STACKGRAPH_PUBLIC_API_BASE_URL` sets the browser-visible API URL at image build time and defaults
+to `http://localhost:8080`. `STACKGRAPH_WEB_PORT` controls the host port and defaults to `3000`.
+
 ## Live ⇄ fixtures (one flag, no component rewrite)
 
 The UI defaults to the **live API**, so Admin settings persist and can activate background

@@ -1,0 +1,20 @@
+groups:
+  - name: stackgraph-operational-slos
+    rules:
+      - alert: StackGraphOperationalSLOBreach
+        expr: stackgraph_operational_alert == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "StackGraph {{ $labels.signal }} threshold breached"
+          owner: "{{ $labels.owner }}"
+          description: "Signal {{ $labels.signal }} exceeded threshold {{ $labels.threshold }}."
+      - alert: StackGraphMetricsMissing
+        expr: absent(up{job="stackgraph-api"}) or up{job="stackgraph-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          owner: platform-on-call
+        annotations:
+          summary: "StackGraph API metrics are unavailable"

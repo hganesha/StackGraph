@@ -1,0 +1,1242 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+from uuid import UUID
+
+import httpx
+
+from app.errors import APIError
+from app.models import (
+    AIProviderConfiguration,
+    AIProviderConfigurationUpdateRequest,
+    AIProviderConnectionTest,
+    Citation,
+    Connector,
+    ConnectorList,
+    ConnectorRegisterRequest,
+    ConnectorUpdateRequest,
+    GitHubRepositoryConnectRequest,
+    MemberInviteRequest,
+    MemberUpdateRequest,
+    PageInfo,
+    ProviderQuota,
+    RescanJob,
+    RescanJobList,
+    RescanRequest,
+    ReviewQueue,
+    ReviewQueueItem,
+    ReviewQueueItemType,
+    ScanPolicy,
+    ScanPolicyUpdateRequest,
+    ScanStatus,
+    TenantMember,
+    TenantMemberList,
+)
+
+
+_REVIEW_PATHS: dict[str, str] = {
+    "IDENTITY_ASSERTION": "/identity-assertions/{id}/review",
+    "CAPABILITY_INFERENCE": "/capability-inferences/{id}/review",
+    "DUPLICATE_CAPABILITY": "/duplicate-capability-candidates/{id}/review",
+    "MODERNIZATION_CANDIDATE": "/modernization-candidates/{id}/review",
+    "MODERNIZATION_RECOMMENDATION": "/modernization-recommendations/{id}/review",
+}
+
+_RAW_SECRET_MARKERS: tuple[str, ...] = (
+    "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xox", "-----BEGIN", "AKIA",
+)
+
+
+def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
+    return float(value) if value is not None else default
+
+
+def _confidence_label(value: Decimal | float) -> str:
+    confidence = float(value)
+    if confidence >= 0.85:
+        return "HIGH"
+    if confidence >= 0.6:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _encode_cursor(kind: str, **values: Any) -> str:
+    payload = json.dumps(
+        {"v": 1, "kind": kind, **values},
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
+
+
+def _decode_cursor(cursor: str | None, kind: str) -> dict[str, Any] | None:
+    if cursor is None:
+        return None
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode())
+        if not isinstance(payload, dict) or payload.get("v") != 1 or payload.get("kind") != kind:
+            raise ValueError
+        return payload
+    except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
+
+
+class AdminReadModelsMixin:
+    database: Any
+    credential_encryption_key: str
+    # --- Review queue ------------------------------------------------------
+    # A read-only aggregation over the five reviewable sources. Each source is filtered to its
+    # pending state, projected to a common shape, then keyset-paginated newest-first. Submitting
+    # a decision still goes to each source's own /review route (carried on `review_path`).
+
+    async def review_queue(
+        self,
+        *,
+        tenant_id: UUID | None,
+        item_types: list[ReviewQueueItemType] | None,
+        repository_id: UUID | None,
+        cursor: str | None,
+        limit: int,
+    ) -> ReviewQueue:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read the review queue.")
+        decoded = _decode_cursor(cursor, "review-queue")
+        rows = await self.database.fetch_all(
+            """
+            WITH queue AS (
+              SELECT ia.id AS item_id, 'IDENTITY_ASSERTION' AS item_type, ia.review_state,
+                     NULL::uuid AS repository_id, ia.confidence, ia.version, ia.created_at,
+                     concat(le.name, ' ↔ ', re.name) AS title,
+                     concat('Identity bridge via ', ia.method) AS summary
+              FROM identity_assertion ia
+              JOIN entity le ON le.id = ia.left_entity_id
+              JOIN entity re ON re.id = ia.right_entity_id
+              WHERE ia.review_state = 'POSSIBLE'
+              UNION ALL
+              SELECT ci.id, 'CAPABILITY_INFERENCE', ci.review_state, ci.repository_entity_id,
+                     ci.confidence, ci.version, ci.created_at, cd.name, ci.rationale
+              FROM capability_inference ci
+              JOIN capability_definition cd ON cd.id = ci.capability_definition_id
+              WHERE ci.review_state = 'UNREVIEWED'
+              UNION ALL
+              SELECT dc.id, 'DUPLICATE_CAPABILITY', dc.review_state, dc.repository_entity_id,
+                     dc.confidence, dc.version, dc.created_at,
+                     concat('Duplicate capability: ', cd.name), dc.summary
+              FROM duplicate_capability_candidate dc
+              JOIN capability_definition cd ON cd.id = dc.capability_definition_id
+              WHERE dc.review_state = 'UNREVIEWED'
+              UNION ALL
+              SELECT mc.id, 'MODERNIZATION_CANDIDATE', mc.review_state, mc.repository_entity_id,
+                     mc.confidence, mc.version, mc.created_at, mc.candidate_kind, mc.summary
+              FROM modernization_candidate mc
+              WHERE mc.review_state = 'UNREVIEWED'
+              UNION ALL
+              SELECT mr.id, 'MODERNIZATION_RECOMMENDATION', mr.review_state, mr.repository_entity_id,
+                     mr.confidence, mr.version, mr.created_at, mr.title, mr.objective
+              FROM modernization_recommendation mr
+              WHERE mr.review_state = 'UNREVIEWED'
+            )
+            SELECT * FROM queue
+            WHERE (%(types)s::text[] IS NULL OR item_type = ANY(%(types)s))
+              AND (%(repository_id)s::uuid IS NULL OR repository_id = %(repository_id)s)
+              AND (%(created_before)s::timestamptz IS NULL
+                   OR created_at < %(created_before)s
+                   OR (created_at = %(created_before)s AND item_id < %(id_before)s))
+            ORDER BY created_at DESC, item_id DESC
+            LIMIT %(limit)s
+            """,
+            {
+                "types": list(item_types) if item_types else None,
+                "repository_id": repository_id,
+                "created_before": decoded["created_before"] if decoded else None,
+                "id_before": decoded["id_before"] if decoded else None,
+                "limit": limit + 1,
+            },
+            tenant_id=tenant_id,
+        )
+        has_next = len(rows) > limit
+        page = rows[:limit]
+        next_cursor = None
+        if has_next and page:
+            last = page[-1]
+            next_cursor = _encode_cursor(
+                "review-queue",
+                created_before=last["created_at"].isoformat(),
+                id_before=str(last["item_id"]),
+            )
+        count_rows = await self.database.fetch_all(
+            """
+            SELECT 'IDENTITY_ASSERTION' AS item_type, count(*) AS n
+              FROM identity_assertion WHERE review_state = 'POSSIBLE'
+            UNION ALL SELECT 'CAPABILITY_INFERENCE', count(*)
+              FROM capability_inference WHERE review_state = 'UNREVIEWED'
+            UNION ALL SELECT 'DUPLICATE_CAPABILITY', count(*)
+              FROM duplicate_capability_candidate WHERE review_state = 'UNREVIEWED'
+            UNION ALL SELECT 'MODERNIZATION_CANDIDATE', count(*)
+              FROM modernization_candidate WHERE review_state = 'UNREVIEWED'
+            UNION ALL SELECT 'MODERNIZATION_RECOMMENDATION', count(*)
+              FROM modernization_recommendation WHERE review_state = 'UNREVIEWED'
+            """,
+            tenant_id=tenant_id,
+        )
+        counts = {row["item_type"]: int(row["n"]) for row in count_rows}
+        return ReviewQueue(
+            as_of=datetime.now(UTC),
+            counts=counts,
+            items=[
+                ReviewQueueItem(
+                    item_id=row["item_id"],
+                    item_type=row["item_type"],
+                    review_state=row["review_state"],
+                    title=row["title"],
+                    summary=row["summary"] or None,
+                    confidence=_number(row["confidence"]),
+                    confidence_band=_confidence_label(row["confidence"]),
+                    repository_id=row["repository_id"],
+                    version=row["version"],
+                    created_at=row["created_at"],
+                    review_path=_REVIEW_PATHS[row["item_type"]].format(id=row["item_id"]),
+                )
+                for row in page
+            ],
+            page_info=PageInfo(has_next_page=has_next, next_cursor=next_cursor),
+        )
+
+    # --- Admin: members & roles -------------------------------------------
+    # The workspace roster and RBAC-management surface. Every mutation writes an admin_audit_log
+    # row inside the same transaction. Role/status changes refuse to strand a tenant without an
+    # active admin.
+
+    async def list_tenant_members(self, *, tenant_id: UUID | None) -> TenantMemberList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list members.")
+        rows = await self.database.fetch_all(
+            "SELECT * FROM tenant_member ORDER BY display_name, actor_key",
+            tenant_id=tenant_id,
+        )
+        return TenantMemberList(members=[self._tenant_member(row) for row in rows])
+
+    async def invite_tenant_member(
+        self, request: MemberInviteRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to invite a member.")
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM tenant_member WHERE actor_key = %s", (request.actor_key,),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409, "MEMBER_EXISTS", "A member with this actor key already exists.",
+                    {"actor_key": request.actor_key},
+                )
+            cursor = await connection.execute(
+                """
+                INSERT INTO tenant_member
+                  (tenant_id, actor_key, display_name, email, role, status, created_by)
+                VALUES (%s, %s, %s, %s, %s, 'INVITED', %s)
+                RETURNING *
+                """,
+                (tenant_id, request.actor_key, request.display_name, request.email,
+                 request.role, actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="member.invite",
+                target_kind="tenant_member", target_id=row["id"],
+                detail={"actor_key": request.actor_key, "role": request.role},
+            )
+        return self._tenant_member(row)
+
+    async def update_tenant_member(
+        self, member_id: UUID, request: MemberUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update a member.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_member WHERE id = %s FOR UPDATE", (member_id,),
+            )
+            member = await cursor.fetchone()
+            if member is None:
+                raise APIError(404, "MEMBER_NOT_FOUND", "The member was not found.")
+            new_role = request.role or member["role"]
+            new_status = request.status or member["status"]
+            demotes_admin = member["role"] == "admin" and member["status"] == "ACTIVE" and (
+                new_role != "admin" or new_status != "ACTIVE"
+            )
+            if demotes_admin:
+                await self._guard_last_admin(connection, exclude_id=member_id)
+            await connection.execute(
+                "UPDATE tenant_member SET role = %s, status = %s, updated_at = now() WHERE id = %s",
+                (new_role, new_status, member_id),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="member.update",
+                target_kind="tenant_member", target_id=member_id,
+                detail={"role": new_role, "status": new_status},
+            )
+            cursor = await connection.execute("SELECT * FROM tenant_member WHERE id = %s", (member_id,))
+            row = await cursor.fetchone()
+        return self._tenant_member(row)
+
+    async def remove_tenant_member(
+        self, member_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to remove a member.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_member WHERE id = %s FOR UPDATE", (member_id,),
+            )
+            member = await cursor.fetchone()
+            if member is None:
+                raise APIError(404, "MEMBER_NOT_FOUND", "The member was not found.")
+            if member["role"] == "admin" and member["status"] == "ACTIVE":
+                await self._guard_last_admin(connection, exclude_id=member_id)
+            await connection.execute("DELETE FROM tenant_member WHERE id = %s", (member_id,))
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="member.remove",
+                target_kind="tenant_member", target_id=member_id,
+                detail={"actor_key": member["actor_key"]},
+            )
+        return self._tenant_member(member)
+
+    @staticmethod
+    async def _guard_last_admin(connection: Any, *, exclude_id: UUID) -> None:
+        cursor = await connection.execute(
+            "SELECT count(*) AS n FROM tenant_member WHERE role = 'admin' AND status = 'ACTIVE' AND id <> %s",
+            (exclude_id,),
+        )
+        if (await cursor.fetchone())["n"] == 0:
+            raise APIError(
+                409, "LAST_ADMIN",
+                "The workspace must keep at least one active admin.",
+            )
+
+    @staticmethod
+    def _tenant_member(row: dict[str, Any]) -> TenantMember:
+        return TenantMember(
+            id=row["id"], actor_key=row["actor_key"], display_name=row["display_name"],
+            email=row["email"], role=row["role"], status=row["status"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    # --- Admin: connectors -------------------------------------------------
+
+    async def list_connectors(self, *, tenant_id: UUID | None) -> ConnectorList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list connectors.")
+        rows = await self.database.fetch_all(
+            "SELECT * FROM connector ORDER BY updated_at DESC, id DESC", tenant_id=tenant_id,
+        )
+        return ConnectorList(connectors=[self._connector(row) for row in rows])
+
+    async def register_connector(
+        self, request: ConnectorRegisterRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to register a connector.")
+        self._reject_raw_secret(request.credential_reference)
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM connector WHERE provider = %s AND external_account_key = %s",
+                (request.provider, request.external_account_key),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409, "CONNECTOR_EXISTS", "A connector for this provider account already exists.",
+                    {"provider": request.provider, "external_account_key": request.external_account_key},
+                )
+            cursor = await connection.execute(
+                """
+                INSERT INTO connector
+                  (tenant_id, provider, display_name, external_account_key, credential_reference,
+                   scopes, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING *
+                """,
+                (tenant_id, request.provider, request.display_name, request.external_account_key,
+                 request.credential_reference, request.scopes, actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="connector.register",
+                target_kind="connector", target_id=row["id"], detail={"provider": request.provider},
+            )
+        return self._connector(row)
+
+    async def connect_github_repository(
+        self,
+        request: GitHubRepositoryConnectRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        self._reject_raw_secret(request.credential_reference)
+        owner, name = request.repository.split("/", 1)
+        full_name = f"{owner}/{name}"
+        normalized_name = full_name.lower()
+        external_account_key = f"github:repository:{normalized_name}"
+        pending_target_key = f"github:repo-name:{normalized_name}"
+        scopes = ["contents:read", "metadata:read"]
+
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM connector WHERE provider='GITHUB_APP' AND external_account_key=%s",
+                (external_account_key,),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409,
+                    "CONNECTOR_EXISTS",
+                    "This GitHub repository is already connected.",
+                    {"repository": full_name},
+                )
+
+            policy_cursor = await connection.execute(
+                "SELECT cadence,enabled FROM scan_policy WHERE tenant_id=%s",
+                (tenant_id,),
+            )
+            policy = await policy_cursor.fetchone()
+            cadence = policy["cadence"] if policy is not None else "DAILY"
+            schedule_enabled = bool(policy["enabled"] if policy is not None else True) and cadence != "MANUAL"
+            cadence_seconds = {
+                "HOURLY": 3600,
+                "DAILY": 86400,
+                "WEEKLY": 604800,
+                "MANUAL": 86400,
+            }[cadence]
+
+            source_cursor = await connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri,metadata)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com',%s::jsonb)
+                ON CONFLICT(tenant_id,source_key) DO UPDATE
+                  SET base_uri=EXCLUDED.base_uri,
+                      metadata=source_system.metadata || EXCLUDED.metadata
+                RETURNING id
+                """,
+                (tenant_id, json.dumps({"provider": "github", "direct_repository": True})),
+            )
+            source = await source_cursor.fetchone()
+            assert source is not None
+            account_cursor = await connection.execute(
+                """
+                INSERT INTO connector_account(
+                  tenant_id,source_system_id,external_account_key,credential_reference,
+                  permissions,status
+                ) VALUES (%s,%s,%s,%s,%s::jsonb,'ACTIVE')
+                ON CONFLICT(tenant_id,source_system_id,external_account_key) DO UPDATE
+                  SET credential_reference=EXCLUDED.credential_reference,
+                      permissions=EXCLUDED.permissions,status='ACTIVE',updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id,
+                    source["id"],
+                    external_account_key,
+                    request.credential_reference,
+                    json.dumps(scopes),
+                ),
+            )
+            account = await account_cursor.fetchone()
+            assert account is not None
+            target_cursor = await connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,enabled,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'REPOSITORY',%s,'HOT',true,%s::jsonb,
+                          CASE WHEN %s THEN now() ELSE NULL END)
+                ON CONFLICT(tenant_id,source_system_id,target_kind,target_key) DO UPDATE
+                  SET connector_account_id=EXCLUDED.connector_account_id,enabled=true,
+                      refresh_policy=EXCLUDED.refresh_policy,
+                      next_due_at=EXCLUDED.next_due_at,updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id,
+                    source["id"],
+                    account["id"],
+                    pending_target_key,
+                    json.dumps({
+                        "provider": "github",
+                        "direct_repository": True,
+                        "owner": owner,
+                        "name": name,
+                        "full_name": full_name,
+                        "cadence_seconds": cadence_seconds,
+                        "schedule_enabled": schedule_enabled,
+                    }),
+                    schedule_enabled,
+                ),
+            )
+            target = await target_cursor.fetchone()
+            assert target is not None
+            connector_cursor = await connection.execute(
+                """
+                INSERT INTO connector(
+                  tenant_id,provider,display_name,external_account_key,credential_reference,
+                  scopes,metadata,created_by
+                ) VALUES (%s,'GITHUB_APP',%s,%s,%s,%s,%s::jsonb,%s)
+                RETURNING *
+                """,
+                (
+                    tenant_id,
+                    full_name,
+                    external_account_key,
+                    request.credential_reference,
+                    scopes,
+                    json.dumps({
+                        "connection_mode": "DIRECT_REPOSITORY",
+                        "ingest_target_id": str(target["id"]),
+                    }),
+                    actor_key,
+                ),
+            )
+            row = await connector_cursor.fetchone()
+            assert row is not None
+            # The first sync is explicit, including when the recurring policy is MANUAL.
+            await connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
+                SELECT %s,%s,'MANUAL',jsonb_build_object('connector_id',%s::text)
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM ingest_run
+                  WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                )
+                """,
+                (tenant_id, target["id"], str(row["id"]), target["id"]),
+            )
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="github_repository.connect",
+                target_kind="connector",
+                target_id=row["id"],
+                detail={"repository": full_name, "ingest_target_id": str(target["id"])},
+            )
+        return self._connector(row)
+
+    async def update_connector(
+        self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update a connector.")
+        if request.credential_reference is not None:
+            self._reject_raw_secret(request.credential_reference)
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM connector WHERE id = %s FOR UPDATE", (connector_id,),
+            )
+            if await cursor.fetchone() is None:
+                raise APIError(404, "CONNECTOR_NOT_FOUND", "The connector was not found.")
+            sets: list[str] = []
+            values: list[Any] = []
+            if request.display_name is not None:
+                sets.append("display_name = %s")
+                values.append(request.display_name)
+            if request.status is not None:
+                sets.append("status = %s")
+                values.append(request.status)
+            if request.scopes is not None:
+                sets.append("scopes = %s")
+                values.append(request.scopes)
+            if request.credential_reference is not None:
+                sets.append("credential_reference = %s")
+                values.append(request.credential_reference)
+            sets.append("updated_at = now()")
+            values.append(connector_id)
+            await connection.execute(
+                f"UPDATE connector SET {', '.join(sets)} WHERE id = %s", tuple(values),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="connector.update",
+                target_kind="connector", target_id=connector_id,
+                detail={"status": request.status} if request.status else {},
+            )
+            cursor = await connection.execute("SELECT * FROM connector WHERE id = %s", (connector_id,))
+            row = await cursor.fetchone()
+        return self._connector(row)
+
+    async def remove_connector(
+        self, connector_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to remove a connector.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM connector WHERE id = %s FOR UPDATE", (connector_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                raise APIError(404, "CONNECTOR_NOT_FOUND", "The connector was not found.")
+            target_id = row["metadata"].get("ingest_target_id") if row.get("metadata") else None
+            if target_id:
+                await connection.execute(
+                    """
+                    UPDATE connector_account account
+                    SET status='DISABLED',updated_at=now()
+                    FROM ingest_target target
+                    WHERE target.id=%s AND account.id=target.connector_account_id
+                    """,
+                    (target_id,),
+                )
+                await connection.execute(
+                    "UPDATE ingest_target SET enabled=false,next_due_at=NULL,updated_at=now() WHERE id=%s",
+                    (target_id,),
+                )
+                await connection.execute(
+                    """
+                    UPDATE ingest_run SET status='CANCELLED',completed_at=now(),
+                      lease_owner=NULL,lease_expires_at=NULL
+                    WHERE ingest_target_id=%s AND status='PENDING'
+                    """,
+                    (target_id,),
+                )
+            await connection.execute("DELETE FROM connector WHERE id=%s", (connector_id,))
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="connector.remove",
+                target_kind="connector", target_id=connector_id, detail={"provider": row["provider"]},
+            )
+        return self._connector(row)
+
+    @staticmethod
+    def _reject_raw_secret(value: str) -> None:
+        candidate = value.strip()
+        if candidate and any(candidate.startswith(marker) for marker in _RAW_SECRET_MARKERS):
+            raise APIError(
+                422, "CREDENTIAL_LOOKS_RAW",
+                "credential_reference must be a secret-store reference, not a raw token.",
+            )
+
+    @staticmethod
+    def _connector(row: dict[str, Any]) -> Connector:
+        return Connector(
+            id=row["id"], provider=row["provider"], display_name=row["display_name"],
+            external_account_key=row["external_account_key"], scopes=list(row["scopes"]),
+            status=row["status"], last_synced_at=row["last_synced_at"], last_error=row["last_error"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    # --- Admin: AI provider configuration --------------------------------
+
+    async def get_ai_provider_configuration(
+        self, *, tenant_id: UUID | None,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read AI configuration.")
+        row = await self.database.fetch_one(
+            """
+            SELECT c.*, s.fingerprint AS key_fingerprint
+            FROM tenant_ai_configuration c
+            LEFT JOIN tenant_secret s ON s.id=c.credential_secret_id
+            """,
+            tenant_id=tenant_id,
+        )
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
+
+    async def update_ai_provider_configuration(
+        self,
+        request: AIProviderConfigurationUpdateRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update AI configuration.")
+        api_key = request.api_key.strip() if request.api_key is not None else None
+        if request.api_key is not None and not api_key:
+            raise APIError(422, "AI_KEY_EMPTY", "The provider API key cannot be empty.")
+
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_ai_configuration WHERE tenant_id=%s FOR UPDATE",
+                (tenant_id,),
+            )
+            existing = await cursor.fetchone()
+            if (
+                existing is not None
+                and existing["credential_secret_id"] is not None
+                and existing["provider"] != request.provider
+                and api_key is None
+            ):
+                raise APIError(
+                    422,
+                    "AI_KEY_ROTATION_REQUIRED",
+                    "Enter a new API key when changing AI providers.",
+                )
+
+            secret_id = existing["credential_secret_id"] if existing is not None else None
+            old_secret_id = secret_id
+            if api_key is not None:
+                secret_cursor = await connection.execute(
+                    """
+                    INSERT INTO tenant_secret(
+                      tenant_id,secret_kind,ciphertext,fingerprint,created_by
+                    ) VALUES (
+                      %s,'AI_PROVIDER_KEY',
+                      pgp_sym_encrypt(%s,%s,'cipher-algo=aes256'),%s,%s
+                    ) RETURNING id
+                    """,
+                    (tenant_id, api_key, self.credential_encryption_key, api_key[-4:], actor_key),
+                )
+                secret = await secret_cursor.fetchone()
+                assert secret is not None
+                secret_id = secret["id"]
+
+            cursor = await connection.execute(
+                """
+                INSERT INTO tenant_ai_configuration(
+                  tenant_id,provider,model,credential_secret_id,enabled,updated_by
+                ) VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id) DO UPDATE SET
+                  provider=EXCLUDED.provider,
+                  model=EXCLUDED.model,
+                  credential_secret_id=EXCLUDED.credential_secret_id,
+                  enabled=EXCLUDED.enabled,
+                  test_status='NOT_TESTED',tested_at=NULL,last_error=NULL,
+                  updated_by=EXCLUDED.updated_by,updated_at=now()
+                RETURNING *
+                """,
+                (tenant_id, request.provider, request.model.strip(), secret_id, request.enabled, actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            if api_key is not None and old_secret_id is not None and old_secret_id != secret_id:
+                await connection.execute("DELETE FROM tenant_secret WHERE id=%s", (old_secret_id,))
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="ai_configuration.update",
+                target_kind="tenant_ai_configuration",
+                target_id=tenant_id,
+                detail={
+                    "provider": request.provider,
+                    "model": request.model.strip(),
+                    "key_rotated": api_key is not None,
+                    "enabled": request.enabled,
+                },
+            )
+            if request.enabled and secret_id is not None and request.model.strip():
+                await self._enqueue_tenant_ai_reanalysis(
+                    connection,
+                    tenant_id=tenant_id,
+                    provider=request.provider,
+                    model=request.model.strip(),
+                    secret_id=secret_id,
+                )
+            fingerprint_cursor = await connection.execute(
+                "SELECT fingerprint FROM tenant_secret WHERE id=%s", (secret_id,),
+            ) if secret_id is not None else None
+            fingerprint_row = await fingerprint_cursor.fetchone() if fingerprint_cursor is not None else None
+        row["key_fingerprint"] = fingerprint_row["fingerprint"] if fingerprint_row else None
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
+
+    async def remove_ai_provider_key(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to remove an AI key.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_ai_configuration WHERE tenant_id=%s FOR UPDATE", (tenant_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                return self._ai_provider_configuration(None)
+            secret_id = row["credential_secret_id"]
+            cursor = await connection.execute(
+                """
+                UPDATE tenant_ai_configuration SET credential_secret_id=NULL,
+                  test_status='NOT_TESTED',tested_at=NULL,last_error=NULL,
+                  updated_by=%s,updated_at=now()
+                WHERE tenant_id=%s RETURNING *
+                """,
+                (actor_key, tenant_id),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            if secret_id is not None:
+                await connection.execute("DELETE FROM tenant_secret WHERE id=%s", (secret_id,))
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="ai_configuration.key_remove", target_kind="tenant_ai_configuration",
+                target_id=tenant_id, detail={"provider": row["provider"]},
+            )
+        row["key_fingerprint"] = None
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
+
+    async def test_ai_provider_connection(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConnectionTest:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to test AI configuration.")
+        row = await self.database.fetch_one(
+            """
+            SELECT c.provider,c.model,
+              pgp_sym_decrypt(s.ciphertext,%s)::text AS api_key
+            FROM tenant_ai_configuration c
+            JOIN tenant_secret s ON s.id=c.credential_secret_id
+            """,
+            (self.credential_encryption_key,), tenant_id=tenant_id,
+        )
+        if row is None:
+            raise APIError(422, "AI_KEY_REQUIRED", "Save a provider API key before testing the connection.")
+        provider = row["provider"]
+        api_key = row["api_key"]
+        url, headers = self._ai_models_request(provider, api_key)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                payload = response.json()
+            available_models = self._ai_model_ids(payload)
+            models = available_models[:100]
+        except (httpx.HTTPError, ValueError, TypeError) as error:
+            message = "Provider authentication or model discovery failed."
+            await self.database.fetch_one(
+                """
+                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
+                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+                """,
+                (message, actor_key), tenant_id=tenant_id,
+            )
+            raise APIError(502, "AI_CONNECTION_FAILED", message) from error
+        if available_models and row["model"] not in available_models:
+            message = f"The selected model {row['model']!r} is not available to this provider key."
+            await self.database.fetch_one(
+                """
+                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
+                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+                """,
+                (message, actor_key), tenant_id=tenant_id,
+            )
+            raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
+        await self.database.fetch_one(
+            """
+            UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
+              last_error=NULL,updated_by=%s,updated_at=now() RETURNING tenant_id
+            """,
+            (actor_key,), tenant_id=tenant_id,
+        )
+        return AIProviderConnectionTest(provider=provider, models=models)
+
+    @staticmethod
+    def _ai_models_request(provider: str, api_key: str) -> tuple[str, dict[str, str]]:
+        if provider == "anthropic":
+            return (
+                "https://api.anthropic.com/v1/models",
+                {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+            )
+        base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+        return f"{base}/models", {"Authorization": f"Bearer {api_key}"}
+
+    @staticmethod
+    def _ai_model_ids(payload: Any) -> list[str]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            return []
+        return sorted(
+            str(item["id"]) for item in payload["data"]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        )
+
+    async def _ai_provider_configuration_with_status(
+        self,
+        row: dict[str, Any] | None,
+        *,
+        tenant_id: UUID,
+    ) -> AIProviderConfiguration:
+        configuration = self._ai_provider_configuration(row)
+        if (
+            row is None
+            or not row["enabled"]
+            or not row["model"]
+            or row["credential_secret_id"] is None
+        ):
+            return configuration
+        configuration_fingerprint = self._tenant_ai_configuration_fingerprint(
+            row["provider"], row["model"], row["credential_secret_id"],
+        )
+        stats = await self.database.fetch_one(
+            """
+            SELECT
+              count(*) FILTER (WHERE status='PENDING') pending_jobs,
+              count(*) FILTER (WHERE status='RUNNING') running_jobs,
+              count(*) FILTER (WHERE status='FAILED') failed_jobs,
+              count(*) FILTER (WHERE status='SUCCEEDED') succeeded_jobs,
+              max(completed_at) FILTER (WHERE status='SUCCEEDED') last_enrichment_at
+            FROM intelligence_job
+            WHERE configuration_fingerprint=%s
+            """,
+            (configuration_fingerprint,),
+            tenant_id=tenant_id,
+        )
+        pending = int(stats["pending_jobs"] or 0) if stats else 0
+        running = int(stats["running_jobs"] or 0) if stats else 0
+        failed = int(stats["failed_jobs"] or 0) if stats else 0
+        succeeded = int(stats["succeeded_jobs"] or 0) if stats else 0
+        status = (
+            "DEGRADED" if failed
+            else "RUNNING" if running
+            else "QUEUED" if pending
+            else "ACTIVE" if succeeded
+            else "READY"
+        )
+        return configuration.model_copy(update={
+            "enrichment_status": status,
+            "pending_enrichment_jobs": pending,
+            "running_enrichment_jobs": running,
+            "failed_enrichment_jobs": failed,
+            "last_enrichment_at": stats["last_enrichment_at"] if stats else None,
+        })
+
+    async def _enqueue_tenant_ai_reanalysis(
+        self,
+        connection: Any,
+        *,
+        tenant_id: UUID,
+        provider: str,
+        model: str,
+        secret_id: UUID,
+    ) -> None:
+        configuration_fingerprint = self._tenant_ai_configuration_fingerprint(
+            provider, model, secret_id,
+        )
+        await connection.execute(
+            """
+            WITH latest_snapshot AS (
+              SELECT DISTINCT ON (repository.id)
+                repository.id repository_id,snapshot.id snapshot_id,snapshot.source_revision
+              FROM entity repository
+              JOIN ingest_target target
+                ON target.tenant_id=repository.tenant_id
+               AND target.target_kind='REPOSITORY'
+               AND target.target_key=repository.canonical_key
+              JOIN source_snapshot snapshot ON snapshot.ingest_target_id=target.id
+              WHERE repository.tenant_id=%s
+                AND repository.namespace='ENTERPRISE'
+                AND repository.entity_type='Repository'
+                AND snapshot.status='PUBLISHED'
+                AND snapshot.completeness='COMPLETE'
+                AND snapshot.extractor_key='repository-dependency-usage'
+              ORDER BY repository.id,snapshot.observed_at DESC,
+                       snapshot.published_at DESC,snapshot.id DESC
+            )
+            INSERT INTO intelligence_job(
+              tenant_id,repository_entity_id,source_snapshot_id,source_revision,
+              job_kind,configuration_fingerprint
+            )
+            SELECT %s,repository_id,snapshot_id,source_revision,
+                   'REPOSITORY_MODERNIZATION',%s
+            FROM latest_snapshot
+            ON CONFLICT DO NOTHING
+            """,
+            (tenant_id, tenant_id, configuration_fingerprint),
+        )
+
+    @staticmethod
+    def _tenant_ai_configuration_fingerprint(
+        provider: str,
+        model: str,
+        secret_id: UUID,
+    ) -> str:
+        payload = f"tenant-ai-v1\x1f{provider}\x1f{model}\x1f{secret_id}".encode()
+        return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+    @staticmethod
+    def _ai_provider_configuration(row: dict[str, Any] | None) -> AIProviderConfiguration:
+        if row is None:
+            return AIProviderConfiguration(provider="anthropic")
+        fingerprint = row.get("key_fingerprint")
+        return AIProviderConfiguration(
+            provider=row["provider"], model=row["model"], enabled=row["enabled"],
+            key_configured=fingerprint is not None, key_fingerprint=fingerprint,
+            test_status=row["test_status"], tested_at=row["tested_at"],
+            last_error=row["last_error"], updated_by=row["updated_by"], updated_at=row["updated_at"],
+        )
+
+    # --- Admin: scan policy, rescans, and quota ----------------------------
+
+    async def get_scan_policy(self, *, tenant_id: UUID | None) -> ScanPolicy:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read the scan policy.")
+        row = await self.database.fetch_one("SELECT * FROM scan_policy", tenant_id=tenant_id)
+        if row is None:
+            # A tenant with no explicit policy runs on the documented default.
+            return ScanPolicy(cadence="DAILY", enabled=True)
+        return self._scan_policy(row)
+
+    async def update_scan_policy(
+        self, request: ScanPolicyUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> ScanPolicy:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update the scan policy.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                INSERT INTO scan_policy (tenant_id, cadence, enabled, updated_by)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (tenant_id) DO UPDATE
+                  SET cadence = EXCLUDED.cadence, enabled = EXCLUDED.enabled,
+                      updated_by = EXCLUDED.updated_by, updated_at = now()
+                RETURNING *
+                """,
+                (tenant_id, request.cadence, request.enabled, actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            cadence_seconds = {
+                "HOURLY": 3600,
+                "DAILY": 86400,
+                "WEEKLY": 604800,
+                "MANUAL": 86400,
+            }[request.cadence]
+            schedule_enabled = request.enabled and request.cadence != "MANUAL"
+            await connection.execute(
+                """
+                UPDATE ingest_target target
+                SET refresh_policy=jsonb_set(
+                      jsonb_set(target.refresh_policy,'{cadence_seconds}',to_jsonb(%s::integer),true),
+                      '{schedule_enabled}',to_jsonb(%s::boolean),true
+                    ),
+                    next_due_at=CASE
+                      WHEN %s THEN coalesce(target.next_due_at,now()) ELSE NULL
+                    END,
+                    updated_at=now()
+                FROM connector admin_connector
+                WHERE admin_connector.tenant_id=%s
+                  AND admin_connector.metadata->>'ingest_target_id'=target.id::text
+                """,
+                (cadence_seconds, schedule_enabled, schedule_enabled, tenant_id),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="scan_policy.update",
+                target_kind="scan_policy", target_id=tenant_id,
+                detail={"cadence": request.cadence, "enabled": request.enabled},
+            )
+        return self._scan_policy(row)
+
+    async def request_rescan(
+        self, request: RescanRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> tuple[RescanJob, bool]:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to request a rescan.")
+        async with self.database.session(tenant_id) as connection:
+            if request.connector_id is not None:
+                probe = await connection.execute(
+                    "SELECT 1 FROM connector WHERE id = %s", (request.connector_id,),
+                )
+                if await probe.fetchone() is None:
+                    raise APIError(404, "CONNECTOR_NOT_FOUND", "The connector was not found.")
+            cursor = await connection.execute(
+                """
+                INSERT INTO rescan_job (tenant_id, connector_id, idempotency_key, reason, requested_by)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (tenant_id, idempotency_key) DO NOTHING
+                RETURNING *
+                """,
+                (tenant_id, request.connector_id, request.idempotency_key, request.reason, actor_key),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                # Idempotent replay: the key already produced a job; return it unchanged.
+                cursor = await connection.execute(
+                    "SELECT * FROM rescan_job WHERE idempotency_key = %s", (request.idempotency_key,),
+                )
+                row = await cursor.fetchone()
+                assert row is not None
+                return self._rescan_job(row), False
+            targets_cursor = await connection.execute(
+                """
+                SELECT target.id
+                FROM ingest_target target
+                JOIN connector admin_connector
+                  ON admin_connector.tenant_id=target.tenant_id
+                 AND admin_connector.metadata->>'ingest_target_id'=target.id::text
+                WHERE target.enabled
+                  AND (%s::uuid IS NULL OR admin_connector.id=%s)
+                FOR UPDATE OF target
+                """,
+                (request.connector_id, request.connector_id),
+            )
+            targets = list(await targets_cursor.fetchall())
+            queued = 0
+            linked = 0
+            for target in targets:
+                run_cursor = await connection.execute(
+                    """
+                    SELECT id FROM ingest_run
+                    WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                    ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE
+                    """,
+                    (target["id"],),
+                )
+                run = await run_cursor.fetchone()
+                if run is None:
+                    run_cursor = await connection.execute(
+                        """
+                        INSERT INTO ingest_run(
+                          tenant_id,ingest_target_id,trigger_kind,stats
+                        ) VALUES (%s,%s,'MANUAL',jsonb_build_object(
+                          'rescan_job_ids',jsonb_build_array(%s::text),
+                          'connector_id',%s::text
+                        )) RETURNING id
+                        """,
+                        (
+                            tenant_id,
+                            target["id"],
+                            str(row["id"]),
+                            str(request.connector_id) if request.connector_id else "",
+                        ),
+                    )
+                    run = await run_cursor.fetchone()
+                    assert run is not None
+                    queued += 1
+                else:
+                    await connection.execute(
+                        """
+                        UPDATE ingest_run SET stats=jsonb_set(
+                          coalesce(stats,'{}'::jsonb),'{rescan_job_ids}',
+                          coalesce(stats->'rescan_job_ids','[]'::jsonb)
+                            || jsonb_build_array(%s::text),true
+                        ) || jsonb_build_object('connector_id',%s::text)
+                        WHERE id=%s
+                        """,
+                        (
+                            str(row["id"]),
+                            str(request.connector_id) if request.connector_id else "",
+                            run["id"],
+                        ),
+                    )
+                linked += 1
+            if linked == 0:
+                completed_cursor = await connection.execute(
+                    """
+                    UPDATE rescan_job SET status='SUCCEEDED',started_at=now(),
+                      completed_at=now(),updated_at=now()
+                    WHERE id=%s RETURNING *
+                    """,
+                    (row["id"],),
+                )
+                row = await completed_cursor.fetchone()
+                assert row is not None
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key, action="rescan.request",
+                target_kind="rescan_job", target_id=row["id"],
+                detail={
+                    "connector_id": str(request.connector_id) if request.connector_id else None,
+                    "ingest_runs_linked": linked,
+                    "ingest_runs_queued": queued,
+                },
+            )
+        return self._rescan_job(row), True
+
+    async def list_rescan_jobs(
+        self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
+    ) -> RescanJobList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list rescan jobs.")
+        decoded = _decode_cursor(cursor, "rescan-job")
+        rows = await self.database.fetch_all(
+            """
+            SELECT * FROM rescan_job
+            WHERE (%(created_before)s::timestamptz IS NULL
+                   OR created_at < %(created_before)s
+                   OR (created_at = %(created_before)s AND id < %(id_before)s))
+            ORDER BY created_at DESC, id DESC
+            LIMIT %(limit)s
+            """,
+            {
+                "created_before": decoded["created_before"] if decoded else None,
+                "id_before": decoded["id_before"] if decoded else None,
+                "limit": limit + 1,
+            },
+            tenant_id=tenant_id,
+        )
+        has_next = len(rows) > limit
+        page = rows[:limit]
+        next_cursor = None
+        if has_next and page:
+            last = page[-1]
+            next_cursor = _encode_cursor(
+                "rescan-job",
+                created_before=last["created_at"].isoformat(),
+                id_before=str(last["id"]),
+            )
+        return RescanJobList(
+            jobs=[self._rescan_job(row) for row in page],
+            page_info=PageInfo(has_next_page=has_next, next_cursor=next_cursor),
+        )
+
+    async def scan_status(self, *, tenant_id: UUID | None) -> ScanStatus:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read scan status.")
+        policy = await self.get_scan_policy(tenant_id=tenant_id)
+        quota_rows = await self.database.fetch_all(
+            "SELECT * FROM connector_quota ORDER BY provider", tenant_id=tenant_id,
+        )
+        job_rows = await self.database.fetch_all(
+            "SELECT * FROM rescan_job ORDER BY created_at DESC, id DESC LIMIT 10", tenant_id=tenant_id,
+        )
+        return ScanStatus(
+            as_of=datetime.now(UTC),
+            policy=policy,
+            quotas=[
+                ProviderQuota(
+                    provider=row["provider"], used=row["used"], limit=row["limit_value"],
+                    status=row["status"], resets_at=row["resets_at"],
+                    backoff_until=row["backoff_until"], observed_at=row["observed_at"],
+                )
+                for row in quota_rows
+            ],
+            recent_jobs=[self._rescan_job(row) for row in job_rows],
+        )
+
+    async def _write_admin_audit(
+        self, connection: Any, *, tenant_id: UUID, actor_key: str, action: str,
+        target_kind: str, target_id: Any, detail: dict[str, Any],
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO admin_audit_log (tenant_id, actor_key, action, target_kind, target_id, detail)
+            VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            """,
+            (tenant_id, actor_key, action, target_kind, str(target_id), json.dumps(detail)),
+        )
+
+    @staticmethod
+    def _scan_policy(row: dict[str, Any]) -> ScanPolicy:
+        return ScanPolicy(
+            cadence=row["cadence"], enabled=row["enabled"],
+            updated_by=row["updated_by"], updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _rescan_job(row: dict[str, Any]) -> RescanJob:
+        return RescanJob(
+            id=row["id"], connector_id=row["connector_id"], status=row["status"],
+            reason=row["reason"], requested_by=row["requested_by"], last_error=row["last_error"],
+            created_at=row["created_at"], started_at=row["started_at"], completed_at=row["completed_at"],
+        )
+
+    @staticmethod
+    def _dedupe_entities(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return list({row["id"]: row for row in rows}.values())
+
+    @staticmethod
+    def _dedupe_citations(citations: list[Citation]) -> list[Citation]:
+        return list({citation.fact_id: citation for citation in citations}.values())

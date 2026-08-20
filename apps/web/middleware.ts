@@ -21,6 +21,17 @@ function contentSecurityPolicy(nonce: string): string {
 }
 
 export function middleware(request: NextRequest) {
+  if (
+    process.env.STACKGRAPH_WEB_AUTH_REQUIRED === "true" &&
+    request.nextUrl.pathname !== "/login" &&
+    !request.cookies.has("stackgraph_session")
+  ) {
+    const login = request.nextUrl.clone();
+    login.pathname = "/login";
+    login.searchParams.set("return_to", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+    return NextResponse.redirect(login);
+  }
+
   if (process.env.NODE_ENV !== "production") {
     return NextResponse.next();
   }
