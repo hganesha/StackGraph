@@ -257,6 +257,7 @@ class ProjectionWorker:
                 FROM projection_outbox
                 WHERE aggregate_type = 'FACT'
                   AND processed_at IS NULL
+                  AND stackgraph_tenant_service_running(tenant_id,'projection')
                   AND available_at <= now()
                   AND (leased_until IS NULL OR leased_until < now())
                 ORDER BY id

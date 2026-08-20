@@ -78,6 +78,7 @@ def schedule_due_targets(
               JOIN connector_account connector ON connector.id=target.connector_account_id
               WHERE source.source_key='github-app' AND connector.status='ACTIVE'
                 AND (%s::uuid IS NULL OR target.tenant_id=%s)
+                AND stackgraph_tenant_service_running(target.tenant_id,'github-control-loop')
                 AND target.enabled AND target.next_due_at<=now()
                 AND coalesce((target.refresh_policy->>'schedule_enabled')::boolean,true)
                 AND target.target_kind IN ('GITHUB_INSTALLATION','REPOSITORY')
@@ -128,6 +129,7 @@ def claim_run(
               JOIN connector_account connector ON connector.id=target.connector_account_id
               WHERE source.source_key='github-app' AND connector.status='ACTIVE'
                 AND (%s::uuid IS NULL OR target.tenant_id=%s)
+                AND stackgraph_tenant_service_running(target.tenant_id,'github-control-loop')
                 AND target.enabled
                 AND (
                   (run.status='PENDING' AND run.available_at<=now()) OR

@@ -973,8 +973,9 @@ class ScanStatus(ContractModel):
     recent_jobs: list[RescanJob]
 
 
-ServiceState = Literal["RUNNING", "IDLE", "WAITING", "DEGRADED", "OFFLINE"]
+ServiceState = Literal["RUNNING", "IDLE", "WAITING", "DEGRADED", "OFFLINE", "STOPPING", "STOPPED"]
 ServiceCategory = Literal["CORE", "INGESTION", "ENRICHMENT", "GRAPH", "INTELLIGENCE"]
+ServiceDesiredState = Literal["RUNNING", "STOPPED"]
 
 
 class ServiceStatus(ContractModel):
@@ -982,6 +983,9 @@ class ServiceStatus(ContractModel):
     name: str = Field(min_length=1)
     category: ServiceCategory
     state: ServiceState
+    desired_state: ServiceDesiredState = "RUNNING"
+    controllable: bool = False
+    management_scope: str = "Externally managed"
     detail: str = ""
     configured: bool = True
     pending: int = Field(default=0, ge=0)
@@ -989,6 +993,10 @@ class ServiceStatus(ContractModel):
     failed: int = Field(default=0, ge=0)
     last_activity_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
+
+
+class ServiceControlRequest(ContractModel):
+    desired_state: ServiceDesiredState
 
 
 class ServiceStatusList(ContractModel):

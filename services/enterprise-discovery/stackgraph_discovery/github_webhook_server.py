@@ -10,7 +10,7 @@ from typing import Any
 
 from .evidence_store import EvidenceStore, evidence_store_from_environment
 from .github_webhook import MAX_WEBHOOK_BYTES, verify_github_webhook
-from .github_webhook_store import process_github_webhook
+from .github_webhook_store import ServiceStoppedError, process_github_webhook
 from .service_heartbeat import record_service_heartbeat
 
 
@@ -76,6 +76,10 @@ def handler(
             except ValueError as error:
                 status = 404 if "not registered" in str(error) else 400
                 self._write(status, {"error": str(error)})
+                return
+            except ServiceStoppedError as error:
+                # A non-success response asks GitHub to retry the durable delivery after restart.
+                self._write(503, {"error": str(error), "retryable": True})
                 return
             except Exception:
                 LOGGER.exception("GitHub webhook processing failed")

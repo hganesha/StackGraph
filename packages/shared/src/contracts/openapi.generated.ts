@@ -799,18 +799,25 @@ export interface Score {
   value: number;
 }
 
+export interface ServiceControlRequest {
+  desired_state: "RUNNING" | "STOPPED";
+}
+
 export interface ServiceStatus {
   category: "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
   configured?: boolean;
+  controllable?: boolean;
+  desired_state?: "RUNNING" | "STOPPED";
   detail?: string;
   failed?: number;
   key: string;
   last_activity_at?: string | null;
   last_heartbeat_at?: string | null;
+  management_scope?: string;
   name: string;
   pending?: number;
   running?: number;
-  state: "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE";
+  state: "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE" | "STOPPING" | "STOPPED";
 }
 
 export interface ServiceStatusList {

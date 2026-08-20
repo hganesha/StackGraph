@@ -889,6 +889,7 @@ def _claim_job(database_url: str, worker_id: str) -> Mapping[str, Any] | None:
             WHERE id=(
               SELECT id FROM intelligence_job
               WHERE status='PENDING' AND available_at<=now()
+                AND stackgraph_tenant_service_running(tenant_id,'intelligence')
                 AND (leased_until IS NULL OR leased_until<now())
               ORDER BY available_at,created_at,id
               FOR UPDATE SKIP LOCKED LIMIT 1

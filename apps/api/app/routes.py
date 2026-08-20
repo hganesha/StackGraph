@@ -62,6 +62,8 @@ from app.models import (
     RescanJob,
     RescanJobList,
     ScanStatus,
+    ServiceControlRequest,
+    ServiceStatus,
     ServiceStatusList,
 )
 
@@ -192,6 +194,10 @@ class ReadModelsProtocol(Protocol):
     ) -> RescanJobList: ...
     async def scan_status(self, *, tenant_id: UUID | None) -> ScanStatus: ...
     async def service_status(self, *, tenant_id: UUID | None) -> ServiceStatusList: ...
+    async def update_service_control(
+        self, service_key: str, request: ServiceControlRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ServiceStatus: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -819,6 +825,20 @@ async def get_service_status(request: Request) -> ServiceStatusList:
     principal = await _principal(request)
     _require(principal, "admin")
     return await _store(request).service_status(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/services/{service_key}", response_model=ServiceStatus,
+    response_model_exclude_none=True, operation_id="updateServiceControl", tags=["admin"],
+)
+async def update_service_control(
+    service_key: str, body: ServiceControlRequest, request: Request,
+) -> ServiceStatus:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_service_control(
+        service_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
 
 
 @router.post(

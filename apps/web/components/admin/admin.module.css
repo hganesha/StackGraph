@@ -403,6 +403,14 @@
   background: var(--sg-color-signal-danger-50);
   color: var(--sg-color-signal-danger-700);
 }
+.serviceSTOPPING {
+  background: var(--sg-color-domain-enterprise-100);
+  color: var(--sg-color-domain-enterprise-800);
+}
+.serviceSTOPPED {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-muted);
+}
 .serviceDetail,
 .serviceTime {
   margin: 0;
@@ -412,6 +420,23 @@
 }
 .serviceTime {
   color: var(--sg-text-muted);
+}
+.serviceControl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  margin-top: auto;
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.serviceControl button {
+  flex: 0 0 auto;
+}
+.externallyManaged {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .serviceMetrics {
   display: grid;

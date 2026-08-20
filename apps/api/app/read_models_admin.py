@@ -40,6 +40,7 @@ from app.models import (
     ScanPolicy,
     ScanPolicyUpdateRequest,
     ScanStatus,
+    ServiceControlRequest,
     ServiceStatus,
     ServiceStatusList,
     TenantMember,
@@ -58,6 +59,10 @@ _REVIEW_PATHS: dict[str, str] = {
 _RAW_SECRET_MARKERS: tuple[str, ...] = (
     "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xox", "-----BEGIN", "AKIA",
 )
+
+_CONTROLLABLE_SERVICES = frozenset({
+    "github-webhook", "github-control-loop", "projection", "intelligence",
+})
 
 
 def _github_api_base_url() -> str:
@@ -1506,6 +1511,10 @@ class AdminReadModelsMixin:
             "SELECT service_key,status,last_heartbeat_at FROM service_heartbeat",
             tenant_id=tenant_id,
         )
+        control_rows = await self.database.fetch_all(
+            "SELECT service_key,desired_state FROM tenant_service_control",
+            tenant_id=tenant_id,
+        )
         workload = await self.database.fetch_one(
             """
             SELECT
@@ -1568,11 +1577,14 @@ class AdminReadModelsMixin:
         ) or {}
         now = datetime.now(UTC)
         heartbeats = {row["service_key"]: row for row in heartbeat_rows}
+        desired_states = {row["service_key"]: row["desired_state"] for row in control_rows}
 
         def service(
             key: str, name: str, category: str, *, configured: bool = True,
             pending: int = 0, running: int = 0, failed: int = 0,
             last_activity_at: datetime | None = None,
+            controllable: bool = False,
+            management_scope: str = "Externally managed",
         ) -> ServiceStatus:
             heartbeat = heartbeats.get(key)
             heartbeat_at = heartbeat.get("last_heartbeat_at") if heartbeat else None
@@ -1581,7 +1593,14 @@ class AdminReadModelsMixin:
                 and (now - heartbeat_at).total_seconds() <= 45
                 and heartbeat.get("status") == "RUNNING"
             )
-            if failed:
+            desired_state = desired_states.get(key, "RUNNING")
+            if controllable and desired_state == "STOPPED" and running:
+                state = "STOPPING"
+                detail = f"Stop requested; {running} in-flight item{'s' if running != 1 else ''} may finish."
+            elif controllable and desired_state == "STOPPED":
+                state = "STOPPED"
+                detail = "Stopped for this workspace; durable queued work is preserved."
+            elif failed:
                 state = "DEGRADED"
                 detail = f"{failed} failed item{'s' if failed != 1 else ''} need attention."
             elif running:
@@ -1601,6 +1620,8 @@ class AdminReadModelsMixin:
                 detail = "Worker is online and the durable queue is clear."
             return ServiceStatus(
                 key=key, name=name, category=category, state=state, detail=detail,
+                desired_state=desired_state, controllable=controllable,
+                management_scope=management_scope,
                 configured=configured, pending=pending, running=running, failed=failed,
                 last_activity_at=last_activity_at, last_heartbeat_at=heartbeat_at,
             )
@@ -1609,21 +1630,25 @@ class AdminReadModelsMixin:
         services = [
             ServiceStatus(
                 key="web", name="Web UI", category="CORE", state="RUNNING",
-                detail="This Admin page is running.", last_activity_at=now, last_heartbeat_at=now,
+                detail="This Admin page is running.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
             ),
             ServiceStatus(
                 key="api", name="API", category="CORE", state="RUNNING",
-                detail="The authenticated Admin API is responding.", last_activity_at=now, last_heartbeat_at=now,
+                detail="The authenticated Admin API is responding.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
             ),
             ServiceStatus(
                 key="database", name="PostgreSQL / AGE", category="CORE", state="RUNNING",
-                detail="Operational state and graph storage are reachable.", last_activity_at=now, last_heartbeat_at=now,
+                detail="Operational state and graph storage are reachable.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
             ),
             service(
                 "github-webhook", "GitHub webhooks", "INGESTION", configured=github_configured,
                 running=int(workload.get("webhook_running") or 0),
                 failed=int(workload.get("webhook_failed") or 0),
                 last_activity_at=workload.get("webhook_last"),
+                controllable=True, management_scope="This workspace",
             ),
             service(
                 "github-control-loop", "GitHub discovery", "INGESTION", configured=github_configured,
@@ -1631,6 +1656,7 @@ class AdminReadModelsMixin:
                 running=int(workload.get("github_running") or 0),
                 failed=int(workload.get("github_failed") or 0),
                 last_activity_at=workload.get("github_last"),
+                controllable=True, management_scope="This workspace",
             ),
             service(
                 "depsdev", "deps.dev enrichment", "ENRICHMENT",
@@ -1638,6 +1664,7 @@ class AdminReadModelsMixin:
                 running=int(workload.get("depsdev_running") or 0),
                 failed=int(workload.get("depsdev_failed") or 0),
                 last_activity_at=workload.get("depsdev_last"),
+                management_scope="Shared OSS catalog pipeline",
             ),
             service(
                 "osv", "OSV vulnerability enrichment", "ENRICHMENT",
@@ -1645,6 +1672,7 @@ class AdminReadModelsMixin:
                 running=int(workload.get("osv_running") or 0),
                 failed=int(workload.get("osv_failed") or 0),
                 last_activity_at=workload.get("osv_last"),
+                management_scope="Shared OSS catalog pipeline",
             ),
             service(
                 "projection", "Graph projection", "GRAPH",
@@ -1652,6 +1680,7 @@ class AdminReadModelsMixin:
                 running=int(workload.get("projection_running") or 0),
                 failed=int(workload.get("projection_failed") or 0),
                 last_activity_at=workload.get("projection_last"),
+                controllable=True, management_scope="This workspace",
             ),
             service(
                 "intelligence", "Modernization intelligence", "INTELLIGENCE",
@@ -1659,9 +1688,42 @@ class AdminReadModelsMixin:
                 running=int(workload.get("intelligence_running") or 0),
                 failed=int(workload.get("intelligence_failed") or 0),
                 last_activity_at=workload.get("intelligence_last"),
+                controllable=True, management_scope="This workspace",
             ),
         ]
         return ServiceStatusList(as_of=now, services=services)
+
+    async def update_service_control(
+        self, service_key: str, request: ServiceControlRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ServiceStatus:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to control a service.")
+        if service_key not in _CONTROLLABLE_SERVICES:
+            raise APIError(
+                409, "SERVICE_EXTERNALLY_MANAGED",
+                "This service cannot be controlled from the workspace Admin UI.",
+            )
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                """
+                INSERT INTO tenant_service_control(
+                  tenant_id,service_key,desired_state,updated_by
+                ) VALUES (%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,service_key) DO UPDATE SET
+                  desired_state=EXCLUDED.desired_state,
+                  updated_by=EXCLUDED.updated_by,
+                  updated_at=now()
+                """,
+                (tenant_id, service_key, request.desired_state, actor_key),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="service.control", target_kind="service", target_id=service_key,
+                detail={"desired_state": request.desired_state},
+            )
+        statuses = await self.service_status(tenant_id=tenant_id)
+        return next(service for service in statuses.services if service.key == service_key)
 
     async def _write_admin_audit(
         self, connection: Any, *, tenant_id: UUID, actor_key: str, action: str,

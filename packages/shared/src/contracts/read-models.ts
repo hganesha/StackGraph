@@ -928,14 +928,18 @@ export interface ScanStatus {
   recent_jobs: RescanJob[];
 }
 
-export type ServiceState = "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE";
+export type ServiceState = "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE" | "STOPPING" | "STOPPED";
 export type ServiceCategory = "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
+export type ServiceDesiredState = "RUNNING" | "STOPPED";
 
 export interface ServiceStatus {
   key: string;
   name: string;
   category: ServiceCategory;
   state: ServiceState;
+  desired_state: ServiceDesiredState;
+  controllable: boolean;
+  management_scope: string;
   detail: string;
   configured: boolean;
   pending: number;
@@ -943,6 +947,10 @@ export interface ServiceStatus {
   failed: number;
   last_activity_at?: string | null;
   last_heartbeat_at?: string | null;
+}
+
+export interface ServiceControlRequest {
+  desired_state: ServiceDesiredState;
 }
 
 export interface ServiceStatusList {

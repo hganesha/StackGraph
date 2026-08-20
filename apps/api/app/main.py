@@ -59,6 +59,28 @@ def create_app(
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await app_database.open()
         try:
+            # Development auth intentionally has no external tenant directory. A migrate-only
+            # local startup must still produce a writable Admin workspace, so provision the
+            # configured tenant id without loading demo/seed estate data.
+            if (
+                app_settings.environment.strip().lower() in {"development", "dev"}
+                and app_settings.auth_mode == "development"
+                and app_settings.default_tenant_id is not None
+            ):
+                async with app_database.session(  # type: ignore[attr-defined]
+                    app_settings.default_tenant_id,
+                ) as connection:
+                    await connection.execute(
+                        """
+                        INSERT INTO tenant(id,tenant_key,name,status)
+                        VALUES (%s,%s,'Local workspace','ACTIVE')
+                        ON CONFLICT(id) DO NOTHING
+                        """,
+                        (
+                            app_settings.default_tenant_id,
+                            f"local-{app_settings.default_tenant_id.hex[:12]}",
+                        ),
+                    )
             yield
         finally:
             await app_database.close()

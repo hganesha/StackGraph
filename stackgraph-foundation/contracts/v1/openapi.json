@@ -4959,6 +4959,24 @@
         "title": "Score",
         "type": "object"
       },
+      "ServiceControlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "desired_state": {
+            "enum": [
+              "RUNNING",
+              "STOPPED"
+            ],
+            "title": "Desired State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "desired_state"
+        ],
+        "title": "ServiceControlRequest",
+        "type": "object"
+      },
       "ServiceStatus": {
         "additionalProperties": false,
         "properties": {
@@ -4977,6 +4995,20 @@
             "default": true,
             "title": "Configured",
             "type": "boolean"
+          },
+          "controllable": {
+            "default": false,
+            "title": "Controllable",
+            "type": "boolean"
+          },
+          "desired_state": {
+            "default": "RUNNING",
+            "enum": [
+              "RUNNING",
+              "STOPPED"
+            ],
+            "title": "Desired State",
+            "type": "string"
           },
           "detail": {
             "default": "",
@@ -5018,6 +5050,11 @@
             ],
             "title": "Last Heartbeat At"
           },
+          "management_scope": {
+            "default": "Externally managed",
+            "title": "Management Scope",
+            "type": "string"
+          },
           "name": {
             "minLength": 1,
             "title": "Name",
@@ -5041,7 +5078,9 @@
               "IDLE",
               "WAITING",
               "DEGRADED",
-              "OFFLINE"
+              "OFFLINE",
+              "STOPPING",
+              "STOPPED"
             ],
             "title": "State",
             "type": "string"
@@ -6105,6 +6144,58 @@
           }
         },
         "summary": "Get Service Status",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/services/{service_key}": {
+      "put": {
+        "operationId": "updateServiceControl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_key",
+            "required": true,
+            "schema": {
+              "title": "Service Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceControlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Service Control",
         "tags": [
           "admin"
         ]

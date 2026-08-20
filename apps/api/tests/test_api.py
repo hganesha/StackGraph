@@ -438,6 +438,17 @@ class StubReadModels:
             )],
         )
 
+    async def update_service_control(self, service_key, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ServiceStatus(
+            key=service_key, name="Graph projection", category="GRAPH",
+            state="STOPPED" if request.desired_state == "STOPPED" else "IDLE",
+            desired_state=request.desired_state, controllable=True,
+            management_scope="This workspace",
+            detail="Stopped for this workspace." if request.desired_state == "STOPPED" else "Queue is clear.",
+        )
+
 
 def app_with_stubs(settings: Settings | None = None) -> tuple[FastAPI, StubReadModels]:
     read_models = StubReadModels()
@@ -896,6 +907,7 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/ai-configuration/test", None),
         ("GET", "/api/v1/admin/scan-status", None),
         ("GET", "/api/v1/admin/services", None),
+        ("PUT", "/api/v1/admin/services/projection", {"desired_state": "STOPPED"}),
         ("PUT", "/api/v1/admin/scan-policy", {"cadence": "DAILY", "enabled": True}),
         ("POST", "/api/v1/admin/rescans", {"idempotency_key": "k1"}),
     ]:
@@ -984,6 +996,19 @@ def test_service_status_is_admin_visible() -> None:
     ))
     assert response.status_code == 200
     assert response.json()["services"][0]["key"] == "api"
+
+
+def test_admin_can_stop_workspace_service() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/services/projection",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"desired_state": "STOPPED"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["state"] == "STOPPED"
+    assert response.json()["desired_state"] == "STOPPED"
+    assert store.last_actor_key == "operator"
 
 
 def test_connect_github_repository_rejects_tokens_and_invalid_identity() -> None:
