@@ -41,6 +41,13 @@ class PageInfo(ContractModel):
     next_cursor: str | None = None
 
 
+class SessionInfo(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    actor_key: str = Field(min_length=1)
+    tenant_id: UUID | None = None
+    capabilities: list[str]
+
+
 class RankedItem(ContractModel):
     id: UUID
     kind: str = Field(min_length=1)

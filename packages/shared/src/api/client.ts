@@ -36,6 +36,7 @@ import type {
   BusinessMapCreateRequest,
   BusinessMapSaveRequest,
   BusinessMapRevisionList,
+  SessionInfo,
 } from "../contracts/read-models";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
@@ -80,6 +81,7 @@ export interface StackGraphClient {
   saveBusinessMap(id: string, body: BusinessMapSaveRequest): Promise<BusinessMapDetail>;
   archiveBusinessMap(id: string): Promise<BusinessMapSummary>;
   getBusinessMapRevisions(id: string): Promise<BusinessMapRevisionList>;
+  getSession(): Promise<SessionInfo>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
@@ -244,6 +246,11 @@ const fixtureClient: StackGraphClient = {
     if (!businessMaps.has(id)) throw new FixtureApiError(404, { code: "BUSINESS_MAP_NOT_FOUND" });
     return { contract_version: "1.0.0", business_map_id: id, revisions: clone(businessMapRevisions.get(id) ?? []) };
   },
+  async getSession() {
+    await delay();
+    // Fixture/demo runs as a full-capability admin so every surface is exercisable.
+    return { contract_version: "1.0.0", actor_key: "fixture-admin", tenant_id: null, capabilities: ["admin"] };
+  },
 };
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -325,6 +332,7 @@ const liveClient: StackGraphClient = {
     req(`/business-maps/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   archiveBusinessMap: (id) => req(`/business-maps/${id}`, { method: "DELETE" }),
   getBusinessMapRevisions: (id) => req(`/business-maps/${id}/revisions`),
+  getSession: () => req("/session"),
 };
 
 export const stackGraphClient: StackGraphClient = isFixtureMode() ? fixtureClient : liveClient;

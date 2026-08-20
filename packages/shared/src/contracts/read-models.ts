@@ -36,6 +36,15 @@ export interface PageInfo {
   next_cursor?: string | null;
 }
 
+export type Capability = "view" | "review" | "execute" | "admin";
+
+export interface SessionInfo {
+  contract_version: "1.0.0";
+  actor_key: string;
+  tenant_id?: string | null;
+  capabilities: Capability[];
+}
+
 export interface Citation {
   fact_id: UUID;
   label: string;

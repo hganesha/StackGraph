@@ -1,31 +1,47 @@
 "use client";
 
-// Mock session/capability model (plan §8.3 RBAC). Real capabilities come from the
-// authenticated session; in fixture mode we assume an admin so the surfaces are demoable.
-// The backend enforces the same graded ladder in apps/api/app/auth.py: holding a tier
-// implies every tier before it (view → review → execute → admin).
-export type Capability = "view" | "review" | "execute" | "admin";
+// Session/capability model backed by the API's GET /session. Capabilities follow a graded
+// ladder view → review → execute → admin (each tier implies the earlier ones), enforced
+// server-side in apps/api/app/auth.py. In fixture mode the client returns a full-capability
+// admin so every surface stays demoable.
+import { useQuery } from "@tanstack/react-query";
+import { stackGraphClient, type Capability } from "@stackgraph/shared";
+
+export type { Capability };
 
 const CAPABILITY_LADDER: Capability[] = ["view", "review", "execute", "admin"];
 
 export interface Session {
-  tenant: string;
+  tenant: string | null;
+  actorKey: string | null;
   capabilities: Capability[];
+  /** True once the session fetch has settled (success or failure). */
+  ready: boolean;
 }
 
-const MOCK_SESSION: Session = {
-  tenant: "StackGraph",
-  capabilities: ["admin"],
-};
+function useSessionQuery() {
+  return useQuery({
+    queryKey: ["session"],
+    queryFn: () => stackGraphClient.getSession(),
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useSession(): Session {
-  return MOCK_SESSION;
+  const { data, isSuccess, isError } = useSessionQuery();
+  return {
+    tenant: data?.tenant_id ?? null,
+    actorKey: data?.actor_key ?? null,
+    capabilities: data?.capabilities ?? [],
+    ready: isSuccess || isError,
+  };
 }
 
 export function useCan(capability: Capability): boolean {
+  const { capabilities } = useSession();
   const highest = Math.max(
     -1,
-    ...MOCK_SESSION.capabilities.map((held) => CAPABILITY_LADDER.indexOf(held)),
+    ...capabilities.map((held) => CAPABILITY_LADDER.indexOf(held)),
   );
   return highest >= CAPABILITY_LADDER.indexOf(capability);
 }

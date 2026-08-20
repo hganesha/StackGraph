@@ -38,6 +38,7 @@ from app.models import (
     RepositoryCapabilityIntelligence,
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
+    SessionInfo,
     TechnologyDetail,
 )
 
@@ -247,6 +248,7 @@ async def review_identity_assertion(
     request: Request,
 ) -> IdentityReviewResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).review_identity_assertion(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -293,6 +295,7 @@ async def review_capability_inference(
     request: Request,
 ) -> CapabilityInferenceReviewResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).review_capability_inference(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -309,6 +312,7 @@ async def review_duplicate_capability_candidate(
     request: Request,
 ) -> DuplicateCapabilityReviewResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).review_duplicate_capability_candidate(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -343,6 +347,7 @@ async def review_modernization_candidate(
     request: Request,
 ) -> ModernizationCandidateReviewResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).review_modernization_candidate(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -360,6 +365,7 @@ async def review_modernization_recommendation(
     request: Request,
 ) -> ModernizationRecommendationReviewResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).review_modernization_recommendation(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -377,6 +383,7 @@ async def record_modernization_validation_outcome(
     request: Request,
 ) -> ModernizationValidationOutcomeResult:
     principal = _principal(request)
+    _require(principal, "review")
     return await _store(request).record_modernization_validation_outcome(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
@@ -391,6 +398,19 @@ async def record_modernization_validation_outcome(
 async def get_phase3_intelligence_metrics(request: Request) -> Phase3IntelligenceMetrics:
     principal = _principal(request)
     return await _store(request).phase3_intelligence_metrics(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/session", response_model=SessionInfo,
+    response_model_exclude_none=True, operation_id="getSession", tags=["session"],
+)
+async def get_session(request: Request) -> SessionInfo:
+    principal = _principal(request)
+    return SessionInfo(
+        actor_key=principal.actor_key,
+        tenant_id=principal.tenant_id,
+        capabilities=sorted(principal.capabilities),
+    )
 
 
 @router.get(

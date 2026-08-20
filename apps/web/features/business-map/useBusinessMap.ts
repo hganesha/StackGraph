@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stackGraphClient, ApiRequestError } from "@stackgraph/shared";
-import { useCan } from "@/lib/session";
+import { useCan, useSession } from "@/lib/session";
 import {
   BUSINESS_FUNCTIONS,
   ORGANIZATION_UNIT_TEMPLATE,
@@ -169,6 +169,7 @@ function isSavedState(value: unknown): value is BusinessMapState {
 
 export function useBusinessMap() {
   // Editing writes to the server; a view-only session stays on the local draft only.
+  const { ready: sessionReady } = useSession();
   const canEdit = useCan("execute");
   const [map, setMap] = useState<BusinessMapState>(createInitialState);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(null);
@@ -185,12 +186,12 @@ export function useBusinessMap() {
   const mapIdRef = useRef<string | null>(null);
   const versionRef = useRef<number>(0);
   const savingRef = useRef(false);
+  const seededRef = useRef<BusinessMapState | null>(null);
+  const reconciledRef = useRef(false);
 
-  // Hydrate: seed instantly from the local draft (offline-first), then reconcile with the
-  // server — load the tenant's map or create it from the local/default state. If the API is
-  // unreachable the workspace stays fully usable on the local draft alone.
+  // Seed instantly from the local draft (offline-first) so the workspace renders without
+  // waiting on the network. The server reconcile happens in the next effect.
   useEffect(() => {
-    let cancelled = false;
     let seeded = createInitialState();
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
@@ -219,7 +220,17 @@ export function useBusinessMap() {
     } catch {
       // A corrupt local draft should never block the workspace.
     }
+    seededRef.current = seeded;
+  }, []);
 
+  // Reconcile with the server once the session settles, so create/edit decisions see the
+  // real capability. Runs once; `hydrated` flips only after this settles, so saves never
+  // fire against just-loaded server state. Offline keeps the local draft.
+  useEffect(() => {
+    if (!sessionReady || reconciledRef.current || seededRef.current === null) return;
+    reconciledRef.current = true;
+    const seeded = seededRef.current;
+    let cancelled = false;
     (async () => {
       try {
         const list = await stackGraphClient.listBusinessMaps();
@@ -249,7 +260,7 @@ export function useBusinessMap() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionReady, canEdit]);
 
   // Persist: always cache the draft locally; when server-backed, debounce a whole-map save
   // guarded by the optimistic version, refetching once on a version conflict.
