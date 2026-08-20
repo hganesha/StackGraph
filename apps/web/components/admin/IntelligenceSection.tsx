@@ -5,21 +5,51 @@ import { ApiRequestError, stackGraphClient, type AIProvider } from "@stackgraph/
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import styles from "./admin.module.css";
 
-const PROVIDERS: Record<AIProvider, { label: string; residency: string; widensEgress: boolean }> = {
+interface ModelOption {
+  id: string;
+  label: string;
+}
+
+interface ProviderDetails {
+  label: string;
+  residency: string;
+  widensEgress: boolean;
+  models: readonly ModelOption[];
+}
+
+const PROVIDERS: Record<AIProvider, ProviderDetails> = {
   openrouter: {
     label: "OpenRouter",
     residency: "OpenRouter is a broker: prompts are forwarded to upstream third-party providers — the widest data-egress surface of the three. Confirm this is acceptable for estate data.",
     widensEgress: true,
+    models: [
+      { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5 — balanced" },
+      { id: "openai/gpt-5.6-terra", label: "GPT-5.6 Terra — balanced" },
+      { id: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview — reasoning" },
+      { id: "x-ai/grok-4.5", label: "Grok 4.5 — general purpose" },
+    ],
   },
   openai: {
     label: "OpenAI",
     residency: "Direct connection to OpenAI. Estate data leaves your tenant boundary to OpenAI only.",
     widensEgress: false,
+    models: [
+      { id: "gpt-5.6-sol", label: "GPT-5.6 Sol — highest capability" },
+      { id: "gpt-5.6-terra", label: "GPT-5.6 Terra — balanced" },
+      { id: "gpt-5.6-luna", label: "GPT-5.6 Luna — fast" },
+      { id: "gpt-5.4-mini", label: "GPT-5.4 mini — economical" },
+    ],
   },
   anthropic: {
     label: "Claude (Anthropic)",
     residency: "Direct connection to Anthropic. Estate data leaves your tenant boundary to Anthropic only.",
     widensEgress: false,
+    models: [
+      { id: "claude-fable-5", label: "Claude Fable 5 — highest capability" },
+      { id: "claude-opus-5", label: "Claude Opus 5 — complex work" },
+      { id: "claude-sonnet-5", label: "Claude Sonnet 5 — balanced" },
+      { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — fast" },
+    ],
   },
 };
 
@@ -43,7 +73,6 @@ export function IntelligenceSection() {
   const [model, setModel] = useState("");
   const [keyInput, setKeyInput] = useState("");
   const [rotating, setRotating] = useState(false);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   useEffect(() => {
     if (!configuration.data) return;
@@ -72,15 +101,13 @@ export function IntelligenceSection() {
     onSuccess: async (next) => {
       setKeyInput("");
       setRotating(false);
-      setAvailableModels([]);
       queryClient.setQueryData(["admin", "ai-configuration"], next);
       await queryClient.invalidateQueries({ queryKey: ["admin", "ai-configuration"] });
     },
   });
   const testConnection = useMutation({
     mutationFn: () => stackGraphClient.testAIProviderConnection(),
-    onSuccess: async (result) => {
-      setAvailableModels(result.models);
+    onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin", "ai-configuration"] });
     },
     onError: async () => {
@@ -95,6 +122,7 @@ export function IntelligenceSection() {
     !persisted || persisted.provider !== provider || persisted.model !== model.trim() || keyInput.trim(),
   );
   const meta = PROVIDERS[provider];
+  const modelIsRecommended = meta.models.some((option) => option.id === model);
 
   const changeProvider = (next: AIProvider) => {
     if (next === provider) return;
@@ -105,6 +133,7 @@ export function IntelligenceSection() {
       if (!ok) return;
     }
     setProvider(next);
+    setModel("");
     if (persisted?.key_configured) setRotating(true);
   };
 
@@ -131,17 +160,16 @@ export function IntelligenceSection() {
 
       <label className={styles.field}>
         <span className={styles.label}>Model</span>
-        <input
-          className={styles.input}
+        <select
+          className={styles.select}
           value={model}
           onChange={(event) => setModel(event.target.value)}
-          placeholder="For example: anthropic/claude-sonnet-4"
-          list="ai-provider-models"
-        />
-        <datalist id="ai-provider-models">
-          {availableModels.map((id) => <option value={id} key={id} />)}
-        </datalist>
-        <span className={styles.help}>Test the connection to load model IDs. Ask remains deterministic until a model is selected.</span>
+        >
+          <option value="">Select a {meta.label} model</option>
+          {model && !modelIsRecommended ? <option value={model}>{model} — current configuration</option> : null}
+          {meta.models.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+        </select>
+        <span className={styles.help}>Four recommended models are shown for the selected provider. Ask remains deterministic until a model is selected.</span>
       </label>
 
       <div className={`${styles.residency} ${meta.widensEgress ? styles.residencyWarn : ""}`}>
