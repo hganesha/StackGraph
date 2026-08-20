@@ -15,6 +15,11 @@ except ImportError:  # runtime scanner has no schema-validation dependency
 
 
 REVISION = "a" * 40
+SNAPSHOT_DIGEST = "b" * 64
+SNAPSHOT_URI = (
+    "stackgraph-evidence://local/tenants/"
+    f"{'c' * 64}/sha256/{SNAPSHOT_DIGEST}"
+)
 
 
 def request(root: Path, *, max_files: int = 100) -> dict:
@@ -33,6 +38,9 @@ def request(root: Path, *, max_files: int = 100) -> dict:
             "source_revision": REVISION,
             "checkout_root": str(root),
             "requested_at": "2026-08-19T14:00:00Z",
+            "blob_uri": SNAPSHOT_URI,
+            "content_hash": f"sha256:{SNAPSHOT_DIGEST}",
+            "content_size_bytes": 4096,
         },
         "limits": {
             "max_files": max_files,
@@ -103,6 +111,19 @@ class RepositoryScannerTests(unittest.TestCase):
         finding = next(fact for fact in result["facts"] if fact["predicate"] == "HAS_PROPERTY")
         self.assertEqual(finding["object_value"]["finding_type"], "NARROW_USE_DEPENDENCY_CANDIDATE")
         self.assertGreaterEqual(len(dependency["evidence"]), 3)
+        self.assertEqual(
+            dependency["evidence"][0]["source_artifact"]["uri"],
+            f"{SNAPSHOT_URI}#path=files/package.json",
+        )
+
+    def test_snapshot_blob_descriptor_must_be_complete(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            scan_request = request(root)
+            del scan_request["snapshot"]["content_hash"]
+
+            with self.assertRaisesRegex(ValueError, "must be supplied together"):
+                scan_repository(scan_request)
 
     def test_python_lock_import_and_reachability_are_distinct_measurements(self) -> None:
         with TemporaryDirectory() as directory:

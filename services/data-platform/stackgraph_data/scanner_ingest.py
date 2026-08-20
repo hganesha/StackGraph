@@ -6,10 +6,10 @@ import os
 import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 from uuid import UUID
-from urllib.parse import unquote
+from urllib.parse import quote, unquote, urlsplit
 
 import psycopg
 from psycopg import Connection
@@ -125,10 +125,15 @@ def persist_scanner_result(
     *,
     target_id: UUID,
     run_id: UUID,
+    raw_observation: Mapping[str, Any] | None = None,
 ) -> PersistResult:
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         return persist_scanner_result_connection(
-            connection, result, target_id=target_id, run_id=run_id,
+            connection,
+            result,
+            target_id=target_id,
+            run_id=run_id,
+            raw_observation=raw_observation,
         )
 
 
@@ -138,6 +143,7 @@ def persist_scanner_result_connection(
     *,
     target_id: UUID,
     run_id: UUID,
+    raw_observation: Mapping[str, Any] | None = None,
 ) -> PersistResult:
     _validate_result(result)
     context = connection.execute(
@@ -173,6 +179,14 @@ def persist_scanner_result_connection(
         if isinstance(subject, Mapping) and subject.get("type") == "Repository":
             if subject.get("key") != context["target_key"]:
                 raise ValueError("repository fact does not match the ingest target")
+
+    if raw_observation is not None:
+        _persist_raw_observation(
+            connection,
+            raw_observation,
+            context=context,
+            result=result,
+        )
 
     extractor = result["extractor"]
     existing = connection.execute(
@@ -553,6 +567,159 @@ def _logical_key(fact: Mapping[str, Any]) -> str:
     return sha256_key(semantic)
 
 
+def _persist_raw_observation(
+    connection: Connection[dict[str, Any]],
+    observation: Mapping[str, Any],
+    *,
+    context: Mapping[str, Any],
+    result: Mapping[str, Any],
+) -> UUID:
+    if observation.get("observation_contract_version") != "1.0.0":
+        raise ValueError("raw observation contract version must be 1.0.0")
+    if observation.get("tenant_key") != context["tenant_key"]:
+        raise ValueError("raw observation tenant does not match the ingest target")
+    if observation.get("target_key") != context["target_key"]:
+        raise ValueError("raw observation target does not match the ingest target")
+    if observation.get("source_revision") != result["source_revision"]:
+        raise ValueError("raw observation source revision does not match the scanner result")
+    source = observation.get("source")
+    content = observation.get("content")
+    if not isinstance(source, Mapping) or not isinstance(content, Mapping):
+        raise ValueError("raw observation requires source and content objects")
+    if source.get("kind") != "GITHUB":
+        raise ValueError("repository raw observation source kind must be GITHUB")
+    if not isinstance(source.get("key"), str) or not isinstance(
+        source.get("adapter_version"), str
+    ):
+        raise ValueError("raw observation source key and adapter version are required")
+    idempotency_key = observation.get("idempotency_key")
+    content_hash = content.get("hash")
+    if not isinstance(idempotency_key, str) or not SHA256_KEY.fullmatch(idempotency_key):
+        raise ValueError("raw observation idempotency key must be a SHA-256 key")
+    if not isinstance(content_hash, str) or not SHA256_KEY.fullmatch(content_hash):
+        raise ValueError("raw observation content hash must be a SHA-256 key")
+    media_type = content.get("media_type")
+    size_bytes = content.get("size_bytes")
+    if not isinstance(media_type, str) or not media_type:
+        raise ValueError("raw observation media type is required")
+    if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes < 0:
+        raise ValueError("raw observation size must be a non-negative integer")
+    has_inline = "inline" in content
+    has_blob = "blob_uri" in content
+    if has_inline == has_blob:
+        raise ValueError("raw observation content requires exactly one of inline or blob_uri")
+    inline_body = content.get("inline") if has_inline else None
+    blob_uri = content.get("blob_uri") if has_blob else None
+    if has_blob and (not isinstance(blob_uri, str) or not blob_uri):
+        raise ValueError("raw observation blob URI must be a non-empty string")
+    if has_blob:
+        parsed_blob = urlsplit(blob_uri)
+        if (
+            not parsed_blob.scheme
+            or not parsed_blob.netloc
+            or parsed_blob.username is not None
+            or parsed_blob.password is not None
+            or parsed_blob.query
+            or parsed_blob.fragment
+        ):
+            raise ValueError(
+                "raw observation blob URI must be absolute and contain no credentials, query, or fragment"
+            )
+        if parsed_blob.scheme == "stackgraph-evidence":
+            parts = PurePosixPath(parsed_blob.path).parts
+            digest = parts[-1] if parts else ""
+            tenant_segment = parts[2] if len(parts) == 5 else ""
+            if (
+                parsed_blob.netloc != "local"
+                or len(parts) != 5
+                or parts[1] != "tenants"
+                or len(tenant_segment) != 64
+                or any(value not in "0123456789abcdef" for value in tenant_segment)
+                or parts[3] != "sha256"
+                or content_hash != f"sha256:{digest}"
+            ):
+                raise ValueError("raw observation blob URI does not match its content hash")
+    if has_inline:
+        inline_bytes = json.dumps(
+            inline_body,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        if sha256_key(inline_body) != content_hash or len(inline_bytes) != size_bytes:
+            raise ValueError("inline raw observation content failed checksum or size validation")
+    observed_at = observation.get("observed_at")
+    if not isinstance(observed_at, str):
+        raise ValueError("raw observation observed_at is required")
+    observed_timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    if observed_timestamp.tzinfo is None:
+        raise ValueError("raw observation observed_at must include a timezone")
+    request_metadata = observation.get("request") or {}
+    if not isinstance(request_metadata, Mapping):
+        raise ValueError("raw observation request must be an object")
+
+    inserted = connection.execute(
+        """
+        INSERT INTO raw_observation(
+          tenant_id,ingest_run_id,source_system_id,target_key,source_revision,
+          adapter_key,adapter_version,provider_schema_version,idempotency_key,
+          content_hash,media_type,size_bytes,inline_body,blob_uri,request_metadata,
+          observed_at,effective_at
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT(idempotency_key) DO NOTHING
+        RETURNING id
+        """,
+        (
+            context["tenant_id"],
+            context["run_id"],
+            context["source_system_id"],
+            observation["target_key"],
+            observation["source_revision"],
+            source["key"],
+            source["adapter_version"],
+            source.get("schema_version"),
+            idempotency_key,
+            content_hash,
+            media_type,
+            size_bytes,
+            Jsonb(inline_body) if has_inline else None,
+            blob_uri,
+            Jsonb(request_metadata),
+            observed_at,
+            observation.get("effective_at"),
+        ),
+    ).fetchone()
+    if inserted is not None:
+        return inserted["id"]
+    existing = connection.execute(
+        """
+        SELECT id,tenant_id,source_system_id,target_key,source_revision,
+               adapter_key,adapter_version,content_hash,media_type,size_bytes,
+               inline_body,blob_uri
+        FROM raw_observation WHERE idempotency_key=%s
+        """,
+        (idempotency_key,),
+    ).fetchone()
+    if existing is None:
+        raise RuntimeError("raw observation replay could not be resolved")
+    expected = {
+        "tenant_id": context["tenant_id"],
+        "source_system_id": context["source_system_id"],
+        "target_key": observation["target_key"],
+        "source_revision": observation["source_revision"],
+        "adapter_key": source["key"],
+        "adapter_version": source["adapter_version"],
+        "content_hash": content_hash,
+        "media_type": media_type,
+        "size_bytes": size_bytes,
+        "inline_body": inline_body,
+        "blob_uri": blob_uri,
+    }
+    if any(existing[key] != value for key, value in expected.items()):
+        raise ValueError("raw observation idempotency key conflicts with different content")
+    return existing["id"]
+
+
 def _upsert_source_artifact(
     connection: Connection[dict[str, Any]],
     tenant_id: UUID,
@@ -562,26 +729,48 @@ def _upsert_source_artifact(
 ) -> UUID:
     reference = evidence["source_artifact"]
     locator = evidence["locator"]
+    artifact_uri = reference.get("uri")
+    if artifact_uri is not None:
+        if not isinstance(artifact_uri, str):
+            raise ValueError("source artifact URI must be a string")
+        parsed_uri = urlsplit(artifact_uri)
+        if (
+            not parsed_uri.scheme
+            or not parsed_uri.netloc
+            or parsed_uri.username is not None
+            or parsed_uri.password is not None
+            or parsed_uri.query
+        ):
+            raise ValueError("source artifact URI must be absolute and contain no credentials or query")
+        path = locator.get("path")
+        if parsed_uri.fragment and (
+            not isinstance(path, str)
+            or parsed_uri.fragment != f"path=files/{quote(path, safe='/')}"
+        ):
+            raise ValueError("source artifact URI fragment does not match the evidence path")
     row = connection.execute(
         """
         INSERT INTO source_artifact(
           tenant_id,source_system_id,external_key,artifact_type,name,source_revision,
-          content_hash,metadata,observed_at
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          content_hash,blob_uri,metadata,observed_at
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ON CONFLICT(tenant_id,source_system_id,external_key,source_revision)
-        DO UPDATE SET metadata=EXCLUDED.metadata
-        RETURNING id,content_hash
+        DO UPDATE SET metadata=EXCLUDED.metadata,
+                      blob_uri=COALESCE(source_artifact.blob_uri,EXCLUDED.blob_uri)
+        RETURNING id,content_hash,blob_uri
         """,
         (
             tenant_id, source_system_id, reference["key"], reference["type"],
             locator.get("path") or reference["key"], reference["revision"],
-            reference.get("content_hash"),
+            reference.get("content_hash"), artifact_uri,
             Jsonb({"locator_kind": evidence["type"]}), fact["observed_at"],
         ),
     ).fetchone()
     assert row is not None
     if row["content_hash"] != reference.get("content_hash"):
         raise ValueError("source artifact content changed for an immutable revision")
+    if reference.get("uri") is not None and row["blob_uri"] != reference["uri"]:
+        raise ValueError("source artifact URI changed for an immutable revision")
     return row["id"]
 
 
@@ -685,6 +874,7 @@ def _parser() -> argparse.ArgumentParser:
     enqueue.add_argument("--priority", default="HOT")
     persist = subparsers.add_parser("persist")
     persist.add_argument("result", type=Path)
+    persist.add_argument("--raw-observation", type=Path)
     persist.add_argument("--target-id", type=UUID, required=True)
     persist.add_argument("--run-id", type=UUID, required=True)
     surface = subparsers.add_parser("api-surface")
@@ -706,8 +896,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif args.command == "persist":
         payload = json.loads(args.result.read_text(encoding="utf-8"))
+        raw_observation = (
+            json.loads(args.raw_observation.read_text(encoding="utf-8"))
+            if args.raw_observation is not None
+            else None
+        )
         result = persist_scanner_result(
-            database_url, payload, target_id=args.target_id, run_id=args.run_id,
+            database_url,
+            payload,
+            target_id=args.target_id,
+            run_id=args.run_id,
+            raw_observation=raw_observation,
         )
     else:
         payload = json.loads(args.result.read_text(encoding="utf-8"))

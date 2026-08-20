@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
 
 backend-up:
 	docker compose up --build -d database api
@@ -100,6 +100,48 @@ intelligence-requeue: database-migrate
 	@test -n "$(REPOSITORY_ID)" || (echo "REPOSITORY_ID is required" >&2; exit 2)
 	docker compose run --rm modernization-intelligence requeue --tenant-id "$(TENANT_ID)" --repository-id "$(REPOSITORY_ID)"
 
+github-installation-register: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	docker compose run --rm github-lifecycle register --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)" --credential-reference "$${CREDENTIAL_REFERENCE:-env://GITHUB_INSTALLATION_TOKEN}" --permission contents:read --permission metadata:read
+
+github-installation-reconcile: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN must resolve the local env:// credential reference" >&2; exit 2)
+	docker compose run --rm github-lifecycle reconcile --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)"
+
+github-installation-revoke: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	docker compose run --rm github-lifecycle revoke --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)"
+
+github-webhook-up:
+	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
+	docker compose --profile github up --build -d github-webhook
+
+github-webhook-down:
+	docker compose --profile github stop github-webhook
+
+github-pipeline-work: database-migrate
+	docker compose run --rm github-control-loop work
+
+pipeline-up: database-migrate
+	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN is required for env://GITHUB_INSTALLATION_TOKEN connectors" >&2; exit 2)
+	docker compose --profile pipeline up --build -d github-webhook github-control-loop projection-continuous intelligence-continuous
+
+pipeline-down:
+	docker compose --profile pipeline stop github-webhook github-control-loop projection-continuous intelligence-continuous
+
+pipeline-logs:
+	docker compose --profile pipeline logs -f github-webhook github-control-loop projection-continuous intelligence-continuous
+
+repository-acquire:
+	@test -n "$(REPOSITORY)" || (echo "REPOSITORY is required (owner/name)" >&2; exit 2)
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	docker compose run --rm repository-acquirer "$(REPOSITORY)" --tenant-key "$(TENANT_KEY)" --output-dir /snapshots --evidence-store-root /evidence $(if $(INSTALLATION_ID),--installation-id "$(INSTALLATION_ID)",) $(if $(PREVIOUS_REVISION),--previous-revision "$(PREVIOUS_REVISION)",)
+
 repository-scan:
 	@test -n "$(SCANNER_REQUEST)" || (echo "SCANNER_REQUEST is required (container path under /snapshots)" >&2; exit 2)
 	@test -n "$(SCANNER_RESULT)" || (echo "SCANNER_RESULT is required (container path under /snapshots)" >&2; exit 2)
@@ -115,7 +157,7 @@ scanner-persist: database-migrate
 	@test -n "$(SCANNER_RESULT)" || (echo "SCANNER_RESULT is required (container path under /snapshots)" >&2; exit 2)
 	@test -n "$(TARGET_ID)" || (echo "TARGET_ID is required" >&2; exit 2)
 	@test -n "$(RUN_ID)" || (echo "RUN_ID is required" >&2; exit 2)
-	docker compose run --rm scanner-ingest persist "$(SCANNER_RESULT)" --target-id "$(TARGET_ID)" --run-id "$(RUN_ID)"
+	docker compose run --rm scanner-ingest persist "$(SCANNER_RESULT)" --target-id "$(TARGET_ID)" --run-id "$(RUN_ID)" $(if $(RAW_OBSERVATION),--raw-observation "$(RAW_OBSERVATION)",)
 
 api-surface-extract:
 	@test -n "$(ARTIFACT_ROOT)" || (echo "ARTIFACT_ROOT is required (container path under /snapshots)" >&2; exit 2)

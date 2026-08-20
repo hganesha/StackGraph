@@ -171,6 +171,120 @@ services:
     volumes:
       - ./services/enterprise-discovery/repository-snapshots:/snapshots
 
+  repository-acquirer:
+    profiles: [tools]
+    build:
+      context: ./services/enterprise-discovery
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_snapshot"]
+    command: ["--help"]
+    volumes:
+      - ./services/enterprise-discovery/repository-snapshots:/snapshots
+      - stackgraph_evidence_data:/evidence
+
+  github-lifecycle:
+    profiles: [tools]
+    build:
+      context: ./services/enterprise-discovery
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      GITHUB_INSTALLATION_TOKEN: ${GITHUB_INSTALLATION_TOKEN:-}
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_installation_cli"]
+    command: ["--help"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  github-webhook:
+    profiles: [github, pipeline]
+    build:
+      context: ./services/enterprise-discovery
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_GITHUB_WEBHOOK_PORT: 8090
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_webhook_server"]
+    ports:
+      - "127.0.0.1:${STACKGRAPH_GITHUB_WEBHOOK_PORT:-8090}:8090"
+    volumes:
+      - stackgraph_evidence_data:/evidence
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8090/health/live', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  github-control-loop:
+    profiles: [pipeline]
+    build:
+      context: .
+      dockerfile: services/enterprise-discovery/Dockerfile.control-loop
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_GITHUB_API_URL: ${STACKGRAPH_GITHUB_API_URL:-https://api.github.com}
+      STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST: ${STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST:-false}
+      GITHUB_INSTALLATION_TOKEN: ${GITHUB_INSTALLATION_TOKEN:-}
+    command:
+      - serve
+      - --snapshot-root
+      - /snapshots
+      - --evidence-root
+      - /evidence
+      - --poll-seconds
+      - ${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}
+    volumes:
+      - stackgraph_repository_snapshots:/snapshots
+      - stackgraph_evidence_data:/evidence
+    depends_on:
+      database:
+        condition: service_healthy
+
+  projection-continuous:
+    profiles: [pipeline]
+    build:
+      context: ./services/data-platform
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_GRAPH_NAME: stackgraph
+      STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+      STACKGRAPH_DB_APP_USER: ${STACKGRAPH_DB_APP_USER:-stackgraph_app}
+    command: ["python", "-m", "stackgraph_data.project", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  intelligence-continuous:
+    profiles: [pipeline]
+    build:
+      context: ./services/intelligence/ai-services
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_AI_ROUTES_JSON: ${STACKGRAPH_AI_ROUTES_JSON:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    entrypoint: ["python", "-m", "stackgraph_ai.modernization_worker"]
+    command: ["serve", "--max-jobs", "${STACKGRAPH_INTELLIGENCE_BATCH_SIZE:-10}", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   scanner-ingest:
     profiles: [tools]
     build:
@@ -230,3 +344,5 @@ services:
 
 volumes:
   stackgraph_postgres_data:
+  stackgraph_evidence_data:
+  stackgraph_repository_snapshots:

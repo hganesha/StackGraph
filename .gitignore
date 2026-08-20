@@ -21,3 +21,6 @@ next-env.d.ts
 !.env.example
 
 *.log
+
+# Local materializations; durable evidence is held in the configured evidence store.
+services/enterprise-discovery/repository-snapshots/

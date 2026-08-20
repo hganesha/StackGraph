@@ -94,18 +94,36 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
                 extractor_version="1.0.0",
                 include_fact=True,
             )
+            wrong_tenant_observation = _raw_observation(
+                tenant_key, repository_key, "revision-1"
+            )
+            wrong_tenant_observation["tenant_key"] = "another-tenant"
+            with self.assertRaisesRegex(ValueError, "tenant does not match"):
+                persist_scanner_result_connection(
+                    connection,
+                    first,
+                    target_id=target["id"],
+                    run_id=first_run["id"],
+                    raw_observation=wrong_tenant_observation,
+                )
 
             persisted = persist_scanner_result_connection(
                 connection,
                 first,
                 target_id=target["id"],
                 run_id=first_run["id"],
+                raw_observation=_raw_observation(
+                    tenant_key, repository_key, "revision-1"
+                ),
             )
             replay = persist_scanner_result_connection(
                 connection,
                 first,
                 target_id=target["id"],
                 run_id=first_run["id"],
+                raw_observation=_raw_observation(
+                    tenant_key, repository_key, "revision-1"
+                ),
             )
 
             self.assertEqual(persisted.fact_count, 2)
@@ -124,6 +142,32 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
             ).fetchone()
             self.assertEqual(code_unit["qualified_name"], "debounceRequest")
             self.assertEqual(code_unit["covering_tests"], ["src/client.test.ts"])
+            artifacts = connection.execute(
+                """
+                SELECT external_key,blob_uri FROM source_artifact
+                WHERE tenant_id=%s ORDER BY external_key
+                """,
+                (tenant["id"],),
+            ).fetchall()
+            self.assertEqual(len(artifacts), 2)
+            self.assertTrue(all(row["blob_uri"].startswith(_snapshot_uri()) for row in artifacts))
+            self.assertTrue(
+                any(
+                    row["blob_uri"].endswith("#path=files/package.json")
+                    for row in artifacts
+                )
+            )
+            raw = connection.execute(
+                """
+                SELECT target_key,source_revision,content_hash,blob_uri,inline_body
+                FROM raw_observation WHERE tenant_id=%s
+                """,
+                (tenant["id"],),
+            ).fetchone()
+            self.assertEqual(raw["target_key"], repository_key)
+            self.assertEqual(raw["source_revision"], "revision-1")
+            self.assertEqual(raw["blob_uri"], _snapshot_uri())
+            self.assertIsNone(raw["inline_body"])
             queued = connection.execute(
                 """
                 SELECT source_revision,status FROM intelligence_job
@@ -247,6 +291,7 @@ def _result(
                     "type": "REPOSITORY_FILE",
                     "revision": revision,
                     "content_hash": "sha256:" + "b" * 64,
+                    "uri": f"{_snapshot_uri()}#path=files/package.json",
                 },
                 "locator": {"path": "package.json", "json_pointer": "/dependencies/lodash"},
             }],
@@ -282,6 +327,7 @@ def _result(
                 "source_artifact": {
                     "key": f"{repository_key}:src/client.ts", "type": "REPOSITORY_FILE",
                     "revision": revision, "content_hash": "sha256:" + "d" * 64,
+                    "uri": f"{_snapshot_uri()}#path=files/src/client.ts",
                 },
                 "locator": {"path": "src/client.ts", "line_start": 4, "line_end": 9},
             }],
@@ -304,6 +350,37 @@ def _result(
             "duration_ms": 1,
         },
         "diagnostics": [],
+    }
+
+
+def _snapshot_uri() -> str:
+    return (
+        "stackgraph-evidence://local/tenants/"
+        f"{'e' * 64}/sha256/{'f' * 64}"
+    )
+
+
+def _raw_observation(tenant_key: str, repository_key: str, revision: str) -> dict:
+    return {
+        "observation_contract_version": "1.0.0",
+        "idempotency_key": sha256_key(tenant_key, repository_key, revision, "raw"),
+        "tenant_key": tenant_key,
+        "source": {
+            "key": "github-repository",
+            "kind": "GITHUB",
+            "adapter_version": "1.0.0",
+            "schema_version": "2022-11-28",
+        },
+        "target_key": repository_key,
+        "source_revision": revision,
+        "observed_at": "2026-08-19T14:00:00Z",
+        "request": {"uri": "https://api.github.com/repos/acme/scanner-test"},
+        "content": {
+            "hash": "sha256:" + "f" * 64,
+            "media_type": "application/vnd.stackgraph.repository-snapshot+tar",
+            "size_bytes": 4096,
+            "blob_uri": _snapshot_uri(),
+        },
     }
 
 

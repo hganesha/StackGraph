@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
+import tarfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +15,7 @@ from stackgraph_discovery.github_client import (
     GitHubClient,
     HttpResponse,
 )
+from stackgraph_discovery.evidence_store import LocalEvidenceStore
 from stackgraph_discovery.github_snapshot import (
     GitHubRepositoryAcquirer,
     SnapshotLimits,
@@ -145,11 +148,13 @@ class GitHubAcquisitionTests(unittest.TestCase):
         client = GitHubClient(token="secret-token", transport=transport)
 
         with TemporaryDirectory() as directory:
+            evidence_store = LocalEvidenceStore(Path(directory) / "evidence")
             result = GitHubRepositoryAcquirer(client).acquire(
                 "acme/widgets",
                 tenant_key="tenant-one",
                 installation_id="9876",
-                output_root=Path(directory),
+                output_root=Path(directory) / "snapshots",
+                evidence_store=evidence_store,
             )
 
             self.assertEqual(result.status, "CHANGED")
@@ -171,10 +176,32 @@ class GitHubAcquisitionTests(unittest.TestCase):
             )
             self.assertEqual(observation["tenant_key"], "tenant-one")
             self.assertEqual(observation["target_key"], "github:repo:9876/1234")
+            self.assertNotIn("inline", observation["content"])
+            self.assertEqual(observation["content"]["blob_uri"], result.stored_evidence.uri)
+            self.assertEqual(observation["content"]["hash"], result.stored_evidence.content_hash)
             self.assertEqual(
-                observation["content"]["inline"]["repository"]["installation_id"],
-                "9876",
+                result.summary()["content_size_bytes"],
+                result.stored_evidence.size_bytes,
             )
+            self.assertNotEqual(
+                observation["idempotency_key"],
+                result.snapshot.raw_observation(
+                    "tenant-two", result.stored_evidence
+                )["idempotency_key"],
+            )
+            archive = evidence_store.read_bytes("tenant-one", result.stored_evidence)
+            with tarfile.open(fileobj=io.BytesIO(archive), mode="r") as stored:
+                self.assertEqual(
+                    sorted(stored.getnames()),
+                    [
+                        "files/package.json",
+                        "files/packages/web/src/index.tsx",
+                        "files/services/api/pyproject.toml",
+                        "snapshot.json",
+                    ],
+                )
+                snapshot_document = json.load(stored.extractfile("snapshot.json"))
+                self.assertEqual(snapshot_document["repository"]["installation_id"], "9876")
             self.assertRegex(observation["idempotency_key"], r"^sha256:[a-f0-9]{64}$")
             self.assertNotIn("secret-token", json.dumps(observation))
 

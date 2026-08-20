@@ -15,6 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote
 
+from .evidence_store import LocalEvidenceStore, StoredEvidence, deterministic_tar
 from .github_client import (
     ApiResult,
     GitHubApiError,
@@ -177,7 +178,11 @@ class RepositorySnapshot:
             value["effective_at"] = self.effective_at
         return value
 
-    def raw_observation(self, tenant_key: str | None = None) -> JsonObject:
+    def raw_observation(
+        self,
+        tenant_key: str | None = None,
+        stored_evidence: StoredEvidence | None = None,
+    ) -> JsonObject:
         snapshot = self.as_dict()
         content_bytes = _canonical_json(snapshot)
         request: JsonObject = {
@@ -188,12 +193,32 @@ class RepositorySnapshot:
 
         identity = {
             "adapter_version": ADAPTER_VERSION,
+            "tenant_key": tenant_key,
             "target_key": self.canonical_key,
             "source_revision": self.source_revision,
+            # One immutable revision can be observed more than once with different
+            # provider metadata. Bind idempotency to this exact observation so a
+            # replay is stable while a later observation cannot collide.
+            "observed_at": self.observed_at,
             "completeness": self.completeness,
             "files": [item.as_dict() for item in self.files],
             "diagnostics": [item.as_dict() for item in self.diagnostics],
         }
+        content: JsonObject
+        if stored_evidence is None:
+            content = {
+                "hash": f"sha256:{hashlib.sha256(content_bytes).hexdigest()}",
+                "media_type": "application/vnd.stackgraph.repository-snapshot+json",
+                "size_bytes": len(content_bytes),
+                "inline": snapshot,
+            }
+        else:
+            content = {
+                "hash": stored_evidence.content_hash,
+                "media_type": stored_evidence.media_type,
+                "size_bytes": stored_evidence.size_bytes,
+                "blob_uri": stored_evidence.uri,
+            }
         envelope: JsonObject = {
             "observation_contract_version": "1.0.0",
             "idempotency_key": f"sha256:{hashlib.sha256(_canonical_json(identity)).hexdigest()}",
@@ -207,12 +232,7 @@ class RepositorySnapshot:
             "source_revision": self.source_revision,
             "observed_at": self.observed_at,
             "request": request,
-            "content": {
-                "hash": f"sha256:{hashlib.sha256(content_bytes).hexdigest()}",
-                "media_type": "application/vnd.stackgraph.repository-snapshot+json",
-                "size_bytes": len(content_bytes),
-                "inline": snapshot,
-            },
+            "content": content,
         }
         if tenant_key is not None:
             envelope["tenant_key"] = tenant_key
@@ -229,6 +249,7 @@ class AcquisitionResult:
     source_revision: str
     snapshot: RepositorySnapshot | None
     output_path: Path | None
+    stored_evidence: StoredEvidence | None
 
     def summary(self) -> JsonObject:
         result: JsonObject = {
@@ -249,6 +270,10 @@ class AcquisitionResult:
             )
         if self.output_path is not None:
             result["output_path"] = str(self.output_path)
+        if self.stored_evidence is not None:
+            result["blob_uri"] = self.stored_evidence.uri
+            result["content_hash"] = self.stored_evidence.content_hash
+            result["content_size_bytes"] = self.stored_evidence.size_bytes
         return result
 
 
@@ -264,6 +289,7 @@ class GitHubRepositoryAcquirer:
         installation_id: str | None = None,
         output_root: Path | None = None,
         tenant_key: str | None = None,
+        evidence_store: LocalEvidenceStore | None = None,
         limits: SnapshotLimits | None = None,
     ) -> AcquisitionResult:
         owner, name = parse_repository(repository)
@@ -304,6 +330,7 @@ class GitHubRepositoryAcquirer:
                 source_revision=source_revision,
                 snapshot=None,
                 output_path=None,
+                stored_evidence=None,
             )
 
         tree_result = self._client.get_json(
@@ -424,8 +451,18 @@ class GitHubRepositoryAcquirer:
             repository_api_uri=f"{self._client.base_url}{repo_path}",
             installation_id=installation_id,
         )
+        stored_evidence = (
+            _store_snapshot(snapshot, evidence_store, tenant_key)
+            if evidence_store is not None
+            else None
+        )
         output_path = (
-            materialize_snapshot(snapshot, output_root, tenant_key)
+            materialize_snapshot(
+                snapshot,
+                output_root,
+                tenant_key,
+                stored_evidence=stored_evidence,
+            )
             if output_root is not None
             else None
         )
@@ -436,6 +473,7 @@ class GitHubRepositoryAcquirer:
             source_revision=source_revision,
             snapshot=snapshot,
             output_path=output_path,
+            stored_evidence=stored_evidence,
         )
 
 
@@ -479,6 +517,8 @@ def materialize_snapshot(
     snapshot: RepositorySnapshot,
     output_root: Path,
     tenant_key: str | None,
+    *,
+    stored_evidence: StoredEvidence | None = None,
 ) -> Path:
     root = output_root.resolve()
     repository_root = root / f"github-repo-{snapshot.repository_id}"
@@ -504,7 +544,7 @@ def materialize_snapshot(
         _write_json(temporary / "snapshot.json", snapshot.as_dict())
         _write_json(
             temporary / "raw-observation.json",
-            snapshot.raw_observation(tenant_key),
+            snapshot.raw_observation(tenant_key, stored_evidence),
         )
         try:
             temporary.replace(destination)
@@ -651,6 +691,23 @@ def _canonical_json(value: object) -> bytes:
     ).encode("utf-8")
 
 
+def _store_snapshot(
+    snapshot: RepositorySnapshot,
+    evidence_store: LocalEvidenceStore,
+    tenant_key: str | None,
+) -> StoredEvidence:
+    if tenant_key is None:
+        raise ValueError("tenant_key is required when durable evidence storage is enabled")
+    entries = {"snapshot.json": _canonical_json(snapshot.as_dict())}
+    entries.update({f"files/{item.path}": item.content for item in snapshot.files})
+    content = deterministic_tar(entries)
+    return evidence_store.put_bytes(
+        tenant_key,
+        content,
+        media_type="application/vnd.stackgraph.repository-snapshot+tar",
+    )
+
+
 def _write_json(path: Path, value: object) -> None:
     path.write_text(
         json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
@@ -664,6 +721,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("repository", help="GitHub repository in owner/name form")
     parser.add_argument("--output-dir", type=Path, required=True)
+    evidence_root = os.environ.get("STACKGRAPH_EVIDENCE_STORE_ROOT")
+    parser.add_argument(
+        "--evidence-store-root",
+        type=Path,
+        default=Path(evidence_root) if evidence_root else None,
+    )
     parser.add_argument("--tenant-key")
     parser.add_argument("--installation-id")
     parser.add_argument("--previous-revision")
@@ -680,6 +743,11 @@ def main(argv: list[str] | None = None) -> int:
     token = os.environ.get(args.token_env)
     client = GitHubClient(token=token, api_version=args.api_version)
     acquirer = GitHubRepositoryAcquirer(client)
+    evidence_store = (
+        LocalEvidenceStore(args.evidence_store_root)
+        if args.evidence_store_root is not None
+        else None
+    )
     try:
         result = acquirer.acquire(
             args.repository,
@@ -687,6 +755,7 @@ def main(argv: list[str] | None = None) -> int:
             installation_id=args.installation_id,
             output_root=args.output_dir,
             tenant_key=args.tenant_key,
+            evidence_store=evidence_store,
             limits=SnapshotLimits(
                 max_files=args.max_files,
                 max_bytes=args.max_bytes,
