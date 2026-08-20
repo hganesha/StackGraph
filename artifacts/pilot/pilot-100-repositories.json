@@ -5,24 +5,24 @@
   "facts_with_evidence_ratio": 1.0,
   "failures": [],
   "findings": 200,
-  "generated_at": "2026-08-20T14:07:16.936290Z",
+  "generated_at": "2026-08-20T15:56:13.738263Z",
   "limitations": [
     "This is a deterministic local scanner/load drill, not a claim about GitHub or provider quota latency.",
     "Live tenant, network enrichment, projection, and UI latency require a deployment-specific trace."
   ],
   "passed": true,
   "per_repository_seconds": {
-    "max": 0.006765,
-    "median": 0.00077,
-    "p95": 0.002348
+    "max": 0.002788,
+    "median": 0.000679,
+    "p95": 0.000993
   },
   "repositories": 100,
   "scan_phases": {
     "execution": "sequential_per_repository; downstream intelligence remains asynchronous",
     "pass_a": "inventory",
-    "pass_a_p95_seconds": 0.001,
+    "pass_a_p95_seconds": 0.0,
     "pass_b": "evidence_refinement",
-    "pass_b_p95_seconds": 0.001
+    "pass_b_p95_seconds": 0.0
   },
   "scanner": {
     "key": "repository-dependency-usage",
@@ -38,7 +38,7 @@
     "two_pass_metrics_present": true,
     "zero_failures": true
   },
-  "time_to_first_five_findings_seconds": 0.007553,
-  "total_seconds": 0.164084,
+  "time_to_first_five_findings_seconds": 0.004761,
+  "total_seconds": 0.105715,
   "workload": "synthetic-polyglot-deployment-fixture"
 }

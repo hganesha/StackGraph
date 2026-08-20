@@ -4,11 +4,16 @@
 export interface AIProviderConfiguration {
   contract_version?: "1.0.0";
   enabled?: boolean;
+  enrichment_status?: "DISABLED" | "READY" | "QUEUED" | "RUNNING" | "ACTIVE" | "DEGRADED";
+  failed_enrichment_jobs?: number;
   key_configured?: boolean;
   key_fingerprint?: string | null;
+  last_enrichment_at?: string | null;
   last_error?: string | null;
   model?: string;
+  pending_enrichment_jobs?: number;
   provider: "openrouter" | "openai" | "anthropic";
+  running_enrichment_jobs?: number;
   test_status?: "NOT_TESTED" | "SUCCEEDED" | "FAILED";
   tested_at?: string | null;
   updated_at?: string | null;

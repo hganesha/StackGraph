@@ -26,6 +26,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 
 FROM base AS runtime
 
+ENV STACKGRAPH_ENVIRONMENT=production
+
 RUN addgroup --system stackgraph \
     && adduser --system --ingroup stackgraph --home /nonexistent --no-create-home stackgraph
 

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import json
 import time
 from dataclasses import dataclass
-from typing import Any
-from uuid import UUID
+from typing import Any, Protocol
+from uuid import UUID, uuid4
+
+import jwt
 
 from app.config import Settings
 from app.errors import APIError
 
 
-# Graded capability ladder: each tier implies the ones before it
-# (view → review → execute → admin). Mirrors the web session model in apps/web/lib/session.ts.
 CAPABILITY_LADDER: tuple[str, ...] = ("view", "review", "execute", "admin")
+SESSION_COOKIE = "stackgraph_session"
+REFRESH_COOKIE = "stackgraph_refresh"
+OIDC_STATE_COOKIE = "stackgraph_oidc_state"
 
 
 def _normalize_capabilities(raw: Any) -> frozenset[str]:
@@ -29,21 +28,95 @@ class Principal:
     actor_key: str
     tenant_id: UUID | None
     capabilities: frozenset[str] = frozenset()
+    jti: UUID | None = None
+    expires_at: int | None = None
 
     def has_capability(self, required: str) -> bool:
-        """True when the principal holds `required` or any higher tier on the ladder."""
         if required not in CAPABILITY_LADDER:
             return False
         held = [CAPABILITY_LADDER.index(c) for c in self.capabilities if c in CAPABILITY_LADDER]
         return bool(held) and max(held) >= CAPABILITY_LADDER.index(required)
 
 
-def _base64url_encode(value: bytes) -> str:
-    return base64.urlsafe_b64encode(value).decode().rstrip("=")
+@dataclass(frozen=True, slots=True)
+class TokenClaims:
+    actor_key: str
+    tenant_id: UUID | None
+    capabilities: frozenset[str]
+    jti: UUID
+    expires_at: int
+    token_type: str
+    raw: dict[str, Any]
 
 
-def _base64url_decode(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+class TokenRevocationStore(Protocol):
+    async def is_revoked(self, *, tenant_id: UUID | None, jti: UUID) -> bool: ...
+
+    async def revoke(
+        self,
+        *,
+        tenant_id: UUID | None,
+        jti: UUID,
+        actor_key: str,
+        token_type: str,
+        expires_at: int,
+        reason: str,
+    ) -> bool: ...
+
+
+class NullTokenRevocationStore:
+    async def is_revoked(self, *, tenant_id: UUID | None, jti: UUID) -> bool:
+        return False
+
+    async def revoke(
+        self,
+        *,
+        tenant_id: UUID | None,
+        jti: UUID,
+        actor_key: str,
+        token_type: str,
+        expires_at: int,
+        reason: str,
+    ) -> bool:
+        return True
+
+
+class DatabaseTokenRevocationStore:
+    def __init__(self, database: Any) -> None:
+        self.database = database
+
+    async def is_revoked(self, *, tenant_id: UUID | None, jti: UUID) -> bool:
+        row = await self.database.fetch_one(
+            "SELECT 1 AS revoked FROM auth_token_revocation WHERE jti = %s AND expires_at > now()",
+            (jti,),
+            tenant_id=tenant_id,
+        )
+        return row is not None
+
+    async def revoke(
+        self,
+        *,
+        tenant_id: UUID | None,
+        jti: UUID,
+        actor_key: str,
+        token_type: str,
+        expires_at: int,
+        reason: str,
+    ) -> bool:
+        if tenant_id is None:
+            return False
+        row = await self.database.fetch_one(
+            """
+            INSERT INTO auth_token_revocation(
+              tenant_id,jti,actor_key,token_type,expires_at,reason
+            ) VALUES (%s,%s,%s,%s,to_timestamp(%s),%s)
+            ON CONFLICT (tenant_id,jti) DO NOTHING
+            RETURNING jti
+            """,
+            (tenant_id, jti, actor_key, token_type, expires_at, reason),
+            tenant_id=tenant_id,
+        )
+        return row is not None
 
 
 def create_session_token(
@@ -53,65 +126,139 @@ def create_session_token(
     tenant_id: UUID | None,
     expires_at: int,
     capabilities: list[str] | None = None,
+    audience: str = "stackgraph-api",
+    kid: str = "primary",
+    jti: UUID | None = None,
+    token_type: str = "access",
+    additional_claims: dict[str, Any] | None = None,
 ) -> str:
-    payload: dict[str, Any] = {
+    now = int(time.time())
+    payload: dict[str, Any] = dict(additional_claims or {})
+    # Protocol claims always win over caller-provided state. This keeps internal
+    # extension claims from silently changing the token subject or lifetime.
+    payload.update({
         "sub": actor_key,
         "tenant_id": str(tenant_id) if tenant_id else None,
+        "iat": now,
         "exp": expires_at,
-    }
+        "aud": audience,
+        "jti": str(jti or uuid4()),
+        "token_type": token_type,
+    })
     if capabilities is not None:
         payload["capabilities"] = list(capabilities)
-    encoded_payload = _base64url_encode(
-        json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
-    )
-    signature = hmac.new(
-        secret.encode(), encoded_payload.encode(), hashlib.sha256,
-    ).digest()
-    return f"{encoded_payload}.{_base64url_encode(signature)}"
+    return jwt.encode(payload, secret, algorithm="HS256", headers={"kid": kid, "typ": "JWT"})
 
 
 class Authenticator:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        revocations: TokenRevocationStore | None = None,
+    ) -> None:
         self.settings = settings
+        self.revocations = revocations or NullTokenRevocationStore()
 
-    def authenticate(self, authorization: str | None) -> Principal:
+    def issue_token(
+        self,
+        *,
+        actor_key: str,
+        tenant_id: UUID | None,
+        capabilities: list[str],
+        token_type: str,
+        ttl_seconds: int,
+        additional_claims: dict[str, Any] | None = None,
+    ) -> tuple[str, TokenClaims]:
+        expires_at = int(time.time()) + ttl_seconds
+        jti = uuid4()
+        secret = self.settings.session_keys[self.settings.auth_session_active_kid]
+        token = create_session_token(
+            secret,
+            actor_key=actor_key,
+            tenant_id=tenant_id,
+            expires_at=expires_at,
+            capabilities=capabilities,
+            audience=self.settings.auth_session_audience,
+            kid=self.settings.auth_session_active_kid,
+            jti=jti,
+            token_type=token_type,
+            additional_claims=additional_claims,
+        )
+        return token, TokenClaims(
+            actor_key=actor_key,
+            tenant_id=tenant_id,
+            capabilities=frozenset(capabilities),
+            jti=jti,
+            expires_at=expires_at,
+            token_type=token_type,
+            raw=additional_claims or {},
+        )
+
+    def decode_token(self, token: str, *, expected_type: str = "access") -> TokenClaims:
+        try:
+            header = jwt.get_unverified_header(token)
+            kid = header.get("kid")
+            if not isinstance(kid, str) or kid not in self.settings.session_keys:
+                raise ValueError("unknown signing key")
+            payload = jwt.decode(
+                token,
+                self.settings.session_keys[kid],
+                algorithms=["HS256"],
+                audience=self.settings.auth_session_audience,
+                options={"require": ["sub", "exp", "iat", "aud", "jti", "token_type"]},
+            )
+            actor_key = payload["sub"]
+            if not isinstance(actor_key, str) or not actor_key:
+                raise ValueError("invalid subject")
+            token_type = payload["token_type"]
+            if token_type != expected_type:
+                raise ValueError("unexpected token type")
+            raw_tenant_id = payload.get("tenant_id")
+            tenant_id = UUID(raw_tenant_id) if raw_tenant_id else None
+            capabilities = (
+                _normalize_capabilities(payload["capabilities"])
+                if "capabilities" in payload
+                else frozenset({"view"})
+            )
+            return TokenClaims(
+                actor_key=actor_key,
+                tenant_id=tenant_id,
+                capabilities=capabilities,
+                jti=UUID(payload["jti"]),
+                expires_at=int(payload["exp"]),
+                token_type=token_type,
+                raw=payload,
+            )
+        except jwt.ExpiredSignatureError as error:
+            raise APIError(401, "SESSION_EXPIRED", "The session has expired.") from error
+        except (jwt.PyJWTError, KeyError, TypeError, ValueError) as error:
+            raise APIError(401, "INVALID_SESSION", "The session is invalid.") from error
+
+    async def authenticate(
+        self,
+        authorization: str | None,
+        session_cookie: str | None = None,
+    ) -> Principal:
         if self.settings.auth_mode == "development":
-            # Local/fixtures development runs with full capability, matching the mock web session.
             return Principal(
                 actor_key=self.settings.development_actor_key,
                 tenant_id=self.settings.default_tenant_id,
                 capabilities=frozenset({"admin"}),
             )
 
-        if authorization is None or not authorization.startswith("Bearer "):
-            raise APIError(401, "AUTH_REQUIRED", "A valid bearer session is required.")
-        token = authorization.removeprefix("Bearer ").strip()
-        try:
-            encoded_payload, encoded_signature = token.split(".", 1)
-            secret = self.settings.auth_session_secret
-            assert secret is not None
-            expected = hmac.new(
-                secret.encode(), encoded_payload.encode(), hashlib.sha256,
-            ).digest()
-            if not hmac.compare_digest(expected, _base64url_decode(encoded_signature)):
-                raise ValueError("signature mismatch")
-            payload: dict[str, Any] = json.loads(_base64url_decode(encoded_payload))
-            actor_key = payload["sub"]
-            if not isinstance(actor_key, str) or not actor_key:
-                raise ValueError("invalid subject")
-            expires_at = int(payload["exp"])
-            if expires_at <= int(time.time()):
-                raise APIError(401, "SESSION_EXPIRED", "The bearer session has expired.")
-            raw_tenant_id = payload.get("tenant_id")
-            tenant_id = UUID(raw_tenant_id) if raw_tenant_id else None
-            # Absent capabilities default to least privilege (read-only).
-            capabilities = (
-                _normalize_capabilities(payload["capabilities"])
-                if "capabilities" in payload
-                else frozenset({"view"})
-            )
-        except APIError:
-            raise
-        except (AssertionError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            raise APIError(401, "INVALID_SESSION", "The bearer session is invalid.") from error
-        return Principal(actor_key=actor_key, tenant_id=tenant_id, capabilities=capabilities)
+        token = session_cookie
+        if authorization is not None and authorization.startswith("Bearer "):
+            token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            raise APIError(401, "AUTH_REQUIRED", "A valid session is required.")
+
+        claims = self.decode_token(token)
+        if await self.revocations.is_revoked(tenant_id=claims.tenant_id, jti=claims.jti):
+            raise APIError(401, "SESSION_REVOKED", "The session has been revoked.")
+        return Principal(
+            actor_key=claims.actor_key,
+            tenant_id=claims.tenant_id,
+            capabilities=claims.capabilities,
+            jti=claims.jti,
+            expires_at=claims.expires_at,
+        )

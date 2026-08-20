@@ -1,0 +1,39 @@
+.page {
+  min-block-size: calc(100vh - 104px);
+  display: grid;
+  place-items: center;
+  padding: var(--sg-space-6);
+}
+
+.card {
+  inline-size: min(440px, 100%);
+  display: grid;
+  gap: var(--sg-space-4);
+  padding: var(--sg-space-6);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-surface-card);
+  box-shadow: var(--sg-shadow-card);
+}
+
+.card h1,
+.card p {
+  margin: 0;
+}
+
+.card p {
+  color: var(--sg-text-secondary);
+}
+
+.signIn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 40px;
+  padding-inline: var(--sg-space-4);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-on-accent);
+  background: var(--sg-color-domain-enterprise-600);
+  font-weight: 600;
+  text-decoration: none;
+}

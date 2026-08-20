@@ -32,7 +32,7 @@ The V0 API read models are available both at their contract paths and under the 
 - `POST /modernization-recommendations/{id}/validation-outcomes`
 - `GET /intelligence/phase-3/metrics`
 
-In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. For a deployed environment, set `STACKGRAPH_AUTH_MODE=signed_session` and configure a random `STACKGRAPH_AUTH_SESSION_SECRET` of at least 32 characters; the API then requires a signed bearer session containing the tenant and actor claims.
+In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAULT_TENANT_ID` and `STACKGRAPH_DEVELOPMENT_ACTOR_KEY`. Client-supplied tenant or actor headers are ignored. Production uses provider-agnostic OIDC and a rotating `STACKGRAPH_AUTH_SESSION_KEYS_JSON` keyring; see `docs/runbooks/production-deployment.md`. `signed_session` remains available for controlled automation bearer tokens.
 
 Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_confidence`, and an optional `highlight_to` entity ID in addition to the frozen v1 center, depth, and limit parameters. Traversal and response nodes remain bounded to depth 2 and 50 nodes.
 

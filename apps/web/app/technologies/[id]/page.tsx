@@ -129,7 +129,7 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
 
       {/* Recommendation engine */}
       <section className={styles.section} aria-label="Recommendations">
-        <h2 className={styles.h2}>Recommendation</h2>
+        <h2 className={styles.h2}>Investigative recommendation</h2>
         {data.recommendations.length > 0 ? (
           <div className={styles.recs}>
             {data.recommendations.map((r) => (

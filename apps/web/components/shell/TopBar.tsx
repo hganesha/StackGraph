@@ -3,13 +3,25 @@
 import { useRouter } from "next/navigation";
 import { useTheme } from "@stackgraph/design-system";
 import { config } from "@stackgraph/shared";
+import { useSession } from "@/lib/session";
 import styles from "./TopBar.module.css";
 
 export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => void; navOpen?: boolean }) {
   const { choice, setChoice } = useTheme();
+  const session = useSession();
   const router = useRouter();
   const cycle = () => setChoice(choice === "light" ? "dark" : choice === "dark" ? "system" : "light");
   const themeIcon = choice === "light" ? "☀" : choice === "dark" ? "☾" : "◐";
+  const initials = session.actorKey
+    ? session.actorKey.split(/[^A-Za-z0-9]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")
+    : "SG";
+  const signOut = async () => {
+    await fetch(`${config.apiBaseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    window.location.assign("/login");
+  };
 
   return (
     <header className={styles.bar}>
@@ -41,11 +53,17 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
         <button className={styles.iconBtn} type="button" onClick={cycle} aria-label={`Theme: ${choice}`} title={`Theme: ${choice}`}>
           {themeIcon}
         </button>
-        <span className={styles.tenant} title="Tenant (from your session)">
+        <button
+          className={styles.tenant}
+          type="button"
+          title={session.actorKey ? `Sign out ${session.actorKey}` : "Tenant session"}
+          aria-label={session.actorKey ? `Sign out ${session.actorKey}` : "Tenant session"}
+          onClick={session.actorKey ? signOut : undefined}
+        >
           <span className={styles.tenantAvatar} aria-hidden="true">
-            SG
+            {initials || "SG"}
           </span>
-        </span>
+        </button>
       </div>
     </header>
   );

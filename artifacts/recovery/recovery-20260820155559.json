@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-08-20T15:56:04Z",
+  "duration_seconds": 5,
+  "source_counts": {"tenant" : 1, "entity" : 230, "fact" : 337, "migration" : 13},
+  "restore_counts": {"tenant" : 1, "entity" : 230, "fact" : 337, "migration" : 13},
+  "pending_projection_events_after_rebuild": 0,
+  "database_restore_passed": true,
+  "projection_rebuild_passed": true,
+  "ephemeral_databases_removed": true
+}

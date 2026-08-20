@@ -1,3 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectDirectory = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -10,6 +15,8 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  output: "standalone",
+  outputFileTracingRoot: path.join(projectDirectory, "../.."),
   // Workspace packages ship as TS source; Next transpiles them.
   transpilePackages: ["@stackgraph/design-system", "@stackgraph/shared", "@stackgraph/graph-ui"],
   eslint: { ignoreDuringBuilds: true },

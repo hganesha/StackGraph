@@ -15,6 +15,25 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "enrichment_status": {
+            "default": "DISABLED",
+            "enum": [
+              "DISABLED",
+              "READY",
+              "QUEUED",
+              "RUNNING",
+              "ACTIVE",
+              "DEGRADED"
+            ],
+            "title": "Enrichment Status",
+            "type": "string"
+          },
+          "failed_enrichment_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Failed Enrichment Jobs",
+            "type": "integer"
+          },
           "key_configured": {
             "default": false,
             "title": "Key Configured",
@@ -30,6 +49,18 @@
               }
             ],
             "title": "Key Fingerprint"
+          },
+          "last_enrichment_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Enrichment At"
           },
           "last_error": {
             "anyOf": [
@@ -47,6 +78,12 @@
             "title": "Model",
             "type": "string"
           },
+          "pending_enrichment_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Pending Enrichment Jobs",
+            "type": "integer"
+          },
           "provider": {
             "enum": [
               "openrouter",
@@ -55,6 +92,12 @@
             ],
             "title": "Provider",
             "type": "string"
+          },
+          "running_enrichment_jobs": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Running Enrichment Jobs",
+            "type": "integer"
           },
           "test_status": {
             "default": "NOT_TESTED",
@@ -5689,6 +5732,140 @@
         "summary": "Ask Estate",
         "tags": [
           "intelligence"
+        ]
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "operationId": "callback_auth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Callback",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/auth/login": {
+      "get": {
+        "operationId": "login_auth_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "refresh_auth_refresh_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Refresh",
+        "tags": [
+          "authentication"
         ]
       }
     },

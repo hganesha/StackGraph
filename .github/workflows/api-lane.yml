@@ -6,6 +6,17 @@ on:
     branches: [main]
 
 jobs:
+  synthetic-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: make pilot-100
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pilot-100
+          path: artifacts/pilot/pilot-100-repositories.json
+
   contracts-and-types:
     runs-on: ubuntu-latest
     steps:
