@@ -16,6 +16,7 @@ Estate Health product surface and by deployment monitoring.
 | Failed webhooks | any | `discovery-on-call` | Replay from immutable evidence after correction. |
 | Stale/error sources | any | `data-quality-owner` | Confirm source availability and freshness limitations. |
 | Failed AI calls in 24h | any | `intelligence-on-call` | Check provider/model routing; deterministic results remain authoritative. |
+| Active provider throttling/exhaustion | any | `discovery-on-call` | Respect the recorded reset/backoff time; reduce concurrency or request budget before replay. |
 
 Deployments should scrape the JSON at least once per minute and route each alert to the named owner.
 AI spend and latency are reported without an alert threshold because budgets are tenant-specific.

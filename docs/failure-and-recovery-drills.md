@@ -13,6 +13,9 @@ Milestones 1–4 use executable drills instead of an operator-only checklist.
 | Database loss | `make recovery-drill` | A fresh database restores equal authoritative counts. |
 | AGE projection loss | `make recovery-drill` | AGE is recreated solely from authoritative PostgreSQL outbox state. |
 | 100+ repository load | `make pilot-100` | Targets and limitations are emitted to a durable JSON artifact. |
+| Provider throttling/exhaustion | GitHub acquisition/control-loop tests and `make pilot-live` | Reset/backoff is persisted per tenant, visible to Admin/operations, and does not discard queued work. |
+| Read-model source failure | Live Playwright injected 503 journey | The failure is announced while the authenticated application shell remains usable. |
+| Representative tenant | `make pilot-live TENANT_KEY=...` | Repository, finding, evidence, quota, API, graph-bound, RLS, and freshness gates are emitted together. |
 
 `make recovery-drill` creates uniquely named ephemeral databases, restores and validates them, rebuilds
 the graph projection, writes `artifacts/recovery/recovery-*.json`, and removes only those ephemeral databases.

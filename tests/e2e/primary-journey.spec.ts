@@ -60,3 +60,38 @@ test("reduced motion and narrow viewport preserve the primary navigation", async
   await page.getByRole("link", { name: "Applications" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Applications" })).toBeVisible();
 });
+
+test("explicit light and dark themes remain accessible", async ({ page }) => {
+  await page.goto("/estate");
+  const theme = page.getByRole("button", { name: "Theme: system" });
+  await theme.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.getByRole("link", { name: "Business Map" })).toHaveCSS(
+    "color",
+    "rgb(78, 77, 73)",
+  );
+  await expectNoSeriousAccessibilityViolations(page);
+  await page.getByRole("button", { name: "Theme: light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("link", { name: "Business Map" })).toHaveCSS(
+    "color",
+    "rgb(180, 178, 170)",
+  );
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("live source failure is announced without losing the application shell", async ({ page }) => {
+  test.skip(process.env.E2E_DATA_SOURCE !== "live", "requires the live API client");
+  await page.route("**/api/v1/estate**", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ code: "PILOT_SOURCE_FAILURE", message: "injected failure" }),
+    });
+  });
+  await page.goto("/estate");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Couldn’t load the estate summary" }),
+  ).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary" })).toBeVisible();
+});

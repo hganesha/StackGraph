@@ -367,6 +367,13 @@ def _acquire_scan_publish(
             max_file_bytes=_policy_int(policy, "max_file_bytes", 2 * 1024 * 1024),
         ),
     )
+    _record_github_quota(
+        database_url,
+        tenant_id=claimed.tenant_id,
+        remaining=result.rate_limit_remaining,
+        limit=result.rate_limit_limit,
+        reset_epoch=result.rate_limit_reset,
+    )
     if direct_repository:
         if repository_id is not None and result.repository_id != repository_id:
             raise ValueError("GitHub acquisition repository ID changed for the connected repository")
@@ -730,6 +737,22 @@ def _fail_run(
         ).fetchone()
         if updated is None:
             raise LeaseLostError("ingest run lease was lost before failure recording")
+        if (
+            isinstance(error, GitHubApiError)
+            and error.retriable
+            and error.status_code in {403, 429}
+        ):
+            _record_github_quota_connection(
+                connection,
+                tenant_id=claimed.tenant_id,
+                remaining=error.rate_limit_remaining,
+                limit=error.rate_limit_limit,
+                reset_epoch=error.rate_limit_reset,
+                backoff_seconds=delay,
+                forced_status=_quota_status(
+                    error.rate_limit_remaining, throttled=True,
+                ),
+            )
         connection.execute(
             """
             INSERT INTO freshness_state(
@@ -754,6 +777,77 @@ def _fail_run(
                 ),
             )
     return terminal, delay
+
+
+def _quota_status(remaining: int | None, *, throttled: bool = False) -> str:
+    if remaining is not None and remaining <= 0:
+        return "EXHAUSTED"
+    return "THROTTLED" if throttled else "OK"
+
+
+def _record_github_quota(
+    database_url: str,
+    *,
+    tenant_id: UUID,
+    remaining: int | None,
+    limit: int | None,
+    reset_epoch: int | None,
+) -> None:
+    if remaining is None and limit is None and reset_epoch is None:
+        return
+    with psycopg.connect(database_url) as connection:
+        _record_github_quota_connection(
+            connection,
+            tenant_id=tenant_id,
+            remaining=remaining,
+            limit=limit,
+            reset_epoch=reset_epoch,
+        )
+
+
+def _record_github_quota_connection(
+    connection: psycopg.Connection,
+    *,
+    tenant_id: UUID,
+    remaining: int | None,
+    limit: int | None,
+    reset_epoch: int | None,
+    backoff_seconds: int | None = None,
+    forced_status: str | None = None,
+) -> None:
+    normalized_limit = limit if limit is not None and limit >= 0 else None
+    normalized_remaining = remaining if remaining is not None and remaining >= 0 else None
+    used = (
+        max(0, normalized_limit - normalized_remaining)
+        if normalized_limit is not None and normalized_remaining is not None
+        else 0
+    )
+    resets_at = (
+        datetime.fromtimestamp(reset_epoch, UTC)
+        if reset_epoch is not None and reset_epoch >= 0
+        else None
+    )
+    backoff_until = (
+        datetime.now(UTC) + timedelta(seconds=max(1, backoff_seconds))
+        if backoff_seconds is not None
+        else None
+    )
+    status = forced_status or _quota_status(normalized_remaining)
+    connection.execute(
+        """
+        INSERT INTO connector_quota(
+          tenant_id,provider,used,limit_value,status,resets_at,backoff_until,
+          observed_at,updated_at
+        ) VALUES (%s,'GITHUB_APP',%s,%s,%s,%s,%s,now(),now())
+        ON CONFLICT(tenant_id,provider) DO UPDATE SET
+          used=CASE WHEN EXCLUDED.limit_value IS NULL
+                    THEN connector_quota.used ELSE EXCLUDED.used END,
+          limit_value=coalesce(EXCLUDED.limit_value,connector_quota.limit_value),
+          status=EXCLUDED.status,resets_at=coalesce(EXCLUDED.resets_at,connector_quota.resets_at),
+          backoff_until=EXCLUDED.backoff_until,observed_at=now(),updated_at=now()
+        """,
+        (tenant_id, used, normalized_limit, status, resets_at, backoff_until),
+    )
 
 
 def _retry_delay(error: Exception, attempt: int) -> int:

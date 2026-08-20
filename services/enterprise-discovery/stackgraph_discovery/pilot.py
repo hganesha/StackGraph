@@ -21,6 +21,8 @@ def run_pilot(repository_count: int = DEFAULT_REPOSITORIES) -> dict[str, object]
         raise ValueError("the pilot requires at least 100 repositories")
     started = time.perf_counter()
     durations: list[float] = []
+    pass_a_durations: list[float] = []
+    pass_b_durations: list[float] = []
     fact_count = 0
     finding_count = 0
     evidence_count = 0
@@ -41,6 +43,9 @@ def run_pilot(repository_count: int = DEFAULT_REPOSITORIES) -> dict[str, object]
                 failures.append({"repository": repository.name, "error": type(error).__name__})
                 continue
             durations.append(time.perf_counter() - scan_started)
+            phase_timings = result["stats"].get("phase_timings_ms", {})
+            pass_a_durations.append(float(phase_timings.get("pass_a_inventory", 0)) / 1000)
+            pass_b_durations.append(float(phase_timings.get("pass_b_refinement", 0)) / 1000)
             complete_count += result["completeness"] == "COMPLETE"
             facts = result["facts"]
             fact_count += len(facts)
@@ -66,6 +71,10 @@ def run_pilot(repository_count: int = DEFAULT_REPOSITORIES) -> dict[str, object]
         "p95_scan_under_2_seconds": p95 < 2.0,
         "evidence_coverage_at_least_99_percent": evidence_ratio >= 0.99,
         "zero_failures": not failures,
+        "two_pass_metrics_present": (
+            len(pass_a_durations) == repository_count
+            and len(pass_b_durations) == repository_count
+        ),
     }
     return {
         "schema_version": "1.0.0",
@@ -84,6 +93,13 @@ def run_pilot(repository_count: int = DEFAULT_REPOSITORIES) -> dict[str, object]
             "median": _rounded(statistics.median(durations) if durations else None),
             "p95": _rounded(p95),
             "max": _rounded(max(durations) if durations else None),
+        },
+        "scan_phases": {
+            "pass_a": "inventory",
+            "pass_b": "evidence_refinement",
+            "execution": "sequential_per_repository; downstream intelligence remains asynchronous",
+            "pass_a_p95_seconds": _rounded(_percentile(pass_a_durations, 95)),
+            "pass_b_p95_seconds": _rounded(_percentile(pass_b_durations, 95)),
         },
         "failures": failures,
         "targets": targets,

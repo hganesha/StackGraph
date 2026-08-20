@@ -136,6 +136,7 @@ class RepositorySnapshot:
     diagnostics: tuple[Diagnostic, ...]
     repository_etag: str | None
     rate_limit_remaining: int | None
+    rate_limit_limit: int | None
     rate_limit_reset: int | None
     api_version: str
     repository_api_uri: str
@@ -171,6 +172,7 @@ class RepositorySnapshot:
             "provider_state": {
                 "repository_etag": self.repository_etag,
                 "rate_limit_remaining": self.rate_limit_remaining,
+                "rate_limit_limit": self.rate_limit_limit,
                 "rate_limit_reset": self.rate_limit_reset,
             },
         }
@@ -250,6 +252,9 @@ class AcquisitionResult:
     snapshot: RepositorySnapshot | None
     output_path: Path | None
     stored_evidence: StoredEvidence | None
+    rate_limit_remaining: int | None
+    rate_limit_limit: int | None
+    rate_limit_reset: int | None
 
     def summary(self) -> JsonObject:
         result: JsonObject = {
@@ -257,6 +262,9 @@ class AcquisitionResult:
             "repository_id": self.repository_id,
             "canonical_key": self.canonical_key,
             "source_revision": self.source_revision,
+            "rate_limit_remaining": self.rate_limit_remaining,
+            "rate_limit_limit": self.rate_limit_limit,
+            "rate_limit_reset": self.rate_limit_reset,
         }
         if self.snapshot is not None:
             result.update(
@@ -321,6 +329,7 @@ class GitHubRepositoryAcquirer:
         tree = _required(_required(commit_data, "commit", dict), "tree", dict)
         tree_sha = str(_required(tree, "sha", str))
         _validate_object_id(tree_sha, "tree SHA")
+        api_results = [repo_result, commit_result]
 
         if previous_revision == source_revision:
             return AcquisitionResult(
@@ -331,12 +340,16 @@ class GitHubRepositoryAcquirer:
                 snapshot=None,
                 output_path=None,
                 stored_evidence=None,
+                rate_limit_remaining=_latest_remaining(*api_results),
+                rate_limit_limit=_latest_limit(*api_results),
+                rate_limit_reset=_latest_reset(*api_results),
             )
 
         tree_result = self._client.get_json(
             f"{repo_path}/git/trees/{quote(tree_sha, safe='')}",
             query={"recursive": "1"},
         )
+        api_results.append(tree_result)
         tree_data = _require_data(tree_result, "tree")
         entries = _required(tree_data, "tree", list)
         diagnostics: list[Diagnostic] = []
@@ -400,6 +413,7 @@ class GitHubRepositoryAcquirer:
             blob_result = self._client.get_json(
                 f"{repo_path}/git/blobs/{quote(blob_sha, safe='')}"
             )
+            api_results.append(blob_result)
             blob = _require_data(blob_result, f"blob {blob_sha}")
             content = _decode_blob(blob, blob_sha, size)
             files.append(
@@ -443,10 +457,9 @@ class GitHubRepositoryAcquirer:
             files=tuple(files),
             diagnostics=tuple(diagnostics),
             repository_etag=repo_result.etag,
-            rate_limit_remaining=_latest_remaining(
-                repo_result, commit_result, tree_result
-            ),
-            rate_limit_reset=_latest_reset(repo_result, commit_result, tree_result),
+            rate_limit_remaining=_latest_remaining(*api_results),
+            rate_limit_limit=_latest_limit(*api_results),
+            rate_limit_reset=_latest_reset(*api_results),
             api_version=self._client.api_version,
             repository_api_uri=f"{self._client.base_url}{repo_path}",
             installation_id=installation_id,
@@ -474,6 +487,9 @@ class GitHubRepositoryAcquirer:
             snapshot=snapshot,
             output_path=output_path,
             stored_evidence=stored_evidence,
+            rate_limit_remaining=snapshot.rate_limit_remaining,
+            rate_limit_limit=snapshot.rate_limit_limit,
+            rate_limit_reset=snapshot.rate_limit_reset,
         )
 
 
@@ -676,6 +692,11 @@ def _validate_object_id(value: str, label: str) -> None:
 
 def _latest_remaining(*results: ApiResult) -> int | None:
     values = [item.rate_limit_remaining for item in results]
+    return next((value for value in reversed(values) if value is not None), None)
+
+
+def _latest_limit(*results: ApiResult) -> int | None:
+    values = [item.rate_limit_limit for item in results]
     return next((value for value in reversed(values) if value is not None), None)
 
 

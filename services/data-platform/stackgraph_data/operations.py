@@ -21,6 +21,7 @@ THRESHOLDS = {
     "failed_webhooks": (0, "discovery-on-call"),
     "stale_or_error_sources": (0, "data-quality-owner"),
     "failed_ai_invocations_24h": (0, "intelligence-on-call"),
+    "throttled_or_exhausted_quotas": (0, "discovery-on-call"),
 }
 
 
@@ -42,6 +43,9 @@ SELECT
   (SELECT count(*) FROM freshness_state WHERE status IN ('STALE','ERROR')) stale_or_error_sources,
   (SELECT count(*) FROM ai_model_invocation
    WHERE status='FAILED' AND started_at>=now()-interval '24 hours') failed_ai_invocations_24h,
+  (SELECT count(*) FROM connector_quota
+   WHERE status IN ('THROTTLED','EXHAUSTED')
+     AND (backoff_until IS NULL OR backoff_until>now())) throttled_or_exhausted_quotas,
   (SELECT count(*) FROM ingest_run WHERE status IN ('PENDING','RUNNING')) active_ingest_runs,
   (SELECT count(*) FROM projection_outbox WHERE processed_at IS NULL) pending_projection_events,
   (SELECT count(*) FROM intelligence_job WHERE status IN ('PENDING','RUNNING')) active_intelligence_jobs,

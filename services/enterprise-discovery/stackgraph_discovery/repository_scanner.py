@@ -237,14 +237,18 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies.extend(_scan_npm(contents, diagnostics))
     dependencies.extend(_scan_python(contents, diagnostics))
     dependencies = _dedupe_dependencies(dependencies)
+    runtime = _runtime_observations(contents, diagnostics)
+    inventory_facts = _application_boundary_facts(scan_input, contents)
+    inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
+    pass_a_completed = time.monotonic()
 
     references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
     reachable_files = _reachable_files(contents, local_edges, entrypoints)
-    runtime = _runtime_observations(contents, diagnostics)
     code_units = _scan_code_units(contents, references, local_edges, diagnostics)
     if any(item.severity == "ERROR" for item in diagnostics):
         completeness = "PARTIAL"
-    facts = _dependency_facts(
+    facts = list(inventory_facts)
+    facts.extend(_dependency_facts(
         scan_input,
         dependencies,
         references,
@@ -252,9 +256,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         runtime,
         completeness,
         source_file_count=sum(1 for path in contents if _is_source(path)),
-    )
-    facts.extend(_application_boundary_facts(scan_input, contents))
-    facts.extend(_deployment_facts(scan_input, contents, diagnostics))
+    ))
     facts.extend(
         _usage_findings(
             scan_input,
@@ -267,7 +269,14 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         )
     )
     facts.extend(_code_unit_facts(scan_input, code_units))
+    material_findings = sum(
+        fact.get("predicate") == "HAS_PROPERTY"
+        and isinstance(fact.get("object_value"), Mapping)
+        and bool(fact["object_value"].get("finding_type"))
+        for fact in facts
+    )
     duration_ms = max(0, int((time.monotonic() - started) * 1000))
+    pass_a_ms = max(0, int((pass_a_completed - started) * 1000))
     return {
         "scanner_contract_version": "1.0.0",
         "run_id": scan_input.run_id,
@@ -282,6 +291,12 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
             "bytes_read": bytes_read,
             "duration_ms": duration_ms,
             "code_units_emitted": len(code_units),
+            "pass_a_inventory_items": len(dependencies) + len(inventory_facts),
+            "material_findings_emitted": material_findings,
+            "phase_timings_ms": {
+                "pass_a_inventory": pass_a_ms,
+                "pass_b_refinement": max(0, duration_ms - pass_a_ms),
+            },
         },
         "diagnostics": [item.as_dict() for item in diagnostics],
     }

@@ -51,6 +51,6 @@
       ]
     }
   ],
-  "stats": {"files_seen": 12, "files_scanned": 2, "facts_emitted": 1, "bytes_read": 18432, "duration_ms": 214},
+  "stats": {"files_seen": 12, "files_scanned": 2, "facts_emitted": 1, "bytes_read": 18432, "duration_ms": 214, "pass_a_inventory_items": 1, "material_findings_emitted": 0, "phase_timings_ms": {"pass_a_inventory": 80, "pass_b_refinement": 134}},
   "diagnostics": []
 }
