@@ -1,63 +1,81 @@
 "use client";
 
-import { DomainBadge, Skeleton } from "@stackgraph/design-system";
-import { useGraphNeighborhood } from "@/lib/queries";
+import { ConfidenceChip, Skeleton, confidenceLabel } from "@stackgraph/design-system";
+import type { ReviewQueueItem } from "@stackgraph/shared";
+import { useReviewQueue } from "@/lib/queries";
 import { UncertainBridge } from "@/components/reviews/UncertainBridge";
 import styles from "./reviews.module.css";
 
-// The center whose neighborhood we scan for uncertain bridges in fixture mode.
-const DEMO_CENTER = "00000000-0000-4000-8000-000000000204";
+const typeLabels: Record<ReviewQueueItem["item_type"], string> = {
+  IDENTITY_ASSERTION: "Identity",
+  CAPABILITY_INFERENCE: "Capability",
+  DUPLICATE_CAPABILITY: "Duplicate",
+  MODERNIZATION_CANDIDATE: "Candidate",
+  MODERNIZATION_RECOMMENDATION: "Recommendation",
+};
+
+function identityLabels(title: string): [string, string] {
+  const labels = title.split(/\s*(?:↔|→)\s*/, 2);
+  return [labels[0] || title, labels[1] || "possible match"];
+}
 
 export default function ReviewsPage() {
-  const { data, isLoading } = useGraphNeighborhood(DEMO_CENTER);
-  const possible = data?.edges.filter((e) => e.review_state === "POSSIBLE") ?? [];
+  const { data, isLoading, isError } = useReviewQueue();
 
   return (
     <div className={styles.page}>
       <header className={styles.head}>
         <h1 className={styles.title}>Reviews</h1>
         <p className={styles.subtitle}>
-          Uncertain cross-domain bridges awaiting a human decision. Confirming or rejecting updates the graph.
+          Evidence-backed identity, capability, duplication, and modernization findings awaiting a human decision.
         </p>
       </header>
 
       <div className={styles.note}>
-        A dedicated review-queue endpoint is a pending backend addition; this view aggregates uncertain
-        bridges from the current neighborhood.
+        The cross-estate queue is tenant-scoped and ordered by confidence and recency. Decisions remain
+        optimistic and audited by the originating workflow.
       </div>
 
-      {isLoading || !data ? (
+      {isLoading ? (
         <div className={styles.list}>
           <Skeleton height={90} />
           <Skeleton height={90} />
         </div>
-      ) : possible.length === 0 ? (
+      ) : isError || !data ? (
+        <div className={styles.empty} role="alert">
+          <p className={styles.emptyTitle}>The review queue could not be loaded.</p>
+          <p className={styles.emptyBody}>Check the API connection, then reload this page.</p>
+        </div>
+      ) : data.items.length === 0 ? (
         <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No bridges need review.</p>
-          <p className={styles.emptyBody}>Every cross-domain join is currently confirmed or not applicable.</p>
+          <p className={styles.emptyTitle}>Nothing needs review.</p>
+          <p className={styles.emptyBody}>All current findings are confirmed, rejected, or not applicable.</p>
         </div>
       ) : (
         <ul className={styles.list}>
-          {possible.map((e) => {
-            const src = data.nodes.find((n) => n.id === e.source);
-            const tgt = data.nodes.find((n) => n.id === e.target);
+          {data.items.map((item) => {
+            const [sourceLabel, targetLabel] = identityLabels(item.title);
             return (
-              <li key={e.id} className={styles.item}>
+              <li key={`${item.item_type}:${item.item_id}`} className={styles.item}>
                 <div className={styles.itemHead}>
-                  {src ? <DomainBadge namespace={src.namespace} /> : null}
-                  <span className={`${styles.itemLabel} sg-mono`}>{src?.label}</span>
-                  <span aria-hidden="true" className={styles.arrow}>
-                    →
+                  <span className={styles.typeLabel}>{typeLabels[item.item_type]}</span>
+                  <span className={styles.itemLabel}>{item.title}</span>
+                  <span className={styles.confidence}>
+                    <ConfidenceChip label={confidenceLabel(item.confidence)} value={item.confidence} />
                   </span>
-                  {tgt ? <DomainBadge namespace={tgt.namespace} /> : null}
-                  <span className={`${styles.itemLabel} sg-mono`}>{tgt?.label}</span>
                 </div>
-                <UncertainBridge
-                  assertionId={e.id}
-                  sourceLabel={src?.label ?? "?"}
-                  targetLabel={tgt?.label ?? "?"}
-                  confidence={e.confidence}
-                />
+                {item.summary ? <p className={styles.summary}>{item.summary}</p> : null}
+                {item.item_type === "IDENTITY_ASSERTION" ? (
+                  <UncertainBridge
+                    assertionId={item.item_id}
+                    sourceLabel={sourceLabel}
+                    targetLabel={targetLabel}
+                    confidence={item.confidence}
+                    expectedVersion={item.version}
+                  />
+                ) : (
+                  <p className={styles.reviewHint}>Open the originating lens to review this finding.</p>
+                )}
               </li>
             );
           })}

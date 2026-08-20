@@ -51,8 +51,27 @@
   color: var(--sg-text-primary);
   font-weight: 500;
 }
-.arrow {
-  color: var(--sg-text-muted);
+.typeLabel {
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-color-domain-intelligence-100);
+  color: var(--sg-color-domain-intelligence-800);
+  font-size: var(--sg-type-small-size);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.confidence {
+  margin-inline-start: auto;
+}
+.summary,
+.reviewHint {
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.reviewHint {
+  padding-block-start: var(--sg-space-2);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
 }
 .empty {
   display: flex;

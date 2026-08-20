@@ -21,3 +21,10 @@ export function useGraphNeighborhood(centerId: string) {
     queryFn: () => stackGraphClient.getGraphNeighborhood(centerId),
   });
 }
+
+export function useReviewQueue() {
+  return useQuery({
+    queryKey: ["reviews", "queue"],
+    queryFn: () => stackGraphClient.getReviewQueue({ limit: 50 }),
+  });
+}
