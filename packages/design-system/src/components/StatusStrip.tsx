@@ -21,7 +21,12 @@ export function StatusStrip({
   const pct = repositoriesTotal > 0 ? Math.round((repositoriesScanned / repositoriesTotal) * 100) : 0;
   const asOfLabel = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(asOf));
   return (
-    <div className={styles.strip} role="status" aria-label="Estate coverage and freshness">
+    <div
+      className={styles.strip}
+      role="status"
+      aria-label="Estate coverage and freshness"
+      tabIndex={0}
+    >
       <span className={styles.item}>
         <span className={styles.k}>Coverage</span>
         <span className={`${styles.v} sg-mono`}>

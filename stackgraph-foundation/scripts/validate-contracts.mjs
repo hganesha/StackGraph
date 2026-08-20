@@ -22,6 +22,7 @@ const cases = [
   ["contracts/v1/fixtures/scanner-result.partial.json", "https://stackgraph.dev/contracts/v1/schemas/scanner-result.schema.json"],
   ["contracts/v1/fixtures/raw-observation.json", "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json"],
   ["contracts/v1/fixtures/raw-observation.npm-registry.json", "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json"],
+  ["contracts/v1/fixtures/runtime-observation.json", "https://stackgraph.dev/contracts/v1/schemas/runtime-observation.schema.json"],
   ["contracts/v1/fixtures/npm-resolution.private.json", "https://stackgraph.dev/contracts/v1/schemas/npm-resolution.schema.json#/$defs/dependencyProperties"],
   ["contracts/v1/fixtures/estate-summary.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/estateSummary"],
   ["contracts/v1/fixtures/application-detail.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/applicationDetail"],
@@ -54,6 +55,17 @@ for (const relative of ["contracts/v1/openapi.json", ...fs.readdirSync(fixtureDi
 }
 
 const openapi = read("contracts/v1/openapi.json");
+const productionCohort = read("seed/production-cohort.json");
+for (const row of productionCohort) {
+  if (!row.id || !row.name || !row.source_url || !row.retrieved_at || !row.curated_group) {
+    failed = true;
+    console.error("production seed cohort row is missing atomic provenance", row);
+  }
+  if (/\s(?:\/|&|,)\s/.test(row.name)) {
+    failed = true;
+    console.error(`production seed cohort is not atomic: ${row.name}`);
+  }
+}
 const visit = (value) => {
   if (!value || typeof value !== "object") return;
   if (typeof value.$ref === "string" && value.$ref.startsWith("#/")) {

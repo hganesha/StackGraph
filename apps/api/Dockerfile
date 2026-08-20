@@ -15,8 +15,10 @@ FROM base AS development
 COPY apps/api/requirements-dev.txt ./
 RUN pip install --no-cache-dir --requirement requirements-dev.txt
 
+COPY apps/api/pytest.ini ./pytest.ini
 COPY apps/api/app ./app
 COPY apps/api/tests ./tests
+COPY scripts/export_openapi.py ./scripts/export_openapi.py
 COPY services/intelligence/ai-services/stackgraph_ai ./stackgraph_ai
 COPY services/intelligence/ai-services/prompts ./prompts
 

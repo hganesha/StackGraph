@@ -8,6 +8,7 @@ import re
 import sys
 import time
 import tomllib
+import yaml
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -19,7 +20,7 @@ from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.2.0"
+SCANNER_VERSION = "1.3.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -253,6 +254,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         source_file_count=sum(1 for path in contents if _is_source(path)),
     )
     facts.extend(_application_boundary_facts(scan_input, contents))
+    facts.extend(_deployment_facts(scan_input, contents, diagnostics))
     facts.extend(
         _usage_findings(
             scan_input,
@@ -1270,7 +1272,11 @@ def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str,
         lowered = path.lower()
         name = PurePosixPath(lowered).name
         kind = None
-        if name in {"dockerfile", "compose.yaml", "compose.yml"} or "deploy" in lowered or "/k8s/" in f"/{lowered}/":
+        if (
+            name in {"dockerfile", "compose.yaml", "compose.yml"}
+            or "deploy" in lowered or "/k8s/" in f"/{lowered}/"
+            or PurePosixPath(lowered).suffix == ".tf"
+        ):
             kind = "DEPLOYMENT"
         elif name in {"package.json", "pyproject.toml", "requirements.txt", "makefile"} or "build" in name:
             kind = "BUILD"
@@ -1541,6 +1547,246 @@ def _application_boundary_facts(
         "properties": properties,
         "evidence": [_evidence_dict(evidence, scan_input)],
     }]
+
+
+def _deployment_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    for path, content in sorted(contents.items()):
+        name = PurePosixPath(path).name.lower()
+        if name == "dockerfile":
+            facts.extend(_dockerfile_facts(scan_input, path, content))
+        elif name in {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}:
+            facts.extend(_compose_facts(scan_input, path, content, diagnostics))
+        elif PurePosixPath(path).suffix.lower() in {".yaml", ".yml"} and (
+            "/k8s/" in f"/{path.lower()}/"
+            or "/kubernetes/" in f"/{path.lower()}/"
+            or "/deploy/" in f"/{path.lower()}/"
+        ):
+            facts.extend(_kubernetes_facts(scan_input, path, content, diagnostics))
+        elif PurePosixPath(path).suffix.lower() == ".tf":
+            facts.extend(_terraform_facts(scan_input, path, content))
+    return facts
+
+
+def _dockerfile_facts(
+    scan_input: ScanInput, path: str, content: bytes,
+) -> list[dict[str, Any]]:
+    text = content.decode("utf-8", errors="replace")
+    facts: list[dict[str, Any]] = []
+    for line_number, line in enumerate(text.splitlines(), 1):
+        match = re.match(r"^\s*FROM\s+(?:--platform=\S+\s+)?(?P<image>\S+)", line, re.I)
+        if not match:
+            continue
+        image = match.group("image")
+        if image.lower() == "scratch":
+            continue
+        deployment = _deployment_ref(scan_input, path, "dockerfile", f"stage-{line_number}")
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line_number, _repository_ref(scan_input), "DEPLOYED_AS",
+            deployment, {"source_kind": "DOCKERFILE", "stage": line_number},
+        ))
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line_number, deployment, "RUNS_ON",
+            _container_image_ref(image), {"source_kind": "DOCKERFILE", "image": image},
+        ))
+    return facts
+
+
+def _compose_facts(
+    scan_input: ScanInput, path: str, content: bytes, diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    document = _decode_yaml_documents(content, path, diagnostics)
+    if document is None:
+        return []
+    root = document[0] if document else None
+    if not isinstance(root, Mapping) or not isinstance(root.get("services"), Mapping):
+        return []
+    text = content.decode("utf-8", errors="replace")
+    facts: list[dict[str, Any]] = []
+    for service_name, definition in sorted(root["services"].items()):
+        if not isinstance(service_name, str) or not isinstance(definition, Mapping):
+            continue
+        line = _line_for_yaml_key(text, service_name)
+        deployment = _deployment_ref(scan_input, path, "compose-service", service_name)
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, _repository_ref(scan_input), "DEPLOYED_AS", deployment,
+            {"source_kind": "COMPOSE", "service": service_name},
+        ))
+        image = definition.get("image")
+        if isinstance(image, str) and image.strip():
+            facts.append(_entity_relationship_fact(
+                scan_input, path, line, deployment, "RUNS_ON", _container_image_ref(image.strip()),
+                {"source_kind": "COMPOSE", "service": service_name, "image": image.strip()},
+            ))
+    return facts
+
+
+def _kubernetes_facts(
+    scan_input: ScanInput, path: str, content: bytes, diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    documents = _decode_yaml_documents(content, path, diagnostics)
+    if documents is None:
+        return []
+    text = content.decode("utf-8", errors="replace")
+    facts: list[dict[str, Any]] = []
+    supported = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"}
+    for index, document in enumerate(documents):
+        if not isinstance(document, Mapping) or document.get("kind") not in supported:
+            continue
+        metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
+        workload_name = str(metadata.get("name") or f"document-{index + 1}")
+        namespace = str(metadata.get("namespace") or "default")
+        line = _line_for_yaml_key(text, workload_name)
+        deployment = _deployment_ref(
+            scan_input, path, str(document["kind"]).lower(), f"{namespace}/{workload_name}",
+        )
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, _repository_ref(scan_input), "DEPLOYED_AS", deployment,
+            {"source_kind": "KUBERNETES", "kind": document["kind"], "namespace": namespace},
+        ))
+        environment = {
+            "namespace": "DEPLOYMENT", "type": "Environment",
+            "key": f"environment:{scan_input.repository_key}:kubernetes:{namespace}",
+            "name": namespace,
+        }
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, deployment, "LOCATED_IN", environment,
+            {"source_kind": "KUBERNETES", "namespace": namespace},
+        ))
+        for image in _kubernetes_images(document):
+            facts.append(_entity_relationship_fact(
+                scan_input, path, line, deployment, "RUNS_ON", _container_image_ref(image),
+                {"source_kind": "KUBERNETES", "kind": document["kind"], "image": image},
+            ))
+    return facts
+
+
+def _terraform_facts(
+    scan_input: ScanInput, path: str, content: bytes,
+) -> list[dict[str, Any]]:
+    text = content.decode("utf-8", errors="replace")
+    facts: list[dict[str, Any]] = []
+    pattern = re.compile(
+        r'^\s*resource\s+"(?P<type>[A-Za-z0-9_-]+)"\s+"(?P<name>[A-Za-z0-9_-]+)"',
+        re.M,
+    )
+    for match in pattern.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        resource_type = match.group("type")
+        resource_name = match.group("name")
+        resource = {
+            "namespace": "DEPLOYMENT", "type": "InfrastructureResource",
+            "key": f"terraform:{scan_input.repository_key}:{resource_type}:{resource_name}",
+            "name": f"{resource_type}.{resource_name}",
+        }
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, _repository_ref(scan_input), "USES", resource,
+            {"source_kind": "TERRAFORM", "resource_type": resource_type,
+             "resource_name": resource_name},
+        ))
+    return facts
+
+
+def _decode_yaml_documents(
+    content: bytes, path: str, diagnostics: list[Diagnostic],
+) -> list[Any] | None:
+    try:
+        return list(yaml.safe_load_all(content.decode("utf-8")))
+    except (UnicodeDecodeError, yaml.YAMLError) as error:
+        diagnostics.append(Diagnostic("ERROR", "INVALID_DEPLOYMENT_YAML", str(error), path))
+        return None
+
+
+def _kubernetes_images(document: Mapping[str, Any]) -> list[str]:
+    spec = document.get("spec")
+    if not isinstance(spec, Mapping):
+        return []
+    if document.get("kind") == "CronJob":
+        spec = spec.get("jobTemplate", {}).get("spec", {}) if isinstance(spec.get("jobTemplate"), Mapping) else {}
+    template = spec.get("template") if isinstance(spec, Mapping) else None
+    pod_spec = template.get("spec") if isinstance(template, Mapping) else spec
+    if not isinstance(pod_spec, Mapping):
+        return []
+    values: set[str] = set()
+    for key in ("initContainers", "containers"):
+        containers = pod_spec.get(key)
+        if not isinstance(containers, list):
+            continue
+        for container in containers:
+            image = container.get("image") if isinstance(container, Mapping) else None
+            if isinstance(image, str) and image.strip():
+                values.add(image.strip())
+    return sorted(values)
+
+
+def _line_for_yaml_key(text: str, key: str) -> int:
+    pattern = re.compile(rf"^\s*(?:name:\s*)?{re.escape(key)}\s*:\s*|^\s*name:\s*{re.escape(key)}\s*$", re.M)
+    match = pattern.search(text)
+    return text.count("\n", 0, match.start()) + 1 if match else 1
+
+
+def _deployment_ref(
+    scan_input: ScanInput, path: str, kind: str, name: str,
+) -> dict[str, str]:
+    return {
+        "namespace": "DEPLOYMENT", "type": "Deployment",
+        "key": f"deployment:{scan_input.repository_key}:{path}:{kind}:{name}",
+        "name": name,
+    }
+
+
+def _container_image_ref(image: str) -> dict[str, str]:
+    return {
+        "namespace": "DEPLOYMENT", "type": "ContainerImage",
+        "key": f"container-image:{image}", "name": image,
+    }
+
+
+def _entity_relationship_fact(
+    scan_input: ScanInput,
+    path: str,
+    line: int,
+    subject: Mapping[str, str],
+    predicate: str,
+    object_entity: Mapping[str, str],
+    properties: Mapping[str, Any],
+) -> dict[str, Any]:
+    evidence = Evidence(
+        path=path,
+        evidence_type="DEPLOYMENT_CONFIG",
+        content_hash=_content_hash_from_evidence_context(path, scan_input.checkout_root),
+        locator={"path": path, "line_start": line, "line_end": line},
+        excerpt_hash=sha256_key(path, line, predicate, object_entity["key"]),
+        metadata=properties,
+    )
+    return {
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "subject": subject["key"],
+            "predicate": predicate,
+            "object": object_entity["key"],
+            "path": path,
+            "line": line,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": dict(subject),
+        "predicate": predicate,
+        "object_entity": dict(object_entity),
+        "assertion_class": "DECLARED",
+        "confidence": 1,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": dict(properties),
+        "evidence": [_evidence_dict(evidence, scan_input)],
+    }
 
 
 def _application_boundary_evidence_path(contents: Mapping[str, bytes]) -> str | None:

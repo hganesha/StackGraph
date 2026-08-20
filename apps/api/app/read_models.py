@@ -3939,46 +3939,84 @@ class ReadModelStore:
                 return self._rescan_job(row), False
             targets_cursor = await connection.execute(
                 """
-                SELECT DISTINCT target.id
+                SELECT target.id
                 FROM ingest_target target
                 JOIN connector admin_connector
                   ON admin_connector.tenant_id=target.tenant_id
                  AND admin_connector.metadata->>'ingest_target_id'=target.id::text
                 WHERE target.enabled
                   AND (%s::uuid IS NULL OR admin_connector.id=%s)
+                FOR UPDATE OF target
                 """,
                 (request.connector_id, request.connector_id),
             )
             targets = list(await targets_cursor.fetchall())
             queued = 0
+            linked = 0
             for target in targets:
                 run_cursor = await connection.execute(
                     """
-                    INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
-                    SELECT %s,%s,'MANUAL',jsonb_build_object(
-                      'rescan_job_id',%s::text,'connector_id',%s::text
-                    )
-                    WHERE NOT EXISTS (
-                      SELECT 1 FROM ingest_run
-                      WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
-                    )
-                    RETURNING id
+                    SELECT id FROM ingest_run
+                    WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                    ORDER BY created_at DESC,id DESC LIMIT 1 FOR UPDATE
                     """,
-                    (
-                        tenant_id,
-                        target["id"],
-                        str(row["id"]),
-                        str(request.connector_id) if request.connector_id else "",
-                        target["id"],
-                    ),
+                    (target["id"],),
                 )
-                if await run_cursor.fetchone() is not None:
+                run = await run_cursor.fetchone()
+                if run is None:
+                    run_cursor = await connection.execute(
+                        """
+                        INSERT INTO ingest_run(
+                          tenant_id,ingest_target_id,trigger_kind,stats
+                        ) VALUES (%s,%s,'MANUAL',jsonb_build_object(
+                          'rescan_job_ids',jsonb_build_array(%s::text),
+                          'connector_id',%s::text
+                        )) RETURNING id
+                        """,
+                        (
+                            tenant_id,
+                            target["id"],
+                            str(row["id"]),
+                            str(request.connector_id) if request.connector_id else "",
+                        ),
+                    )
+                    run = await run_cursor.fetchone()
+                    assert run is not None
                     queued += 1
+                else:
+                    await connection.execute(
+                        """
+                        UPDATE ingest_run SET stats=jsonb_set(
+                          coalesce(stats,'{}'::jsonb),'{rescan_job_ids}',
+                          coalesce(stats->'rescan_job_ids','[]'::jsonb)
+                            || jsonb_build_array(%s::text),true
+                        ) || jsonb_build_object('connector_id',%s::text)
+                        WHERE id=%s
+                        """,
+                        (
+                            str(row["id"]),
+                            str(request.connector_id) if request.connector_id else "",
+                            run["id"],
+                        ),
+                    )
+                linked += 1
+            if linked == 0:
+                completed_cursor = await connection.execute(
+                    """
+                    UPDATE rescan_job SET status='SUCCEEDED',started_at=now(),
+                      completed_at=now(),updated_at=now()
+                    WHERE id=%s RETURNING *
+                    """,
+                    (row["id"],),
+                )
+                row = await completed_cursor.fetchone()
+                assert row is not None
             await self._write_admin_audit(
                 connection, tenant_id=tenant_id, actor_key=actor_key, action="rescan.request",
                 target_kind="rescan_job", target_id=row["id"],
                 detail={
                     "connector_id": str(request.connector_id) if request.connector_id else None,
+                    "ingest_runs_linked": linked,
                     "ingest_runs_queued": queued,
                 },
             )

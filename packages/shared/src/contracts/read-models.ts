@@ -1,6 +1,6 @@
-// Contract types for StackGraph read models — mirrors
-// stackgraph-foundation/contracts/v1/schemas/{read-models,common}.schema.json.
-// TODO(build): replace with codegen (json-schema-to-typescript) so contract drift breaks the build.
+// Application-facing contract types for StackGraph read models. The complete wire-level
+// model is generated from the canonical OpenAPI document in openapi.generated.ts and
+// compiled beside this curated facade; CI fails when the generated artifact drifts.
 
 export type UUID = string;
 export type Timestamp = string;

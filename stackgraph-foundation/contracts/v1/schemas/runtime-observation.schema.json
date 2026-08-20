@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stackgraph.dev/contracts/v1/schemas/runtime-observation.schema.json",
+  "title": "Attested runtime observation v1",
+  "type": "object",
+  "required": ["runtime_contract_version", "observation_id", "tenant_key", "source", "workload", "observed_at", "valid_until", "artifact", "events", "absence_is_unknown"],
+  "properties": {
+    "runtime_contract_version": {"const": "1.0.0"},
+    "observation_id": {"type": "string", "format": "uuid"},
+    "tenant_key": {"type": "string", "minLength": 1},
+    "source": {
+      "type": "object",
+      "required": ["collector_key", "collector_version", "attestation_method", "collector_identity", "verified"],
+      "properties": {
+        "collector_key": {"type": "string", "minLength": 1},
+        "collector_version": {"type": "string", "minLength": 1},
+        "attestation_method": {"enum": ["SIGNED_EXPORT", "WORKLOAD_IDENTITY", "MANUAL_IMPORT"]},
+        "collector_identity": {"type": "string", "minLength": 1},
+        "verified": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "workload": {
+      "type": "object",
+      "required": ["repository_key", "source_revision", "deployment_key", "environment_key"],
+      "properties": {
+        "repository_key": {"type": "string", "minLength": 1},
+        "source_revision": {"type": "string", "minLength": 1},
+        "deployment_key": {"type": "string", "minLength": 1},
+        "environment_key": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "observed_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "valid_until": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "artifact": {
+      "type": "object",
+      "required": ["key", "revision", "content_hash", "blob_uri"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "blob_uri": {"type": "string", "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["event_kind", "subject", "predicate", "object_entity", "confidence", "locator"],
+        "properties": {
+          "event_kind": {"enum": ["IMAGE_RUNNING", "PACKAGE_LOADED", "SERVICE_CONNECTION", "PROCESS_RUNNING", "HEALTH_CHECK"]},
+          "subject": {"$ref": "common.schema.json#/$defs/entityRef"},
+          "predicate": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+          "object_entity": {"$ref": "common.schema.json#/$defs/entityRef"},
+          "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+          "locator": {"type": "object", "minProperties": 1, "additionalProperties": true},
+          "properties": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "absence_is_unknown": {"const": true},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

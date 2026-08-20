@@ -39,10 +39,10 @@ services:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_APP_USER:-stackgraph_app}:${STACKGRAPH_DB_APP_PASSWORD:-stackgraph_app}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       STACKGRAPH_DB_POOL_MIN_SIZE: ${STACKGRAPH_DB_POOL_MIN_SIZE:-1}
       STACKGRAPH_DB_POOL_MAX_SIZE: ${STACKGRAPH_DB_POOL_MAX_SIZE:-5}
-      STACKGRAPH_CORS_ALLOWED_ORIGINS: ${STACKGRAPH_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      STACKGRAPH_CORS_ALLOWED_ORIGINS: ${STACKGRAPH_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3100,http://localhost:5173}
       STACKGRAPH_AUTH_MODE: ${STACKGRAPH_AUTH_MODE:-development}
       STACKGRAPH_AUTH_SESSION_SECRET: ${STACKGRAPH_AUTH_SESSION_SECRET:-}
-      STACKGRAPH_DEFAULT_TENANT_ID: ${STACKGRAPH_DEFAULT_TENANT_ID:-}
+      STACKGRAPH_DEFAULT_TENANT_ID: ${STACKGRAPH_DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
       STACKGRAPH_DEVELOPMENT_ACTOR_KEY: ${STACKGRAPH_DEVELOPMENT_ACTOR_KEY:-local-user}
       STACKGRAPH_CONTRACTS_DIR: /contracts/v1
       STACKGRAPH_AI_ASK_ENABLED: ${STACKGRAPH_AI_ASK_ENABLED:-false}
@@ -155,6 +155,31 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  osv-continuous:
+    profiles: [pipeline]
+    build:
+      context: ./services/data-platform
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    entrypoint: ["python", "-m", "stackgraph_data.osv_worker"]
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
 
   npm-registry:
     profiles: [tools]
@@ -193,6 +218,12 @@ services:
     environment:
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-}
+      STACKGRAPH_EVIDENCE_S3_PREFIX: ${STACKGRAPH_EVIDENCE_S3_PREFIX:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID: ${STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID:-}
+      STACKGRAPH_EVIDENCE_S3_ENDPOINT: ${STACKGRAPH_EVIDENCE_S3_ENDPOINT:-}
+      STACKGRAPH_EVIDENCE_RETENTION_DAYS: ${STACKGRAPH_EVIDENCE_RETENTION_DAYS:-30}
+      STACKGRAPH_EVIDENCE_LEGAL_HOLD: ${STACKGRAPH_EVIDENCE_LEGAL_HOLD:-false}
     entrypoint: ["python", "-m", "stackgraph_discovery.github_snapshot"]
     command: ["--help"]
     volumes:
@@ -206,6 +237,9 @@ services:
     environment:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       GITHUB_INSTALLATION_TOKEN: ${GITHUB_INSTALLATION_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
     entrypoint: ["python", "-m", "stackgraph_discovery.github_installation_cli"]
     command: ["--help"]
     depends_on:
@@ -220,6 +254,12 @@ services:
     environment:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-}
+      STACKGRAPH_EVIDENCE_S3_PREFIX: ${STACKGRAPH_EVIDENCE_S3_PREFIX:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID: ${STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID:-}
+      STACKGRAPH_EVIDENCE_S3_ENDPOINT: ${STACKGRAPH_EVIDENCE_S3_ENDPOINT:-}
+      STACKGRAPH_EVIDENCE_RETENTION_DAYS: ${STACKGRAPH_EVIDENCE_RETENTION_DAYS:-30}
+      STACKGRAPH_EVIDENCE_LEGAL_HOLD: ${STACKGRAPH_EVIDENCE_LEGAL_HOLD:-false}
       STACKGRAPH_GITHUB_WEBHOOK_PORT: 8090
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
     entrypoint: ["python", "-m", "stackgraph_discovery.github_webhook_server"]
@@ -250,10 +290,19 @@ services:
     environment:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
       STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-}
+      STACKGRAPH_EVIDENCE_S3_PREFIX: ${STACKGRAPH_EVIDENCE_S3_PREFIX:-stackgraph-evidence}
+      STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID: ${STACKGRAPH_EVIDENCE_S3_KMS_KEY_ID:-}
+      STACKGRAPH_EVIDENCE_S3_ENDPOINT: ${STACKGRAPH_EVIDENCE_S3_ENDPOINT:-}
+      STACKGRAPH_EVIDENCE_RETENTION_DAYS: ${STACKGRAPH_EVIDENCE_RETENTION_DAYS:-30}
+      STACKGRAPH_EVIDENCE_LEGAL_HOLD: ${STACKGRAPH_EVIDENCE_LEGAL_HOLD:-false}
       STACKGRAPH_GITHUB_API_URL: ${STACKGRAPH_GITHUB_API_URL:-https://api.github.com}
       STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST: ${STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST:-false}
       GITHUB_INSTALLATION_TOKEN: ${GITHUB_INSTALLATION_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_APP_PRIVATE_KEY_FILE: ${GITHUB_APP_PRIVATE_KEY_FILE:-}
     command:
       - serve
       - --snapshot-root
@@ -268,6 +317,12 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
 
   projection-continuous:
     profiles: [pipeline]
@@ -283,6 +338,12 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
 
   intelligence-continuous:
     profiles: [pipeline]
@@ -300,6 +361,12 @@ services:
     depends_on:
       database:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
 
   scanner-ingest:
     profiles: [tools]

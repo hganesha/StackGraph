@@ -1,0 +1,39 @@
+{
+  "runtime_contract_version": "1.0.0",
+  "observation_id": "00000000-0000-4000-8000-000000000501",
+  "tenant_key": "acme",
+  "source": {
+    "collector_key": "otel-runtime-import",
+    "collector_version": "1.0.0",
+    "attestation_method": "WORKLOAD_IDENTITY",
+    "collector_identity": "spiffe://acme.example/collector/runtime",
+    "verified": true
+  },
+  "workload": {
+    "repository_key": "github:repo:123",
+    "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
+    "deployment_key": "deployment:billing-api:production",
+    "environment_key": "environment:production"
+  },
+  "observed_at": "2026-08-20T14:00:00Z",
+  "valid_until": "2026-08-20T14:15:00Z",
+  "artifact": {
+    "key": "runtime:acme:billing-api:20260820T140000Z",
+    "revision": "otel-batch-501",
+    "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "blob_uri": "stackgraph-evidence://object/tenants/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/sha256/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "events": [
+    {
+      "event_kind": "IMAGE_RUNNING",
+      "subject": {"namespace": "DEPLOYMENT", "type": "Deployment", "key": "deployment:billing-api:production", "name": "billing-api production"},
+      "predicate": "RUNS_ON",
+      "object_entity": {"namespace": "DEPLOYMENT", "type": "ContainerImage", "key": "container:ghcr.io/acme/billing@sha256:abc", "name": "billing image"},
+      "confidence": 1,
+      "locator": {"json_pointer": "/resource/container/image/id"},
+      "properties": {"runtime_status": "OBSERVED"}
+    }
+  ],
+  "absence_is_unknown": true,
+  "limitations": ["Only workloads exporting attested telemetry are represented."]
+}

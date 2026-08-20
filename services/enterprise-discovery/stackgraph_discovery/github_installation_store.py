@@ -21,6 +21,7 @@ PERMISSION = re.compile(r"^[a-z][a-z0-9_-]*:(?:read|write)$")
 ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,126}$")
 REFERENCE_SCHEMES = {
     "env",
+    "github-app",
     "vault",
     "aws-secrets",
     "gcp-secrets",

@@ -1,0 +1,16 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/workspace/services/enterprise-discovery
+
+WORKDIR /workspace/services/enterprise-discovery
+COPY services/enterprise-discovery/requirements.txt services/enterprise-discovery/requirements-test.txt ./
+RUN pip install --no-cache-dir --requirement requirements-test.txt
+COPY services/enterprise-discovery/stackgraph_discovery ./stackgraph_discovery
+COPY services/data-platform/stackgraph_data ./stackgraph_data
+COPY services/enterprise-discovery/tests ./tests
+COPY stackgraph-foundation/contracts /workspace/stackgraph-foundation/contracts
+
+CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]

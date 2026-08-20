@@ -578,7 +578,8 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             assert audits >= 4
             target = connection.execute(
                 """
-                SELECT target.target_key,target.refresh_policy,run.trigger_kind,run.status
+                SELECT target.target_key,target.refresh_policy,run.trigger_kind,
+                       run.status,run.stats
                 FROM connector admin_connector
                 JOIN ingest_target target
                   ON admin_connector.metadata->>'ingest_target_id'=target.id::text
@@ -589,7 +590,8 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             ).fetchone()
             assert target[0] == "github:repo-name:acme/billing"
             assert target[1]["direct_repository"] is True
-            assert target[2:] == ("MANUAL", "PENDING")
+            assert target[2:4] == ("MANUAL", "PENDING")
+            assert target[4]["rescan_job_ids"] == [rescan_a.json()["id"]]
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
@@ -604,9 +606,9 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM connector_account WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
-                for table in (
-                    "ai_model_invocation", "admin_audit_log",
-                    "tenant_ai_configuration", "tenant_secret",
+            for table in (
+                "ai_model_invocation", "admin_audit_log",
+                "tenant_ai_configuration", "tenant_secret",
                 "rescan_job", "connector_quota",
                 "scan_policy", "connector", "tenant_member",
             ):

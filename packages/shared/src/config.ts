@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 // Runtime data-source configuration. One flag flips the whole UI from fixtures to the live API
 // with no component change (the Lane C promise). See docs/stackgraph-ux-architecture-and-plan.md §7.1.
 //

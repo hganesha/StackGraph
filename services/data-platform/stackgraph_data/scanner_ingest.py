@@ -18,7 +18,12 @@ from psycopg.types.json import Jsonb
 
 from stackgraph_data.catalog import sha256_key
 from stackgraph_data.depsdev import PackageVersionKey
-from stackgraph_data.depsdev_worker import ensure_package_version_target_connection
+from stackgraph_data.depsdev_worker import (
+    ensure_package_version_target_connection as ensure_depsdev_target,
+)
+from stackgraph_data.osv_worker import (
+    ensure_package_version_target_connection as ensure_osv_target,
+)
 
 
 SOURCE_KEY = "github-enterprise"
@@ -213,8 +218,7 @@ def persist_scanner_result_connection(
             (existing["id"],),
         ).fetchone()
         enrichment_target_count = sum(
-            ensure_package_version_target_connection(connection, purl).created
-            for purl in enrichment_purls
+            _ensure_public_enrichment(connection, purl) for purl in enrichment_purls
         )
         return PersistResult(
             str(existing["id"]), "PUBLISHED", True, int(count["count"]), 0,
@@ -347,7 +351,8 @@ def persist_scanner_result_connection(
     run_status = "SUCCEEDED" if result["completeness"] == "COMPLETE" else "PARTIAL"
     connection.execute(
         """
-        UPDATE ingest_run SET status=%s,completeness=%s,stats=%s,
+        UPDATE ingest_run SET status=%s,completeness=%s,
+          stats=coalesce(ingest_run.stats,'{}'::jsonb) || %s,
           completed_at=now(),lease_owner=NULL,lease_expires_at=NULL
         WHERE id=%s
         """,
@@ -361,13 +366,21 @@ def persist_scanner_result_connection(
         (target_id,),
     )
     enrichment_target_count = sum(
-        ensure_package_version_target_connection(connection, purl).created
-        for purl in enrichment_purls
+        _ensure_public_enrichment(connection, purl) for purl in enrichment_purls
     )
     return PersistResult(
         str(snapshot_id), "PUBLISHED", False, fact_count, usage_count,
         enrichment_target_count,
     )
+
+
+def _ensure_public_enrichment(
+    connection: Connection[dict[str, Any]], purl: str,
+) -> int:
+    """Ensure the initial external evidence fan-out and count newly observed packages."""
+    depsdev = ensure_depsdev_target(connection, purl)
+    osv = ensure_osv_target(connection, purl)
+    return int(depsdev.created or osv.created)
 
 
 def _public_package_version_purl(fact: Mapping[str, Any]) -> str | None:

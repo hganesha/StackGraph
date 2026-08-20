@@ -10,7 +10,7 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .evidence_store import LocalEvidenceStore
+from .evidence_store import EvidenceStore
 from .github_installation import OWNER_NAME, REPOSITORY_NAME
 from .github_installation_store import EXTERNAL_ACCOUNT_PREFIX, revoke_installation_connection
 from .github_webhook import VerifiedGitHubWebhook
@@ -42,7 +42,7 @@ def process_github_webhook(
     database_url: str,
     webhook: VerifiedGitHubWebhook,
     *,
-    evidence_store: LocalEvidenceStore,
+    evidence_store: EvidenceStore,
 ) -> WebhookProcessingResult:
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         return process_github_webhook_connection(
@@ -54,7 +54,7 @@ def process_github_webhook_connection(
     connection: Connection[dict[str, Any]],
     webhook: VerifiedGitHubWebhook,
     *,
-    evidence_store: LocalEvidenceStore,
+    evidence_store: EvidenceStore,
 ) -> WebhookProcessingResult:
     if webhook.installation_id is None:
         raise ValueError("GitHub webhook event cannot be routed without an installation")

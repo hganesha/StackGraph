@@ -147,6 +147,42 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertLess(application["confidence"], 0.6)
         self.assertIn("package.json#workspaces", application["properties"]["monorepo_signals"])
 
+    def test_deployment_and_terraform_files_emit_canonical_evidence_backed_facts(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Dockerfile").write_text("FROM python:3.13-slim\n")
+            (root / "compose.yaml").write_text(
+                "services:\n  api:\n    image: ghcr.io/acme/billing:1.2.3\n"
+            )
+            (root / "k8s").mkdir()
+            (root / "k8s" / "deployment.yaml").write_text(
+                "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n"
+                "  name: billing\n  namespace: production\nspec:\n  template:\n"
+                "    spec:\n      containers:\n        - name: api\n"
+                "          image: ghcr.io/acme/billing:1.2.3\n"
+            )
+            (root / "infra.tf").write_text(
+                'resource "aws_s3_bucket" "invoices" {\n  bucket = "invoices"\n}\n'
+            )
+
+            result = scan_repository(request(root))
+
+        relationships = {
+            (fact["predicate"], fact["object_entity"]["type"])
+            for fact in result["facts"] if "object_entity" in fact
+        }
+        self.assertIn(("DEPLOYED_AS", "Deployment"), relationships)
+        self.assertIn(("RUNS_ON", "ContainerImage"), relationships)
+        self.assertIn(("LOCATED_IN", "Environment"), relationships)
+        self.assertIn(("USES", "InfrastructureResource"), relationships)
+        terraform = next(
+            fact for fact in result["facts"]
+            if fact["object_entity"]["type"] == "InfrastructureResource"
+        )
+        self.assertEqual(terraform["object_entity"]["name"], "aws_s3_bucket.invoices")
+        self.assertEqual(terraform["evidence"][0]["locator"]["path"], "infra.tf")
+        self.assertEqual(terraform["assertion_class"], "DECLARED")
+
     def test_snapshot_blob_descriptor_must_be_complete(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

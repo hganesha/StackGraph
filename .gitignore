@@ -10,6 +10,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .venv/
+.pnpm-store/
+test-results/
+playwright-report/
 *.py[cod]
 
 # TypeScript / Next build artifacts
@@ -21,6 +24,11 @@ next-env.d.ts
 !.env.example
 
 *.log
+
+# Finder/iCloud conflict copies. These are never canonical source files and must not
+# enter test discovery, builds, migration discovery, or commits.
+**/* [0-9].*
+**/* [0-9]
 
 # Local materializations; durable evidence is held in the configured evidence store.
 services/enterprise-discovery/repository-snapshots/
