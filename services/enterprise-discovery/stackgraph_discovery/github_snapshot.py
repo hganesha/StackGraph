@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote
 
-from .evidence_store import LocalEvidenceStore, StoredEvidence, deterministic_tar
+from .evidence_store import EvidenceStore, LocalEvidenceStore, StoredEvidence, deterministic_tar
 from .github_client import (
     ApiResult,
     GitHubApiError,
@@ -289,7 +289,7 @@ class GitHubRepositoryAcquirer:
         installation_id: str | None = None,
         output_root: Path | None = None,
         tenant_key: str | None = None,
-        evidence_store: LocalEvidenceStore | None = None,
+        evidence_store: EvidenceStore | None = None,
         limits: SnapshotLimits | None = None,
     ) -> AcquisitionResult:
         owner, name = parse_repository(repository)
@@ -504,6 +504,8 @@ def manifest_kind(path: str) -> str | None:
             return "PYTHON_REQUIREMENTS"
     if pure_path.suffix.lower() in SOURCE_SUFFIXES:
         return SOURCE_SUFFIXES[pure_path.suffix.lower()]
+    if pure_path.suffix.lower() == ".tf":
+        return "INFRASTRUCTURE_CONFIG"
     lowered_parts = tuple(part.lower() for part in pure_path.parts)
     if pure_path.suffix.lower() in {".yaml", ".yml", ".toml"} and any(
         part in {".github", "workflows", "deploy", "deployment", "k8s", "kubernetes", "config"}
@@ -693,7 +695,7 @@ def _canonical_json(value: object) -> bytes:
 
 def _store_snapshot(
     snapshot: RepositorySnapshot,
-    evidence_store: LocalEvidenceStore,
+    evidence_store: EvidenceStore,
     tenant_key: str | None,
 ) -> StoredEvidence:
     if tenant_key is None:

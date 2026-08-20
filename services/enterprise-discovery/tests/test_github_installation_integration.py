@@ -83,6 +83,7 @@ def verified_webhook(
 class GitHubCredentialBoundaryTests(unittest.TestCase):
     def test_accepts_references_but_never_raw_tokens(self) -> None:
         validate_credential_reference("vault://stackgraph/github/installations/9876")
+        validate_credential_reference("github-app://installation/9876")
         self.assertEqual(
             resolve_environment_credential(
                 "env://GITHUB_INSTALLATION_TOKEN_9876",

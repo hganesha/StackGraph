@@ -13,7 +13,7 @@
       "required": ["key", "kind", "adapter_version"],
       "properties": {
         "key": {"type": "string", "minLength": 1},
-        "kind": {"enum": ["GITHUB", "PACKAGE_REGISTRY", "DEPS_DEV", "OSV", "OPENSSF", "CURATED"]},
+        "kind": {"enum": ["GITHUB", "PACKAGE_REGISTRY", "DEPS_DEV", "OSV", "OPENSSF", "CURATED", "RUNTIME"]},
         "adapter_version": {"type": "string", "minLength": 1},
         "schema_version": {"type": "string"}
       },

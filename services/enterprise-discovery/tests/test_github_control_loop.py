@@ -24,6 +24,7 @@ try:
         _retry_delay,
         claim_run,
         fail_exhausted_leases,
+        reconcile_rescan_jobs,
         schedule_due_targets,
     )
     from stackgraph_discovery.github_installation import (
@@ -78,6 +79,142 @@ class GitHubControlLoopUnitTests(unittest.TestCase):
     "PostgreSQL integration dependencies are unavailable",
 )
 class GitHubControlLoopPersistenceTests(unittest.TestCase):
+    def test_rescan_jobs_roll_up_shared_run_success_and_failure(self) -> None:
+        tenant_key = f"github-rescan-rollup-{uuid4()}"
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            tenant = connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'Rescan rollup') RETURNING id",
+                (tenant_key,),
+            ).fetchone()
+            source = connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com') RETURNING id
+                """,
+                (tenant["id"],),
+            ).fetchone()
+            account = connection.execute(
+                """
+                INSERT INTO connector_account(
+                  tenant_id,source_system_id,external_account_key,
+                  credential_reference,permissions
+                ) VALUES (%s,%s,%s,'env://GITHUB_TOKEN',%s) RETURNING id
+                """,
+                (
+                    tenant["id"], source["id"], f"github:repository:{uuid4()}",
+                    Jsonb(["contents:read", "metadata:read"]),
+                ),
+            ).fetchone()
+            target = connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,
+                  target_key,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'REPOSITORY',%s,%s,NULL) RETURNING id
+                """,
+                (
+                    tenant["id"], source["id"], account["id"],
+                    f"github:repo:{uuid4()}",
+                    Jsonb({"full_name": "acme/rescan", "schedule_enabled": False}),
+                ),
+            ).fetchone()
+            jobs = connection.execute(
+                """
+                INSERT INTO rescan_job(
+                  tenant_id,idempotency_key,reason,requested_by
+                ) VALUES
+                  (%s,%s,'shared run one','tester'),
+                  (%s,%s,'shared run two','tester')
+                RETURNING id
+                """,
+                (tenant["id"], f"rescan-{uuid4()}", tenant["id"], f"rescan-{uuid4()}"),
+            ).fetchall()
+            run = connection.execute(
+                """
+                INSERT INTO ingest_run(
+                  tenant_id,ingest_target_id,trigger_kind,stats
+                ) VALUES (%s,%s,'MANUAL',%s) RETURNING id
+                """,
+                (
+                    tenant["id"], target["id"],
+                    Jsonb({"rescan_job_ids": [str(job["id"]) for job in jobs]}),
+                ),
+            ).fetchone()
+
+        self.assertEqual(
+            reconcile_rescan_jobs(DATABASE_URL, tenant_id=tenant["id"]), 0,
+        )
+        claimed = claim_run(
+            DATABASE_URL, worker_id="rescan-rollup-test", lease_seconds=300,
+            tenant_id=tenant["id"],
+        )
+        self.assertIsNotNone(claimed)
+        self.assertEqual(
+            reconcile_rescan_jobs(DATABASE_URL, tenant_id=tenant["id"]), 2,
+        )
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            running = connection.execute(
+                "SELECT status,started_at FROM rescan_job WHERE id=ANY(%s::uuid[])",
+                ([job["id"] for job in jobs],),
+            ).fetchall()
+            self.assertTrue(all(row["status"] == "RUNNING" for row in running))
+            self.assertTrue(all(row["started_at"] is not None for row in running))
+            connection.execute(
+                """
+                UPDATE ingest_run SET status='SUCCEEDED',completed_at=now(),
+                  lease_owner=NULL,lease_expires_at=NULL WHERE id=%s
+                """,
+                (run["id"],),
+            )
+
+        self.assertEqual(
+            reconcile_rescan_jobs(DATABASE_URL, tenant_id=tenant["id"]), 2,
+        )
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            completed = connection.execute(
+                "SELECT status,completed_at FROM rescan_job WHERE id=ANY(%s::uuid[])",
+                ([job["id"] for job in jobs],),
+            ).fetchall()
+            self.assertTrue(all(row["status"] == "SUCCEEDED" for row in completed))
+            self.assertTrue(all(row["completed_at"] is not None for row in completed))
+            failed_job = connection.execute(
+                """
+                INSERT INTO rescan_job(
+                  tenant_id,idempotency_key,reason,requested_by
+                ) VALUES (%s,%s,'failed run','tester') RETURNING id
+                """,
+                (tenant["id"], f"rescan-{uuid4()}"),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO ingest_run(
+                  tenant_id,ingest_target_id,trigger_kind,status,stats,error_class,
+                  error_detail,started_at,completed_at
+                ) VALUES (%s,%s,'MANUAL','FAILED',%s,'TestFailure',%s,now(),now())
+                """,
+                (
+                    tenant["id"], target["id"],
+                    Jsonb({"rescan_job_ids": [str(failed_job["id"])]}),
+                    Jsonb({"message": "repository scan failed"}),
+                ),
+            )
+
+        self.assertEqual(
+            reconcile_rescan_jobs(DATABASE_URL, tenant_id=tenant["id"]), 1,
+        )
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            failed = connection.execute(
+                "SELECT status,last_error,completed_at FROM rescan_job WHERE id=%s",
+                (failed_job["id"],),
+            ).fetchone()
+            self.assertEqual(failed["status"], "FAILED")
+            self.assertEqual(failed["last_error"], "repository scan failed")
+            self.assertIsNotNone(failed["completed_at"])
+            connection.execute(
+                "UPDATE ingest_target SET enabled=false,next_due_at=NULL WHERE id=%s",
+                (target["id"],),
+            )
+
     def test_due_target_is_scheduled_once_and_expired_lease_dead_letters(self) -> None:
         tenant_key = f"github-control-{uuid4()}"
         registration = None

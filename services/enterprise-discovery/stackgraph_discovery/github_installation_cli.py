@@ -5,13 +5,13 @@ import json
 import os
 
 from .github_client import GitHubClient
+from .github_app_auth import resolve_runtime_credential
 from .github_installation import InstallationRepositoryDiscovery
 from .github_installation_store import (
     as_json,
     connector_binding,
     reconcile_installation,
     register_installation,
-    resolve_environment_credential,
     revoke_installation,
 )
 
@@ -69,7 +69,9 @@ def main(argv: list[str] | None = None) -> int:
             tenant_key=args.tenant_key,
             installation_id=args.installation_id,
         )
-        token = resolve_environment_credential(binding.credential_reference)
+        token = resolve_runtime_credential(
+            binding.credential_reference, installation_id=args.installation_id,
+        )
         snapshot = InstallationRepositoryDiscovery(
             GitHubClient(token=token, api_version=args.api_version),
             max_pages=args.max_pages,

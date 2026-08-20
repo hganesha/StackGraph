@@ -1,0 +1,14 @@
+[
+  {"id":"htmx","name":"HTMX","source_url":"https://htmx.org/","retrieved_at":"2026-08-20","curated_group":"htmx-alpine-js"},
+  {"id":"alpine-js","name":"Alpine.js","source_url":"https://alpinejs.dev/","retrieved_at":"2026-08-20","curated_group":"htmx-alpine-js"},
+  {"id":"apollo-client","name":"Apollo Client","source_url":"https://www.apollographql.com/docs/react","retrieved_at":"2026-08-20","curated_group":"apollo-client-urql"},
+  {"id":"urql","name":"urql","source_url":"https://commerce.nearform.com/open-source/urql/","retrieved_at":"2026-08-20","curated_group":"apollo-client-urql"},
+  {"id":"turborepo","name":"Turborepo","source_url":"https://turborepo.com/docs","retrieved_at":"2026-08-20","curated_group":"turborepo-nx"},
+  {"id":"nx","name":"Nx","source_url":"https://nx.dev/docs","retrieved_at":"2026-08-20","curated_group":"turborepo-nx"},
+  {"id":"pnpm","name":"pnpm","source_url":"https://pnpm.io/","retrieved_at":"2026-08-20","curated_group":"pnpm-npm-bun-yarn"},
+  {"id":"npm","name":"npm","source_url":"https://docs.npmjs.com/","retrieved_at":"2026-08-20","curated_group":"pnpm-npm-bun-yarn"},
+  {"id":"bun","name":"Bun","source_url":"https://bun.sh/docs","retrieved_at":"2026-08-20","curated_group":"pnpm-npm-bun-yarn"},
+  {"id":"yarn","name":"Yarn","source_url":"https://yarnpkg.com/","retrieved_at":"2026-08-20","curated_group":"pnpm-npm-bun-yarn"},
+  {"id":"redis","name":"Redis","source_url":"https://redis.io/docs/latest/","retrieved_at":"2026-08-20","curated_group":"redis-valkey"},
+  {"id":"valkey","name":"Valkey","source_url":"https://valkey.io/","retrieved_at":"2026-08-20","curated_group":"redis-valkey"}
+]

@@ -15,12 +15,12 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .evidence_store import LocalEvidenceStore
+from .evidence_store import evidence_store_from_environment
 from .github_client import GitHubApiError, GitHubClient, GitHubTransportError
+from .github_app_auth import resolve_runtime_credential
 from .github_installation import InstallationRepositoryDiscovery
 from .github_installation_store import (
     reconcile_installation,
-    resolve_environment_credential,
 )
 from .github_snapshot import GitHubRepositoryAcquirer, SnapshotLimits
 from .repository_scanner import SCANNER_KEY, SCANNER_VERSION, scan_repository
@@ -199,6 +199,69 @@ def fail_exhausted_leases(database_url: str) -> int:
     return len(rows)
 
 
+def reconcile_rescan_jobs(
+    database_url: str,
+    *,
+    tenant_id: UUID | None = None,
+) -> int:
+    """Roll operator rescan jobs up from every linked ingest run."""
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        rows = connection.execute(
+            """
+            WITH rollup AS (
+              SELECT job.id,
+                     bool_or(run.status IN ('FAILED','CANCELLED')) any_failed,
+                     bool_and(run.status IN (
+                       'SUCCEEDED','PARTIAL','FAILED','CANCELLED'
+                     )) all_terminal,
+                     min(run.started_at) started_at,
+                     max(run.completed_at) completed_at,
+                     string_agg(
+                       coalesce(run.error_detail->>'message',run.error_class),'; '
+                       ORDER BY run.completed_at,run.id
+                     ) FILTER (
+                       WHERE run.status IN ('FAILED','CANCELLED')
+                         AND coalesce(run.error_detail->>'message',run.error_class) IS NOT NULL
+                     ) errors
+              FROM rescan_job job
+              JOIN ingest_run run ON (
+                run.stats->>'rescan_job_id'=job.id::text
+                OR coalesce(run.stats->'rescan_job_ids','[]'::jsonb) ? job.id::text
+              )
+              WHERE job.status IN ('PENDING','RUNNING')
+                AND (%s::uuid IS NULL OR job.tenant_id=%s)
+              GROUP BY job.id
+            ), desired AS (
+              SELECT *,CASE
+                WHEN all_terminal AND any_failed THEN 'FAILED'
+                WHEN all_terminal THEN 'SUCCEEDED'
+                WHEN started_at IS NOT NULL THEN 'RUNNING'
+                ELSE 'PENDING'
+              END next_status
+              FROM rollup
+            )
+            UPDATE rescan_job job SET
+              status=desired.next_status,
+              started_at=coalesce(job.started_at,desired.started_at),
+              completed_at=CASE WHEN desired.all_terminal
+                THEN coalesce(desired.completed_at,now()) ELSE NULL END,
+              last_error=CASE WHEN desired.all_terminal AND desired.any_failed
+                THEN coalesce(desired.errors,'one or more ingest runs failed')
+                ELSE NULL END,
+              updated_at=now()
+            FROM desired
+            WHERE job.id=desired.id AND (
+              job.status IS DISTINCT FROM desired.next_status
+              OR (job.started_at IS NULL AND desired.started_at IS NOT NULL)
+              OR (desired.all_terminal AND job.completed_at IS NULL)
+            )
+            RETURNING job.id
+            """,
+            (tenant_id, tenant_id),
+        ).fetchall()
+    return len(rows)
+
+
 def run_once(
     database_url: str,
     *,
@@ -208,6 +271,7 @@ def run_once(
     lease_seconds: int = 1800,
 ) -> WorkResult:
     fail_exhausted_leases(database_url)
+    reconcile_rescan_jobs(database_url)
     schedule_due_targets(database_url)
     claimed = claim_run(
         database_url,
@@ -216,6 +280,7 @@ def run_once(
     )
     if claimed is None:
         return WorkResult(status="IDLE")
+    reconcile_rescan_jobs(database_url)
     try:
         if claimed.target_kind == "GITHUB_INSTALLATION":
             source_revision = _reconcile_installation(database_url, claimed)
@@ -248,12 +313,16 @@ def run_once(
             run_id=str(claimed.run_id), target_key=claimed.target_key,
             retry_after_seconds=None if terminal else delay,
         )
+    finally:
+        reconcile_rescan_jobs(database_url)
 
 
 def _reconcile_installation(database_url: str, claimed: ClaimedRun) -> str:
     _renew_lease(database_url, claimed)
     installation_id = _required_policy_string(claimed.refresh_policy, "installation_id")
-    token = resolve_environment_credential(claimed.credential_reference)
+    token = resolve_runtime_credential(
+        claimed.credential_reference, installation_id=installation_id,
+    )
     client = _client(token)
     snapshot = InstallationRepositoryDiscovery(client).discover(installation_id)
     _renew_lease(database_url, claimed)
@@ -277,7 +346,9 @@ def _acquire_scan_publish(
     if not direct_repository and repository_id is None:
         raise ValueError("refresh policy repository_id must be a non-empty string")
     full_name = _required_policy_string(policy, "full_name")
-    token = resolve_environment_credential(claimed.credential_reference)
+    token = resolve_runtime_credential(
+        claimed.credential_reference, installation_id=installation_id,
+    )
     previous_revision = _previous_revision(database_url, claimed.target_id)
     _renew_lease(database_url, claimed)
     result = GitHubRepositoryAcquirer(_client(token)).acquire(
@@ -286,7 +357,10 @@ def _acquire_scan_publish(
         installation_id=installation_id,
         output_root=snapshot_root,
         tenant_key=claimed.tenant_key,
-        evidence_store=LocalEvidenceStore(evidence_root),
+        evidence_store=evidence_store_from_environment({
+            **os.environ,
+            "STACKGRAPH_EVIDENCE_STORE_ROOT": str(evidence_root),
+        }),
         limits=SnapshotLimits(
             max_files=_policy_int(policy, "max_files", 100_000),
             max_bytes=_policy_int(policy, "max_bytes", 1024 * 1024 * 1024),
@@ -528,7 +602,8 @@ def _complete_run(
     with psycopg.connect(database_url) as connection:
         completed = connection.execute(
             """
-            UPDATE ingest_run SET status='SUCCEEDED',completeness='COMPLETE',stats=%s,
+            UPDATE ingest_run SET status='SUCCEEDED',completeness='COMPLETE',
+              stats=coalesce(ingest_run.stats,'{}'::jsonb) || %s,
               completed_at=now(),lease_owner=NULL,lease_expires_at=NULL
             WHERE id=%s AND status='RUNNING' AND lease_owner=%s
               AND lease_expires_at>now()

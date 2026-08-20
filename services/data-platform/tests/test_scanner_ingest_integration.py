@@ -174,23 +174,29 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(replay.enrichment_target_count, 0)
             enrichment = connection.execute(
                 """
-                SELECT target.tenant_id,target.target_key,run.trigger_kind,run.status
+                SELECT source.source_key,target.tenant_id,target.target_key,
+                       run.trigger_kind,run.status
                 FROM ingest_target target
                 JOIN source_system source ON source.id=target.source_system_id
                 JOIN ingest_run run ON run.ingest_target_id=target.id
-                WHERE source.source_key='deps.dev'
+                WHERE source.source_key IN ('deps.dev','osv.dev')
                   AND target.target_key=%s
+                ORDER BY source.source_key
                 """,
                 (package_purl,),
-            ).fetchone()
+            ).fetchall()
             self.assertEqual(
                 enrichment,
-                {
-                    "tenant_id": None,
-                    "target_key": package_purl,
-                    "trigger_kind": "RECONCILIATION",
-                    "status": "PENDING",
-                },
+                [
+                    {
+                        "source_key": source_key,
+                        "tenant_id": None,
+                        "target_key": package_purl,
+                        "trigger_kind": "RECONCILIATION",
+                        "status": "PENDING",
+                    }
+                    for source_key in ("deps.dev", "osv.dev")
+                ],
             )
             package_entity = connection.execute(
                 """

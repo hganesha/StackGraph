@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from .evidence_store import LocalEvidenceStore
+from .evidence_store import EvidenceStore, evidence_store_from_environment
 from .github_webhook import MAX_WEBHOOK_BYTES, verify_github_webhook
 from .github_webhook_store import process_github_webhook
 
@@ -26,7 +26,7 @@ def handler(
     *,
     database_url: str,
     webhook_secret: str,
-    evidence_store: LocalEvidenceStore,
+    evidence_store: EvidenceStore,
 ) -> type[BaseHTTPRequestHandler]:
     class GitHubWebhookHandler(BaseHTTPRequestHandler):
         server_version = "StackGraphGitHubWebhook/1.0"
@@ -107,7 +107,6 @@ def handler(
 def main() -> None:
     database_url = _required_environment("STACKGRAPH_DATABASE_URL")
     webhook_secret = _required_environment("GITHUB_WEBHOOK_SECRET")
-    evidence_root = Path(_required_environment("STACKGRAPH_EVIDENCE_STORE_ROOT"))
     host = os.environ.get("STACKGRAPH_GITHUB_WEBHOOK_HOST", "0.0.0.0")
     port = int(os.environ.get("STACKGRAPH_GITHUB_WEBHOOK_PORT", "8090"))
     if port < 1 or port > 65535:
@@ -117,7 +116,7 @@ def main() -> None:
         handler(
             database_url=database_url,
             webhook_secret=webhook_secret,
-            evidence_store=LocalEvidenceStore(evidence_root),
+            evidence_store=evidence_store_from_environment(),
         ),
     )
     server.daemon_threads = True

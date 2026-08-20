@@ -1,0 +1,36 @@
+{
+  "complete_scans": 100,
+  "evidence_items": 1400,
+  "facts": 1000,
+  "facts_with_evidence_ratio": 1.0,
+  "failures": [],
+  "findings": 200,
+  "generated_at": "2026-08-20T13:19:25.748891Z",
+  "limitations": [
+    "This is a deterministic local scanner/load drill, not a claim about GitHub or provider quota latency.",
+    "Live tenant, network enrichment, projection, and UI latency require a deployment-specific trace."
+  ],
+  "passed": true,
+  "per_repository_seconds": {
+    "max": 0.0026,
+    "median": 0.000661,
+    "p95": 0.001535
+  },
+  "repositories": 100,
+  "scanner": {
+    "key": "repository-dependency-usage",
+    "version": "1.3.0"
+  },
+  "schema_version": "1.0.0",
+  "targets": {
+    "all_scans_complete": true,
+    "evidence_coverage_at_least_99_percent": true,
+    "first_five_findings_under_20_minutes": true,
+    "p95_scan_under_2_seconds": true,
+    "repository_count_at_least_100": true,
+    "zero_failures": true
+  },
+  "time_to_first_five_findings_seconds": 0.005818,
+  "total_seconds": 0.11893,
+  "workload": "synthetic-polyglot-deployment-fixture"
+}

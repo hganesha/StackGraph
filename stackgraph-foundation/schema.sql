@@ -176,7 +176,7 @@ BEGIN
   IF object_tenant IS NOT NULL AND object_tenant IS DISTINCT FROM NEW.tenant_id THEN RAISE EXCEPTION 'fact object is outside tenant scope'; END IF;
  END IF;
  RETURN NEW;
-END $$;
+END; $$;
 CREATE TRIGGER trg_validate_fact_object_kind BEFORE INSERT OR UPDATE OF predicate,object_entity_id,object_value ON fact_assertion FOR EACH ROW EXECUTE FUNCTION validate_fact_object_kind();
 CREATE TABLE evidence (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id) ON DELETE CASCADE,
@@ -203,10 +203,10 @@ BEGIN
  IF registry_tenant IS NOT NULL AND registry_tenant IS DISTINCT FROM NEW.tenant_id THEN RAISE EXCEPTION 'package registry is outside tenant scope'; END IF;
  IF registry_visibility='PRIVATE' AND registry_tenant IS NULL THEN RAISE EXCEPTION 'private registry must be tenant scoped'; END IF;
  RETURN NEW;
-END $$;
+END; $$;
 CREATE TRIGGER trg_validate_dependency_resolution_scope BEFORE INSERT OR UPDATE ON dependency_resolution FOR EACH ROW EXECUTE FUNCTION validate_dependency_resolution_scope();
 CREATE FUNCTION require_fact_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN IF NOT EXISTS(SELECT 1 FROM evidence WHERE fact_assertion_id=NEW.id) THEN RAISE EXCEPTION 'fact_assertion % must have evidence',NEW.id; END IF; RETURN NEW; END $$;
+BEGIN IF NOT EXISTS(SELECT 1 FROM evidence WHERE fact_assertion_id=NEW.id) THEN RAISE EXCEPTION 'fact_assertion % must have evidence',NEW.id; END IF; RETURN NEW; END; $$;
 CREATE CONSTRAINT TRIGGER trg_require_fact_evidence AFTER INSERT OR UPDATE ON fact_assertion DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION require_fact_evidence();
 
 CREATE TABLE package_api_surface (
@@ -445,6 +445,14 @@ CREATE TABLE business_map_shared_group_member(tenant_id uuid NOT NULL REFERENCES
 CREATE TABLE business_map_function_assignment(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),business_map_id uuid NOT NULL REFERENCES business_map(id) ON DELETE CASCADE,business_map_function_id uuid NOT NULL REFERENCES business_map_function(id) ON DELETE CASCADE,lane_id uuid REFERENCES business_map_lane(id) ON DELETE CASCADE,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(business_map_id,business_map_function_id));
 CREATE TABLE business_map_revision(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),business_map_id uuid NOT NULL REFERENCES business_map(id) ON DELETE CASCADE,version integer NOT NULL CHECK(version>0),snapshot jsonb NOT NULL CHECK(jsonb_typeof(snapshot)='object'),actor_key text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(business_map_id,version));
 
+-- Tenant administration and operator control (migration 010).
+CREATE TABLE tenant_member(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),actor_key text NOT NULL CHECK(actor_key<>''),display_name text NOT NULL DEFAULT '',email text NOT NULL DEFAULT '',role text NOT NULL DEFAULT 'view' CHECK(role IN ('view','review','execute','admin')),status text NOT NULL DEFAULT 'INVITED' CHECK(status IN ('INVITED','ACTIVE','SUSPENDED')),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,actor_key));
+CREATE TABLE connector(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),provider text NOT NULL CHECK(provider IN ('GITHUB_APP','PACKAGE_REGISTRY','DEPS_DEV','OSV','OTHER')),display_name text NOT NULL CHECK(display_name<>''),external_account_key text NOT NULL DEFAULT '',credential_reference text NOT NULL DEFAULT '',scopes text[] NOT NULL DEFAULT '{}',status text NOT NULL DEFAULT 'CONNECTED' CHECK(status IN ('CONNECTED','NEEDS_REAUTH','DISABLED','REVOKED')),last_synced_at timestamptz,last_error text,metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(metadata)='object'),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,provider,external_account_key));
+CREATE TABLE scan_policy(tenant_id uuid PRIMARY KEY REFERENCES tenant(id),cadence text NOT NULL DEFAULT 'DAILY' CHECK(cadence IN ('HOURLY','DAILY','WEEKLY','MANUAL')),enabled boolean NOT NULL DEFAULT true,updated_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE rescan_job(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),connector_id uuid REFERENCES connector(id) ON DELETE SET NULL,idempotency_key text NOT NULL CHECK(idempotency_key<>''),status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','RUNNING','SUCCEEDED','FAILED')),reason text NOT NULL DEFAULT '',requested_by text NOT NULL,last_error text,created_at timestamptz NOT NULL DEFAULT now(),started_at timestamptz,completed_at timestamptz,updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,idempotency_key));
+CREATE TABLE connector_quota(tenant_id uuid NOT NULL REFERENCES tenant(id),provider text NOT NULL CHECK(provider IN ('GITHUB_APP','PACKAGE_REGISTRY','DEPS_DEV','OSV','OTHER')),used integer NOT NULL DEFAULT 0 CHECK(used>=0),limit_value integer CHECK(limit_value IS NULL OR limit_value>=0),status text NOT NULL DEFAULT 'OK' CHECK(status IN ('OK','THROTTLED','EXHAUSTED')),resets_at timestamptz,backoff_until timestamptz,observed_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,provider));
+CREATE TABLE admin_audit_log(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),actor_key text NOT NULL,action text NOT NULL CHECK(action<>''),target_kind text NOT NULL,target_id text NOT NULL DEFAULT '',detail jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(detail)='object'),created_at timestamptz NOT NULL DEFAULT now());
+
 CREATE VIEW current_fact WITH (security_invoker=true) AS SELECT * FROM (
  SELECT f.*,row_number() OVER(PARTITION BY f.tenant_id,f.logical_key ORDER BY f.system_from DESC,f.id DESC) AS current_rank
  FROM fact_assertion f WHERE f.system_to IS NULL
@@ -475,7 +483,7 @@ BEGIN
  INSERT INTO projection_outbox(tenant_id,aggregate_type,aggregate_id,operation,dedupe_key,payload)
  SELECT f.tenant_id,'FACT',f.id,'UPSERT','snapshot:'||p_snapshot_id::text||':fact:'||f.id::text,jsonb_build_object('source_snapshot_id',p_snapshot_id)
  FROM fact_assertion f WHERE f.source_snapshot_id=p_snapshot_id ON CONFLICT(dedupe_key) DO NOTHING;
-END $$;
+END; $$;
 
 CREATE FUNCTION enqueue_repository_intelligence_on_publish() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -490,7 +498,7 @@ BEGIN
   ON CONFLICT DO NOTHING;
  END IF;
  RETURN NEW;
-END $$;
+END; $$;
 CREATE TRIGGER source_snapshot_enqueue_repository_intelligence AFTER UPDATE OF status ON source_snapshot
 FOR EACH ROW EXECUTE FUNCTION enqueue_repository_intelligence_on_publish();
 
@@ -518,6 +526,15 @@ CREATE INDEX idx_code_implementation_repository ON code_implementation_summary(t
 CREATE INDEX idx_code_implementation_structure ON code_implementation_summary(tenant_id,structural_fingerprint,source_revision);
 CREATE INDEX idx_code_implementation_tokens ON code_implementation_summary USING gin(semantic_tokens);
 CREATE INDEX idx_modernization_internal_capability ON modernization_internal_component(tenant_id,capability_definition_id,status);
+CREATE INDEX idx_tenant_member_tenant ON tenant_member(tenant_id,role,status);
+CREATE INDEX idx_connector_tenant ON connector(tenant_id,status,updated_at DESC);
+CREATE INDEX idx_rescan_job_tenant ON rescan_job(tenant_id,created_at DESC,id DESC);
+CREATE INDEX idx_admin_audit_log_tenant ON admin_audit_log(tenant_id,created_at DESC,id DESC);
+CREATE INDEX idx_identity_assertion_review_queue ON identity_assertion(created_at DESC,id DESC) WHERE review_state='POSSIBLE';
+CREATE INDEX idx_capability_inference_review_queue ON capability_inference(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
+CREATE INDEX idx_duplicate_capability_review_queue ON duplicate_capability_candidate(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
+CREATE INDEX idx_modernization_candidate_review_queue ON modernization_candidate(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
+CREATE INDEX idx_modernization_recommendation_review_queue ON modernization_recommendation(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
 CREATE INDEX idx_modernization_validation_recommendation ON modernization_validation_outcome(tenant_id,modernization_recommendation_id,reported_at DESC);
 CREATE INDEX idx_business_map_tenant ON business_map(tenant_id,status,updated_at DESC);
 CREATE INDEX idx_business_map_lane_map ON business_map_lane(tenant_id,business_map_id,lane_kind,position);
@@ -533,8 +550,8 @@ CREATE INDEX idx_business_map_revision_map ON business_map_revision(tenant_id,bu
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_revision'
-] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END $$;
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log'
+] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END; $$;
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
 ALTER TABLE capability_mapping ENABLE ROW LEVEL SECURITY;

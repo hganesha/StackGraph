@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 operations-snapshot recovery-drill fresh-integration
 
 backend-up:
 	docker compose up --build -d database api
@@ -103,12 +103,12 @@ intelligence-requeue: database-migrate
 github-installation-register: database-migrate
 	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
 	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
-	docker compose run --rm github-lifecycle register --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)" --credential-reference "$${CREDENTIAL_REFERENCE:-env://GITHUB_INSTALLATION_TOKEN}" --permission contents:read --permission metadata:read
+	docker compose run --rm github-lifecycle register --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)" --credential-reference "$${CREDENTIAL_REFERENCE:-github-app://installation/$(INSTALLATION_ID)}" --permission contents:read --permission metadata:read
 
 github-installation-reconcile: database-migrate
 	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
 	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
-	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN must resolve the local env:// credential reference" >&2; exit 2)
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || { test -n "$$GITHUB_APP_ID" && { test -n "$$GITHUB_APP_PRIVATE_KEY" || test -n "$$GITHUB_APP_PRIVATE_KEY_FILE"; }; } || (echo "set GitHub App credentials or GITHUB_INSTALLATION_TOKEN" >&2; exit 2)
 	docker compose run --rm github-lifecycle reconcile --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)"
 
 github-installation-revoke: database-migrate
@@ -128,14 +128,27 @@ github-pipeline-work: database-migrate
 
 pipeline-up: database-migrate
 	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
-	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN is required for env://GITHUB_INSTALLATION_TOKEN connectors" >&2; exit 2)
-	docker compose --profile pipeline up --build -d github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || { test -n "$$GITHUB_APP_ID" && { test -n "$$GITHUB_APP_PRIVATE_KEY" || test -n "$$GITHUB_APP_PRIVATE_KEY_FILE"; }; } || (echo "set GitHub App credentials or GITHUB_INSTALLATION_TOKEN" >&2; exit 2)
+	docker compose --profile pipeline up --build -d github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 
 pipeline-down:
-	docker compose --profile pipeline stop github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline stop github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 
 pipeline-logs:
-	docker compose --profile pipeline logs -f github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline logs -f github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+
+pilot-100:
+	mkdir -p artifacts/pilot
+	docker compose run --rm --no-deps -v "$(CURDIR)/artifacts/pilot:/artifacts" --entrypoint python repository-scanner -m stackgraph_discovery.pilot --repositories "$${PILOT_REPOSITORIES:-100}" --output /artifacts/pilot-100-repositories.json
+
+operations-snapshot:
+	docker compose run --rm --no-deps seed python -m stackgraph_data.operations
+
+recovery-drill:
+	./scripts/recovery_drill.sh
+
+fresh-integration:
+	./scripts/fresh_integration_matrix.sh
 
 repository-acquire:
 	@test -n "$(REPOSITORY)" || (echo "REPOSITORY is required (owner/name)" >&2; exit 2)

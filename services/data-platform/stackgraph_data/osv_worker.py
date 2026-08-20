@@ -132,6 +132,68 @@ def enqueue_package_version(
     return enqueue_package_versions(database_url, [purl], **kwargs)[0]
 
 
+def ensure_package_version_target_connection(
+    connection: Connection[dict[str, Any]],
+    purl: str,
+    *,
+    priority: str = "WARM",
+    max_vulnerabilities: int = DEFAULT_MAX_VULNERABILITIES,
+    max_pages: int = DEFAULT_MAX_PAGES,
+    refresh_seconds: int = DEFAULT_REFRESH_SECONDS,
+) -> EnqueueResult:
+    """Create an OSV target once without resetting an existing freshness schedule."""
+    target = PackageVersionKey.from_purl(purl)
+    _validate_policy(priority, max_vulnerabilities, max_pages, refresh_seconds)
+    policy = _refresh_policy(max_vulnerabilities, max_pages, refresh_seconds)
+    source_id = _upsert_osv_source(connection)
+    inserted = connection.execute(
+        """
+        INSERT INTO ingest_target(
+          tenant_id,source_system_id,target_kind,target_key,priority,enabled,
+          refresh_policy,next_due_at
+        ) VALUES (NULL,%s,'PACKAGE_VERSION',%s,%s,true,%s,now())
+        ON CONFLICT(tenant_id,source_system_id,target_kind,target_key)
+        DO NOTHING RETURNING id
+        """,
+        (source_id, target.purl, priority, Jsonb(policy)),
+    ).fetchone()
+    if inserted is not None:
+        run = connection.execute(
+            """
+            INSERT INTO ingest_run(
+              tenant_id,ingest_target_id,trigger_kind,status,available_at
+            ) VALUES (NULL,%s,'RECONCILIATION','PENDING',now()) RETURNING id
+            """,
+            (inserted["id"],),
+        ).fetchone()
+        assert run is not None
+        return EnqueueResult(
+            target_id=str(inserted["id"]), run_id=str(run["id"]),
+            target_key=target.purl, created=True,
+        )
+    existing = connection.execute(
+        """
+        SELECT target.id,(
+          SELECT run.id FROM ingest_run run
+          WHERE run.ingest_target_id=target.id
+            AND run.status IN ('PENDING','RUNNING')
+          ORDER BY run.created_at LIMIT 1
+        ) run_id
+        FROM ingest_target target
+        WHERE target.tenant_id IS NULL AND target.source_system_id=%s
+          AND target.target_kind='PACKAGE_VERSION' AND target.target_key=%s
+        """,
+        (source_id, target.purl),
+    ).fetchone()
+    assert existing is not None
+    return EnqueueResult(
+        target_id=str(existing["id"]),
+        run_id=str(existing["run_id"]) if existing["run_id"] else "",
+        target_key=target.purl,
+        created=False,
+    )
+
+
 def sync_observed_package_versions(
     database_url: str,
     *,
@@ -1743,6 +1805,12 @@ def _parser() -> argparse.ArgumentParser:
     work.add_argument("--worker-id")
     work.add_argument("--batch-size", type=int, default=50)
     work.add_argument("--lease-seconds", type=int, default=300)
+    serve = subparsers.add_parser("serve")
+    serve.add_argument("--worker-id")
+    serve.add_argument("--batch-size", type=int, default=50)
+    serve.add_argument("--lease-seconds", type=int, default=300)
+    serve.add_argument("--poll-seconds", type=float, default=2.0)
+    serve.add_argument("--sync-limit", type=int, default=1_000)
     schedule = subparsers.add_parser("schedule")
     schedule.add_argument("--limit", type=int, default=500)
     sync = subparsers.add_parser("sync")
@@ -1769,6 +1837,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     database_url = _database_url(parser)
+    if args.command == "serve":
+        if args.poll_seconds < 0:
+            parser.error("--poll-seconds must not be negative")
+        if args.sync_limit <= 0:
+            parser.error("--sync-limit must be positive")
+        while True:
+            sync_observed_package_versions(database_url, limit=args.sync_limit)
+            result = run_batch(
+                database_url,
+                worker_id=args.worker_id,
+                batch_size=args.batch_size,
+                lease_seconds=args.lease_seconds,
+            )
+            print(json.dumps(asdict(result), sort_keys=True), flush=True)
+            if result.status in {"IDLE", "RETRY_SCHEDULED"}:
+                time.sleep(max(0.1, args.poll_seconds))
     if args.command == "enqueue":
         result: object = enqueue_package_versions(
             database_url,
