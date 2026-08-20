@@ -39,6 +39,16 @@ from app.models import (
     BusinessMapDetail,
     BusinessMapList,
     BusinessMapStateModel,
+    ReviewQueue,
+    ReviewQueueItem,
+    TenantMember,
+    TenantMemberList,
+    Connector,
+    ConnectorList,
+    ScanPolicy,
+    ScanStatus,
+    RescanJob,
+    RescanJobList,
 )
 
 
@@ -220,6 +230,117 @@ class StubReadModels:
             successful_validation_rate=1.0, evidence_completeness_rate=1.0,
             retry_count=0, dead_letter_count=0, stale_candidate_count=0,
             stale_recommendation_count=0, model_invocation_count=0, model_cost_usd=0,
+        )
+
+    async def review_queue(self, *, tenant_id, item_types, repository_id, cursor, limit):
+        self.last_tenant_id = tenant_id
+        self.last_item_types = item_types
+        self.last_repository_id = repository_id
+        return ReviewQueue(
+            as_of=NOW,
+            counts={
+                "IDENTITY_ASSERTION": 1, "CAPABILITY_INFERENCE": 0, "DUPLICATE_CAPABILITY": 0,
+                "MODERNIZATION_CANDIDATE": 0, "MODERNIZATION_RECOMMENDATION": 0,
+            },
+            items=[ReviewQueueItem(
+                item_id=UUID("00000000-0000-4000-8000-000000000501"),
+                item_type="IDENTITY_ASSERTION", review_state="POSSIBLE",
+                title="stripe ↔ stripe-node", confidence=0.7, confidence_band="MEDIUM",
+                version=1, created_at=NOW,
+                review_path="/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+            )],
+            page_info=PageInfo(has_next_page=False),
+        )
+
+    async def list_tenant_members(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return TenantMemberList(members=[])
+
+    async def invite_tenant_member(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return TenantMember(
+            id=UUID("00000000-0000-4000-8000-000000000a01"), actor_key=request.actor_key,
+            display_name=request.display_name, email=request.email, role=request.role,
+            status="INVITED", created_at=NOW, updated_at=NOW,
+        )
+
+    async def update_tenant_member(self, member_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return TenantMember(
+            id=member_id, actor_key="member", display_name="", email="",
+            role=request.role or "view", status=request.status or "ACTIVE",
+            created_at=NOW, updated_at=NOW,
+        )
+
+    async def remove_tenant_member(self, member_id, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return TenantMember(
+            id=member_id, actor_key="member", display_name="", email="",
+            role="view", status="ACTIVE", created_at=NOW, updated_at=NOW,
+        )
+
+    async def list_connectors(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ConnectorList(connectors=[])
+
+    async def register_connector(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return Connector(
+            id=UUID("00000000-0000-4000-8000-000000000b01"), provider=request.provider,
+            display_name=request.display_name, external_account_key=request.external_account_key,
+            scopes=request.scopes, status="CONNECTED", created_at=NOW, updated_at=NOW,
+        )
+
+    async def update_connector(self, connector_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return Connector(
+            id=connector_id, provider="GITHUB_APP", display_name=request.display_name or "conn",
+            external_account_key="", scopes=request.scopes or [], status=request.status or "CONNECTED",
+            created_at=NOW, updated_at=NOW,
+        )
+
+    async def remove_connector(self, connector_id, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return Connector(
+            id=connector_id, provider="GITHUB_APP", display_name="conn", external_account_key="",
+            scopes=[], status="REVOKED", created_at=NOW, updated_at=NOW,
+        )
+
+    async def get_scan_policy(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ScanPolicy(cadence="DAILY", enabled=True)
+
+    async def update_scan_policy(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ScanPolicy(cadence=request.cadence, enabled=request.enabled, updated_by=actor_key, updated_at=NOW)
+
+    async def request_rescan(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        created = getattr(self, "rescan_created", True)
+        return (
+            RescanJob(
+                id=UUID("00000000-0000-4000-8000-000000000c01"), connector_id=request.connector_id,
+                status="PENDING", reason=request.reason, requested_by=actor_key, created_at=NOW,
+            ),
+            created,
+        )
+
+    async def list_rescan_jobs(self, *, tenant_id, cursor, limit):
+        self.last_tenant_id = tenant_id
+        return RescanJobList(jobs=[], page_info=PageInfo(has_next_page=False))
+
+    async def scan_status(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ScanStatus(
+            as_of=NOW, policy=ScanPolicy(cadence="DAILY", enabled=True), quotas=[], recent_jobs=[],
         )
 
 
@@ -556,3 +677,141 @@ def test_identity_review_accepts_optimistic_version() -> None:
     assert response.status_code == 200
     assert response.json()["review_state"] == "CONFIRMED"
     assert response.json()["version"] == 2
+
+
+# --- Review queue --------------------------------------------------------
+
+def _token(secret: str, caps: list[str], tenant_id: UUID) -> str:
+    return create_session_token(
+        secret, actor_key="operator", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=caps,
+    )
+
+
+SECRET = "a-test-session-secret-with-at-least-32-characters"
+TENANT = UUID("00000000-0000-4000-8000-000000000123")
+
+
+def _signed_app() -> tuple[FastAPI, StubReadModels]:
+    return app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=SECRET,
+    ))
+
+
+def test_review_queue_is_exposed_and_versioned() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/reviews/queue?type=IDENTITY_ASSERTION&limit=10",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['review'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["contract_version"] == "1.0.0"
+    assert body["counts"]["IDENTITY_ASSERTION"] == 1
+    assert body["items"][0]["item_type"] == "IDENTITY_ASSERTION"
+    assert body["items"][0]["review_path"].endswith("/review")
+    assert store.last_tenant_id == TENANT
+    assert store.last_item_types == ["IDENTITY_ASSERTION"]
+
+
+def test_review_queue_requires_review_capability() -> None:
+    app, _ = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/reviews/queue",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['view'], TENANT)}"},
+    ))
+    assert response.status_code == 403
+    assert response.json()["details"]["required_capability"] == "review"
+
+
+# --- Admin gating --------------------------------------------------------
+
+def test_admin_routes_require_admin_capability() -> None:
+    app, store = _signed_app()
+    execute_token = _token(SECRET, ["execute"], TENANT)
+    for method, path, payload in [
+        ("GET", "/api/v1/admin/members", None),
+        ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
+        ("GET", "/api/v1/admin/connectors", None),
+        ("GET", "/api/v1/admin/scan-status", None),
+        ("PUT", "/api/v1/admin/scan-policy", {"cadence": "DAILY", "enabled": True}),
+        ("POST", "/api/v1/admin/rescans", {"idempotency_key": "k1"}),
+    ]:
+        response = asyncio.run(request(
+            app, method, path, headers={"Authorization": f"Bearer {execute_token}"},
+            json=payload,
+        ))
+        assert response.status_code == 403, f"{method} {path}"
+        assert response.json()["details"]["required_capability"] == "admin"
+    assert store.last_actor_key is None  # no write reached the store
+
+
+def test_invite_member_creates_and_forwards_actor() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/members",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"actor_key": "dana@acme.example", "display_name": "Dana", "role": "review"},
+    ))
+    assert response.status_code == 201
+    body = response.json()
+    assert body["actor_key"] == "dana@acme.example"
+    assert body["role"] == "review"
+    assert store.last_actor_key == "operator"
+
+
+def test_register_connector_creates() -> None:
+    app, _ = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/connectors",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"provider": "GITHUB_APP", "display_name": "acme-corp", "scopes": ["repo:read"]},
+    ))
+    assert response.status_code == 201
+    assert response.json()["provider"] == "GITHUB_APP"
+
+
+def test_rescan_is_created_then_idempotent() -> None:
+    app, store = _signed_app()
+    admin = _token(SECRET, ["admin"], TENANT)
+    created = asyncio.run(request(
+        app, "POST", "/api/v1/admin/rescans",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={"idempotency_key": "nightly-2026-08-19"},
+    ))
+    assert created.status_code == 201
+
+    store.rescan_created = False  # simulate an idempotent replay
+    replay = asyncio.run(request(
+        app, "POST", "/api/v1/admin/rescans",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={"idempotency_key": "nightly-2026-08-19"},
+    ))
+    assert replay.status_code == 200
+    assert replay.json()["status"] == "PENDING"
+
+
+def test_scan_policy_update_forwards_actor() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/scan-policy",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"cadence": "HOURLY", "enabled": True},
+    ))
+    assert response.status_code == 200
+    assert response.json()["cadence"] == "HOURLY"
+    assert store.last_actor_key == "operator"
+
+
+def test_reject_raw_secret_blocks_token_like_reference() -> None:
+    from app.read_models import ReadModelStore
+    from app.errors import APIError as _APIError
+
+    ReadModelStore._reject_raw_secret("vault://connectors/github/acme")  # ok, no raise
+    for raw in ["ghp_" + "a" * 36, "github_pat_" + "b" * 40, "xoxb-123", "-----BEGIN KEY-----"]:
+        try:
+            ReadModelStore._reject_raw_secret(raw)
+        except _APIError as error:
+            assert error.code == "CREDENTIAL_LOOKS_RAW"
+        else:
+            raise AssertionError(f"expected rejection for {raw!r}")

@@ -37,6 +37,22 @@ import type {
   BusinessMapSaveRequest,
   BusinessMapRevisionList,
   SessionInfo,
+  ReviewQueue,
+  ReviewQueueItemType,
+  TenantMemberList,
+  TenantMember,
+  MemberInviteRequest,
+  MemberUpdateRequest,
+  ConnectorList,
+  Connector,
+  ConnectorRegisterRequest,
+  ConnectorUpdateRequest,
+  ScanPolicy,
+  ScanPolicyUpdateRequest,
+  ScanStatus,
+  RescanRequest,
+  RescanJob,
+  RescanJobList,
 } from "../contracts/read-models";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
@@ -82,6 +98,25 @@ export interface StackGraphClient {
   archiveBusinessMap(id: string): Promise<BusinessMapSummary>;
   getBusinessMapRevisions(id: string): Promise<BusinessMapRevisionList>;
   getSession(): Promise<SessionInfo>;
+  getReviewQueue(params?: {
+    types?: ReviewQueueItemType[];
+    repository?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ReviewQueue>;
+  listMembers(): Promise<TenantMemberList>;
+  inviteMember(body: MemberInviteRequest): Promise<TenantMember>;
+  updateMember(id: string, body: MemberUpdateRequest): Promise<TenantMember>;
+  removeMember(id: string): Promise<TenantMember>;
+  listConnectors(): Promise<ConnectorList>;
+  registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
+  updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
+  removeConnector(id: string): Promise<Connector>;
+  getScanPolicy(): Promise<ScanPolicy>;
+  updateScanPolicy(body: ScanPolicyUpdateRequest): Promise<ScanPolicy>;
+  getScanStatus(): Promise<ScanStatus>;
+  requestRescan(body: RescanRequest): Promise<RescanJob>;
+  listRescans(cursor?: string, limit?: number): Promise<RescanJobList>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
@@ -96,6 +131,39 @@ class FixtureApiError extends Error {
   }
 }
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+// Fixture-mode admin state so the Admin surface's CRUD is exercisable without a backend.
+// Seeded to mirror the previous mock sections so the demo looks unchanged on first load.
+const adminMembers = new Map<string, TenantMember>();
+const adminConnectors = new Map<string, Connector>();
+const adminRescans = new Map<string, { idempotencyKey: string; job: RescanJob }>();
+let adminScanPolicy: ScanPolicy = { contract_version: "1.0.0", cadence: "DAILY", enabled: true };
+{
+  const now = "2026-08-19T12:00:00.000Z";
+  for (const seed of [
+    { actor_key: "hariganesh@msn.com", display_name: "You", role: "admin", status: "ACTIVE" },
+    { actor_key: "dana@acme.example", display_name: "Dana Okafor", role: "execute", status: "ACTIVE" },
+    { actor_key: "priya@acme.example", display_name: "Priya Raman", role: "review", status: "ACTIVE" },
+    { actor_key: "sam@acme.example", display_name: "Sam Lee", role: "view", status: "ACTIVE" },
+  ] as const) {
+    const id = `seed-${seed.actor_key}`;
+    adminMembers.set(id, {
+      id, actor_key: seed.actor_key, display_name: seed.display_name, email: seed.actor_key,
+      role: seed.role, status: seed.status, created_at: now, updated_at: now,
+    });
+  }
+  for (const seed of [
+    { provider: "GITHUB_APP", display_name: "acme-corp (GitHub org)", scopes: ["repo:read", "metadata:read"], status: "CONNECTED" },
+    { provider: "PACKAGE_REGISTRY", display_name: "npm-public", scopes: ["PUBLIC"], status: "CONNECTED" },
+    { provider: "PACKAGE_REGISTRY", display_name: "artifactory-internal", scopes: ["PRIVATE"], status: "NEEDS_REAUTH" },
+  ] as const) {
+    const id = `seed-${seed.display_name}`;
+    adminConnectors.set(id, {
+      id, provider: seed.provider, display_name: seed.display_name, external_account_key: "",
+      scopes: [...seed.scopes], status: seed.status, created_at: now, updated_at: now,
+    });
+  }
+}
 const businessMaps = new Map<string, BusinessMapDetail>();
 const businessMapRevisions = new Map<string, BusinessMapRevisionList["revisions"]>();
 {
@@ -251,6 +319,134 @@ const fixtureClient: StackGraphClient = {
     // Fixture/demo runs as a full-capability admin so every surface is exercisable.
     return { contract_version: "1.0.0", actor_key: "fixture-admin", tenant_id: null, capabilities: ["admin"] };
   },
+  async getReviewQueue() {
+    await delay();
+    const now = new Date().toISOString();
+    return {
+      contract_version: "1.0.0",
+      as_of: now,
+      counts: {
+        IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 0, DUPLICATE_CAPABILITY: 0,
+        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 0,
+      },
+      items: [{
+        item_id: "00000000-0000-4000-8000-000000000501",
+        item_type: "IDENTITY_ASSERTION", review_state: "POSSIBLE",
+        title: "stripe ↔ stripe-node", confidence: 0.72, confidence_band: "MEDIUM",
+        version: 1, created_at: now,
+        review_path: "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+      }],
+      page_info: { has_next_page: false },
+    };
+  },
+  async listMembers() {
+    await delay();
+    return { contract_version: "1.0.0", members: clone([...adminMembers.values()]) };
+  },
+  async inviteMember(body) {
+    await delay();
+    const now = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? `member-${adminMembers.size + 1}`;
+    const member: TenantMember = {
+      id, actor_key: body.actor_key, display_name: body.display_name ?? "",
+      email: body.email ?? "", role: body.role ?? "view", status: "INVITED",
+      created_at: now, updated_at: now,
+    };
+    adminMembers.set(id, member);
+    return clone(member);
+  },
+  async updateMember(id, body) {
+    await delay();
+    const member = adminMembers.get(id);
+    if (!member) throw new FixtureApiError(404, { code: "MEMBER_NOT_FOUND" });
+    if (body.role) member.role = body.role;
+    if (body.status) member.status = body.status;
+    member.updated_at = new Date().toISOString();
+    return clone(member);
+  },
+  async removeMember(id) {
+    await delay();
+    const member = adminMembers.get(id);
+    if (!member) throw new FixtureApiError(404, { code: "MEMBER_NOT_FOUND" });
+    adminMembers.delete(id);
+    return clone(member);
+  },
+  async listConnectors() {
+    await delay();
+    return { contract_version: "1.0.0", connectors: clone([...adminConnectors.values()]) };
+  },
+  async registerConnector(body) {
+    await delay();
+    const now = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? `connector-${adminConnectors.size + 1}`;
+    const connector: Connector = {
+      id, provider: body.provider, display_name: body.display_name,
+      external_account_key: body.external_account_key ?? "", scopes: body.scopes ?? [],
+      status: "CONNECTED", created_at: now, updated_at: now,
+    };
+    adminConnectors.set(id, connector);
+    return clone(connector);
+  },
+  async updateConnector(id, body) {
+    await delay();
+    const connector = adminConnectors.get(id);
+    if (!connector) throw new FixtureApiError(404, { code: "CONNECTOR_NOT_FOUND" });
+    if (body.display_name) connector.display_name = body.display_name;
+    if (body.status) connector.status = body.status;
+    if (body.scopes) connector.scopes = body.scopes;
+    connector.updated_at = new Date().toISOString();
+    return clone(connector);
+  },
+  async removeConnector(id) {
+    await delay();
+    const connector = adminConnectors.get(id);
+    if (!connector) throw new FixtureApiError(404, { code: "CONNECTOR_NOT_FOUND" });
+    adminConnectors.delete(id);
+    return clone(connector);
+  },
+  async getScanPolicy() {
+    await delay();
+    return clone(adminScanPolicy);
+  },
+  async updateScanPolicy(body) {
+    await delay();
+    adminScanPolicy = {
+      contract_version: "1.0.0", cadence: body.cadence, enabled: body.enabled ?? true,
+      updated_by: "fixture-admin", updated_at: new Date().toISOString(),
+    };
+    return clone(adminScanPolicy);
+  },
+  async getScanStatus() {
+    await delay();
+    return {
+      contract_version: "1.0.0", as_of: new Date().toISOString(), policy: clone(adminScanPolicy),
+      quotas: [
+        { provider: "GITHUB_APP", used: 4200, limit: 5000, status: "OK", observed_at: new Date().toISOString() },
+      ],
+      recent_jobs: clone([...adminRescans.values()].map((r) => r.job).slice(-10).reverse()),
+    };
+  },
+  async requestRescan(body) {
+    await delay();
+    const existing = [...adminRescans.values()].find((j) => j.idempotencyKey === body.idempotency_key);
+    if (existing) return clone(existing.job);
+    const now = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? `rescan-${adminRescans.size + 1}`;
+    const job: RescanJob = {
+      id, connector_id: body.connector_id ?? null, status: "PENDING",
+      reason: body.reason ?? "", requested_by: "fixture-admin", created_at: now,
+    };
+    adminRescans.set(id, { idempotencyKey: body.idempotency_key, job });
+    return clone(job);
+  },
+  async listRescans() {
+    await delay();
+    return {
+      contract_version: "1.0.0",
+      jobs: clone([...adminRescans.values()].map((r) => r.job).reverse()),
+      page_info: { has_next_page: false },
+    };
+  },
 };
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -333,6 +529,35 @@ const liveClient: StackGraphClient = {
   archiveBusinessMap: (id) => req(`/business-maps/${id}`, { method: "DELETE" }),
   getBusinessMapRevisions: (id) => req(`/business-maps/${id}/revisions`),
   getSession: () => req("/session"),
+  getReviewQueue: (params) => {
+    const search = new URLSearchParams();
+    for (const type of params?.types ?? []) search.append("type", type);
+    if (params?.repository) search.set("repository", params.repository);
+    if (params?.cursor) search.set("cursor", params.cursor);
+    if (params?.limit != null) search.set("limit", String(params.limit));
+    const query = search.toString();
+    return req(`/reviews/queue${query ? `?${query}` : ""}`);
+  },
+  listMembers: () => req("/admin/members"),
+  inviteMember: (body) =>
+    req("/admin/members", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  updateMember: (id, body) =>
+    req(`/admin/members/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  removeMember: (id) => req(`/admin/members/${id}`, { method: "DELETE" }),
+  listConnectors: () => req("/admin/connectors"),
+  registerConnector: (body) =>
+    req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  updateConnector: (id, body) =>
+    req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
+  getScanPolicy: () => req("/admin/scan-policy"),
+  updateScanPolicy: (body) =>
+    req("/admin/scan-policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getScanStatus: () => req("/admin/scan-status"),
+  requestRescan: (body) =>
+    req("/admin/rescans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  listRescans: (cursor, limit = 50) =>
+    req(`/admin/rescans?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
 };
 
 export const stackGraphClient: StackGraphClient = isFixtureMode() ? fixtureClient : liveClient;

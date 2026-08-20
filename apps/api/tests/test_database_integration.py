@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 import psycopg
@@ -393,3 +394,160 @@ def test_golden_billing_vertical_slice() -> None:
         assert responses["indirectAsk"].json()["graph_highlight"]["highlighted_path"]
     finally:
         remove_golden_billing(admin_database_url)
+
+
+def test_review_queue_aggregates_pending_items_over_live_schema() -> None:
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    tenant_id = "00000000-0000-4000-8000-00000000a001"
+    left_id = "00000000-0000-4000-8000-00000000a002"
+    right_id = "00000000-0000-4000-8000-00000000a003"
+    assertion_id = "00000000-0000-4000-8000-00000000a004"
+
+    def configure_tenant(connection) -> None:
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+
+    with psycopg.connect(admin_database_url) as connection:
+        configure_tenant(connection)
+        connection.execute(
+            "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'review-queue-test','Review queue test')",
+            (tenant_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO entity(id,tenant_id,namespace,entity_type,canonical_key,name) VALUES
+              (%s,%s,'TECHNOLOGY','Technology','rq:left','stripe'),
+              (%s,%s,'TECHNOLOGY','Technology','rq:right','stripe-node')
+            """,
+            (left_id, tenant_id, right_id, tenant_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO identity_assertion
+              (id,tenant_id,left_entity_id,right_entity_id,method,method_version,confidence,review_state)
+            VALUES (%s,%s,%s,%s,'TEST','1.0.0',0.72,'POSSIBLE')
+            """,
+            (assertion_id, tenant_id, left_id, right_id),
+        )
+
+    try:
+        async def query():
+            settings = Settings(database_url=database_url)
+            database = Database(settings)
+            await database.open()
+            try:
+                store = ReadModelStore(database)
+                unfiltered = await store.review_queue(
+                    tenant_id=UUID(tenant_id), item_types=None, repository_id=None, cursor=None, limit=50,
+                )
+                filtered = await store.review_queue(
+                    tenant_id=UUID(tenant_id), item_types=["CAPABILITY_INFERENCE"],
+                    repository_id=None, cursor=None, limit=50,
+                )
+                return unfiltered, filtered
+            finally:
+                await database.close()
+
+        unfiltered, filtered = asyncio.run(query())
+
+        assert unfiltered.contract_version == "1.0.0"
+        assert set(unfiltered.counts) == {
+            "IDENTITY_ASSERTION", "CAPABILITY_INFERENCE", "DUPLICATE_CAPABILITY",
+            "MODERNIZATION_CANDIDATE", "MODERNIZATION_RECOMMENDATION",
+        }
+        assert unfiltered.counts["IDENTITY_ASSERTION"] >= 1
+        item = next(i for i in unfiltered.items if str(i.item_id) == assertion_id)
+        assert item.item_type == "IDENTITY_ASSERTION"
+        assert item.title == "stripe ↔ stripe-node"
+        assert item.confidence_band == "MEDIUM"
+        assert item.review_path == f"/identity-assertions/{assertion_id}/review"
+        # The CAPABILITY_INFERENCE filter must exclude the identity assertion.
+        assert all(str(i.item_id) != assertion_id for i in filtered.items)
+    finally:
+        with psycopg.connect(admin_database_url) as connection:
+            configure_tenant(connection)
+            connection.execute("DELETE FROM identity_assertion WHERE id=%s", (assertion_id,))
+            connection.execute("DELETE FROM entity WHERE id IN (%s,%s)", (left_id, right_id))
+            connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
+
+
+def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    tenant_id = "00000000-0000-4000-8000-00000000b001"
+
+    def configure_tenant(connection) -> None:
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+
+    with psycopg.connect(admin_database_url) as connection:
+        configure_tenant(connection)
+        connection.execute(
+            "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'admin-lifecycle-test','Admin lifecycle test')",
+            (tenant_id,),
+        )
+
+    try:
+        async def exercise():
+            app = create_app(settings=Settings(
+                environment="test",
+                database_url=database_url,
+                default_tenant_id=tenant_id,
+                development_actor_key="admin-integration",
+            ))
+            async with app.router.lifespan_context(app):
+                async with AsyncClient(
+                    transport=ASGITransport(app=app, raise_app_exceptions=False),
+                    base_url="http://testserver",
+                ) as client:
+                    member = await client.post(
+                        "/admin/members",
+                        json={"actor_key": "dana@acme.example", "display_name": "Dana", "role": "review"},
+                    )
+                    members = await client.get("/admin/members")
+                    connector = await client.post(
+                        "/admin/connectors",
+                        json={"provider": "GITHUB_APP", "display_name": "acme-corp",
+                              "external_account_key": "acme", "scopes": ["repo:read"],
+                              "credential_reference": "vault://gh/acme"},
+                    )
+                    policy = await client.put(
+                        "/admin/scan-policy", json={"cadence": "HOURLY", "enabled": True},
+                    )
+                    rescan_a = await client.post("/admin/rescans", json={"idempotency_key": "nightly"})
+                    rescan_b = await client.post("/admin/rescans", json={"idempotency_key": "nightly"})
+                    status = await client.get("/admin/scan-status")
+                    raw = await client.post(
+                        "/admin/connectors",
+                        json={"provider": "OTHER", "display_name": "bad",
+                              "credential_reference": "ghp_" + "a" * 36},
+                    )
+                    return member, members, connector, policy, rescan_a, rescan_b, status, raw
+
+        member, members, connector, policy, rescan_a, rescan_b, status, raw = asyncio.run(exercise())
+
+        assert member.status_code == 201 and member.json()["role"] == "review"
+        assert members.status_code == 200 and len(members.json()["members"]) == 1
+        assert connector.status_code == 201 and connector.json()["provider"] == "GITHUB_APP"
+        assert "credential_reference" not in connector.json()  # never surfaced
+        assert policy.status_code == 200 and policy.json()["cadence"] == "HOURLY"
+        assert rescan_a.status_code == 201
+        assert rescan_b.status_code == 200  # idempotent replay
+        assert rescan_a.json()["id"] == rescan_b.json()["id"]
+        assert status.status_code == 200 and status.json()["policy"]["cadence"] == "HOURLY"
+        assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
+
+        with psycopg.connect(database_url) as connection:
+            configure_tenant(connection)
+            audits = connection.execute(
+                "SELECT count(*) FROM admin_audit_log WHERE tenant_id=%s", (tenant_id,),
+            ).fetchone()[0]
+            assert audits >= 4
+    finally:
+        with psycopg.connect(admin_database_url) as connection:
+            configure_tenant(connection)
+            for table in (
+                "admin_audit_log", "rescan_job", "connector_quota",
+                "scan_policy", "connector", "tenant_member",
+            ):
+                connection.execute(f"DELETE FROM {table} WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
