@@ -7,8 +7,8 @@ reviewable migration recommendations.
 ## Data flow
 
 1. The repository scanner publishes a `COMPLETE` `repository-dependency-usage` snapshot.
-2. The publication trigger inserts idempotent capability and `REPOSITORY_MODERNIZATION` jobs for the tenant,
-   repository, source revision, and configuration fingerprint.
+2. The publication trigger inserts one idempotent `REPOSITORY_MODERNIZATION` job for the tenant, repository,
+   source revision, and configuration fingerprint. That job runs capability inference before modernization.
 3. The intelligence worker synchronizes the active capability taxonomy and applies curated mappings. Unmapped active usage can optionally be sent through the configured AI capability-inference route.
 4. Multiple active dependencies mapped to one capability become duplicate-capability candidates.
 5. The scanner's persisted code-unit fingerprints generate internal or vendored duplication candidates within
