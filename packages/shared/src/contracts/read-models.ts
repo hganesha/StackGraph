@@ -778,6 +778,39 @@ export interface ConnectorUpdateRequest {
   credential_reference?: string;
 }
 
+// --- Admin: AI provider configuration -----------------------------------
+
+export type AIProvider = "openrouter" | "openai" | "anthropic";
+export type AIConnectionTestStatus = "NOT_TESTED" | "SUCCEEDED" | "FAILED";
+
+export interface AIProviderConfiguration {
+  contract_version: "1.0.0";
+  provider: AIProvider;
+  model: string;
+  enabled: boolean;
+  key_configured: boolean;
+  key_fingerprint?: string | null;
+  test_status: AIConnectionTestStatus;
+  tested_at?: string | null;
+  last_error?: string | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+}
+
+export interface AIProviderConfigurationUpdateRequest {
+  provider: AIProvider;
+  model?: string;
+  api_key?: string;
+  enabled?: boolean;
+}
+
+export interface AIProviderConnectionTest {
+  contract_version: "1.0.0";
+  provider: AIProvider;
+  status: "SUCCEEDED";
+  models: string[];
+}
+
 // --- Admin: scan policy, rescans, and quota ------------------------------
 
 export type ScanCadence = "HOURLY" | "DAILY" | "WEEKLY" | "MANUAL";

@@ -23,6 +23,7 @@ def remove_golden_billing(database_url: str) -> None:
     with psycopg.connect(database_url) as connection:
         _scope(connection)
         for statement in (
+            "DELETE FROM ai_model_invocation WHERE tenant_id=%s",
             "DELETE FROM projection_outbox WHERE tenant_id=%s",
             "DELETE FROM recommendation_evidence WHERE tenant_id=%s",
             "DELETE FROM recommendation WHERE tenant_id=%s",

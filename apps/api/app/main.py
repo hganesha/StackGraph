@@ -60,18 +60,35 @@ def create_app(
         app_database,
         graph_read_mode=app_settings.graph_read_mode,
         graph_discovery_limit=app_settings.graph_discovery_limit,
+        credential_encryption_key=app_settings.credential_encryption_key,
     )
-    application.state.ask_service = ask_service or application.state.read_models
-    if ask_service is None and app_settings.ai_ask_enabled:
+    environment_ask_service = None
+    if ask_service is None and read_models is None and app_settings.ai_ask_enabled:
         from app.ai_ask import AIAskOrchestrator
         from stackgraph_ai import AISettings, build_ai_service
 
         ai_service = build_ai_service(AISettings.from_env(), database=app_database)  # type: ignore[arg-type]
         ai_service.routes.get(app_settings.ai_ask_route)
-        application.state.ask_service = AIAskOrchestrator(
+        environment_ask_service = AIAskOrchestrator(
             deterministic=application.state.read_models,
             ai=ai_service,
             route=app_settings.ai_ask_route,
+            fallback_enabled=app_settings.ai_ask_fallback_enabled,
+            max_evidence_chars=app_settings.ai_ask_max_evidence_chars,
+        )
+    if ask_service is not None:
+        application.state.ask_service = ask_service
+    elif read_models is not None:
+        # Unit/contract tests can supply a self-contained read-model stub.
+        application.state.ask_service = application.state.read_models
+    else:
+        from app.ai_ask import TenantConfiguredAIAskService
+
+        application.state.ask_service = TenantConfiguredAIAskService(
+            database=app_database,
+            deterministic=application.state.read_models,
+            encryption_key=app_settings.credential_encryption_key,
+            environment_fallback=environment_ask_service,
             fallback_enabled=app_settings.ai_ask_fallback_enabled,
             max_evidence_chars=app_settings.ai_ask_max_evidence_chars,
         )

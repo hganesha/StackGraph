@@ -115,6 +115,37 @@ class RepositoryScannerTests(unittest.TestCase):
             dependency["evidence"][0]["source_artifact"]["uri"],
             f"{SNAPSHOT_URI}#path=files/package.json",
         )
+        application = next(
+            fact for fact in result["facts"] if fact["predicate"] == "IMPLEMENTED_BY"
+        )
+        self.assertEqual(application["subject"]["type"], "Application")
+        self.assertEqual(application["object_entity"]["type"], "Repository")
+        self.assertEqual(application["assertion_class"], "INFERRED")
+        self.assertEqual(application["properties"]["boundary_strategy"], "REPOSITORY_FALLBACK")
+        self.assertEqual(application["evidence"][0]["locator"]["path"], "package.json")
+
+    def test_monorepo_application_boundary_is_explicitly_provisional(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({
+                "name": "portfolio", "private": True, "workspaces": ["apps/*"],
+            }))
+            (root / "apps").mkdir()
+            (root / "apps" / "web").mkdir()
+            (root / "apps" / "web" / "package.json").write_text(json.dumps({"name": "web"}))
+            (root / "apps" / "api").mkdir()
+            (root / "apps" / "api" / "package.json").write_text(json.dumps({"name": "api"}))
+
+            result = scan_repository(request(root))
+
+        application = next(
+            fact for fact in result["facts"] if fact["predicate"] == "IMPLEMENTED_BY"
+        )
+        self.assertEqual(application["properties"]["boundary_strategy"], "REPOSITORY_PORTFOLIO")
+        self.assertTrue(application["properties"]["provisional"])
+        self.assertEqual(application["properties"]["review_state"], "UNREVIEWED")
+        self.assertLess(application["confidence"], 0.6)
+        self.assertIn("package.json#workspaces", application["properties"]["monorepo_signals"])
 
     def test_snapshot_blob_descriptor_must_be_complete(self) -> None:
         with TemporaryDirectory() as directory:
@@ -266,7 +297,7 @@ class RepositoryScannerTests(unittest.TestCase):
             return next(
                 fact["object_value"]["structural_fingerprint"]
                 for fact in result["facts"]
-                if fact["object_value"].get("record_kind") == "code_implementation_summary"
+                if fact.get("object_value", {}).get("record_kind") == "code_implementation_summary"
             )
 
         self.assertEqual(fingerprint(first_result), fingerprint(second_result))

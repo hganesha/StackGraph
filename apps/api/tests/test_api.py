@@ -12,6 +12,8 @@ from app.database import DatabaseReadiness
 from app.errors import APIError
 from app.main import create_app
 from app.models import (
+    AIProviderConfiguration,
+    AIProviderConnectionTest,
     AskRequest,
     AskResponse,
     CapabilityDefinitionModel,
@@ -70,9 +72,11 @@ class StubReadModels:
     def __init__(self) -> None:
         self.last_tenant_id = None
         self.last_actor_key = None
+        self.last_estate_namespaces = None
 
-    async def estate_summary(self, *, tenant_id, cursor, limit):
+    async def estate_summary(self, *, tenant_id, cursor, limit, namespaces=None):
         self.last_tenant_id = tenant_id
+        self.last_estate_namespaces = namespaces
         return EstateSummary(
             as_of=NOW,
             counts=EstateCounts(applications=0, repositories=0, services=0, technologies=0),
@@ -323,6 +327,30 @@ class StubReadModels:
             scopes=[], status="REVOKED", created_at=NOW, updated_at=NOW,
         )
 
+    async def get_ai_provider_configuration(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return AIProviderConfiguration(provider="anthropic")
+
+    async def update_ai_provider_configuration(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return AIProviderConfiguration(
+            provider=request.provider, model=request.model, enabled=request.enabled,
+            key_configured=request.api_key is not None,
+            key_fingerprint=request.api_key[-4:] if request.api_key else None,
+            updated_by=actor_key, updated_at=NOW,
+        )
+
+    async def remove_ai_provider_key(self, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return AIProviderConfiguration(provider="anthropic")
+
+    async def test_ai_provider_connection(self, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return AIProviderConnectionTest(provider="anthropic", models=["claude-test"])
+
     async def get_scan_policy(self, *, tenant_id):
         self.last_tenant_id = tenant_id
         return ScanPolicy(cadence="DAILY", enabled=True)
@@ -383,6 +411,18 @@ def test_estate_summary_is_available_on_contract_and_versioned_paths() -> None:
     assert direct.status_code == 200
     assert direct.json()["contract_version"] == "1.0.0"
     assert versioned.json() == direct.json()
+
+
+def test_estate_summary_forwards_domain_scope() -> None:
+    app, store = app_with_stubs()
+    response = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/estate/summary?domain=TECHNOLOGY&domain=OSS&limit=100",
+    ))
+
+    assert response.status_code == 200
+    assert store.last_estate_namespaces == ["TECHNOLOGY", "OSS"]
 
 
 def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
@@ -745,6 +785,10 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
+        ("GET", "/api/v1/admin/ai-configuration", None),
+        ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
+        ("DELETE", "/api/v1/admin/ai-configuration/key", None),
+        ("POST", "/api/v1/admin/ai-configuration/test", None),
         ("GET", "/api/v1/admin/scan-status", None),
         ("PUT", "/api/v1/admin/scan-policy", {"cadence": "DAILY", "enabled": True}),
         ("POST", "/api/v1/admin/rescans", {"idempotency_key": "k1"}),
@@ -810,6 +854,20 @@ def test_connect_github_repository_rejects_tokens_and_invalid_identity() -> None
     ))
     assert invalid.status_code == 422
     assert secret.status_code == 422
+
+
+def test_ai_configuration_is_write_only_and_forwards_actor() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/ai-configuration",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"provider": "openrouter", "model": "anthropic/claude-test", "api_key": "sk-test-1234"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["key_configured"] is True
+    assert response.json()["key_fingerprint"] == "1234"
+    assert "api_key" not in response.json()
+    assert store.last_actor_key == "operator"
 
 
 def test_rescan_is_created_then_idempotent() -> None:

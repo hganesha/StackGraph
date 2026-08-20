@@ -27,8 +27,32 @@
 }
 .head {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sg-space-3);
+}
+.headMain {
+  display: flex;
   flex-direction: column;
   gap: var(--sg-space-1);
+  min-inline-size: 0;
+}
+.exploreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding: var(--sg-space-2) var(--sg-space-3);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-400);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-color-domain-intelligence-700);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+  flex-shrink: 0;
+  transition: background var(--sg-motion-hover);
+}
+.exploreBtn:hover {
+  background: var(--sg-color-domain-intelligence-100);
 }
 .title {
   font-size: var(--sg-type-h1-size);

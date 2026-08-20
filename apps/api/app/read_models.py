@@ -10,11 +10,16 @@ from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+import httpx
+
 from app.age_graph import AgeGraphReader, AgeTopology
 from app.database import Database
 from app.errors import APIError
 from app.models import (
     ApplicationDetail,
+    AIProviderConfiguration,
+    AIProviderConfigurationUpdateRequest,
+    AIProviderConnectionTest,
     AskRequest,
     AskResponse,
     AssessmentSummary,
@@ -240,11 +245,13 @@ class ReadModelStore:
         *,
         graph_read_mode: str = "sql",
         graph_discovery_limit: int = 5000,
+        credential_encryption_key: str = "stackgraph-local-development-credential-key",
     ) -> None:
         self.database = database
         self.graph_read_mode = graph_read_mode
         self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
         self.graph_read_metrics = GraphReadMetrics()
+        self.credential_encryption_key = credential_encryption_key
 
     async def estate_summary(
         self,
@@ -252,6 +259,7 @@ class ReadModelStore:
         tenant_id: UUID | None,
         cursor: str | None,
         limit: int,
+        namespaces: list[str] | None = None,
     ) -> EstateSummary:
         cursor_data = _decode_cursor(cursor, "estate")
         try:
@@ -320,7 +328,11 @@ class ReadModelStore:
               SELECT * FROM assessment a WHERE a.subject_entity_id=e.id AND a.status='CURRENT' AND lower(a.dimension)='viability'
               ORDER BY a.valid_from DESC LIMIT 1
             ) v ON true
-            WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+            WHERE (
+                (e.namespace='ENTERPRISE' AND e.entity_type='Application')
+                OR (e.namespace IN ('TECHNOLOGY','OSS') AND e.entity_type<>'Capability')
+              )
+              AND (%s::text[] IS NULL OR e.namespace=ANY(%s::text[]))
               AND (
                 %s::numeric IS NULL
                 OR coalesce(p.score,0)<%s::numeric
@@ -329,7 +341,16 @@ class ReadModelStore:
             ORDER BY coalesce(p.score,0) DESC,e.name,e.id
             LIMIT %s
             """,
-            (cursor_score, cursor_score, cursor_score, cursor_name, cursor_id, limit + 1),
+            (
+                namespaces or None,
+                namespaces or None,
+                cursor_score,
+                cursor_score,
+                cursor_score,
+                cursor_name,
+                cursor_id,
+                limit + 1,
+            ),
             tenant_id=tenant_id,
         )
         has_next = len(rows) > limit
@@ -3607,6 +3628,222 @@ class ReadModelStore:
             external_account_key=row["external_account_key"], scopes=list(row["scopes"]),
             status=row["status"], last_synced_at=row["last_synced_at"], last_error=row["last_error"],
             created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    # --- Admin: AI provider configuration --------------------------------
+
+    async def get_ai_provider_configuration(
+        self, *, tenant_id: UUID | None,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read AI configuration.")
+        row = await self.database.fetch_one(
+            """
+            SELECT c.*, s.fingerprint AS key_fingerprint
+            FROM tenant_ai_configuration c
+            LEFT JOIN tenant_secret s ON s.id=c.credential_secret_id
+            """,
+            tenant_id=tenant_id,
+        )
+        return self._ai_provider_configuration(row)
+
+    async def update_ai_provider_configuration(
+        self,
+        request: AIProviderConfigurationUpdateRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update AI configuration.")
+        api_key = request.api_key.strip() if request.api_key is not None else None
+        if request.api_key is not None and not api_key:
+            raise APIError(422, "AI_KEY_EMPTY", "The provider API key cannot be empty.")
+
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_ai_configuration WHERE tenant_id=%s FOR UPDATE",
+                (tenant_id,),
+            )
+            existing = await cursor.fetchone()
+            if (
+                existing is not None
+                and existing["credential_secret_id"] is not None
+                and existing["provider"] != request.provider
+                and api_key is None
+            ):
+                raise APIError(
+                    422,
+                    "AI_KEY_ROTATION_REQUIRED",
+                    "Enter a new API key when changing AI providers.",
+                )
+
+            secret_id = existing["credential_secret_id"] if existing is not None else None
+            old_secret_id = secret_id
+            if api_key is not None:
+                secret_cursor = await connection.execute(
+                    """
+                    INSERT INTO tenant_secret(
+                      tenant_id,secret_kind,ciphertext,fingerprint,created_by
+                    ) VALUES (
+                      %s,'AI_PROVIDER_KEY',
+                      pgp_sym_encrypt(%s,%s,'cipher-algo=aes256'),%s,%s
+                    ) RETURNING id
+                    """,
+                    (tenant_id, api_key, self.credential_encryption_key, api_key[-4:], actor_key),
+                )
+                secret = await secret_cursor.fetchone()
+                assert secret is not None
+                secret_id = secret["id"]
+
+            cursor = await connection.execute(
+                """
+                INSERT INTO tenant_ai_configuration(
+                  tenant_id,provider,model,credential_secret_id,enabled,updated_by
+                ) VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id) DO UPDATE SET
+                  provider=EXCLUDED.provider,
+                  model=EXCLUDED.model,
+                  credential_secret_id=EXCLUDED.credential_secret_id,
+                  enabled=EXCLUDED.enabled,
+                  test_status='NOT_TESTED',tested_at=NULL,last_error=NULL,
+                  updated_by=EXCLUDED.updated_by,updated_at=now()
+                RETURNING *
+                """,
+                (tenant_id, request.provider, request.model.strip(), secret_id, request.enabled, actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            if api_key is not None and old_secret_id is not None and old_secret_id != secret_id:
+                await connection.execute("DELETE FROM tenant_secret WHERE id=%s", (old_secret_id,))
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="ai_configuration.update",
+                target_kind="tenant_ai_configuration",
+                target_id=tenant_id,
+                detail={
+                    "provider": request.provider,
+                    "model": request.model.strip(),
+                    "key_rotated": api_key is not None,
+                    "enabled": request.enabled,
+                },
+            )
+            fingerprint_cursor = await connection.execute(
+                "SELECT fingerprint FROM tenant_secret WHERE id=%s", (secret_id,),
+            ) if secret_id is not None else None
+            fingerprint_row = await fingerprint_cursor.fetchone() if fingerprint_cursor is not None else None
+        row["key_fingerprint"] = fingerprint_row["fingerprint"] if fingerprint_row else None
+        return self._ai_provider_configuration(row)
+
+    async def remove_ai_provider_key(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to remove an AI key.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM tenant_ai_configuration WHERE tenant_id=%s FOR UPDATE", (tenant_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                return self._ai_provider_configuration(None)
+            secret_id = row["credential_secret_id"]
+            cursor = await connection.execute(
+                """
+                UPDATE tenant_ai_configuration SET credential_secret_id=NULL,
+                  test_status='NOT_TESTED',tested_at=NULL,last_error=NULL,
+                  updated_by=%s,updated_at=now()
+                WHERE tenant_id=%s RETURNING *
+                """,
+                (actor_key, tenant_id),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            if secret_id is not None:
+                await connection.execute("DELETE FROM tenant_secret WHERE id=%s", (secret_id,))
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="ai_configuration.key_remove", target_kind="tenant_ai_configuration",
+                target_id=tenant_id, detail={"provider": row["provider"]},
+            )
+        row["key_fingerprint"] = None
+        return self._ai_provider_configuration(row)
+
+    async def test_ai_provider_connection(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConnectionTest:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to test AI configuration.")
+        row = await self.database.fetch_one(
+            """
+            SELECT c.provider,
+              pgp_sym_decrypt(s.ciphertext,%s)::text AS api_key
+            FROM tenant_ai_configuration c
+            JOIN tenant_secret s ON s.id=c.credential_secret_id
+            """,
+            (self.credential_encryption_key,), tenant_id=tenant_id,
+        )
+        if row is None:
+            raise APIError(422, "AI_KEY_REQUIRED", "Save a provider API key before testing the connection.")
+        provider = row["provider"]
+        api_key = row["api_key"]
+        url, headers = self._ai_models_request(provider, api_key)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                payload = response.json()
+            models = self._ai_model_ids(payload)[:100]
+        except (httpx.HTTPError, ValueError, TypeError) as error:
+            message = "Provider authentication or model discovery failed."
+            await self.database.fetch_one(
+                """
+                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
+                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+                """,
+                (message, actor_key), tenant_id=tenant_id,
+            )
+            raise APIError(502, "AI_CONNECTION_FAILED", message) from error
+        await self.database.fetch_one(
+            """
+            UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
+              last_error=NULL,updated_by=%s,updated_at=now() RETURNING tenant_id
+            """,
+            (actor_key,), tenant_id=tenant_id,
+        )
+        return AIProviderConnectionTest(provider=provider, models=models)
+
+    @staticmethod
+    def _ai_models_request(provider: str, api_key: str) -> tuple[str, dict[str, str]]:
+        if provider == "anthropic":
+            return (
+                "https://api.anthropic.com/v1/models",
+                {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+            )
+        base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+        return f"{base}/models", {"Authorization": f"Bearer {api_key}"}
+
+    @staticmethod
+    def _ai_model_ids(payload: Any) -> list[str]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            return []
+        return sorted(
+            str(item["id"]) for item in payload["data"]
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        )
+
+    @staticmethod
+    def _ai_provider_configuration(row: dict[str, Any] | None) -> AIProviderConfiguration:
+        if row is None:
+            return AIProviderConfiguration(provider="anthropic")
+        fingerprint = row.get("key_fingerprint")
+        return AIProviderConfiguration(
+            provider=row["provider"], model=row["model"], enabled=row["enabled"],
+            key_configured=fingerprint is not None, key_fingerprint=fingerprint,
+            test_status=row["test_status"], tested_at=row["tested_at"],
+            last_error=row["last_error"], updated_by=row["updated_by"], updated_at=row["updated_at"],
         )
 
     # --- Admin: scan policy, rescans, and quota ----------------------------

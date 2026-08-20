@@ -19,7 +19,7 @@ from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.1.0"
+SCANNER_VERSION = "1.2.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -252,6 +252,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         completeness,
         source_file_count=sum(1 for path in contents if _is_source(path)),
     )
+    facts.extend(_application_boundary_facts(scan_input, contents))
     facts.extend(
         _usage_findings(
             scan_input,
@@ -1475,6 +1476,106 @@ def _repository_ref(scan_input: ScanInput) -> dict[str, str]:
         "key": scan_input.repository_key,
         "name": scan_input.repository_name,
     }
+
+
+def _application_boundary_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+) -> list[dict[str, Any]]:
+    """Emit a transparent, reviewable application boundary for pilot discovery.
+
+    A repository is concrete scan evidence, but it is not always equivalent to one deployable
+    application. Until a service catalog or curated mapping supersedes it, this fact creates a
+    provisional portfolio boundary and records monorepo ambiguity instead of presenting the
+    fallback as authoritative application truth.
+    """
+    evidence_path = _application_boundary_evidence_path(contents)
+    if evidence_path is None:
+        return []
+    monorepo_signals = _monorepo_signals(contents)
+    strategy = "REPOSITORY_PORTFOLIO" if monorepo_signals else "REPOSITORY_FALLBACK"
+    confidence = 0.55 if monorepo_signals else 0.8
+    application_key = f"application:{scan_input.repository_key}"
+    properties = {
+        "boundary_strategy": strategy,
+        "provisional": True,
+        "review_state": "UNREVIEWED",
+        "monorepo_signals": monorepo_signals,
+        "limitations": [
+            "repository boundaries may not match deployable application or service boundaries",
+            "replace this provisional mapping with curated catalog, CMDB, or reviewed discovery evidence",
+        ],
+    }
+    identity = {
+        "tenant": scan_input.tenant_key,
+        "application": application_key,
+        "predicate": "IMPLEMENTED_BY",
+        "repository": scan_input.repository_key,
+        "source_revision": scan_input.source_revision,
+        "extractor": SCANNER_VERSION,
+    }
+    evidence = Evidence(
+        path=evidence_path,
+        evidence_type="APPLICATION_BOUNDARY",
+        content_hash=content_hash(contents[evidence_path]),
+        locator={"path": evidence_path},
+        metadata={"boundary_strategy": strategy, "monorepo_signals": monorepo_signals},
+    )
+    return [{
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key(identity),
+        "tenant_key": scan_input.tenant_key,
+        "subject": {
+            "namespace": "ENTERPRISE",
+            "type": "Application",
+            "key": application_key,
+            "name": scan_input.repository_name,
+        },
+        "predicate": "IMPLEMENTED_BY",
+        "object_entity": _repository_ref(scan_input),
+        "assertion_class": "INFERRED",
+        "confidence": confidence,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": properties,
+        "evidence": [_evidence_dict(evidence, scan_input)],
+    }]
+
+
+def _application_boundary_evidence_path(contents: Mapping[str, bytes]) -> str | None:
+    preferred_names = (
+        "package.json", "pyproject.toml", "requirements.txt", "Dockerfile",
+        "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
+    )
+    for name in preferred_names:
+        matches = sorted(path for path in contents if PurePosixPath(path).name == name)
+        if matches:
+            return min(matches, key=lambda path: (len(PurePosixPath(path).parts), path))
+    return min(contents, default=None, key=lambda path: (len(PurePosixPath(path).parts), path))
+
+
+def _monorepo_signals(contents: Mapping[str, bytes]) -> list[str]:
+    signals: list[str] = []
+    if "pnpm-workspace.yaml" in contents:
+        signals.append("pnpm-workspace.yaml")
+    root_manifest = contents.get("package.json")
+    if root_manifest is not None:
+        try:
+            document = json.loads(root_manifest)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            document = None
+        if isinstance(document, Mapping) and isinstance(document.get("workspaces"), (list, Mapping)):
+            signals.append("package.json#workspaces")
+    manifest_directories = {
+        str(PurePosixPath(path).parent)
+        for path in contents
+        if PurePosixPath(path).name in {"package.json", "pyproject.toml"}
+        and str(PurePosixPath(path).parent) != "."
+    }
+    if len(manifest_directories) > 1:
+        signals.append("multiple-component-manifests")
+    return signals
 
 
 def _usage_limitations(

@@ -807,6 +807,40 @@ class ConnectorUpdateRequest(ContractModel):
         return self
 
 
+# --- Admin: AI provider configuration -----------------------------------
+
+AIProvider = Literal["openrouter", "openai", "anthropic"]
+AIConnectionTestStatus = Literal["NOT_TESTED", "SUCCEEDED", "FAILED"]
+
+
+class AIProviderConfiguration(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    provider: AIProvider
+    model: str = ""
+    enabled: bool = True
+    key_configured: bool = False
+    key_fingerprint: str | None = None
+    test_status: AIConnectionTestStatus = "NOT_TESTED"
+    tested_at: datetime | None = None
+    last_error: str | None = None
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class AIProviderConfigurationUpdateRequest(ContractModel):
+    provider: AIProvider
+    model: str = Field(default="", max_length=255)
+    api_key: str | None = Field(default=None, min_length=8, max_length=8192)
+    enabled: bool = True
+
+
+class AIProviderConnectionTest(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    provider: AIProvider
+    status: Literal["SUCCEEDED"] = "SUCCEEDED"
+    models: list[str] = Field(default_factory=list)
+
+
 # --- Admin: scan policy, rescans, and quota ------------------------------
 
 ScanCadence = Literal["HOURLY", "DAILY", "WEEKLY", "MANUAL"]

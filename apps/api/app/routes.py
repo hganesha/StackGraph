@@ -9,6 +9,9 @@ from app.auth import Principal
 from app.errors import APIError
 from app.models import (
     ApplicationDetail,
+    AIProviderConfiguration,
+    AIProviderConfigurationUpdateRequest,
+    AIProviderConnectionTest,
     AskRequest,
     AskResponse,
     BusinessMapCreateRequest,
@@ -61,7 +64,10 @@ from app.models import (
 
 
 class ReadModelsProtocol(Protocol):
-    async def estate_summary(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> EstateSummary: ...
+    async def estate_summary(
+        self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
+        namespaces: list[str] | None = None,
+    ) -> EstateSummary: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
     async def modernization(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> ModernizationList: ...
@@ -152,6 +158,19 @@ class ReadModelsProtocol(Protocol):
     async def remove_connector(
         self, connector_id: UUID, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
+    async def get_ai_provider_configuration(
+        self, *, tenant_id: UUID | None,
+    ) -> AIProviderConfiguration: ...
+    async def update_ai_provider_configuration(
+        self, request: AIProviderConfigurationUpdateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConfiguration: ...
+    async def remove_ai_provider_key(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConfiguration: ...
+    async def test_ai_provider_connection(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AIProviderConnectionTest: ...
     async def get_scan_policy(self, *, tenant_id: UUID | None) -> ScanPolicy: ...
     async def update_scan_policy(
         self, request: ScanPolicyUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
@@ -208,10 +227,12 @@ async def get_estate_summary(
     request: Request,
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
+    domain: list[Namespace] | None = Query(default=None),
 ) -> EstateSummary:
     principal = _principal(request)
     return await _store(request).estate_summary(
         tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
+        namespaces=domain,
     )
 
 
@@ -666,6 +687,56 @@ async def remove_connector(id: UUID, request: Request) -> Connector:
     _require(principal, "admin")
     return await _store(request).remove_connector(
         id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: AI provider configuration -----------------------------------
+
+@router.get(
+    "/admin/ai-configuration", response_model=AIProviderConfiguration,
+    response_model_exclude_none=True, operation_id="getAIProviderConfiguration", tags=["admin"],
+)
+async def get_ai_provider_configuration(request: Request) -> AIProviderConfiguration:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_ai_provider_configuration(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/ai-configuration", response_model=AIProviderConfiguration,
+    response_model_exclude_none=True, operation_id="updateAIProviderConfiguration", tags=["admin"],
+)
+async def update_ai_provider_configuration(
+    body: AIProviderConfigurationUpdateRequest, request: Request,
+) -> AIProviderConfiguration:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_ai_provider_configuration(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.delete(
+    "/admin/ai-configuration/key", response_model=AIProviderConfiguration,
+    response_model_exclude_none=True, operation_id="removeAIProviderKey", tags=["admin"],
+)
+async def remove_ai_provider_key(request: Request) -> AIProviderConfiguration:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).remove_ai_provider_key(
+        tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/admin/ai-configuration/test", response_model=AIProviderConnectionTest,
+    response_model_exclude_none=True, operation_id="testAIProviderConnection", tags=["admin"],
+)
+async def test_ai_provider_connection(request: Request) -> AIProviderConnectionTest:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).test_ai_provider_connection(
+        tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 
