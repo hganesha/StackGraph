@@ -20,8 +20,8 @@ policy/catalog governance, calibration, and owned alerting are not complete.
 
 | Area | Status | Evidence-backed conclusion | Primary remaining boundary |
 | --- | --- | --- | --- |
-| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, AGE projection, and a local durable evidence backend are implemented and tested | Continuously deployed scheduling, webhooks, production object-storage lifecycle controls, provider operations, PyPI metadata, and additional ecosystems |
-| Lane B — Enterprise discovery | **Partial** | GitHub snapshot acquisition, npm/Python dependency and usage scanning, registry resolution, API-surface extraction, code-unit evidence, persistence, and intelligence enqueueing are implemented and tested | GitHub App/org lifecycle, automatic acquisition-to-publication orchestration, semantic deployment/IaC parsing, two-pass operation, runtime collection, and pilot-scale proof |
+| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, AGE projection, a local durable evidence backend, and GitHub webhook delivery routing are implemented and tested | Continuously deployed scheduling, production webhook ingress/alerting, production object-storage lifecycle controls, provider operations, PyPI metadata, and additional ecosystems |
+| Lane B — Enterprise discovery | **Partial** | GitHub installation registration/reconciliation, webhook routing, snapshot acquisition, npm/Python scanning, registry resolution, API-surface/code-unit evidence, persistence, and intelligence enqueueing are implemented and tested | Hosted GitHub App callback/token minting, automatic acquisition-to-publication orchestration, semantic deployment/IaC parsing, two-pass operation, runtime collection, and pilot-scale proof |
 | Lane D — Intelligence/quality | **Partial** | Versioned taxonomy, evidence-constrained inference, duplicate detection, eligibility-gated modernization, impact, review/outcome capture, metrics, AI Ask, replay, and RLS are implemented and tested | Tenant policy/catalog rollout, calibration targets, dashboards/alerts, runtime validation, business-capability intelligence, and Phase 4 evidence |
 | Cross-lane contract gate | **Verified** | The v1 ontology, fact, raw-observation, scanner, read-model, and OpenAPI fixtures validate together | Generated types and drift enforcement remain incomplete; TypeScript read-model types are still maintained manually |
 | Pilot operations | **Missing** | No repository evidence demonstrates a complete 100+ repository production drill with owned SLOs, backups, replay, and alerts | Build and exercise the production control plane before claiming pilot readiness |
@@ -105,8 +105,9 @@ lanes only. Lane C completion is intentionally not scored here.
   continuously deployed scheduler or supervisor definition in this repository.
 - `source_artifact` and `raw_observation` retain `blob_uri` references, hashes, and metadata, but the local stack
   contains no S3-compatible object store, retention policy, lifecycle policy, or restore procedure.
-- `webhook_delivery` has safe idempotency and signature-state fields, but no HTTP receiver, signature verifier,
-  event router, or reconciliation service persists and processes GitHub deliveries.
+- The GitHub webhook receiver verifies signatures, archives bodies, deduplicates deliveries, and routes lifecycle
+  events locally. Production TLS ingress, secret rotation, delivery/reconciliation alerting, and a continuously
+  supervised deployment are not defined.
 - Freshness and queue state are queryable in PostgreSQL, while production dashboards, alert routes, and named
   owners are not defined.
 - npm registry acquisition is implemented as a bounded client/CLI, not a leased refresh worker equivalent to
@@ -132,6 +133,8 @@ lanes only. Lane C completion is intentionally not scored here.
 | Capability | Status | Implementation evidence | Verification evidence |
 | --- | --- | --- | --- |
 | GitHub repository acquisition | **Verified** | [GitHub client](../services/enterprise-discovery/stackgraph_discovery/github_client.py) and [snapshot acquirer](../services/enterprise-discovery/stackgraph_discovery/github_snapshot.py) resolve immutable repository/commit identity, enforce bounds, reject unsafe paths/origins, and classify retryable failures | GitHub acquisition tests cover unchanged revisions, truncation, rate limits, unsafe paths, and private-installation identity |
+| GitHub installation lifecycle | **Verified** | [installation discovery](../services/enterprise-discovery/stackgraph_discovery/github_installation.py), [persistence](../services/enterprise-discovery/stackgraph_discovery/github_installation_store.py), and the [lifecycle runbook](runbooks/github-installation-lifecycle.md) register credential references, paginate the complete authorized set, create connector-bound targets/cursors, disable removals, and revoke safely | Unit and PostgreSQL integration tests cover pagination, replay, tenant conflicts, removal, pending-run cancellation, and revocation |
+| GitHub webhook routing | **Verified** | [webhook verifier](../services/enterprise-discovery/stackgraph_discovery/github_webhook.py), [delivery router](../services/enterprise-discovery/stackgraph_discovery/github_webhook_store.py), and [HTTP receiver](../services/enterprise-discovery/stackgraph_discovery/github_webhook_server.py) verify HMAC before parsing, archive bodies, dedupe delivery IDs, and schedule default-branch revisions/reconciliation | Signature and database integration tests cover safe headers, replay, push routing, repository removal, evidence URIs, and pending-run cancellation |
 | Immutable snapshots and durable descriptors | **Verified** | Revision-addressed materializations contain selected files, `snapshot.json`, and a contract-v1 raw observation; a configured local evidence backend creates a deterministic checksum-addressed archive and scanner evidence retains archive-member URIs | Acquisition/evidence-store tests and [enterprise-discovery README](../services/enterprise-discovery/README.md) |
 | npm manifests and locks | **Verified** | [repository scanner](../services/enterprise-discovery/stackgraph_discovery/repository_scanner.py) reads package manifests plus npm, Yarn, and pnpm locks, with workspace/component scope | Scanner tests cover resolved dependencies and line-level evidence |
 | Python manifests and locks | **Verified** | Scanner supports `pyproject.toml`, Poetry, uv, Pipenv, and requirements files with exact-version resolution where available | Scanner tests cover Python lock, import, and reachability evidence |
@@ -144,9 +147,9 @@ lanes only. Lane C completion is intentionally not scored here.
 
 ### Implemented but not operationalized
 
-- GitHub acquisition is a secure CLI/library, not a GitHub App installation service. Repository discovery,
-  installation lifecycle, organization pagination, installation-token renewal, and removal reconciliation are
-  absent.
+- GitHub installation registration, authorized-repository pagination, removal/revocation, and webhook routing are
+  implemented. A hosted authorization callback and production secret-broker adapter for minting/refreshing
+  installation tokens are still absent; the checked-in local resolver supports `env://` references only.
 - The Makefile exposes acquisition, scan, enqueue, persistence, projection, and intelligence commands, but no
   durable orchestrator moves one repository automatically through every step or records the entire workflow.
 - `Dockerfile`, Compose files, and selected deployment/config YAML are acquired. The scanner records them as
@@ -154,8 +157,8 @@ lanes only. Lane C completion is intentionally not scored here.
   regions, or deployment relationships into canonical facts. `.tf` files are not currently selected.
 - `stackgraph-runtime.json` can supply runtime observations to the scanner, but the repository contains no
   runtime collector, attestation format producer, or deployment integration that creates it.
-- Snapshot materialization is filesystem-based. Its durability and lifecycle therefore depend on the Lane A
-  object-storage gap.
+- Snapshot evidence has a local durable backend, while production durability, retention, encryption, and restore
+  still depend on completing Lane A's object-storage lifecycle gap.
 
 ### Lane B gap register
 
@@ -229,6 +232,10 @@ Implementation progress on `codex/lane-a-b-d-p0`:
   persistence, and archive-member URIs on persisted source artifacts.
 - A-02 remains open until a production object-store backend, encryption/key policy, retention/legal-hold rules,
   authorized deletion workflow, restore/replay drill, and operational telemetry satisfy its exit condition.
+- Work package 2 / B-01 + A-03 is **Partial**. Credential-reference installation registration, bounded complete
+  repository reconciliation, safe removal/revocation, an HMAC-verifying HTTP receiver, durable webhook bodies,
+  delivery dedupe, and default-branch push routing are implemented. It remains open for the hosted installation
+  callback, production token broker/refresh, continuous scheduler ownership, TLS ingress, and delivery alerts.
 
 | Order | Work package | Owner | Prerequisites | Deliverable and exit condition |
 | ---: | --- | --- | --- | --- |

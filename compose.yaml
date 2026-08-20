@@ -184,6 +184,48 @@ services:
       - ./services/enterprise-discovery/repository-snapshots:/snapshots
       - stackgraph_evidence_data:/evidence
 
+  github-lifecycle:
+    profiles: [tools]
+    build:
+      context: ./services/enterprise-discovery
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      GITHUB_INSTALLATION_TOKEN: ${GITHUB_INSTALLATION_TOKEN:-}
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_installation_cli"]
+    command: ["--help"]
+    depends_on:
+      database:
+        condition: service_healthy
+
+  github-webhook:
+    profiles: [github]
+    build:
+      context: ./services/enterprise-discovery
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+      STACKGRAPH_GITHUB_WEBHOOK_PORT: 8090
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_webhook_server"]
+    ports:
+      - "127.0.0.1:${STACKGRAPH_GITHUB_WEBHOOK_PORT:-8090}:8090"
+    volumes:
+      - stackgraph_evidence_data:/evidence
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8090/health/live', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
   scanner-ingest:
     profiles: [tools]
     build:

@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
 
 backend-up:
 	docker compose up --build -d database api
@@ -99,6 +99,29 @@ intelligence-requeue: database-migrate
 	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
 	@test -n "$(REPOSITORY_ID)" || (echo "REPOSITORY_ID is required" >&2; exit 2)
 	docker compose run --rm modernization-intelligence requeue --tenant-id "$(TENANT_ID)" --repository-id "$(REPOSITORY_ID)"
+
+github-installation-register: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	docker compose run --rm github-lifecycle register --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)" --credential-reference "$${CREDENTIAL_REFERENCE:-env://GITHUB_INSTALLATION_TOKEN}" --permission contents:read --permission metadata:read
+
+github-installation-reconcile: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN must resolve the local env:// credential reference" >&2; exit 2)
+	docker compose run --rm github-lifecycle reconcile --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)"
+
+github-installation-revoke: database-migrate
+	@test -n "$(TENANT_KEY)" || (echo "TENANT_KEY is required" >&2; exit 2)
+	@test -n "$(INSTALLATION_ID)" || (echo "INSTALLATION_ID is required" >&2; exit 2)
+	docker compose run --rm github-lifecycle revoke --tenant-key "$(TENANT_KEY)" --installation-id "$(INSTALLATION_ID)"
+
+github-webhook-up:
+	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
+	docker compose --profile github up --build -d github-webhook
+
+github-webhook-down:
+	docker compose --profile github stop github-webhook
 
 repository-acquire:
 	@test -n "$(REPOSITORY)" || (echo "REPOSITORY is required (owner/name)" >&2; exit 2)

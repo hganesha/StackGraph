@@ -93,6 +93,19 @@ python -m stackgraph_discovery.api_surface /tmp/unpacked-package \
 See [the dependency analysis runbook](../../docs/runbooks/repository-dependency-analysis.md)
 for the complete acquire, scan, persist, and API-surface workflow.
 
+## GitHub App installation lifecycle
+
+`stackgraph_discovery.github_installation_cli` registers a tenant connector using
+only a secret-provider credential reference, paginates the installation's complete
+authorized repository set, creates connector-bound repository targets, and safely
+disables removed targets. `stackgraph_discovery.github_webhook_server` verifies
+GitHub HMAC signatures, archives delivery bodies in the tenant evidence store,
+deduplicates delivery IDs, and routes default-branch pushes and lifecycle changes
+into the ingestion control plane.
+
+See [the GitHub installation lifecycle runbook](../../docs/runbooks/github-installation-lifecycle.md)
+for registration, reconciliation, webhook, and revocation commands.
+
 ## npm registry resolution
 
 `stackgraph_discovery.npm_resolution` converts repository-owned `.npmrc` and
