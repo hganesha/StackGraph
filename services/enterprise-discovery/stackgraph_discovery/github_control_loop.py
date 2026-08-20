@@ -24,6 +24,7 @@ from .github_installation_store import (
 )
 from .github_snapshot import GitHubRepositoryAcquirer, SnapshotLimits
 from .repository_scanner import SCANNER_KEY, SCANNER_VERSION, scan_repository
+from .service_heartbeat import record_service_heartbeat
 
 
 MAX_ATTEMPTS = 5
@@ -179,11 +180,16 @@ def fail_exhausted_leases(database_url: str) -> int:
             WHERE target.id=run.ingest_target_id AND source.id=target.source_system_id
               AND source.source_key='github-app' AND run.status='RUNNING'
               AND run.lease_expires_at<=now() AND run.attempt>=%s
-            RETURNING run.id,run.tenant_id,run.ingest_target_id
+            RETURNING run.id,run.tenant_id,run.ingest_target_id,target.refresh_policy
             """,
             (MAX_ATTEMPTS,),
         ).fetchall()
         for row in rows:
+            _defer_target_after_terminal_failure_connection(
+                connection,
+                target_id=row["ingest_target_id"],
+                refresh_policy=row["refresh_policy"],
+            )
             connection.execute(
                 """
                 INSERT INTO dead_letter(
@@ -765,6 +771,11 @@ def _fail_run(
             (claimed.tenant_id, claimed.target_id, Jsonb([detail])),
         )
         if terminal:
+            _defer_target_after_terminal_failure_connection(
+                connection,
+                target_id=claimed.target_id,
+                refresh_policy=claimed.refresh_policy,
+            )
             connection.execute(
                 """
                 INSERT INTO dead_letter(
@@ -777,6 +788,26 @@ def _fail_run(
                 ),
             )
     return terminal, delay
+
+
+def _defer_target_after_terminal_failure_connection(
+    connection: psycopg.Connection,
+    *,
+    target_id: UUID,
+    refresh_policy: Mapping[str, Any],
+) -> None:
+    """Prevent a terminal failure from being rescheduled in a tight loop."""
+    schedule_enabled = refresh_policy.get("schedule_enabled", True) is True
+    cadence = _policy_int(refresh_policy, "cadence_seconds", DEFAULT_CADENCE_SECONDS)
+    connection.execute(
+        """
+        UPDATE ingest_target
+        SET next_due_at=CASE WHEN %s THEN now()+(%s*interval '1 second') ELSE NULL END,
+            updated_at=now()
+        WHERE id=%s
+        """,
+        (schedule_enabled, cadence, target_id),
+    )
 
 
 def _quota_status(remaining: int | None, *, throttled: bool = False) -> str:
@@ -914,6 +945,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"scheduled": schedule_due_targets(database_url, limit=args.limit)}))
         return 0
     while True:
+        record_service_heartbeat(
+            database_url, "github-control-loop", instance_id=args.worker_id,
+            metadata={"poll_seconds": args.poll_seconds},
+        )
         result = run_once(
             database_url, snapshot_root=args.snapshot_root,
             evidence_root=args.evidence_root, worker_id=args.worker_id,

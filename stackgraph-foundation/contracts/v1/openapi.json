@@ -2303,6 +2303,37 @@
         "title": "Freshness",
         "type": "object"
       },
+      "GitHubInstallationConnectRequest": {
+        "additionalProperties": false,
+        "description": "Bind an already-authorized GitHub App installation to this tenant.\n\nThe App private key and short-lived installation tokens remain in the deployment\nsecret boundary. The browser supplies only GitHub's public installation identifier.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "installation_id": {
+            "maxLength": 20,
+            "minLength": 1,
+            "pattern": "^[1-9][0-9]{0,19}$",
+            "title": "Installation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installation_id"
+        ],
+        "title": "GitHubInstallationConnectRequest",
+        "type": "object"
+      },
       "GitHubRepositoryConnectRequest": {
         "additionalProperties": false,
         "description": "Register one repository for the self-hosted GitHub ingestion worker.\n\nThe browser supplies repository identity only. The credential value remains in the\nworker environment and this contract stores only its reference.",
@@ -4852,6 +4883,132 @@
         "title": "Score",
         "type": "object"
       },
+      "ServiceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "CORE",
+              "INGESTION",
+              "ENRICHMENT",
+              "GRAPH",
+              "INTELLIGENCE"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "configured": {
+            "default": true,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "failed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "pending": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Pending",
+            "type": "integer"
+          },
+          "running": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Running",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "RUNNING",
+              "IDLE",
+              "WAITING",
+              "DEGRADED",
+              "OFFLINE"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "category",
+          "state"
+        ],
+        "title": "ServiceStatus",
+        "type": "object"
+      },
+      "ServiceStatusList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceStatus"
+            },
+            "title": "Services",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "services"
+        ],
+        "title": "ServiceStatusList",
+        "type": "object"
+      },
       "SessionInfo": {
         "additionalProperties": false,
         "properties": {
@@ -5418,6 +5575,47 @@
         ]
       }
     },
+    "/admin/github/installations": {
+      "post": {
+        "operationId": "connectGitHubInstallation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubInstallationConnectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Connector"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Github Installation",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/github/repositories": {
       "post": {
         "operationId": "connectGitHubRepository",
@@ -5789,6 +5987,27 @@
           }
         },
         "summary": "Get Scan Status",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/services": {
+      "get": {
+        "operationId": "getServiceStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatusList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Service Status",
         "tags": [
           "admin"
         ]

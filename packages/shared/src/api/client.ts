@@ -47,6 +47,7 @@ import type {
   Connector,
   ConnectorRegisterRequest,
   GitHubRepositoryConnectRequest,
+  GitHubInstallationConnectRequest,
   ConnectorUpdateRequest,
   AIProviderConfiguration,
   AIProviderConfigurationUpdateRequest,
@@ -54,6 +55,7 @@ import type {
   ScanPolicy,
   ScanPolicyUpdateRequest,
   ScanStatus,
+  ServiceStatusList,
   RescanRequest,
   RescanJob,
   RescanJobList,
@@ -122,6 +124,7 @@ export interface StackGraphClient {
   listConnectors(): Promise<ConnectorList>;
   registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
+  connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
@@ -131,6 +134,7 @@ export interface StackGraphClient {
   getScanPolicy(): Promise<ScanPolicy>;
   updateScanPolicy(body: ScanPolicyUpdateRequest): Promise<ScanPolicy>;
   getScanStatus(): Promise<ScanStatus>;
+  getServiceStatus(): Promise<ServiceStatusList>;
   requestRescan(body: RescanRequest): Promise<RescanJob>;
   listRescans(cursor?: string, limit?: number): Promise<RescanJobList>;
 }
@@ -425,6 +429,15 @@ const fixtureClient: StackGraphClient = {
       scopes: ["contents:read", "metadata:read"],
     });
   },
+  async connectGitHubInstallation(body) {
+    return this.registerConnector({
+      provider: "GITHUB_APP",
+      display_name: body.display_name ?? `GitHub installation ${body.installation_id}`,
+      external_account_key: `github:installation:${body.installation_id}`,
+      credential_reference: `github-app://installation/${body.installation_id}`,
+      scopes: ["contents:read", "metadata:read"],
+    });
+  },
   async updateConnector(id, body) {
     await delay();
     const connector = adminConnectors.get(id);
@@ -509,6 +522,28 @@ const fixtureClient: StackGraphClient = {
         { provider: "GITHUB_APP", used: 4200, limit: 5000, status: "OK", observed_at: new Date().toISOString() },
       ],
       recent_jobs: clone([...adminRescans.values()].map((r) => r.job).slice(-10).reverse()),
+    };
+  },
+  async getServiceStatus() {
+    await delay();
+    const now = new Date().toISOString();
+    return {
+      contract_version: "1.0.0", as_of: now,
+      services: [
+        ["web", "Web UI", "CORE"], ["api", "API", "CORE"],
+        ["database", "PostgreSQL / AGE", "CORE"],
+        ["github-webhook", "GitHub webhooks", "INGESTION"],
+        ["github-control-loop", "GitHub discovery", "INGESTION"],
+        ["depsdev", "deps.dev enrichment", "ENRICHMENT"],
+        ["osv", "OSV vulnerability enrichment", "ENRICHMENT"],
+        ["projection", "Graph projection", "GRAPH"],
+        ["intelligence", "Modernization intelligence", "INTELLIGENCE"],
+      ].map(([key, name, category]) => ({
+        key, name, category: category as ServiceStatusList["services"][number]["category"],
+        state: "IDLE" as const, detail: "Worker is online and the durable queue is clear.",
+        configured: true, pending: 0, running: 0, failed: 0,
+        last_heartbeat_at: now,
+      })),
     };
   },
   async requestRescan(body) {
@@ -649,6 +684,8 @@ const liveClient: StackGraphClient = {
     req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   connectGitHubRepository: (body) =>
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  connectGitHubInstallation: (body) =>
+    req("/admin/github/installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
@@ -661,6 +698,7 @@ const liveClient: StackGraphClient = {
   updateScanPolicy: (body) =>
     req("/admin/scan-policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getScanStatus: () => req("/admin/scan-status"),
+  getServiceStatus: () => req("/admin/services"),
   requestRescan: (body) =>
     req("/admin/rescans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listRescans: (cursor, limit = 50) =>

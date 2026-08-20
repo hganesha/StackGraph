@@ -33,6 +33,7 @@ from stackgraph_ai.modernization import (
     analyze_native_replacement,
     analyze_structural_duplication,
 )
+from stackgraph_ai.service_heartbeat import record_service_heartbeat
 
 
 @dataclass(frozen=True, slots=True)
@@ -995,6 +996,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.poll_seconds < 0:
         raise SystemExit("--poll-seconds must not be negative")
     while True:
+        record_service_heartbeat(
+            database_url, "intelligence", instance_id=args.worker_id,
+            metadata={"poll_seconds": args.poll_seconds, "max_jobs": max(1, args.max_jobs)},
+        )
         result = work_jobs(
             database_url,
             capability_catalog_dir=args.capability_catalog_dir,

@@ -29,6 +29,7 @@ from stackgraph_data.osv import (
     normalize_bundle,
     vulnerability_properties,
 )
+from stackgraph_data.service_heartbeat import record_service_heartbeat
 
 
 EXTRACTOR_KEY = "osv-v1"
@@ -1843,6 +1844,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.sync_limit <= 0:
             parser.error("--sync-limit must be positive")
         while True:
+            record_service_heartbeat(
+                database_url, "osv", instance_id=args.worker_id,
+                metadata={"poll_seconds": args.poll_seconds},
+            )
             sync_observed_package_versions(database_url, limit=args.sync_limit)
             result = run_batch(
                 database_url,

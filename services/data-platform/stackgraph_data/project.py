@@ -16,6 +16,8 @@ from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from .service_heartbeat import record_service_heartbeat
+
 
 NODE_UPSERT_CYPHER = """
 MERGE (entity:Entity {entity_id: $entity_id})
@@ -454,6 +456,11 @@ def main() -> None:
     if args.poll_seconds < 0:
         parser.error("--poll-seconds must not be negative")
     while True:
+        if args.poll_seconds > 0:
+            record_service_heartbeat(
+                database_url, "projection",
+                metadata={"poll_seconds": args.poll_seconds, "batch_size": args.batch_size},
+            )
         result = project_database(
             database_url,
             graph_name=args.graph_name,

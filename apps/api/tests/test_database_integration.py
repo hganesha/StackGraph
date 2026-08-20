@@ -530,6 +530,13 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         "/admin/github/repositories",
                         json={"repository": "acme/billing"},
                     )
+                    installation = await client.post(
+                        "/admin/github/installations",
+                        json={
+                            "installation_id": "900000000000000001",
+                            "display_name": "Acme GitHub App",
+                        },
+                    )
                     with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
                         configure_tenant(connection)
                         target = connection.execute(
@@ -573,6 +580,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                     rescan_a = await client.post("/admin/rescans", json={"idempotency_key": "nightly"})
                     rescan_b = await client.post("/admin/rescans", json={"idempotency_key": "nightly"})
                     status = await client.get("/admin/scan-status")
+                    services = await client.get("/admin/services")
                     raw = await client.post(
                         "/admin/connectors",
                         json={"provider": "OTHER", "display_name": "bad",
@@ -591,13 +599,14 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                     )
                     ai_removed = await client.delete("/admin/ai-configuration/key")
                     return (
-                        member, members, connector, repository, policy, rescan_a, rescan_b,
-                        status, raw, ai_saved, ai_read, tenant_ai, ai_removed,
+                        member, members, connector, repository, installation, policy,
+                        rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
+                        tenant_ai, ai_removed,
                     )
 
         (
-            member, members, connector, repository, policy, rescan_a, rescan_b,
-            status, raw, ai_saved, ai_read, tenant_ai, ai_removed,
+            member, members, connector, repository, installation, policy, rescan_a,
+            rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
         ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
@@ -606,11 +615,20 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert "credential_reference" not in connector.json()  # never surfaced
         assert repository.status_code == 201
         assert repository.json()["external_account_key"] == "github:repository:acme/billing"
+        assert installation.status_code == 201
+        assert installation.json()["external_account_key"] == (
+            "github:installation:900000000000000001"
+        )
         assert policy.status_code == 200 and policy.json()["cadence"] == "HOURLY"
         assert rescan_a.status_code == 201
         assert rescan_b.status_code == 200  # idempotent replay
         assert rescan_a.json()["id"] == rescan_b.json()["id"]
         assert status.status_code == 200 and status.json()["policy"]["cadence"] == "HOURLY"
+        assert services.status_code == 200
+        assert {service["key"] for service in services.json()["services"]} == {
+            "web", "api", "database", "github-webhook", "github-control-loop",
+            "depsdev", "osv", "projection", "intelligence",
+        }
         assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
         assert ai_saved.status_code == 200 and ai_saved.json()["key_fingerprint"] == "5678"
         assert ai_saved.json()["enrichment_status"] == "QUEUED"
@@ -639,13 +657,39 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                   ON admin_connector.metadata->>'ingest_target_id'=target.id::text
                 JOIN ingest_run run ON run.ingest_target_id=target.id
                 WHERE admin_connector.id=%s
+                ORDER BY run.created_at DESC,run.id DESC
+                LIMIT 1
                 """,
                 (repository.json()["id"],),
             ).fetchone()
             assert target[0] == "github:repo-name:acme/billing"
             assert target[1]["direct_repository"] is True
-            assert target[2:4] == ("MANUAL", "PENDING")
+            assert target[2] == "MANUAL"
+            # A continuously running discovery worker may claim this synthetic run.
+            assert target[3] in {"PENDING", "RUNNING", "FAILED"}
             assert target[4]["rescan_job_ids"] == [rescan_a.json()["id"]]
+            installation_target = connection.execute(
+                """
+                SELECT target.target_kind,target.target_key,target.refresh_policy,
+                       account.credential_reference,run.trigger_kind
+                FROM connector admin_connector
+                JOIN ingest_target target
+                  ON admin_connector.metadata->>'ingest_target_id'=target.id::text
+                JOIN connector_account account ON account.id=target.connector_account_id
+                JOIN ingest_run run ON run.ingest_target_id=target.id
+                WHERE admin_connector.id=%s
+                ORDER BY run.created_at LIMIT 1
+                """,
+                (installation.json()["id"],),
+            ).fetchone()
+            assert installation_target[0:2] == (
+                "GITHUB_INSTALLATION", "github:installation:900000000000000001",
+            )
+            assert installation_target[2]["installation_id"] == "900000000000000001"
+            assert installation_target[3] == (
+                "github-app://installation/900000000000000001"
+            )
+            assert installation_target[4] == "MANUAL"
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
@@ -670,7 +714,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                 "ai_model_invocation", "admin_audit_log",
                 "tenant_ai_configuration", "tenant_secret",
                 "rescan_job", "connector_quota",
-                "scan_policy", "connector", "tenant_member",
+                "scan_policy", "connector", "tenant_member", "dead_letter",
             ):
                 connection.execute(f"DELETE FROM {table} WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))

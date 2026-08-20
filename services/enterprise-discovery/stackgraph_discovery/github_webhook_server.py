@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from .evidence_store import EvidenceStore, evidence_store_from_environment
 from .github_webhook import MAX_WEBHOOK_BYTES, verify_github_webhook
 from .github_webhook_store import process_github_webhook
+from .service_heartbeat import record_service_heartbeat
 
 
 LOGGER = logging.getLogger(__name__)
@@ -120,7 +122,27 @@ def main() -> None:
         ),
     )
     server.daemon_threads = True
-    server.serve_forever(poll_interval=0.5)
+    stopped = threading.Event()
+
+    def heartbeat_loop() -> None:
+        while not stopped.is_set():
+            try:
+                record_service_heartbeat(
+                    database_url, "github-webhook", metadata={"port": port},
+                )
+            except Exception:
+                LOGGER.exception("GitHub webhook heartbeat failed")
+            stopped.wait(10)
+
+    heartbeat_thread = threading.Thread(
+        target=heartbeat_loop, name="github-webhook-heartbeat", daemon=True,
+    )
+    heartbeat_thread.start()
+    try:
+        server.serve_forever(poll_interval=0.5)
+    finally:
+        stopped.set()
+        server.server_close()
 
 
 if __name__ == "__main__":

@@ -43,6 +43,16 @@ CREATE TABLE connector_account (
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','DISABLED','REVOKED')), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE NULLS NOT DISTINCT (tenant_id,source_system_id,external_account_key)
 );
+CREATE UNIQUE INDEX uq_github_installation_tenant ON connector_account(external_account_key)
+  WHERE external_account_key LIKE 'github:installation:%';
+CREATE TABLE service_heartbeat (
+  service_key text PRIMARY KEY CHECK(service_key ~ '^[a-z][a-z0-9-]{1,63}$'),
+  instance_id text NOT NULL CHECK(instance_id <> ''),
+  status text NOT NULL DEFAULT 'RUNNING' CHECK(status IN ('RUNNING','DEGRADED','STOPPING')),
+  metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(metadata)='object'),
+  started_at timestamptz NOT NULL DEFAULT now(),
+  last_heartbeat_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE package_registry (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), source_system_id uuid NOT NULL REFERENCES source_system(id),
   connector_account_id uuid REFERENCES connector_account(id), registry_key text NOT NULL,
@@ -552,6 +562,7 @@ CREATE INDEX idx_rescan_job_tenant ON rescan_job(tenant_id,created_at DESC,id DE
 CREATE INDEX idx_admin_audit_log_tenant ON admin_audit_log(tenant_id,created_at DESC,id DESC);
 CREATE INDEX idx_auth_token_revocation_expiry ON auth_token_revocation(expires_at);
 CREATE INDEX idx_api_rate_limit_window_expiry ON api_rate_limit_window(window_started_at);
+CREATE INDEX idx_service_heartbeat_freshness ON service_heartbeat(last_heartbeat_at DESC);
 CREATE INDEX idx_identity_assertion_review_queue ON identity_assertion(created_at DESC,id DESC) WHERE review_state='POSSIBLE';
 CREATE INDEX idx_capability_inference_review_queue ON capability_inference(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
 CREATE INDEX idx_duplicate_capability_review_queue ON duplicate_capability_candidate(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
@@ -593,5 +604,6 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('011_tenant_ai_provider_configuration.sql','20f0096023b1f959de30e5a81764923392153caef120dd41eb2b85386078818c'),
  ('012_activate_tenant_ai_enrichment.sql','32fcc5401f4e0549c74e3e23997f19ada49b90de421c4ebd394f80ac4193b0b5'),
  ('013_auth_token_revocation.sql','835e327b669036047fbdf882a9abc4a1c2bf6829d838a084d3aa9bbc1c82617b'), -- gitleaks:allow; migration checksum, not a credential
- ('014_repair_dependency_usage_legacy.sql','1d9becc7e78515554e3872aa5a06b52415360c69c9bfba8b3790f24c3bd26c77'); -- gitleaks:allow; migration checksum, not a credential
+ ('014_repair_dependency_usage_legacy.sql','1d9becc7e78515554e3872aa5a06b52415360c69c9bfba8b3790f24c3bd26c77'), -- gitleaks:allow; migration checksum, not a credential
+ ('015_service_visibility_and_github_admin.sql','359d26f1effb73467370bc7171e200c8e9586f21395f0a2e24f11fc4d3ed0182'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

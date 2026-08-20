@@ -20,6 +20,7 @@ try:
     from stackgraph_discovery.github_control_loop import (
         MAX_ATTEMPTS,
         _acquire_scan_publish,
+        _fail_run,
         _policy_int,
         _quota_status,
         _record_github_quota,
@@ -302,6 +303,46 @@ class GitHubControlLoopPersistenceTests(unittest.TestCase):
                 "UPDATE ingest_target SET enabled=false,next_due_at=NULL WHERE tenant_id=%s",
                 (claimed.tenant_id,),
             )
+
+    def test_terminal_failure_defers_the_next_scheduled_run(self) -> None:
+        tenant_key = f"github-terminal-failure-{uuid4()}"
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'GitHub terminal failure')",
+                (tenant_key,),
+            )
+        registration = register_installation(
+            DATABASE_URL,
+            tenant_key=tenant_key,
+            installation_id=str(uuid4().int)[:12],
+            credential_reference="env://GITHUB_INSTALLATION_TOKEN",
+            permissions=["contents:read", "metadata:read"],
+        )
+        tenant_id = registration.tenant_id
+        self.assertEqual(schedule_due_targets(DATABASE_URL, tenant_id=tenant_id), 1)
+        claimed = claim_run(
+            DATABASE_URL,
+            worker_id="terminal-failure-test",
+            lease_seconds=30,
+            tenant_id=tenant_id,
+        )
+        self.assertIsNotNone(claimed)
+        assert claimed is not None
+
+        terminal, _ = _fail_run(DATABASE_URL, claimed, ValueError("missing credential"))
+
+        self.assertTrue(terminal)
+        self.assertEqual(schedule_due_targets(DATABASE_URL, tenant_id=tenant_id), 0)
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            target = connection.execute(
+                "SELECT next_due_at > now() deferred FROM ingest_target WHERE id=%s",
+                (claimed.target_id,),
+            ).fetchone()
+            connection.execute(
+                "UPDATE ingest_target SET enabled=false,next_due_at=NULL WHERE id=%s",
+                (claimed.target_id,),
+            )
+        self.assertTrue(target["deferred"])
 
     def test_changed_repository_publishes_once_and_unchanged_revision_skips_scan(self) -> None:
         tenant_key = f"github-pipeline-{uuid4()}"

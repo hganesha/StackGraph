@@ -49,6 +49,8 @@ from app.models import (
     ConnectorList,
     ScanPolicy,
     ScanStatus,
+    ServiceStatus,
+    ServiceStatusList,
     RescanJob,
     RescanJobList,
 )
@@ -332,6 +334,17 @@ class StubReadModels:
             created_at=NOW, updated_at=NOW,
         )
 
+    async def connect_github_installation(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return Connector(
+            id=UUID("00000000-0000-4000-8000-000000000b03"), provider="GITHUB_APP",
+            display_name=request.display_name or f"GitHub installation {request.installation_id}",
+            external_account_key=f"github:installation:{request.installation_id}",
+            scopes=["contents:read", "metadata:read"], status="CONNECTED",
+            created_at=NOW, updated_at=NOW,
+        )
+
     async def update_connector(self, connector_id, request, *, tenant_id, actor_key):
         self.last_tenant_id = tenant_id
         self.last_actor_key = actor_key
@@ -402,6 +415,16 @@ class StubReadModels:
         self.last_tenant_id = tenant_id
         return ScanStatus(
             as_of=NOW, policy=ScanPolicy(cadence="DAILY", enabled=True), quotas=[], recent_jobs=[],
+        )
+
+    async def service_status(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ServiceStatusList(
+            as_of=NOW,
+            services=[ServiceStatus(
+                key="api", name="API", category="CORE", state="RUNNING",
+                detail="The API is responding.", last_heartbeat_at=NOW,
+            )],
         )
 
 
@@ -854,11 +877,13 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
+        ("POST", "/api/v1/admin/github/installations", {"installation_id": "123456"}),
         ("GET", "/api/v1/admin/ai-configuration", None),
         ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
         ("DELETE", "/api/v1/admin/ai-configuration/key", None),
         ("POST", "/api/v1/admin/ai-configuration/test", None),
         ("GET", "/api/v1/admin/scan-status", None),
+        ("GET", "/api/v1/admin/services", None),
         ("PUT", "/api/v1/admin/scan-policy", {"cadence": "DAILY", "enabled": True}),
         ("POST", "/api/v1/admin/rescans", {"idempotency_key": "k1"}),
     ]:
@@ -907,6 +932,29 @@ def test_connect_github_repository_queues_admin_connection() -> None:
     assert response.json()["display_name"] == "Acme/Billing"
     assert response.json()["external_account_key"] == "github:repository:acme/billing"
     assert store.last_actor_key == "operator"
+
+
+def test_connect_github_installation_queues_reconciliation() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/installations",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"installation_id": "12345678", "display_name": "Acme engineering"},
+    ))
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "Acme engineering"
+    assert response.json()["external_account_key"] == "github:installation:12345678"
+    assert store.last_actor_key == "operator"
+
+
+def test_service_status_is_admin_visible() -> None:
+    app, _ = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/services",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["services"][0]["key"] == "api"
 
 
 def test_connect_github_repository_rejects_tokens_and_invalid_identity() -> None:

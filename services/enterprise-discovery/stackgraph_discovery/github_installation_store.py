@@ -187,6 +187,29 @@ def register_installation_connection(
         ),
     ).fetchone()
     assert installation_target is not None
+    # Keep the tenant-facing Admin connector in lockstep with the ingestion binding.
+    # Older installations are backfilled by migration 015.
+    connection.execute(
+        """
+        INSERT INTO connector(
+          tenant_id,provider,display_name,external_account_key,credential_reference,
+          scopes,status,metadata,created_by
+        ) VALUES (%s,'GITHUB_APP',%s,%s,%s,%s,'CONNECTED',%s,'github-installation-cli')
+        ON CONFLICT(tenant_id,provider,external_account_key) DO UPDATE
+          SET credential_reference=EXCLUDED.credential_reference,
+              scopes=EXCLUDED.scopes,status='CONNECTED',
+              metadata=connector.metadata || EXCLUDED.metadata,updated_at=now()
+        """,
+        (
+            tenant["id"], f"GitHub installation {installation_id}", external_key,
+            credential_reference, normalized_permissions,
+            Jsonb({
+                "connection_mode": "GITHUB_APP_INSTALLATION",
+                "installation_id": installation_id,
+                "ingest_target_id": str(installation_target["id"]),
+            }),
+        ),
+    )
     return RegistrationResult(
         tenant_id=str(tenant["id"]),
         source_system_id=str(source["id"]),
@@ -452,6 +475,13 @@ def revoke_installation_connection(
     connection.execute(
         "UPDATE connector_account SET status='REVOKED',updated_at=now() WHERE id=%s",
         (binding.connector_account_id,),
+    )
+    connection.execute(
+        """
+        UPDATE connector SET status='REVOKED',updated_at=now()
+        WHERE tenant_id=%s AND provider='GITHUB_APP' AND external_account_key=%s
+        """,
+        (binding.tenant_id, _external_account_key(installation_id)),
     )
     return RevocationResult(
         connector_account_id=str(binding.connector_account_id),

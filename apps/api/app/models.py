@@ -818,6 +818,21 @@ class GitHubRepositoryConnectRequest(ContractModel):
     credential_reference: Literal["env://GITHUB_TOKEN"] = "env://GITHUB_TOKEN"
 
 
+class GitHubInstallationConnectRequest(ContractModel):
+    """Bind an already-authorized GitHub App installation to this tenant.
+
+    The App private key and short-lived installation tokens remain in the deployment
+    secret boundary. The browser supplies only GitHub's public installation identifier.
+    """
+
+    installation_id: str = Field(
+        min_length=1,
+        max_length=20,
+        pattern=r"^[1-9][0-9]{0,19}$",
+    )
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+
+
 class ConnectorUpdateRequest(ContractModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: ConnectorStatus | None = None
@@ -942,6 +957,30 @@ class ScanStatus(ContractModel):
     policy: ScanPolicy
     quotas: list[ProviderQuota]
     recent_jobs: list[RescanJob]
+
+
+ServiceState = Literal["RUNNING", "IDLE", "WAITING", "DEGRADED", "OFFLINE"]
+ServiceCategory = Literal["CORE", "INGESTION", "ENRICHMENT", "GRAPH", "INTELLIGENCE"]
+
+
+class ServiceStatus(ContractModel):
+    key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    category: ServiceCategory
+    state: ServiceState
+    detail: str = ""
+    configured: bool = True
+    pending: int = Field(default=0, ge=0)
+    running: int = Field(default=0, ge=0)
+    failed: int = Field(default=0, ge=0)
+    last_activity_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+
+
+class ServiceStatusList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    services: list[ServiceStatus]
 
 
 class ErrorResponse(ContractModel):

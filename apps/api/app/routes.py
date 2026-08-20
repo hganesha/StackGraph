@@ -54,12 +54,14 @@ from app.models import (
     ConnectorRegisterRequest,
     GitHubRepositoryConnectRequest,
     ConnectorUpdateRequest,
+    GitHubInstallationConnectRequest,
     ScanPolicy,
     ScanPolicyUpdateRequest,
     RescanRequest,
     RescanJob,
     RescanJobList,
     ScanStatus,
+    ServiceStatusList,
 )
 
 
@@ -152,6 +154,9 @@ class ReadModelsProtocol(Protocol):
     async def connect_github_repository(
         self, request: GitHubRepositoryConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
+    async def connect_github_installation(
+        self, request: GitHubInstallationConnectRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
@@ -182,6 +187,7 @@ class ReadModelsProtocol(Protocol):
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
     ) -> RescanJobList: ...
     async def scan_status(self, *, tenant_id: UUID | None) -> ScanStatus: ...
+    async def service_status(self, *, tenant_id: UUID | None) -> ServiceStatusList: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -667,6 +673,20 @@ async def connect_github_repository(
     )
 
 
+@router.post(
+    "/admin/github/installations", response_model=Connector, status_code=201,
+    response_model_exclude_none=True, operation_id="connectGitHubInstallation", tags=["admin"],
+)
+async def connect_github_installation(
+    body: GitHubInstallationConnectRequest, request: Request,
+) -> Connector:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).connect_github_installation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
 @router.put(
     "/admin/connectors/{id}", response_model=Connector,
     response_model_exclude_none=True, operation_id="updateConnector", tags=["admin"],
@@ -773,6 +793,16 @@ async def get_scan_status(request: Request) -> ScanStatus:
     principal = await _principal(request)
     _require(principal, "admin")
     return await _store(request).scan_status(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/admin/services", response_model=ServiceStatusList,
+    response_model_exclude_none=True, operation_id="getServiceStatus", tags=["admin"],
+)
+async def get_service_status(request: Request) -> ServiceStatusList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).service_status(tenant_id=principal.tenant_id)
 
 
 @router.post(

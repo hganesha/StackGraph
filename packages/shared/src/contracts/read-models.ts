@@ -799,6 +799,12 @@ export interface GitHubRepositoryConnectRequest {
   credential_reference?: "env://GITHUB_TOKEN";
 }
 
+export interface GitHubInstallationConnectRequest {
+  /** Public GitHub App installation identifier; no credential material crosses the browser. */
+  installation_id: string;
+  display_name?: string;
+}
+
 export interface ConnectorUpdateRequest {
   display_name?: string;
   status?: ConnectorStatus;
@@ -906,4 +912,27 @@ export interface ScanStatus {
   policy: ScanPolicy;
   quotas: ProviderQuota[];
   recent_jobs: RescanJob[];
+}
+
+export type ServiceState = "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE";
+export type ServiceCategory = "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
+
+export interface ServiceStatus {
+  key: string;
+  name: string;
+  category: ServiceCategory;
+  state: ServiceState;
+  detail: string;
+  configured: boolean;
+  pending: number;
+  running: number;
+  failed: number;
+  last_activity_at?: string | null;
+  last_heartbeat_at?: string | null;
+}
+
+export interface ServiceStatusList {
+  contract_version: "1.0.0";
+  as_of: string;
+  services: ServiceStatus[];
 }

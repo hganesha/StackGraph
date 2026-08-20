@@ -394,6 +394,11 @@ export interface Freshness {
   status: "FRESH" | "STALE" | "UNKNOWN";
 }
 
+export interface GitHubInstallationConnectRequest {
+  display_name?: string | null;
+  installation_id: string;
+}
+
 export interface GitHubRepositoryConnectRequest {
   credential_reference?: "env://GITHUB_TOKEN";
   repository: string;
@@ -778,6 +783,26 @@ export interface Score {
   confidence_label: "HIGH" | "MEDIUM" | "LOW";
   method_version: string;
   value: number;
+}
+
+export interface ServiceStatus {
+  category: "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
+  configured?: boolean;
+  detail?: string;
+  failed?: number;
+  key: string;
+  last_activity_at?: string | null;
+  last_heartbeat_at?: string | null;
+  name: string;
+  pending?: number;
+  running?: number;
+  state: "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE";
+}
+
+export interface ServiceStatusList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  services: Array<ServiceStatus>;
 }
 
 export interface SessionInfo {

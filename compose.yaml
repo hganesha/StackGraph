@@ -300,7 +300,7 @@ services:
       STACKGRAPH_EVIDENCE_RETENTION_DAYS: ${STACKGRAPH_EVIDENCE_RETENTION_DAYS:-30}
       STACKGRAPH_EVIDENCE_LEGAL_HOLD: ${STACKGRAPH_EVIDENCE_LEGAL_HOLD:-false}
       STACKGRAPH_GITHUB_WEBHOOK_PORT: 8090
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-stackgraph-local-development-webhook-secret}
     entrypoint: ["python", "-m", "stackgraph_discovery.github_webhook_server"]
     ports:
       - "127.0.0.1:${STACKGRAPH_GITHUB_WEBHOOK_PORT:-8090}:8090"

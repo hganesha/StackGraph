@@ -43,8 +43,8 @@ Git repositories are a primary sensor, not the final product.
 
 ## Docker quick start
 
-Start the database, apply migrations, load the reference cohort, project the graph, and run both
-the API and standalone Next.js UI as Docker images:
+Start the database, apply migrations, load the reference cohort, project the graph, and run the
+API, standalone Next.js UI, and continuous ingestion/enrichment pipeline as Docker images:
 
 ```sh
 ./scripts/start_docker.sh
@@ -53,6 +53,14 @@ the API and standalone Next.js UI as Docker images:
 Open `http://localhost:3000` for the UI or `http://localhost:8080/health/ready` for API readiness.
 The script waits for every long-running service to become healthy before returning. It preserves
 the named database volume across restarts; use `make app-down` to stop the app without deleting data.
+
+Open **Admin → Services** to see the API, UI, database, GitHub webhook/control loop, deps.dev,
+OSV, graph projection, and intelligence workers together with their heartbeat and queue state.
+Open **Admin → Connections** to bind an already-authorized GitHub App installation by its public
+installation ID. Configure `GITHUB_APP_ID` and either `GITHUB_APP_PRIVATE_KEY` or
+`GITHUB_APP_PRIVATE_KEY_FILE` in the Docker environment; private keys and short-lived installation
+tokens are never sent to or stored by the browser. Direct repository connections using
+`GITHUB_TOKEN` remain available as a development option.
 
 Use `./scripts/start_docker.sh --help` for options including an explicit environment file,
 reusing existing images, skipping reference seeding, or following container logs. The equivalent
