@@ -404,6 +404,20 @@ export interface GitHubRepositoryConnectRequest {
   repository: string;
 }
 
+export interface GitHubRepositoryOption {
+  archived?: boolean;
+  default_branch?: string | null;
+  full_name: string;
+  visibility: "public" | "private" | "internal";
+}
+
+export interface GitHubRepositoryOptionList {
+  contract_version?: "1.0.0";
+  repositories: Array<GitHubRepositoryOption>;
+  token_configured: boolean;
+  truncated?: boolean;
+}
+
 export interface GraphEdge {
   assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
   citation_fact_ids: Array<string>;

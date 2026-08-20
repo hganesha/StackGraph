@@ -3,9 +3,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
@@ -23,6 +25,8 @@ from app.models import (
     ConnectorUpdateRequest,
     GitHubInstallationConnectRequest,
     GitHubRepositoryConnectRequest,
+    GitHubRepositoryOption,
+    GitHubRepositoryOptionList,
     MemberInviteRequest,
     MemberUpdateRequest,
     PageInfo,
@@ -54,6 +58,22 @@ _REVIEW_PATHS: dict[str, str] = {
 _RAW_SECRET_MARKERS: tuple[str, ...] = (
     "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xox", "-----BEGIN", "AKIA",
 )
+
+
+def _github_api_base_url() -> str:
+    base_url = os.getenv("STACKGRAPH_GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    parsed = urlsplit(base_url)
+    is_local = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    allow_insecure_local = os.getenv("STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST") == "true"
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ValueError("GitHub API URL cannot contain credentials, a query, or a fragment")
+    if parsed.scheme != "https" and not (
+        parsed.scheme == "http" and is_local and allow_insecure_local
+    ):
+        raise ValueError("GitHub API URL must use HTTPS")
+    if not parsed.hostname:
+        raise ValueError("GitHub API URL must include a host")
+    return base_url
 
 
 def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
@@ -550,6 +570,114 @@ class AdminReadModelsMixin:
                 detail={"repository": full_name, "ingest_target_id": str(target["id"])},
             )
         return self._connector(row)
+
+    async def list_available_github_repositories(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubRepositoryOptionList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list GitHub repositories.")
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if not token:
+            return GitHubRepositoryOptionList(token_configured=False, repositories=[])
+
+        existing_rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT lower(repository_name) repository_name
+            FROM (
+              SELECT replace(connector.external_account_key,'github:repository:','') repository_name
+              FROM connector
+              WHERE connector.tenant_id=%s AND connector.provider='GITHUB_APP'
+                AND connector.status='CONNECTED'
+                AND connector.external_account_key LIKE 'github:repository:%%'
+              UNION ALL
+              SELECT target.refresh_policy->>'full_name' repository_name
+              FROM ingest_target target
+              JOIN source_system source ON source.id=target.source_system_id
+              WHERE target.tenant_id=%s AND source.source_key='github-app'
+                AND target.target_kind='REPOSITORY' AND target.enabled
+            ) connected
+            WHERE nullif(repository_name,'') IS NOT NULL
+            """,
+            (tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        existing = {row["repository_name"] for row in existing_rows}
+        repositories: dict[str, GitHubRepositoryOption] = {}
+        truncated = False
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "StackGraph-admin/1.0",
+            "X-GitHub-Api-Version": "2026-03-10",
+        }
+        try:
+            base_url = _github_api_base_url()
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=20.0,
+                follow_redirects=False,
+            ) as client:
+                for page in range(1, 101):
+                    response = await client.get(
+                        f"{base_url}/user/repos",
+                        params={
+                            "affiliation": "owner,collaborator,organization_member",
+                            "sort": "full_name",
+                            "direction": "asc",
+                            "per_page": "100",
+                            "page": str(page),
+                        },
+                    )
+                    if response.status_code in {401, 403}:
+                        raise APIError(
+                            502,
+                            "GITHUB_TOKEN_REJECTED",
+                            "GitHub rejected the configured token or its repository-list request.",
+                        )
+                    response.raise_for_status()
+                    payload = response.json()
+                    if not isinstance(payload, list):
+                        raise ValueError("GitHub repository response is not a list")
+                    for item in payload:
+                        if not isinstance(item, dict) or not isinstance(item.get("full_name"), str):
+                            continue
+                        full_name = item["full_name"]
+                        normalized_name = full_name.lower()
+                        if normalized_name in existing or normalized_name in repositories:
+                            continue
+                        raw_visibility = item.get("visibility")
+                        visibility = (
+                            raw_visibility
+                            if raw_visibility in {"public", "private", "internal"}
+                            else "private" if item.get("private") is True else "public"
+                        )
+                        default_branch = item.get("default_branch")
+                        repositories[normalized_name] = GitHubRepositoryOption(
+                            full_name=full_name,
+                            visibility=visibility,
+                            archived=item.get("archived") is True,
+                            default_branch=(
+                                default_branch[:255] if isinstance(default_branch, str) else None
+                            ),
+                        )
+                    if len(payload) < 100:
+                        break
+                else:
+                    truncated = True
+        except APIError:
+            raise
+        except (httpx.HTTPError, ValueError) as error:
+            raise APIError(
+                502,
+                "GITHUB_REPOSITORY_DISCOVERY_FAILED",
+                "GitHub repositories could not be loaded from the configured token.",
+            ) from error
+
+        return GitHubRepositoryOptionList(
+            token_configured=True,
+            repositories=sorted(repositories.values(), key=lambda repository: repository.full_name.lower()),
+            truncated=truncated,
+        )
 
     async def connect_github_installation(
         self,

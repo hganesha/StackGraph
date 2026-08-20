@@ -60,7 +60,8 @@ Open **Admin → Connections** to bind an already-authorized GitHub App installa
 installation ID. Configure `GITHUB_APP_ID` and either `GITHUB_APP_PRIVATE_KEY` or
 `GITHUB_APP_PRIVATE_KEY_FILE` in the Docker environment; private keys and short-lived installation
 tokens are never sent to or stored by the browser. Direct repository connections using
-`GITHUB_TOKEN` remain available as a development option.
+`GITHUB_TOKEN` remain available as a development option; the Admin UI lists only repositories
+visible to that token which are not already active in the StackGraph estate.
 
 Use `./scripts/start_docker.sh --help` for options including an explicit environment file,
 reusing existing images, skipping reference seeding, or following container logs. The equivalent

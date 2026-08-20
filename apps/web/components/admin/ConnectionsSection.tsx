@@ -36,6 +36,12 @@ export function ConnectionsSection() {
     queryKey: ["admin", "connectors"],
     queryFn: () => stackGraphClient.listConnectors(),
   });
+  const availableRepositories = useQuery({
+    queryKey: ["admin", "github", "repositories", "available"],
+    queryFn: () => stackGraphClient.listAvailableGitHubRepositories(),
+    enabled: showForm && connectionMode === "repository",
+    staleTime: 30_000,
+  });
   const connect = useMutation({
     mutationFn: () => stackGraphClient.connectGitHubRepository({ repository: repository.trim() }),
     onSuccess: async (connector) => {
@@ -74,6 +80,9 @@ export function ConnectionsSection() {
 
   const connectionPending = connect.isPending || connectInstallation.isPending;
   const connectionError = connect.error ?? connectInstallation.error;
+  const repositoryAvailable = availableRepositories.data?.repositories.some(
+    (option) => option.full_name === repository,
+  ) ?? false;
 
   return (
     <div className={styles.section}>
@@ -146,15 +155,55 @@ export function ConnectionsSection() {
           ) : (
             <label className={styles.field}>
               <span className={styles.label}>Repository</span>
-              <input
-                className={styles.input}
+              <select
+                className={styles.select}
                 value={repository}
                 onChange={(event) => setRepository(event.target.value)}
-                placeholder="owner/repository"
-                pattern="[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"
-                autoComplete="off"
+                disabled={
+                  availableRepositories.isLoading
+                  || availableRepositories.isFetching
+                  || !availableRepositories.data
+                  || availableRepositories.data?.token_configured === false
+                  || availableRepositories.data?.repositories.length === 0
+                }
                 required
-              />
+              >
+                <option value="">
+                  {availableRepositories.isLoading || availableRepositories.isFetching
+                    ? "Loading repositories…"
+                    : availableRepositories.data?.token_configured === false
+                      ? "GITHUB_TOKEN is not configured"
+                      : availableRepositories.data?.repositories.length === 0
+                        ? "No unconnected repositories available"
+                        : "Select a repository…"}
+                </option>
+                {availableRepositories.data?.repositories.map((option) => (
+                  <option value={option.full_name} key={option.full_name}>
+                    {option.full_name}
+                    {option.visibility === "public" ? "" : ` · ${option.visibility}`}
+                    {option.archived ? " · archived" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className={styles.help}>
+                {availableRepositories.data?.token_configured === false
+                  ? "Set GITHUB_TOKEN in the API and pipeline environment, then restart the services."
+                  : "Only repositories visible to GITHUB_TOKEN and not already in StackGraph are shown."}
+              </span>
+              <span className={styles.repositoryPickerActions}>
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  disabled={availableRepositories.isFetching}
+                  onClick={() => void availableRepositories.refetch()}
+                >
+                  Refresh repositories
+                </button>
+                {availableRepositories.data?.truncated ? "Showing the first 10,000 repositories." : null}
+              </span>
+              {availableRepositories.isError ? (
+                <span className={styles.error} role="alert">{errorMessage(availableRepositories.error)}</span>
+              ) : null}
             </label>
           )}
           <div className={styles.residency}>
@@ -163,14 +212,16 @@ export function ConnectionsSection() {
               {connectionMode === "installation" ? (
                 <>The worker mints short-lived installation tokens from the deployment’s GitHub App key. Neither the key nor tokens enter this form or the database.</>
               ) : (
-                <>Set <span className="sg-mono">GITHUB_TOKEN</span> in the pipeline environment. StackGraph saves only <span className="sg-mono">env://GITHUB_TOKEN</span>.</>
+                <>Set <span className="sg-mono">GITHUB_TOKEN</span> in the API and pipeline environment. StackGraph saves only <span className="sg-mono">env://GITHUB_TOKEN</span>.</>
               )}
             </span>
           </div>
           <button
             type="submit"
             className={styles.primary}
-            disabled={connectionPending || (connectionMode === "installation" ? !installationId.trim() : !repository.trim())}
+            disabled={connectionPending || (
+              connectionMode === "installation" ? !installationId.trim() : !repositoryAvailable
+            )}
           >
             {connectionPending ? "Connecting…" : "Connect and queue first scan"}
           </button>

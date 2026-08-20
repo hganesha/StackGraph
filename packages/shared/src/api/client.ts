@@ -47,6 +47,7 @@ import type {
   Connector,
   ConnectorRegisterRequest,
   GitHubRepositoryConnectRequest,
+  GitHubRepositoryOptionList,
   GitHubInstallationConnectRequest,
   ConnectorUpdateRequest,
   AIProviderConfiguration,
@@ -123,6 +124,7 @@ export interface StackGraphClient {
   removeMember(id: string): Promise<TenantMember>;
   listConnectors(): Promise<ConnectorList>;
   registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
+  listAvailableGitHubRepositories(): Promise<GitHubRepositoryOptionList>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
@@ -429,6 +431,24 @@ const fixtureClient: StackGraphClient = {
       scopes: ["contents:read", "metadata:read"],
     });
   },
+  async listAvailableGitHubRepositories() {
+    await delay();
+    const connected = new Set(
+      [...adminConnectors.values()]
+        .filter((connector) => connector.external_account_key.startsWith("github:repository:"))
+        .map((connector) => connector.external_account_key.slice("github:repository:".length).toLowerCase()),
+    );
+    return {
+      contract_version: "1.0.0",
+      token_configured: true,
+      truncated: false,
+      repositories: [
+        { full_name: "acme/billing", visibility: "private" as const, archived: false, default_branch: "main" },
+        { full_name: "acme/platform", visibility: "private" as const, archived: false, default_branch: "main" },
+        { full_name: "acme/public-design-system", visibility: "public" as const, archived: false, default_branch: "main" },
+      ].filter((repository) => !connected.has(repository.full_name.toLowerCase())),
+    };
+  },
   async connectGitHubInstallation(body) {
     return this.registerConnector({
       provider: "GITHUB_APP",
@@ -682,6 +702,7 @@ const liveClient: StackGraphClient = {
   listConnectors: () => req("/admin/connectors"),
   registerConnector: (body) =>
     req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  listAvailableGitHubRepositories: () => req("/admin/github/repositories/available"),
   connectGitHubRepository: (body) =>
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   connectGitHubInstallation: (body) =>

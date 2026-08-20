@@ -53,6 +53,7 @@ from app.models import (
     ConnectorList,
     ConnectorRegisterRequest,
     GitHubRepositoryConnectRequest,
+    GitHubRepositoryOptionList,
     ConnectorUpdateRequest,
     GitHubInstallationConnectRequest,
     ScanPolicy,
@@ -154,6 +155,9 @@ class ReadModelsProtocol(Protocol):
     async def connect_github_repository(
         self, request: GitHubRepositoryConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
+    async def list_available_github_repositories(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubRepositoryOptionList: ...
     async def connect_github_installation(
         self, request: GitHubInstallationConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
@@ -670,6 +674,18 @@ async def connect_github_repository(
     _require(principal, "admin")
     return await _store(request).connect_github_repository(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/admin/github/repositories/available", response_model=GitHubRepositoryOptionList,
+    response_model_exclude_none=True, operation_id="listAvailableGitHubRepositories", tags=["admin"],
+)
+async def list_available_github_repositories(request: Request) -> GitHubRepositoryOptionList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_available_github_repositories(
+        tenant_id=principal.tenant_id,
     )
 
 

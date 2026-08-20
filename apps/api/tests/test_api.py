@@ -47,6 +47,8 @@ from app.models import (
     TenantMemberList,
     Connector,
     ConnectorList,
+    GitHubRepositoryOption,
+    GitHubRepositoryOptionList,
     ScanPolicy,
     ScanStatus,
     ServiceStatus,
@@ -332,6 +334,15 @@ class StubReadModels:
             external_account_key=f"github:repository:{request.repository.lower()}",
             scopes=["contents:read", "metadata:read"], status="CONNECTED",
             created_at=NOW, updated_at=NOW,
+        )
+
+    async def list_available_github_repositories(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return GitHubRepositoryOptionList(
+            token_configured=True,
+            repositories=[GitHubRepositoryOption(
+                full_name="acme/platform", visibility="private", default_branch="main",
+            )],
         )
 
     async def connect_github_installation(self, request, *, tenant_id, actor_key):
@@ -876,6 +887,7 @@ def test_admin_routes_require_admin_capability() -> None:
         ("GET", "/api/v1/admin/members", None),
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
+        ("GET", "/api/v1/admin/github/repositories/available", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
         ("POST", "/api/v1/admin/github/installations", {"installation_id": "123456"}),
         ("GET", "/api/v1/admin/ai-configuration", None),
@@ -932,6 +944,23 @@ def test_connect_github_repository_queues_admin_connection() -> None:
     assert response.json()["display_name"] == "Acme/Billing"
     assert response.json()["external_account_key"] == "github:repository:acme/billing"
     assert store.last_actor_key == "operator"
+
+
+def test_available_github_repositories_are_admin_visible() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/github/repositories/available",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["token_configured"] is True
+    assert response.json()["repositories"] == [{
+        "full_name": "acme/platform",
+        "visibility": "private",
+        "archived": False,
+        "default_branch": "main",
+    }]
+    assert store.last_tenant_id == TENANT
 
 
 def test_connect_github_installation_queues_reconciliation() -> None:

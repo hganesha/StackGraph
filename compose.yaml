@@ -60,6 +60,9 @@ services:
       OPENROUTER_SITE_NAME: ${OPENROUTER_SITE_NAME:-StackGraph}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com/v1}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      STACKGRAPH_GITHUB_API_URL: ${STACKGRAPH_GITHUB_API_URL:-https://api.github.com}
+      STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST: ${STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST:-false}
     command:
       - uvicorn
       - app.main:app

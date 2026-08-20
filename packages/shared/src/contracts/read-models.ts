@@ -799,6 +799,20 @@ export interface GitHubRepositoryConnectRequest {
   credential_reference?: "env://GITHUB_TOKEN";
 }
 
+export interface GitHubRepositoryOption {
+  full_name: string;
+  visibility: "public" | "private" | "internal";
+  archived: boolean;
+  default_branch?: string | null;
+}
+
+export interface GitHubRepositoryOptionList {
+  contract_version: "1.0.0";
+  token_configured: boolean;
+  repositories: GitHubRepositoryOption[];
+  truncated: boolean;
+}
+
 export interface GitHubInstallationConnectRequest {
   /** Public GitHub App installation identifier; no credential material crosses the browser. */
   installation_id: string;

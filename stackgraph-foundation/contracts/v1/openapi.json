@@ -2358,6 +2358,82 @@
         "title": "GitHubRepositoryConnectRequest",
         "type": "object"
       },
+      "GitHubRepositoryOption": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "default": false,
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "default_branch": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Branch"
+          },
+          "full_name": {
+            "maxLength": 201,
+            "minLength": 3,
+            "title": "Full Name",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "private",
+              "internal"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_name",
+          "visibility"
+        ],
+        "title": "GitHubRepositoryOption",
+        "type": "object"
+      },
+      "GitHubRepositoryOptionList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryOption"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "token_configured": {
+            "title": "Token Configured",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "token_configured",
+          "repositories"
+        ],
+        "title": "GitHubRepositoryOptionList",
+        "type": "object"
+      },
       "GraphEdge": {
         "additionalProperties": false,
         "properties": {
@@ -5652,6 +5728,27 @@
           }
         },
         "summary": "Connect Github Repository",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/github/repositories/available": {
+      "get": {
+        "operationId": "listAvailableGitHubRepositories",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubRepositoryOptionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Available Github Repositories",
         "tags": [
           "admin"
         ]

@@ -818,6 +818,20 @@ class GitHubRepositoryConnectRequest(ContractModel):
     credential_reference: Literal["env://GITHUB_TOKEN"] = "env://GITHUB_TOKEN"
 
 
+class GitHubRepositoryOption(ContractModel):
+    full_name: str = Field(min_length=3, max_length=201)
+    visibility: Literal["public", "private", "internal"]
+    archived: bool = False
+    default_branch: str | None = Field(default=None, max_length=255)
+
+
+class GitHubRepositoryOptionList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    token_configured: bool
+    repositories: list[GitHubRepositoryOption]
+    truncated: bool = False
+
+
 class GitHubInstallationConnectRequest(ContractModel):
     """Bind an already-authorized GitHub App installation to this tenant.
 

@@ -338,6 +338,13 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.repositoryPickerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-3);
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
 
 /* service visibility */
 .serviceGrid {
