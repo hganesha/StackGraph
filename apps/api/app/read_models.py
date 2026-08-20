@@ -18,6 +18,21 @@ from app.models import (
     AskRequest,
     AskResponse,
     AssessmentSummary,
+    BusinessMapCapabilityNode,
+    BusinessMapCreateRequest,
+    BusinessMapDetail,
+    BusinessMapFunctionAssignment,
+    BusinessMapFunctionNode,
+    BusinessMapLane,
+    BusinessMapList,
+    BusinessMapPlacement,
+    BusinessMapProcessNode,
+    BusinessMapRevisionList,
+    BusinessMapRevisionSummary,
+    BusinessMapSaveRequest,
+    BusinessMapSharedGroup,
+    BusinessMapStateModel,
+    BusinessMapSummary,
     CapabilityDefinitionModel,
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
@@ -67,6 +82,10 @@ from app.models import (
 CONTRACT_VERSION = "1.0.0"
 MAX_GRAPH_NODES = 50
 logger = logging.getLogger(__name__)
+
+# The DB stores uppercase enums; the API contract and UI use the workspace's kebab form.
+_VIEW_MODE_TO_DB = {"value-chain": "VALUE_CHAIN", "organization": "ORGANIZATION"}
+_VIEW_MODE_FROM_DB = {value: key for key, value in _VIEW_MODE_TO_DB.items()}
 
 _GRAPH_NEIGHBORHOOD_CTE = """
 WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
@@ -2107,6 +2126,477 @@ class ReadModelStore:
         return ModernizationValidationOutcomeResult(
             id=row["id"], modernization_recommendation_id=recommendation_id,
             validation_status=outcome.validation_status, reported_at=reported_at,
+        )
+
+    # --- Business Map ------------------------------------------------------
+    # The map is the API's first read-write aggregate. A save is a whole-map replace
+    # guarded by optimistic `expected_version`, reusing the identity-assertion FOR UPDATE
+    # pattern; children are deleted and re-inserted inside one transaction and each save
+    # writes an immutable revision snapshot.
+
+    async def list_business_maps(
+        self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
+    ) -> BusinessMapList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list business maps.")
+        decoded = _decode_cursor(cursor, "business-map")
+        rows = await self.database.fetch_all(
+            """
+            SELECT * FROM business_map
+            WHERE status<>'ARCHIVED'
+              AND (%(updated_before)s::timestamptz IS NULL
+                   OR updated_at<%(updated_before)s
+                   OR (updated_at=%(updated_before)s AND id<%(id_before)s))
+            ORDER BY updated_at DESC,id DESC
+            LIMIT %(limit)s
+            """,
+            {
+                "updated_before": decoded["updated_before"] if decoded else None,
+                "id_before": decoded["id_before"] if decoded else None,
+                "limit": limit + 1,
+            },
+            tenant_id=tenant_id,
+        )
+        has_next = len(rows) > limit
+        page = rows[:limit]
+        next_cursor = None
+        if has_next and page:
+            last = page[-1]
+            next_cursor = _encode_cursor(
+                "business-map",
+                updated_before=last["updated_at"].isoformat(),
+                id_before=str(last["id"]),
+            )
+        return BusinessMapList(
+            as_of=datetime.now(UTC),
+            maps=[self._business_map_summary(row) for row in page],
+            page_info=PageInfo(has_next_page=has_next, next_cursor=next_cursor),
+        )
+
+    async def create_business_map(
+        self, request: BusinessMapCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to create a business map.")
+        self._validate_business_map_state(request.state)
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM business_map WHERE map_key=%s", (request.map_key,),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409, "BUSINESS_MAP_EXISTS", "A business map with this key already exists.",
+                    {"map_key": request.map_key},
+                )
+            cursor = await connection.execute(
+                """
+                INSERT INTO business_map
+                  (tenant_id,map_key,title,view_mode,template_id,status,version,created_by)
+                VALUES (%s,%s,%s,%s,%s,'ACTIVE',1,%s)
+                RETURNING id
+                """,
+                (
+                    tenant_id, request.map_key, request.state.title,
+                    _VIEW_MODE_TO_DB[request.state.view_mode], request.state.template_id, actor_key,
+                ),
+            )
+            map_id = (await cursor.fetchone())["id"]
+            await self._write_business_map_children(connection, map_id=map_id, tenant_id=tenant_id, state=request.state)
+            await self._write_business_map_revision(
+                connection, map_id=map_id, tenant_id=tenant_id, version=1,
+                state=request.state, actor_key=actor_key,
+            )
+            return await self._business_map_detail(connection, map_id)
+
+    async def business_map_detail(
+        self, map_id: UUID, *, tenant_id: UUID | None,
+    ) -> BusinessMapDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read a business map.")
+        async with self.database.session(tenant_id) as connection:
+            return await self._business_map_detail(connection, map_id)
+
+    async def save_business_map(
+        self, map_id: UUID, request: BusinessMapSaveRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to save a business map.")
+        self._validate_business_map_state(request.state)
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM business_map WHERE id=%s FOR UPDATE", (map_id,),
+            )
+            existing = await cursor.fetchone()
+            if existing is None:
+                raise APIError(404, "BUSINESS_MAP_NOT_FOUND", "The business map was not found.")
+            if existing["status"] == "ARCHIVED":
+                raise APIError(409, "BUSINESS_MAP_ARCHIVED", "An archived business map cannot be edited.")
+            if existing["version"] != request.expected_version:
+                raise APIError(
+                    409, "VERSION_CONFLICT", "The business map changed before this save was applied.",
+                    {"expected_version": request.expected_version, "actual_version": existing["version"]},
+                )
+            new_version = existing["version"] + 1
+            now = datetime.now(UTC)
+            # Delete parents; CASCADE clears processes, capabilities, placements,
+            # shared-group members, and assignments.
+            await connection.execute("DELETE FROM business_map_shared_group WHERE business_map_id=%s", (map_id,))
+            await connection.execute("DELETE FROM business_map_function WHERE business_map_id=%s", (map_id,))
+            await connection.execute("DELETE FROM business_map_lane WHERE business_map_id=%s", (map_id,))
+            await connection.execute(
+                """
+                UPDATE business_map
+                SET title=%s,view_mode=%s,template_id=%s,version=%s,updated_at=%s
+                WHERE id=%s
+                """,
+                (
+                    request.state.title, _VIEW_MODE_TO_DB[request.state.view_mode],
+                    request.state.template_id, new_version, now, map_id,
+                ),
+            )
+            await self._write_business_map_children(connection, map_id=map_id, tenant_id=tenant_id, state=request.state)
+            await self._write_business_map_revision(
+                connection, map_id=map_id, tenant_id=tenant_id, version=new_version,
+                state=request.state, actor_key=actor_key,
+            )
+            return await self._business_map_detail(connection, map_id)
+
+    async def archive_business_map(
+        self, map_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapSummary:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to archive a business map.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                UPDATE business_map SET status='ARCHIVED',updated_at=now()
+                WHERE id=%s AND status<>'ARCHIVED'
+                RETURNING *
+                """,
+                (map_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
+                probe = await connection.execute("SELECT 1 FROM business_map WHERE id=%s", (map_id,))
+                if await probe.fetchone() is None:
+                    raise APIError(404, "BUSINESS_MAP_NOT_FOUND", "The business map was not found.")
+                cursor = await connection.execute("SELECT * FROM business_map WHERE id=%s", (map_id,))
+                row = await cursor.fetchone()
+        return self._business_map_summary(row)
+
+    async def business_map_revisions(
+        self, map_id: UUID, *, tenant_id: UUID | None,
+    ) -> BusinessMapRevisionList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read business map revisions.")
+        async with self.database.session(tenant_id) as connection:
+            probe = await connection.execute("SELECT 1 FROM business_map WHERE id=%s", (map_id,))
+            if await probe.fetchone() is None:
+                raise APIError(404, "BUSINESS_MAP_NOT_FOUND", "The business map was not found.")
+            cursor = await connection.execute(
+                """
+                SELECT version,actor_key,created_at FROM business_map_revision
+                WHERE business_map_id=%s ORDER BY version DESC
+                """,
+                (map_id,),
+            )
+            rows = await cursor.fetchall()
+        return BusinessMapRevisionList(
+            business_map_id=map_id,
+            revisions=[
+                BusinessMapRevisionSummary(
+                    version=row["version"], actor_key=row["actor_key"], created_at=row["created_at"],
+                )
+                for row in rows
+            ],
+        )
+
+    @staticmethod
+    def _business_map_summary(row: dict[str, Any]) -> BusinessMapSummary:
+        return BusinessMapSummary(
+            id=row["id"], map_key=row["map_key"], title=row["title"],
+            view_mode=_VIEW_MODE_FROM_DB[row["view_mode"]], template_id=row["template_id"],
+            status=row["status"], version=row["version"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _validate_business_map_state(state: BusinessMapStateModel) -> None:
+        stage_keys = {stage.id for stage in state.stages}
+        unit_keys = {unit.id for unit in state.organization_units}
+        function_keys = {fn.id for fn in state.catalog}
+        capability_keys = {
+            capability.id
+            for fn in state.catalog
+            for process in fn.processes
+            for capability in process.capabilities
+        }
+
+        def require(condition: bool, ref_kind: str, ref: str) -> None:
+            if not condition:
+                raise APIError(
+                    422, "BUSINESS_MAP_INVALID_REFERENCE",
+                    "The business map references an element it does not define.",
+                    {"reference_kind": ref_kind, "reference": ref},
+                )
+
+        for placement in state.placements:
+            require(placement.capability_id in capability_keys, "placement.capability_id", placement.capability_id)
+            if placement.stage_id is not None:
+                require(placement.stage_id in stage_keys, "placement.stage_id", placement.stage_id)
+            if placement.source_function_id is not None:
+                require(placement.source_function_id in function_keys, "placement.source_function_id", placement.source_function_id)
+        for group in state.shared_groups:
+            require(group.start_stage_id in stage_keys, "shared_group.start_stage_id", group.start_stage_id)
+            require(group.end_stage_id in stage_keys, "shared_group.end_stage_id", group.end_stage_id)
+            for capability_id in group.capability_ids:
+                require(capability_id in capability_keys, "shared_group.capability_id", capability_id)
+        for assignment in state.function_assignments:
+            require(assignment.function_id in function_keys, "assignment.function_id", assignment.function_id)
+            require(assignment.unit_id in unit_keys, "assignment.unit_id", assignment.unit_id)
+
+    async def _write_business_map_children(
+        self, connection: Any, *, map_id: UUID, tenant_id: UUID, state: BusinessMapStateModel,
+    ) -> None:
+        stage_ids: dict[str, UUID] = {}
+        unit_ids: dict[str, UUID] = {}
+        for order, stage in enumerate(state.stages):
+            cursor = await connection.execute(
+                """
+                INSERT INTO business_map_lane
+                  (tenant_id,business_map_id,lane_kind,lane_key,label,sublabel,color,gradient,icon,position)
+                VALUES (%s,%s,'STAGE',%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """,
+                (tenant_id, map_id, stage.id, stage.label, stage.sublabel, stage.color, stage.gradient, stage.icon, order),
+            )
+            stage_ids[stage.id] = (await cursor.fetchone())["id"]
+        for order, unit in enumerate(state.organization_units):
+            cursor = await connection.execute(
+                """
+                INSERT INTO business_map_lane
+                  (tenant_id,business_map_id,lane_kind,lane_key,label,sublabel,color,gradient,icon,position)
+                VALUES (%s,%s,'ORG_UNIT',%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """,
+                (tenant_id, map_id, unit.id, unit.label, unit.sublabel, unit.color, unit.gradient, unit.icon, order),
+            )
+            unit_ids[unit.id] = (await cursor.fetchone())["id"]
+
+        function_ids: dict[str, UUID] = {}
+        capability_ids: dict[str, UUID] = {}
+        for fn_order, fn in enumerate(state.catalog):
+            cursor = await connection.execute(
+                """
+                INSERT INTO business_map_function
+                  (tenant_id,business_map_id,function_key,name,description,color,gradient,icon,position)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """,
+                (tenant_id, map_id, fn.id, fn.name, fn.description, fn.color, fn.gradient, fn.icon, fn_order),
+            )
+            function_id = (await cursor.fetchone())["id"]
+            function_ids[fn.id] = function_id
+            for process_order, process in enumerate(fn.processes):
+                cursor = await connection.execute(
+                    """
+                    INSERT INTO business_map_process
+                      (tenant_id,business_map_id,business_map_function_id,process_key,name,description,position)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                    """,
+                    (tenant_id, map_id, function_id, process.id, process.name, process.description, process_order),
+                )
+                process_id = (await cursor.fetchone())["id"]
+                for capability_order, capability in enumerate(process.capabilities):
+                    cursor = await connection.execute(
+                        """
+                        INSERT INTO business_map_capability
+                          (tenant_id,business_map_id,business_map_process_id,capability_key,name,description,tags,kpis,owner,position)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                        """,
+                        (tenant_id, map_id, process_id, capability.id, capability.name, capability.description,
+                         capability.tags, capability.kpis, capability.owner, capability_order),
+                    )
+                    capability_ids[capability.id] = (await cursor.fetchone())["id"]
+
+        for placement in state.placements:
+            await connection.execute(
+                """
+                INSERT INTO business_map_placement
+                  (tenant_id,business_map_id,business_map_capability_id,lane_id,source_function_id,maturity)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    tenant_id, map_id, capability_ids[placement.capability_id],
+                    stage_ids.get(placement.stage_id) if placement.stage_id else None,
+                    function_ids.get(placement.source_function_id) if placement.source_function_id else None,
+                    placement.maturity,
+                ),
+            )
+        for group in state.shared_groups:
+            cursor = await connection.execute(
+                """
+                INSERT INTO business_map_shared_group
+                  (tenant_id,business_map_id,group_key,name,description,start_lane_id,end_lane_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                """,
+                (tenant_id, map_id, group.id, group.name, group.description,
+                 stage_ids.get(group.start_stage_id), stage_ids.get(group.end_stage_id)),
+            )
+            group_id = (await cursor.fetchone())["id"]
+            for capability_id in group.capability_ids:
+                await connection.execute(
+                    """
+                    INSERT INTO business_map_shared_group_member
+                      (tenant_id,shared_group_id,business_map_capability_id)
+                    VALUES (%s,%s,%s) ON CONFLICT DO NOTHING
+                    """,
+                    (tenant_id, group_id, capability_ids[capability_id]),
+                )
+        for assignment in state.function_assignments:
+            await connection.execute(
+                """
+                INSERT INTO business_map_function_assignment
+                  (tenant_id,business_map_id,business_map_function_id,lane_id)
+                VALUES (%s,%s,%s,%s)
+                """,
+                (tenant_id, map_id, function_ids[assignment.function_id], unit_ids.get(assignment.unit_id)),
+            )
+
+    async def _write_business_map_revision(
+        self, connection: Any, *, map_id: UUID, tenant_id: UUID, version: int,
+        state: BusinessMapStateModel, actor_key: str,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO business_map_revision
+              (tenant_id,business_map_id,version,snapshot,actor_key)
+            VALUES (%s,%s,%s,%s::jsonb,%s)
+            """,
+            (tenant_id, map_id, version, json.dumps(state.model_dump(mode="json")), actor_key),
+        )
+
+    async def _business_map_detail(self, connection: Any, map_id: UUID) -> BusinessMapDetail:
+        cursor = await connection.execute("SELECT * FROM business_map WHERE id=%s", (map_id,))
+        row = await cursor.fetchone()
+        if row is None:
+            raise APIError(404, "BUSINESS_MAP_NOT_FOUND", "The business map was not found.")
+
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_lane WHERE business_map_id=%s ORDER BY lane_kind,position", (map_id,),
+        )
+        lanes = await cursor.fetchall()
+        lane_key_by_id = {lane["id"]: lane["lane_key"] for lane in lanes}
+        stages = [self._business_map_lane(lane) for lane in lanes if lane["lane_kind"] == "STAGE"]
+        units = [self._business_map_lane(lane) for lane in lanes if lane["lane_kind"] == "ORG_UNIT"]
+
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_function WHERE business_map_id=%s ORDER BY position", (map_id,),
+        )
+        functions = await cursor.fetchall()
+        function_key_by_id = {fn["id"]: fn["function_key"] for fn in functions}
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_process WHERE business_map_id=%s ORDER BY position", (map_id,),
+        )
+        processes = await cursor.fetchall()
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_capability WHERE business_map_id=%s ORDER BY position", (map_id,),
+        )
+        capabilities = await cursor.fetchall()
+        capability_key_by_id = {cap["id"]: cap["capability_key"] for cap in capabilities}
+        capabilities_by_process: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
+        for cap in capabilities:
+            capabilities_by_process[cap["business_map_process_id"]].append(cap)
+        processes_by_function: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
+        for process in processes:
+            processes_by_function[process["business_map_function_id"]].append(process)
+
+        catalog = [
+            BusinessMapFunctionNode(
+                id=fn["function_key"], name=fn["name"], description=fn["description"],
+                color=fn["color"], gradient=fn["gradient"], icon=fn["icon"],
+                processes=[
+                    BusinessMapProcessNode(
+                        id=process["process_key"], name=process["name"], description=process["description"],
+                        capabilities=[
+                            BusinessMapCapabilityNode(
+                                id=cap["capability_key"], name=cap["name"], description=cap["description"],
+                                tags=list(cap["tags"]), kpis=list(cap["kpis"]), owner=cap["owner"],
+                            )
+                            for cap in capabilities_by_process.get(process["id"], [])
+                        ],
+                    )
+                    for process in processes_by_function.get(fn["id"], [])
+                ],
+            )
+            for fn in functions
+        ]
+
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_placement WHERE business_map_id=%s", (map_id,),
+        )
+        placements = [
+            BusinessMapPlacement(
+                capability_id=capability_key_by_id[placement["business_map_capability_id"]],
+                stage_id=lane_key_by_id.get(placement["lane_id"]) if placement["lane_id"] else None,
+                maturity=placement["maturity"],
+                source_function_id=function_key_by_id.get(placement["source_function_id"]) if placement["source_function_id"] else None,
+            )
+            for placement in await cursor.fetchall()
+        ]
+
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_shared_group WHERE business_map_id=%s ORDER BY created_at", (map_id,),
+        )
+        groups = await cursor.fetchall()
+        cursor = await connection.execute(
+            """
+            SELECT member.shared_group_id,member.business_map_capability_id
+            FROM business_map_shared_group_member member
+            JOIN business_map_shared_group grp ON grp.id=member.shared_group_id
+            WHERE grp.business_map_id=%s
+            """,
+            (map_id,),
+        )
+        members_by_group: dict[UUID, list[str]] = defaultdict(list)
+        for member in await cursor.fetchall():
+            members_by_group[member["shared_group_id"]].append(
+                capability_key_by_id[member["business_map_capability_id"]]
+            )
+        shared_groups = [
+            BusinessMapSharedGroup(
+                id=group["group_key"], name=group["name"], description=group["description"],
+                capability_ids=members_by_group.get(group["id"], []),
+                start_stage_id=lane_key_by_id.get(group["start_lane_id"], ""),
+                end_stage_id=lane_key_by_id.get(group["end_lane_id"], ""),
+            )
+            for group in groups
+        ]
+
+        cursor = await connection.execute(
+            "SELECT * FROM business_map_function_assignment WHERE business_map_id=%s", (map_id,),
+        )
+        assignments = [
+            BusinessMapFunctionAssignment(
+                function_id=function_key_by_id[assignment["business_map_function_id"]],
+                unit_id=lane_key_by_id.get(assignment["lane_id"], ""),
+            )
+            for assignment in await cursor.fetchall()
+        ]
+
+        return BusinessMapDetail(
+            id=row["id"], map_key=row["map_key"], status=row["status"], version=row["version"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+            state=BusinessMapStateModel(
+                title=row["title"], view_mode=_VIEW_MODE_FROM_DB[row["view_mode"]],
+                template_id=row["template_id"], stages=stages, organization_units=units,
+                catalog=catalog, placements=placements, shared_groups=shared_groups,
+                function_assignments=assignments,
+            ),
+        )
+
+    @staticmethod
+    def _business_map_lane(lane: dict[str, Any]) -> BusinessMapLane:
+        return BusinessMapLane(
+            id=lane["lane_key"], label=lane["label"], sublabel=lane["sublabel"],
+            color=lane["color"], gradient=lane["gradient"], icon=lane["icon"], order=lane["position"],
         )
 
     async def phase3_intelligence_metrics(

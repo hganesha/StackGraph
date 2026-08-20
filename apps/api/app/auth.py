@@ -13,10 +13,29 @@ from app.config import Settings
 from app.errors import APIError
 
 
+# Graded capability ladder: each tier implies the ones before it
+# (view → review → execute → admin). Mirrors the web session model in apps/web/lib/session.ts.
+CAPABILITY_LADDER: tuple[str, ...] = ("view", "review", "execute", "admin")
+
+
+def _normalize_capabilities(raw: Any) -> frozenset[str]:
+    if not isinstance(raw, (list, tuple, set, frozenset)):
+        return frozenset()
+    return frozenset(item for item in raw if isinstance(item, str) and item in CAPABILITY_LADDER)
+
+
 @dataclass(frozen=True, slots=True)
 class Principal:
     actor_key: str
     tenant_id: UUID | None
+    capabilities: frozenset[str] = frozenset()
+
+    def has_capability(self, required: str) -> bool:
+        """True when the principal holds `required` or any higher tier on the ladder."""
+        if required not in CAPABILITY_LADDER:
+            return False
+        held = [CAPABILITY_LADDER.index(c) for c in self.capabilities if c in CAPABILITY_LADDER]
+        return bool(held) and max(held) >= CAPABILITY_LADDER.index(required)
 
 
 def _base64url_encode(value: bytes) -> str:
@@ -33,12 +52,15 @@ def create_session_token(
     actor_key: str,
     tenant_id: UUID | None,
     expires_at: int,
+    capabilities: list[str] | None = None,
 ) -> str:
-    payload = {
+    payload: dict[str, Any] = {
         "sub": actor_key,
         "tenant_id": str(tenant_id) if tenant_id else None,
         "exp": expires_at,
     }
+    if capabilities is not None:
+        payload["capabilities"] = list(capabilities)
     encoded_payload = _base64url_encode(
         json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
     )
@@ -54,9 +76,11 @@ class Authenticator:
 
     def authenticate(self, authorization: str | None) -> Principal:
         if self.settings.auth_mode == "development":
+            # Local/fixtures development runs with full capability, matching the mock web session.
             return Principal(
                 actor_key=self.settings.development_actor_key,
                 tenant_id=self.settings.default_tenant_id,
+                capabilities=frozenset({"admin"}),
             )
 
         if authorization is None or not authorization.startswith("Bearer "):
@@ -80,8 +104,14 @@ class Authenticator:
                 raise APIError(401, "SESSION_EXPIRED", "The bearer session has expired.")
             raw_tenant_id = payload.get("tenant_id")
             tenant_id = UUID(raw_tenant_id) if raw_tenant_id else None
+            # Absent capabilities default to least privilege (read-only).
+            capabilities = (
+                _normalize_capabilities(payload["capabilities"])
+                if "capabilities" in payload
+                else frozenset({"view"})
+            )
         except APIError:
             raise
         except (AssertionError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
             raise APIError(401, "INVALID_SESSION", "The bearer session is invalid.") from error
-        return Principal(actor_key=actor_key, tenant_id=tenant_id)
+        return Principal(actor_key=actor_key, tenant_id=tenant_id, capabilities=capabilities)

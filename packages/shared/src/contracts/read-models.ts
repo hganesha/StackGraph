@@ -526,3 +526,130 @@ export interface ApiError {
   request_id: string;
   details?: Record<string, unknown>;
 }
+
+// --- Business Map -----------------------------------------------------------
+
+export type MaturityLevel = 1 | 2 | 3 | 4 | 5;
+export type BusinessMapViewMode = "value-chain" | "organization";
+export type BusinessMapStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+
+export interface BusinessMapLane {
+  id: string;
+  label: string;
+  sublabel: string;
+  color: string;
+  gradient: string;
+  icon: string;
+  order: number;
+}
+
+export interface BusinessMapCapabilityNode {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  kpis: string[];
+  owner?: string | null;
+}
+
+export interface BusinessMapProcessNode {
+  id: string;
+  name: string;
+  description: string;
+  capabilities: BusinessMapCapabilityNode[];
+}
+
+export interface BusinessMapFunctionNode {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  gradient: string;
+  icon: string;
+  processes: BusinessMapProcessNode[];
+}
+
+export interface BusinessMapPlacement {
+  capability_id: string;
+  stage_id: string | null;
+  maturity: MaturityLevel;
+  source_function_id: string | null;
+}
+
+export interface BusinessMapSharedGroup {
+  id: string;
+  name: string;
+  description: string;
+  capability_ids: string[];
+  start_stage_id: string;
+  end_stage_id: string;
+}
+
+export interface BusinessMapFunctionAssignment {
+  function_id: string;
+  unit_id: string;
+}
+
+export interface BusinessMapStateModel {
+  title: string;
+  view_mode: BusinessMapViewMode;
+  template_id: string;
+  stages: BusinessMapLane[];
+  organization_units: BusinessMapLane[];
+  catalog: BusinessMapFunctionNode[];
+  placements: BusinessMapPlacement[];
+  shared_groups: BusinessMapSharedGroup[];
+  function_assignments: BusinessMapFunctionAssignment[];
+}
+
+export interface BusinessMapSummary {
+  id: string;
+  map_key: string;
+  title: string;
+  view_mode: BusinessMapViewMode;
+  template_id: string;
+  status: BusinessMapStatus;
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BusinessMapList {
+  contract_version: "1.0.0";
+  as_of: string;
+  maps: BusinessMapSummary[];
+  page_info: PageInfo;
+}
+
+export interface BusinessMapDetail {
+  contract_version: "1.0.0";
+  id: string;
+  map_key: string;
+  status: BusinessMapStatus;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  state: BusinessMapStateModel;
+}
+
+export interface BusinessMapCreateRequest {
+  map_key: string;
+  state: BusinessMapStateModel;
+}
+
+export interface BusinessMapSaveRequest {
+  expected_version: number;
+  state: BusinessMapStateModel;
+}
+
+export interface BusinessMapRevisionSummary {
+  version: number;
+  actor_key: string;
+  created_at: string;
+}
+
+export interface BusinessMapRevisionList {
+  contract_version: "1.0.0";
+  business_map_id: string;
+  revisions: BusinessMapRevisionSummary[];
+}

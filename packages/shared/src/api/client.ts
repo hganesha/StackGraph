@@ -30,6 +30,12 @@ import type {
   Phase3IntelligenceMetrics,
   ModernizationList,
   TechnologyDetail,
+  BusinessMapList,
+  BusinessMapDetail,
+  BusinessMapSummary,
+  BusinessMapCreateRequest,
+  BusinessMapSaveRequest,
+  BusinessMapRevisionList,
 } from "../contracts/read-models";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
@@ -48,6 +54,7 @@ import capabilityTaxonomy from "../fixtures/capability-taxonomy.json";
 import repositoryCapabilities from "../fixtures/repository-capabilities.json";
 import repositoryModernization from "../fixtures/repository-modernization-intelligence.json";
 import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
+import businessMapDetail from "../fixtures/business-map-detail.json";
 
 export interface StackGraphClient {
   getEstateSummary(): Promise<EstateSummary>;
@@ -67,10 +74,46 @@ export interface StackGraphClient {
   reviewModernizationRecommendation(id: string, body: ModernizationRecommendationReviewRequest): Promise<ModernizationRecommendationReviewResult>;
   recordModernizationValidationOutcome(id: string, body: ModernizationValidationOutcomeRequest): Promise<ModernizationValidationOutcomeResult>;
   getPhase3IntelligenceMetrics(): Promise<Phase3IntelligenceMetrics>;
+  listBusinessMaps(cursor?: string, limit?: number): Promise<BusinessMapList>;
+  createBusinessMap(body: BusinessMapCreateRequest): Promise<BusinessMapDetail>;
+  getBusinessMap(id: string): Promise<BusinessMapDetail>;
+  saveBusinessMap(id: string, body: BusinessMapSaveRequest): Promise<BusinessMapDetail>;
+  archiveBusinessMap(id: string): Promise<BusinessMapSummary>;
+  getBusinessMapRevisions(id: string): Promise<BusinessMapRevisionList>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
+
+// Fixture mode keeps the Business Map in memory so the workspace's create/save/list flow is
+// fully exercisable without a backend. It mirrors the server's optimistic-concurrency contract.
+class FixtureApiError extends Error {
+  constructor(public status: number, public detail: unknown) {
+    super(`StackGraph API ${status}`);
+    this.name = "ApiRequestError";
+  }
+}
+const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+const businessMaps = new Map<string, BusinessMapDetail>();
+const businessMapRevisions = new Map<string, BusinessMapRevisionList["revisions"]>();
+{
+  const seed = clone(businessMapDetail as BusinessMapDetail);
+  businessMaps.set(seed.id, seed);
+  businessMapRevisions.set(seed.id, [
+    { version: 1, actor_key: "fixture", created_at: seed.created_at },
+  ]);
+}
+const summarize = (m: BusinessMapDetail): BusinessMapSummary => ({
+  id: m.id,
+  map_key: m.map_key,
+  title: m.state.title,
+  view_mode: m.state.view_mode,
+  template_id: m.state.template_id,
+  status: m.status,
+  version: m.version,
+  created_at: m.created_at,
+  updated_at: m.updated_at,
+});
 
 const fixtureClient: StackGraphClient = {
   async getEstateSummary() {
@@ -140,6 +183,66 @@ const fixtureClient: StackGraphClient = {
   async getPhase3IntelligenceMetrics() {
     await delay();
     return phase3Metrics as Phase3IntelligenceMetrics;
+  },
+  async listBusinessMaps() {
+    await delay();
+    const maps = [...businessMaps.values()]
+      .filter((m) => m.status !== "ARCHIVED")
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map(summarize);
+    return { contract_version: "1.0.0", as_of: new Date().toISOString(), maps, page_info: { has_next_page: false } };
+  },
+  async createBusinessMap(body) {
+    await delay();
+    for (const existing of businessMaps.values()) {
+      if (existing.map_key === body.map_key) {
+        throw new FixtureApiError(409, { code: "BUSINESS_MAP_EXISTS", map_key: body.map_key });
+      }
+    }
+    const now = new Date().toISOString();
+    const id = (globalThis.crypto?.randomUUID?.() ?? `fixture-${businessMaps.size + 1}`);
+    const detail: BusinessMapDetail = {
+      contract_version: "1.0.0", id, map_key: body.map_key, status: "ACTIVE", version: 1,
+      created_at: now, updated_at: now, state: clone(body.state),
+    };
+    businessMaps.set(id, detail);
+    businessMapRevisions.set(id, [{ version: 1, actor_key: "fixture", created_at: now }]);
+    return clone(detail);
+  },
+  async getBusinessMap(id) {
+    await delay();
+    const detail = businessMaps.get(id);
+    if (!detail) throw new FixtureApiError(404, { code: "BUSINESS_MAP_NOT_FOUND" });
+    return clone(detail);
+  },
+  async saveBusinessMap(id, body) {
+    await delay();
+    const detail = businessMaps.get(id);
+    if (!detail) throw new FixtureApiError(404, { code: "BUSINESS_MAP_NOT_FOUND" });
+    if (detail.status === "ARCHIVED") throw new FixtureApiError(409, { code: "BUSINESS_MAP_ARCHIVED" });
+    if (detail.version !== body.expected_version) {
+      throw new FixtureApiError(409, {
+        code: "VERSION_CONFLICT", expected_version: body.expected_version, actual_version: detail.version,
+      });
+    }
+    const now = new Date().toISOString();
+    const next: BusinessMapDetail = { ...detail, version: detail.version + 1, updated_at: now, state: clone(body.state) };
+    businessMaps.set(id, next);
+    businessMapRevisions.get(id)?.unshift({ version: next.version, actor_key: "fixture", created_at: now });
+    return clone(next);
+  },
+  async archiveBusinessMap(id) {
+    await delay();
+    const detail = businessMaps.get(id);
+    if (!detail) throw new FixtureApiError(404, { code: "BUSINESS_MAP_NOT_FOUND" });
+    detail.status = "ARCHIVED";
+    detail.updated_at = new Date().toISOString();
+    return summarize(detail);
+  },
+  async getBusinessMapRevisions(id) {
+    await delay();
+    if (!businessMaps.has(id)) throw new FixtureApiError(404, { code: "BUSINESS_MAP_NOT_FOUND" });
+    return { contract_version: "1.0.0", business_map_id: id, revisions: clone(businessMapRevisions.get(id) ?? []) };
   },
 };
 
@@ -213,6 +316,15 @@ const liveClient: StackGraphClient = {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
   getPhase3IntelligenceMetrics: () => req("/intelligence/phase-3/metrics"),
+  listBusinessMaps: (cursor, limit = 50) =>
+    req(`/business-maps?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  createBusinessMap: (body) =>
+    req("/business-maps", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getBusinessMap: (id) => req(`/business-maps/${id}`),
+  saveBusinessMap: (id, body) =>
+    req(`/business-maps/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  archiveBusinessMap: (id) => req(`/business-maps/${id}`, { method: "DELETE" }),
+  getBusinessMapRevisions: (id) => req(`/business-maps/${id}/revisions`),
 };
 
 export const stackGraphClient: StackGraphClient = isFixtureMode() ? fixtureClient : liveClient;
