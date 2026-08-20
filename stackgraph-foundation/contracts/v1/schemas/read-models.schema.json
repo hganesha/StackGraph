@@ -123,15 +123,57 @@
       },
       "additionalProperties": false
     },
+    "taxonomySummary": {
+      "type": "object",
+      "required": ["key", "name"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "summary": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "applicationTechnologyUsage": {
+      "type": "object",
+      "required": ["technology", "classification", "confidence", "confidence_label", "citations"],
+      "properties": {
+        "technology": {"$ref": "#/$defs/entitySummary"},
+        "category": {"$ref": "#/$defs/taxonomySummary"},
+        "classification": {"enum": ["CURATED", "CATALOG_MATCH", "UNCLASSIFIED"]},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+      },
+      "additionalProperties": false
+    },
+    "applicationTechnologyFunction": {
+      "type": "object",
+      "required": ["function", "technologies"],
+      "properties": {
+        "function": {"$ref": "#/$defs/taxonomySummary"},
+        "technologies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/applicationTechnologyUsage"}}
+      },
+      "additionalProperties": false
+    },
+    "applicationTechnologyGroup": {
+      "type": "object",
+      "required": ["domain", "functions"],
+      "properties": {
+        "domain": {"$ref": "#/$defs/taxonomySummary"},
+        "functions": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/applicationTechnologyFunction"}}
+      },
+      "additionalProperties": false
+    },
     "applicationDetail": {
       "type": "object",
-      "required": ["contract_version", "application", "business_context", "repositories", "technologies", "deployments", "assessments", "recommendations", "freshness"],
+      "required": ["contract_version", "application", "business_context", "repositories", "technologies", "technology_groups", "deployments", "assessments", "recommendations", "freshness"],
       "properties": {
         "contract_version": {"const": "1.0.0"},
         "application": {"$ref": "#/$defs/entitySummary"},
         "business_context": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "repositories": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "technology_groups": {"type": "array", "items": {"$ref": "#/$defs/applicationTechnologyGroup"}},
         "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
         "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},

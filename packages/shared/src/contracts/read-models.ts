@@ -101,6 +101,33 @@ export interface EntitySummary {
   summary?: string;
 }
 
+export interface TaxonomySummary {
+  key: string;
+  name: string;
+  summary?: string;
+}
+
+export type TechnologyClassification = "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+
+export interface ApplicationTechnologyUsage {
+  technology: EntitySummary;
+  category?: TaxonomySummary | null;
+  classification: TechnologyClassification;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  citations: Citation[];
+}
+
+export interface ApplicationTechnologyFunction {
+  function: TaxonomySummary;
+  technologies: ApplicationTechnologyUsage[];
+}
+
+export interface ApplicationTechnologyGroup {
+  domain: TaxonomySummary;
+  functions: ApplicationTechnologyFunction[];
+}
+
 export interface AssessmentSummary {
   id: UUID;
   dimension: string;
@@ -156,6 +183,7 @@ export interface ApplicationDetail {
   business_context: EntitySummary[];
   repositories: EntitySummary[];
   technologies: EntitySummary[];
+  technology_groups: ApplicationTechnologyGroup[];
   deployments: EntitySummary[];
   assessments: AssessmentSummary[];
   recommendations: RecommendationSummary[];
