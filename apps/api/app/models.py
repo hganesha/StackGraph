@@ -774,6 +774,21 @@ class ConnectorRegisterRequest(ContractModel):
     scopes: list[str] = Field(default_factory=list)
 
 
+class GitHubRepositoryConnectRequest(ContractModel):
+    """Register one repository for the self-hosted GitHub ingestion worker.
+
+    The browser supplies repository identity only. The credential value remains in the
+    worker environment and this contract stores only its reference.
+    """
+
+    repository: str = Field(
+        min_length=3,
+        max_length=201,
+        pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+    )
+    credential_reference: Literal["env://GITHUB_TOKEN"] = "env://GITHUB_TOKEN"
+
+
 class ConnectorUpdateRequest(ContractModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     status: ConnectorStatus | None = None

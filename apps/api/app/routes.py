@@ -49,6 +49,7 @@ from app.models import (
     Connector,
     ConnectorList,
     ConnectorRegisterRequest,
+    GitHubRepositoryConnectRequest,
     ConnectorUpdateRequest,
     ScanPolicy,
     ScanPolicyUpdateRequest,
@@ -141,6 +142,9 @@ class ReadModelsProtocol(Protocol):
     async def list_connectors(self, *, tenant_id: UUID | None) -> ConnectorList: ...
     async def register_connector(
         self, request: ConnectorRegisterRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
+    async def connect_github_repository(
+        self, request: GitHubRepositoryConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
@@ -623,6 +627,20 @@ async def register_connector(body: ConnectorRegisterRequest, request: Request) -
     principal = _principal(request)
     _require(principal, "admin")
     return await _store(request).register_connector(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/admin/github/repositories", response_model=Connector, status_code=201,
+    response_model_exclude_none=True, operation_id="connectGitHubRepository", tags=["admin"],
+)
+async def connect_github_repository(
+    body: GitHubRepositoryConnectRequest, request: Request,
+) -> Connector:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).connect_github_repository(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
