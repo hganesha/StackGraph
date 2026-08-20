@@ -36,6 +36,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm contracts:generate
       - run: git diff --exit-code -- packages/shared/src/contracts/openapi.generated.ts
+      - run: bash -n scripts/start_docker.sh && ./scripts/start_docker.sh --help > /dev/null
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm lint:css

@@ -4,13 +4,25 @@ The local backend uses FastAPI for the API and the official Apache AGE image for
 
 ## Start
 
-Copy `.env.example` to `.env` only when you need to override the development defaults, then run:
+Copy `.env.example` to `.env` only when you need to override the development defaults. For the
+complete application—including the standalone UI Docker image—run:
+
+```shell
+./scripts/start_docker.sh
+```
+
+This builds the database tools, API, and UI images; waits for PostgreSQL/AGE; applies migrations;
+loads the reference cohort; projects graph changes; and health-gates the API and UI. For backend-only
+work, run:
 
 ```shell
 make backend-up
 ```
 
-The API is available at `http://localhost:8080`, interactive API documentation at `http://localhost:8080/docs`, and PostgreSQL at `localhost:5432` by default. The host API port is intentionally configurable through `STACKGRAPH_API_PORT`; the container always listens on port 8000.
+The UI is available at `http://localhost:3000`, the API at `http://localhost:8080`, interactive API
+documentation at `http://localhost:8080/docs`, and PostgreSQL at `localhost:5432` by default. Host
+ports are configurable through `STACKGRAPH_WEB_PORT`, `STACKGRAPH_API_PORT`, and
+`STACKGRAPH_DB_PORT`; container ports remain fixed.
 
 The V0 API read models are available both at their contract paths and under the versioned `/api/v1` prefix:
 

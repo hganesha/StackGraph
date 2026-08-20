@@ -41,6 +41,23 @@ actions**
 
 Git repositories are a primary sensor, not the final product.
 
+## Docker quick start
+
+Start the database, apply migrations, load the reference cohort, project the graph, and run both
+the API and standalone Next.js UI as Docker images:
+
+```sh
+./scripts/start_docker.sh
+```
+
+Open `http://localhost:3000` for the UI or `http://localhost:8080/health/ready` for API readiness.
+The script waits for every long-running service to become healthy before returning. It preserves
+the named database volume across restarts; use `make app-down` to stop the app without deleting data.
+
+Use `./scripts/start_docker.sh --help` for options including an explicit environment file,
+reusing existing images, skipping reference seeding, or following container logs. The equivalent
+Make entry points are `make app-up`, `make app-logs`, and `make app-down`.
+
 ## Importing the public npm OSS catalog
 
 The data platform can import the currently 5,232-row

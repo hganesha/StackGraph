@@ -288,6 +288,13 @@
             },
             "title": "Technologies",
             "type": "array"
+          },
+          "technology_groups": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTechnologyGroup"
+            },
+            "title": "Technology Groups",
+            "type": "array"
           }
         },
         "required": [
@@ -295,12 +302,116 @@
           "business_context",
           "repositories",
           "technologies",
+          "technology_groups",
           "deployments",
           "assessments",
           "recommendations",
           "freshness"
         ],
         "title": "ApplicationDetail",
+        "type": "object"
+      },
+      "ApplicationTechnologyFunction": {
+        "additionalProperties": false,
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/TaxonomySummary"
+          },
+          "technologies": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTechnologyUsage"
+            },
+            "minItems": 1,
+            "title": "Technologies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "function",
+          "technologies"
+        ],
+        "title": "ApplicationTechnologyFunction",
+        "type": "object"
+      },
+      "ApplicationTechnologyGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/TaxonomySummary"
+          },
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationTechnologyFunction"
+            },
+            "minItems": 1,
+            "title": "Functions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "domain",
+          "functions"
+        ],
+        "title": "ApplicationTechnologyGroup",
+        "type": "object"
+      },
+      "ApplicationTechnologyUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxonomySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "classification": {
+            "enum": [
+              "CURATED",
+              "CATALOG_MATCH",
+              "UNCLASSIFIED"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "classification",
+          "confidence",
+          "confidence_label",
+          "citations"
+        ],
+        "title": "ApplicationTechnologyUsage",
         "type": "object"
       },
       "AskRequest": {
@@ -4780,6 +4891,38 @@
           "capabilities"
         ],
         "title": "SessionInfo",
+        "type": "object"
+      },
+      "TaxonomySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "TaxonomySummary",
         "type": "object"
       },
       "TechnologyDetail": {

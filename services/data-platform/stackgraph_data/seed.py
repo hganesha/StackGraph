@@ -224,12 +224,17 @@ class CatalogSeeder:
         return row["id"]
 
     def _upsert_entities(self) -> None:
+        domains = {item["id"]: item for item in self.catalog.domains}
+        categories = {item["id"]: item for item in self.catalog.categories}
         for capability in self.catalog.capabilities:
+            domain = domains[capability["domain_id"]]
             canonical_key = f"stackgraph:capability:{capability['id']}"
             properties = {
                 "seed_id": self.catalog.seed_id,
                 "seed_version": self.catalog.seed_version,
+                "capability_key": capability["id"],
                 "domain_id": capability["domain_id"],
+                "domain_name": domain["name"],
                 "definition": capability["definition"],
             }
             self.entities[capability["id"]] = self._upsert_entity(
@@ -240,17 +245,31 @@ class CatalogSeeder:
             )
 
         for technology in self.catalog.technologies:
+            domain = domains[technology["domain_id"]]
+            category = categories[technology["category_id"]]
+            lookup_keys = {
+                str(technology["id"]).lower(),
+                str(technology["name"]).lower(),
+                *(str(alias).lower() for alias in technology.get("aliases", [])),
+            }
+            if str(technology["name"]).lower().endswith(".js"):
+                lookup_keys.add(str(technology["name"])[:-3].lower())
+            if str(technology["id"]).lower().endswith("-js"):
+                lookup_keys.add(str(technology["id"])[:-3].lower())
             canonical_key = f"stackgraph:technology:{technology['id']}"
             properties = {
                 "seed_id": self.catalog.seed_id,
                 "seed_version": self.catalog.seed_version,
                 "domain_id": technology["domain_id"],
+                "domain_name": domain["name"],
                 "category_id": technology["category_id"],
+                "category_name": category["name"],
                 "entity_kind": technology["entity_kind"],
                 "language_ecosystem": technology.get("language_ecosystem"),
                 "purpose": technology.get("purpose"),
                 "curated_signal": technology.get("curated_signal"),
                 "aliases": technology.get("aliases", []),
+                "catalog_lookup_keys": sorted(lookup_keys),
             }
             self.entities[technology["id"]] = self._upsert_entity(
                 entity_type="Technology",
@@ -316,13 +335,18 @@ class CatalogSeeder:
         return entity_id
 
     def _insert_entity_property_facts(self) -> None:
+        domains = {item["id"]: item for item in self.catalog.domains}
+        categories = {item["id"]: item for item in self.catalog.categories}
         for capability in self.catalog.capabilities:
+            domain = domains[capability["domain_id"]]
             self._insert_fact(
                 subject_id=self.entities[capability["id"]],
                 predicate="HAS_PROPERTY",
                 object_value={
                     "record_kind": "capability_catalog_entry",
+                    "capability_key": capability["id"],
                     "domain_id": capability["domain_id"],
+                    "domain_name": domain["name"],
                     "definition": capability["definition"],
                 },
                 confidence=1.0,
@@ -332,6 +356,8 @@ class CatalogSeeder:
             )
 
         for technology in self.catalog.technologies:
+            domain = domains[technology["domain_id"]]
+            category = categories[technology["category_id"]]
             locator: dict[str, Any] = {
                 "seed_file": "technologies.json",
                 "record_id": technology["id"],
@@ -344,7 +370,9 @@ class CatalogSeeder:
                 object_value={
                     "record_kind": "technology_catalog_entry",
                     "domain_id": technology["domain_id"],
+                    "domain_name": domain["name"],
                     "category_id": technology["category_id"],
+                    "category_name": category["name"],
                     "entity_kind": technology["entity_kind"],
                     "language_ecosystem": technology.get("language_ecosystem"),
                     "purpose": technology.get("purpose"),

@@ -91,6 +91,34 @@ class EntitySummary(ContractModel):
     summary: str | None = None
 
 
+class TaxonomySummary(ContractModel):
+    key: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    summary: str | None = None
+
+
+TechnologyClassification = Literal["CURATED", "CATALOG_MATCH", "UNCLASSIFIED"]
+
+
+class ApplicationTechnologyUsage(ContractModel):
+    technology: EntitySummary
+    category: TaxonomySummary | None = None
+    classification: TechnologyClassification
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class ApplicationTechnologyFunction(ContractModel):
+    function: TaxonomySummary
+    technologies: list[ApplicationTechnologyUsage] = Field(min_length=1)
+
+
+class ApplicationTechnologyGroup(ContractModel):
+    domain: TaxonomySummary
+    functions: list[ApplicationTechnologyFunction] = Field(min_length=1)
+
+
 class AssessmentSummary(ContractModel):
     id: UUID
     dimension: str = Field(min_length=1)
@@ -138,6 +166,7 @@ class ApplicationDetail(ContractModel):
     business_context: list[EntitySummary]
     repositories: list[EntitySummary]
     technologies: list[EntitySummary]
+    technology_groups: list[ApplicationTechnologyGroup]
     deployments: list[EntitySummary]
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]

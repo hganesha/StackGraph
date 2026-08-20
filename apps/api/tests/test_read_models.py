@@ -11,6 +11,7 @@ from app.read_models import (
     _confidence_label,
     _decode_cursor,
     _encode_cursor,
+    _group_application_technologies,
 )
 
 
@@ -66,6 +67,76 @@ def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.85) == "HIGH"
     assert _confidence_label(0.5999) == "LOW"
     assert _confidence_label(0.60) == "MEDIUM"
+
+
+def test_application_technologies_group_by_catalog_domain_and_capability() -> None:
+    usage_fact = UUID("00000000-0000-4000-8000-000000000301")
+    classification_fact = UUID("00000000-0000-4000-8000-000000000302")
+    catalog_fact = UUID("00000000-0000-4000-8000-000000000304")
+    react_package_id = UUID("00000000-0000-4000-8000-000000000204")
+    unknown_package_id = UUID("00000000-0000-4000-8000-000000000205")
+    react_catalog_id = UUID("00000000-0000-4000-8000-000000000206")
+    technology_rows = [
+        {
+            "id": react_package_id,
+            "namespace": "TECHNOLOGY",
+            "entity_type": "PackageVersion",
+            "canonical_key": "pkg:npm/react@19.1.1",
+            "name": "react 19.1.1",
+            "properties": {"catalog_metadata": {"description": "Interactive UI components."}},
+            "usage_fact_ids": [usage_fact],
+            "usage_confidence": Decimal("1.0"),
+        },
+        {
+            "id": unknown_package_id,
+            "namespace": "TECHNOLOGY",
+            "entity_type": "PackageVersion",
+            "canonical_key": "pkg:npm/unknown-package@1.0.0",
+            "name": "unknown-package 1.0.0",
+            "properties": {},
+            "usage_fact_ids": [UUID("00000000-0000-4000-8000-000000000303")],
+            "usage_confidence": Decimal("0.9"),
+        },
+    ]
+    catalog_rows = [{
+        "id": react_catalog_id,
+        "namespace": "TECHNOLOGY",
+        "entity_type": "Technology",
+        "canonical_key": "stackgraph:technology:react",
+        "name": "React",
+        "properties": {
+            "domain_id": "frontend",
+            "domain_name": "Frontend",
+            "category_id": "ui-rendering-reactivity",
+            "category_name": "UI rendering & reactivity",
+            "catalog_lookup_keys": ["react"],
+        },
+        "capability_id": UUID("00000000-0000-4000-8000-000000000207"),
+        "capability_key": "ui-rendering",
+        "capability_name": "UI rendering",
+        "capability_summary": "Turn application state into interactive UI.",
+        "catalog_fact_id": catalog_fact,
+        "classification_fact_id": classification_fact,
+        "classification_confidence": Decimal("0.95"),
+    }]
+
+    groups = _group_application_technologies(technology_rows, catalog_rows)
+
+    assert [group.domain.key for group in groups] == ["frontend", "unclassified"]
+    frontend = groups[0].functions[0]
+    assert frontend.function.key == "ui-rendering"
+    assert frontend.technologies[0].classification == "CATALOG_MATCH"
+    assert frontend.technologies[0].confidence == pytest.approx(0.85)
+    assert frontend.technologies[0].technology.summary == "Interactive UI components."
+    assert {citation.fact_id for citation in frontend.technologies[0].citations} == {
+        usage_fact,
+        classification_fact,
+        catalog_fact,
+    }
+    unknown = groups[1].functions[0].technologies[0]
+    assert unknown.classification == "UNCLASSIFIED"
+    assert unknown.confidence == 0
+    assert unknown.category is None
 
 
 def test_cursor_is_typed_and_rejects_cross_endpoint_reuse() -> None:

@@ -60,6 +60,79 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
         </section>
       ) : null}
 
+      <section className={styles.section} aria-label="Technology landscape">
+        <div className={styles.sectionHeading}>
+          <h2 className={styles.h2}>Technology landscape</h2>
+          <span className={styles.sectionCount}>{data.technologies.length} linked</span>
+        </div>
+        {data.technology_groups.length > 0 ? (
+          <div className={styles.technologyGroups}>
+            {data.technology_groups.map((group) => (
+              <article key={group.domain.key} className={styles.technologyDomain}>
+                <header className={styles.domainHead}>
+                  <h3 className={styles.domainTitle}>{group.domain.name}</h3>
+                  <span className={styles.domainCount}>
+                    {new Set(group.functions.flatMap((item) => item.technologies.map((usage) => usage.technology.id))).size} technologies
+                  </span>
+                </header>
+                <div className={styles.functionList}>
+                  {group.functions.map((item) => (
+                    <section key={item.function.key} className={styles.functionGroup}>
+                      <div className={styles.functionHead}>
+                        <div>
+                          <h4 className={styles.functionTitle}>{item.function.name}</h4>
+                          {item.function.summary ? (
+                            <p className={styles.functionSummary}>{item.function.summary}</p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <ul className={styles.technologyList}>
+                        {item.technologies.map((usage) => (
+                          <li key={usage.technology.id} className={styles.technologyRow}>
+                            <div className={styles.technologyMain}>
+                              <Link href={`/technologies/${usage.technology.id}`} className={`${styles.technologyName} sg-mono`}>
+                                {usage.technology.name}
+                              </Link>
+                              {usage.technology.summary ? (
+                                <p className={styles.technologySummary}>{usage.technology.summary}</p>
+                              ) : null}
+                              <div className={styles.technologyMeta}>
+                                {usage.category ? <span className={styles.category}>{usage.category.name}</span> : null}
+                                <span className={usage.classification === "UNCLASSIFIED" ? styles.needsClassification : styles.classification}>
+                                  {usage.classification === "CURATED"
+                                    ? "Curated catalog"
+                                    : usage.classification === "CATALOG_MATCH"
+                                      ? "Exact catalog match"
+                                      : "Needs classification"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className={styles.technologyEvidence}>
+                              {usage.classification !== "UNCLASSIFIED" ? (
+                                <ConfidenceChip label={usage.confidence_label} value={usage.confidence} />
+                              ) : null}
+                              {usage.citations.map((citation) => (
+                                <CitationChip
+                                  key={citation.fact_id}
+                                  label={citation.label}
+                                  onOpen={() => openEvidence(citation.fact_id, citation.label)}
+                                />
+                              ))}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.emptyTechnology}>No technology usage has been linked to this application yet.</p>
+        )}
+      </section>
+
       <section className={styles.section} aria-label="Assessments">
         <h2 className={styles.h2}>Assessments</h2>
         <ul className={styles.assessments}>

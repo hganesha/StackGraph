@@ -44,6 +44,26 @@ export interface ApplicationDetail {
   recommendations: Array<RecommendationSummary>;
   repositories: Array<EntitySummary>;
   technologies: Array<EntitySummary>;
+  technology_groups: Array<ApplicationTechnologyGroup>;
+}
+
+export interface ApplicationTechnologyFunction {
+  function: TaxonomySummary;
+  technologies: Array<ApplicationTechnologyUsage>;
+}
+
+export interface ApplicationTechnologyGroup {
+  domain: TaxonomySummary;
+  functions: Array<ApplicationTechnologyFunction>;
+}
+
+export interface ApplicationTechnologyUsage {
+  category?: TaxonomySummary | null;
+  citations: Array<Citation>;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  technology: EntitySummary;
 }
 
 export interface AskRequest {
@@ -765,6 +785,12 @@ export interface SessionInfo {
   capabilities: Array<string>;
   contract_version?: "1.0.0";
   tenant_id?: string | null;
+}
+
+export interface TaxonomySummary {
+  key: string;
+  name: string;
+  summary?: string | null;
 }
 
 export interface TechnologyDetail {
