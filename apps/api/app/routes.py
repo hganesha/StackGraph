@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
 
 from app.auth import Principal
 from app.errors import APIError
@@ -40,6 +40,22 @@ from app.models import (
     Phase3IntelligenceMetrics,
     SessionInfo,
     TechnologyDetail,
+    ReviewQueue,
+    ReviewQueueItemType,
+    TenantMember,
+    TenantMemberList,
+    MemberInviteRequest,
+    MemberUpdateRequest,
+    Connector,
+    ConnectorList,
+    ConnectorRegisterRequest,
+    ConnectorUpdateRequest,
+    ScanPolicy,
+    ScanPolicyUpdateRequest,
+    RescanRequest,
+    RescanJob,
+    RescanJobList,
+    ScanStatus,
 )
 
 
@@ -108,6 +124,41 @@ class ReadModelsProtocol(Protocol):
     async def business_map_revisions(
         self, map_id: UUID, *, tenant_id: UUID | None,
     ) -> BusinessMapRevisionList: ...
+    async def review_queue(
+        self, *, tenant_id: UUID | None, item_types: list[ReviewQueueItemType] | None,
+        repository_id: UUID | None, cursor: str | None, limit: int,
+    ) -> ReviewQueue: ...
+    async def list_tenant_members(self, *, tenant_id: UUID | None) -> TenantMemberList: ...
+    async def invite_tenant_member(
+        self, request: MemberInviteRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember: ...
+    async def update_tenant_member(
+        self, member_id: UUID, request: MemberUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember: ...
+    async def remove_tenant_member(
+        self, member_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantMember: ...
+    async def list_connectors(self, *, tenant_id: UUID | None) -> ConnectorList: ...
+    async def register_connector(
+        self, request: ConnectorRegisterRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
+    async def update_connector(
+        self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
+    async def remove_connector(
+        self, connector_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
+    async def get_scan_policy(self, *, tenant_id: UUID | None) -> ScanPolicy: ...
+    async def update_scan_policy(
+        self, request: ScanPolicyUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> ScanPolicy: ...
+    async def request_rescan(
+        self, request: RescanRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> tuple[RescanJob, bool]: ...
+    async def list_rescan_jobs(
+        self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
+    ) -> RescanJobList: ...
+    async def scan_status(self, *, tenant_id: UUID | None) -> ScanStatus: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -483,3 +534,183 @@ async def list_business_map_revisions(id: UUID, request: Request) -> BusinessMap
     principal = _principal(request)
     _require(principal, "view")
     return await _store(request).business_map_revisions(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/reviews/queue", response_model=ReviewQueue,
+    response_model_exclude_none=True, operation_id="getReviewQueue", tags=["reviews"],
+)
+async def get_review_queue(
+    request: Request,
+    type: list[ReviewQueueItemType] | None = Query(default=None),
+    repository: UUID | None = None,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> ReviewQueue:
+    principal = _principal(request)
+    _require(principal, "review")
+    return await _store(request).review_queue(
+        tenant_id=principal.tenant_id, item_types=type, repository_id=repository,
+        cursor=cursor, limit=limit,
+    )
+
+
+# --- Admin: members & roles ---------------------------------------------
+
+@router.get(
+    "/admin/members", response_model=TenantMemberList,
+    response_model_exclude_none=True, operation_id="listMembers", tags=["admin"],
+)
+async def list_members(request: Request) -> TenantMemberList:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_tenant_members(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/admin/members", response_model=TenantMember, status_code=201,
+    response_model_exclude_none=True, operation_id="inviteMember", tags=["admin"],
+)
+async def invite_member(body: MemberInviteRequest, request: Request) -> TenantMember:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).invite_tenant_member(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/members/{id}", response_model=TenantMember,
+    response_model_exclude_none=True, operation_id="updateMember", tags=["admin"],
+)
+async def update_member(id: UUID, body: MemberUpdateRequest, request: Request) -> TenantMember:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_tenant_member(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.delete(
+    "/admin/members/{id}", response_model=TenantMember,
+    response_model_exclude_none=True, operation_id="removeMember", tags=["admin"],
+)
+async def remove_member(id: UUID, request: Request) -> TenantMember:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).remove_tenant_member(
+        id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: connectors ---------------------------------------------------
+
+@router.get(
+    "/admin/connectors", response_model=ConnectorList,
+    response_model_exclude_none=True, operation_id="listConnectors", tags=["admin"],
+)
+async def list_connectors(request: Request) -> ConnectorList:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_connectors(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/admin/connectors", response_model=Connector, status_code=201,
+    response_model_exclude_none=True, operation_id="registerConnector", tags=["admin"],
+)
+async def register_connector(body: ConnectorRegisterRequest, request: Request) -> Connector:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).register_connector(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/connectors/{id}", response_model=Connector,
+    response_model_exclude_none=True, operation_id="updateConnector", tags=["admin"],
+)
+async def update_connector(id: UUID, body: ConnectorUpdateRequest, request: Request) -> Connector:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_connector(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.delete(
+    "/admin/connectors/{id}", response_model=Connector,
+    response_model_exclude_none=True, operation_id="removeConnector", tags=["admin"],
+)
+async def remove_connector(id: UUID, request: Request) -> Connector:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).remove_connector(
+        id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: scan policy, rescans, and status -----------------------------
+
+@router.get(
+    "/admin/scan-policy", response_model=ScanPolicy,
+    response_model_exclude_none=True, operation_id="getScanPolicy", tags=["admin"],
+)
+async def get_scan_policy(request: Request) -> ScanPolicy:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_scan_policy(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/scan-policy", response_model=ScanPolicy,
+    response_model_exclude_none=True, operation_id="updateScanPolicy", tags=["admin"],
+)
+async def update_scan_policy(body: ScanPolicyUpdateRequest, request: Request) -> ScanPolicy:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_scan_policy(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/admin/scan-status", response_model=ScanStatus,
+    response_model_exclude_none=True, operation_id="getScanStatus", tags=["admin"],
+)
+async def get_scan_status(request: Request) -> ScanStatus:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).scan_status(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/admin/rescans", response_model=RescanJob,
+    response_model_exclude_none=True, operation_id="requestRescan", tags=["admin"],
+)
+async def request_rescan(body: RescanRequest, request: Request, response: Response) -> RescanJob:
+    principal = _principal(request)
+    _require(principal, "admin")
+    job, created = await _store(request).request_rescan(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    # A fresh job is 201 Created; an idempotent replay returns the existing job as 200 OK.
+    response.status_code = 201 if created else 200
+    return job
+
+
+@router.get(
+    "/admin/rescans", response_model=RescanJobList,
+    response_model_exclude_none=True, operation_id="listRescans", tags=["admin"],
+)
+async def list_rescans(
+    request: Request,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> RescanJobList:
+    principal = _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_rescan_jobs(
+        tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
+    )

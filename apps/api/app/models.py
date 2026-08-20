@@ -660,6 +660,206 @@ class BusinessMapRevisionList(ContractModel):
     revisions: list[BusinessMapRevisionSummary]
 
 
+# --- Review queue --------------------------------------------------------
+# One normalized view over the five reviewable sources so the Reviews page can list every
+# pending item across the estate without knowing each source's shape. Submission still goes
+# to each source's own /review route (see `review_path`).
+
+ReviewQueueItemType = Literal[
+    "IDENTITY_ASSERTION",
+    "CAPABILITY_INFERENCE",
+    "DUPLICATE_CAPABILITY",
+    "MODERNIZATION_CANDIDATE",
+    "MODERNIZATION_RECOMMENDATION",
+]
+
+
+class ReviewQueueItem(ContractModel):
+    item_id: UUID
+    item_type: ReviewQueueItemType
+    review_state: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    summary: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    confidence_band: ConfidenceLabel
+    repository_id: UUID | None = None
+    version: int = Field(ge=1)
+    created_at: datetime
+    # The endpoint that accepts a decision for this item, e.g. "/identity-assertions/{id}/review".
+    review_path: str = Field(min_length=1)
+
+
+class ReviewQueue(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    # Per-type pending totals for the whole tenant, independent of the type/repository/cursor
+    # filters, so the UI's tab badges stay stable while a filtered page is shown.
+    counts: dict[ReviewQueueItemType, int]
+    items: list[ReviewQueueItem]
+    page_info: PageInfo
+
+
+# --- Admin: members & roles ---------------------------------------------
+
+MemberRole = Literal["view", "review", "execute", "admin"]
+MemberStatus = Literal["INVITED", "ACTIVE", "SUSPENDED"]
+
+
+class TenantMember(ContractModel):
+    id: UUID
+    actor_key: str = Field(min_length=1)
+    display_name: str = ""
+    email: str = ""
+    role: MemberRole
+    status: MemberStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class TenantMemberList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    members: list[TenantMember]
+
+
+class MemberInviteRequest(ContractModel):
+    actor_key: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(default="", max_length=255)
+    email: str = Field(default="", max_length=320)
+    role: MemberRole = "view"
+
+
+class MemberUpdateRequest(ContractModel):
+    role: MemberRole | None = None
+    status: MemberStatus | None = None
+
+    @model_validator(mode="after")
+    def _at_least_one_field(self) -> "MemberUpdateRequest":
+        if self.role is None and self.status is None:
+            raise ValueError("at least one of role or status is required")
+        return self
+
+
+# --- Admin: connectors ---------------------------------------------------
+
+ConnectorProvider = Literal["GITHUB_APP", "PACKAGE_REGISTRY", "DEPS_DEV", "OSV", "OTHER"]
+ConnectorStatus = Literal["CONNECTED", "NEEDS_REAUTH", "DISABLED", "REVOKED"]
+
+
+class Connector(ContractModel):
+    # A registered source/registry connection. The stored credential_reference is a secret-store
+    # pointer and is deliberately never surfaced here.
+    id: UUID
+    provider: ConnectorProvider
+    display_name: str = Field(min_length=1)
+    external_account_key: str = ""
+    scopes: list[str] = Field(default_factory=list)
+    status: ConnectorStatus
+    last_synced_at: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConnectorList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    connectors: list[Connector]
+
+
+class ConnectorRegisterRequest(ContractModel):
+    provider: ConnectorProvider
+    display_name: str = Field(min_length=1, max_length=255)
+    external_account_key: str = Field(default="", max_length=255)
+    # An opaque reference into the secret store. A raw token/PAT/password is rejected.
+    credential_reference: str = Field(default="", max_length=512)
+    scopes: list[str] = Field(default_factory=list)
+
+
+class ConnectorUpdateRequest(ContractModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    status: ConnectorStatus | None = None
+    scopes: list[str] | None = None
+    credential_reference: str | None = Field(default=None, max_length=512)
+
+    @model_validator(mode="after")
+    def _at_least_one_field(self) -> "ConnectorUpdateRequest":
+        if (
+            self.display_name is None
+            and self.status is None
+            and self.scopes is None
+            and self.credential_reference is None
+        ):
+            raise ValueError("at least one field is required")
+        return self
+
+
+# --- Admin: scan policy, rescans, and quota ------------------------------
+
+ScanCadence = Literal["HOURLY", "DAILY", "WEEKLY", "MANUAL"]
+
+
+class ScanPolicy(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    cadence: ScanCadence
+    enabled: bool
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class ScanPolicyUpdateRequest(ContractModel):
+    cadence: ScanCadence
+    enabled: bool = True
+
+
+RescanJobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED"]
+
+
+class RescanRequest(ContractModel):
+    # NULL connector_id (omitted) means a full-estate rescan. `idempotency_key` makes a repeated
+    # POST return the existing job rather than enqueueing a duplicate.
+    connector_id: UUID | None = None
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    reason: str = Field(default="", max_length=1000)
+
+
+class RescanJob(ContractModel):
+    id: UUID
+    connector_id: UUID | None = None
+    status: RescanJobStatus
+    reason: str = ""
+    requested_by: str = Field(min_length=1)
+    last_error: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class RescanJobList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    jobs: list[RescanJob]
+    page_info: PageInfo
+
+
+QuotaStatus = Literal["OK", "THROTTLED", "EXHAUSTED"]
+
+
+class ProviderQuota(ContractModel):
+    provider: ConnectorProvider
+    used: int = Field(ge=0)
+    limit: int | None = Field(default=None, ge=0)
+    status: QuotaStatus
+    resets_at: datetime | None = None
+    backoff_until: datetime | None = None
+    observed_at: datetime
+
+
+class ScanStatus(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    policy: ScanPolicy
+    quotas: list[ProviderQuota]
+    recent_jobs: list[RescanJob]
+
+
 class ErrorResponse(ContractModel):
     code: str
     message: str

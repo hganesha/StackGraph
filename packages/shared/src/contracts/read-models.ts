@@ -662,3 +662,175 @@ export interface BusinessMapRevisionList {
   business_map_id: string;
   revisions: BusinessMapRevisionSummary[];
 }
+
+// --- Review queue --------------------------------------------------------
+
+export type ReviewQueueItemType =
+  | "IDENTITY_ASSERTION"
+  | "CAPABILITY_INFERENCE"
+  | "DUPLICATE_CAPABILITY"
+  | "MODERNIZATION_CANDIDATE"
+  | "MODERNIZATION_RECOMMENDATION";
+
+export interface ReviewQueueItem {
+  item_id: string;
+  item_type: ReviewQueueItemType;
+  review_state: string;
+  title: string;
+  summary?: string | null;
+  confidence: number;
+  confidence_band: ConfidenceLabel;
+  repository_id?: string | null;
+  version: number;
+  created_at: string;
+  /** The endpoint that accepts a decision for this item. */
+  review_path: string;
+}
+
+export interface ReviewQueue {
+  contract_version: "1.0.0";
+  as_of: string;
+  counts: Record<ReviewQueueItemType, number>;
+  items: ReviewQueueItem[];
+  page_info: PageInfo;
+}
+
+// --- Admin: members & roles ---------------------------------------------
+
+export type MemberRole = Capability;
+export type MemberStatus = "INVITED" | "ACTIVE" | "SUSPENDED";
+
+export interface TenantMember {
+  id: string;
+  actor_key: string;
+  display_name: string;
+  email: string;
+  role: MemberRole;
+  status: MemberStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantMemberList {
+  contract_version: "1.0.0";
+  members: TenantMember[];
+}
+
+export interface MemberInviteRequest {
+  actor_key: string;
+  display_name?: string;
+  email?: string;
+  role?: MemberRole;
+}
+
+export interface MemberUpdateRequest {
+  role?: MemberRole;
+  status?: MemberStatus;
+}
+
+// --- Admin: connectors ---------------------------------------------------
+
+export type ConnectorProvider =
+  | "GITHUB_APP"
+  | "PACKAGE_REGISTRY"
+  | "DEPS_DEV"
+  | "OSV"
+  | "OTHER";
+export type ConnectorStatus = "CONNECTED" | "NEEDS_REAUTH" | "DISABLED" | "REVOKED";
+
+export interface Connector {
+  id: string;
+  provider: ConnectorProvider;
+  display_name: string;
+  external_account_key: string;
+  scopes: string[];
+  status: ConnectorStatus;
+  last_synced_at?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConnectorList {
+  contract_version: "1.0.0";
+  connectors: Connector[];
+}
+
+export interface ConnectorRegisterRequest {
+  provider: ConnectorProvider;
+  display_name: string;
+  external_account_key?: string;
+  /** An opaque secret-store reference; a raw token/PAT/password is rejected server-side. */
+  credential_reference?: string;
+  scopes?: string[];
+}
+
+export interface ConnectorUpdateRequest {
+  display_name?: string;
+  status?: ConnectorStatus;
+  scopes?: string[];
+  credential_reference?: string;
+}
+
+// --- Admin: scan policy, rescans, and quota ------------------------------
+
+export type ScanCadence = "HOURLY" | "DAILY" | "WEEKLY" | "MANUAL";
+
+export interface ScanPolicy {
+  contract_version: "1.0.0";
+  cadence: ScanCadence;
+  enabled: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ScanPolicyUpdateRequest {
+  cadence: ScanCadence;
+  enabled?: boolean;
+}
+
+export type RescanJobStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+
+export interface RescanRequest {
+  connector_id?: string | null;
+  idempotency_key: string;
+  reason?: string;
+}
+
+export interface RescanJob {
+  id: string;
+  connector_id?: string | null;
+  status: RescanJobStatus;
+  reason: string;
+  requested_by: string;
+  last_error?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface RescanJobList {
+  contract_version: "1.0.0";
+  jobs: RescanJob[];
+  page_info: PageInfo;
+}
+
+export type QuotaStatus = "OK" | "THROTTLED" | "EXHAUSTED";
+
+export interface ProviderQuota {
+  provider: ConnectorProvider;
+  used: number;
+  limit?: number | null;
+  status: QuotaStatus;
+  resets_at?: string | null;
+  backoff_until?: string | null;
+  observed_at: string;
+}
+
+export interface ScanStatus {
+  contract_version: "1.0.0";
+  as_of: string;
+  policy: ScanPolicy;
+  quotas: ProviderQuota[];
+  recent_jobs: RescanJob[];
+}
