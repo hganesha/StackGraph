@@ -15,10 +15,23 @@ const GraphCanvas = dynamic(() => import("@stackgraph/graph-ui").then((m) => m.G
   loading: () => <Skeleton height="100%" />,
 });
 
-export function GraphLens({ centerId, techName }: { centerId: string; techName: string }) {
-  const { data, isLoading } = useGraphNeighborhood(centerId);
+export function GraphLens({
+  centerId,
+  centerName,
+  collectionHref,
+  collectionLabel,
+  depth = 1,
+}: {
+  centerId: string;
+  centerName: string;
+  collectionHref: string;
+  collectionLabel: string;
+  depth?: number;
+}) {
+  const { data, isLoading } = useGraphNeighborhood(centerId, depth);
   const [selected, setSelected] = useState<string | null>(null);
   const openEvidence = useEvidenceStore((s) => s.open);
+  const detailHref = `${collectionHref}/${centerId}`;
 
   const selectedNode = useMemo(() => data?.nodes.find((n) => n.id === selected) ?? null, [data, selected]);
   const connectedEdges = useMemo(
@@ -30,17 +43,17 @@ export function GraphLens({ centerId, techName }: { centerId: string; techName: 
     <div className={styles.lens}>
       <header className={styles.head}>
         <nav className={styles.crumbs} aria-label="Breadcrumb">
-          <Link href="/technologies" className={styles.crumb}>
-            Technologies
+          <Link href={collectionHref} className={styles.crumb}>
+            {collectionLabel}
           </Link>
           <span aria-hidden="true">›</span>
-          <Link href={`/technologies/${centerId}`} className={styles.crumb}>
-            <span className="sg-mono">{techName}</span>
+          <Link href={detailHref} className={styles.crumb}>
+            <span className="sg-mono">{centerName}</span>
           </Link>
           <span aria-hidden="true">›</span>
           <span className={styles.lensTag}>Graph lens</span>
         </nav>
-        <Link href={`/technologies/${centerId}`} className={styles.close} aria-label="Exit graph lens">
+        <Link href={detailHref} className={styles.close} aria-label="Exit graph lens">
           ✕ Exit
         </Link>
       </header>

@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
@@ -37,8 +38,13 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
       </nav>
 
       <header className={styles.head}>
-        <h1 className={`${styles.title} sg-mono`}>{data.application.name}</h1>
-        {data.application.summary ? <p className={styles.summary}>{data.application.summary}</p> : null}
+        <div className={styles.headMain}>
+          <h1 className={`${styles.title} sg-mono`}>{data.application.name}</h1>
+          {data.application.summary ? <p className={styles.summary}>{data.application.summary}</p> : null}
+        </div>
+        <Link href={`/applications/${id}/graph`} className={styles.exploreBtn}>
+          <span aria-hidden="true">◇</span> Explore neighborhood
+        </Link>
       </header>
 
       {data.business_context.length > 0 ? (

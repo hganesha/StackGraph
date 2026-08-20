@@ -40,10 +40,10 @@ export function useModernization() {
   });
 }
 
-export function useGraphNeighborhood(centerId: string) {
+export function useGraphNeighborhood(centerId: string, depth = 1) {
   return useQuery({
-    queryKey: ["graph", centerId],
-    queryFn: () => stackGraphClient.getGraphNeighborhood(centerId),
+    queryKey: ["graph", centerId, depth],
+    queryFn: () => stackGraphClient.getGraphNeighborhood(centerId, depth),
   });
 }
 

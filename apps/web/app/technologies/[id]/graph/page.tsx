@@ -12,5 +12,12 @@ export default function GraphLensPage({ params }: { params: Promise<{ id: string
     queryKey: ["technology", id],
     queryFn: () => stackGraphClient.getTechnology(id),
   });
-  return <GraphLens centerId={id} techName={data?.technology.name ?? "…"} />;
+  return (
+    <GraphLens
+      centerId={id}
+      centerName={data?.technology.name ?? "…"}
+      collectionHref="/technologies"
+      collectionLabel="Technologies"
+    />
+  );
 }
