@@ -143,6 +143,19 @@ services:
       database:
         condition: service_healthy
 
+  depsdev-continuous:
+    profiles: [pipeline]
+    build:
+      context: ./services/data-platform
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    entrypoint: ["python", "-m", "stackgraph_data.depsdev_worker"]
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   npm-registry:
     profiles: [tools]
     build:

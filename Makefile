@@ -129,13 +129,13 @@ github-pipeline-work: database-migrate
 pipeline-up: database-migrate
 	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
 	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN is required for env://GITHUB_INSTALLATION_TOKEN connectors" >&2; exit 2)
-	docker compose --profile pipeline up --build -d github-webhook github-control-loop projection-continuous intelligence-continuous
+	docker compose --profile pipeline up --build -d github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
 
 pipeline-down:
-	docker compose --profile pipeline stop github-webhook github-control-loop projection-continuous intelligence-continuous
+	docker compose --profile pipeline stop github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
 
 pipeline-logs:
-	docker compose --profile pipeline logs -f github-webhook github-control-loop projection-continuous intelligence-continuous
+	docker compose --profile pipeline logs -f github-webhook github-control-loop depsdev-continuous projection-continuous intelligence-continuous
 
 repository-acquire:
 	@test -n "$(REPOSITORY)" || (echo "REPOSITORY is required (owner/name)" >&2; exit 2)

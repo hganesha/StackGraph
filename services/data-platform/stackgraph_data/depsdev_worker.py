@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import socket
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -38,6 +39,14 @@ DEFAULT_MAX_ATTEMPTS = 5
 class EnqueueResult:
     target_id: str
     run_id: str
+    target_key: str
+    created: bool
+
+
+@dataclass(frozen=True, slots=True)
+class EnsureTargetResult:
+    target_id: str
+    run_id: str | None
     target_key: str
     created: bool
 
@@ -158,6 +167,94 @@ def enqueue_package_version(
             target_key=target.purl,
             created=True,
         )
+
+
+def ensure_package_version_target_connection(
+    connection: Connection[dict[str, Any]],
+    purl: str,
+    *,
+    priority: str = "WARM",
+    max_nodes: int = 1_000,
+    max_edges: int = 5_000,
+    refresh_seconds: int = DEFAULT_REFRESH_SECONDS,
+) -> EnsureTargetResult:
+    """Create the global deps.dev target and initial run if they do not exist.
+
+    This non-forcing variant is intended for upstream ingestion transactions. Existing
+    targets retain their freshness schedule and are not made due again by every scan.
+    """
+    target = PackageVersionKey.from_purl(purl)
+    if priority not in {"HOT", "WARM", "COLD", "ON_DEMAND"}:
+        raise ValueError("priority must be HOT, WARM, COLD, or ON_DEMAND")
+    if max_nodes <= 0 or max_edges <= 0 or refresh_seconds <= 0:
+        raise ValueError("target limits and refresh interval must be positive")
+    policy = {
+        "adapter": EXTRACTOR_KEY,
+        "api_version": "v3",
+        "max_nodes": max_nodes,
+        "max_edges": max_edges,
+        "max_attempts": DEFAULT_MAX_ATTEMPTS,
+        "refresh_seconds": refresh_seconds,
+    }
+    source_id = _upsert_depsdev_source(connection)
+    inserted = connection.execute(
+        """
+        INSERT INTO ingest_target (
+            tenant_id, source_system_id, target_kind, target_key, priority,
+            enabled, refresh_policy, next_due_at
+        )
+        VALUES (NULL, %s, 'PACKAGE_VERSION', %s, %s, true, %s, now())
+        ON CONFLICT (tenant_id, source_system_id, target_kind, target_key)
+        DO NOTHING
+        RETURNING id
+        """,
+        (source_id, target.purl, priority, Jsonb(policy)),
+    ).fetchone()
+    if inserted is not None:
+        run = connection.execute(
+            """
+            INSERT INTO ingest_run (
+                tenant_id, ingest_target_id, trigger_kind, status, available_at
+            )
+            VALUES (NULL, %s, 'RECONCILIATION', 'PENDING', now())
+            RETURNING id
+            """,
+            (inserted["id"],),
+        ).fetchone()
+        assert run is not None
+        return EnsureTargetResult(
+            target_id=str(inserted["id"]),
+            run_id=str(run["id"]),
+            target_key=target.purl,
+            created=True,
+        )
+
+    existing = connection.execute(
+        """
+        SELECT target.id,
+               (
+                 SELECT run.id
+                 FROM ingest_run run
+                 WHERE run.ingest_target_id=target.id
+                   AND run.status IN ('PENDING','RUNNING')
+                 ORDER BY run.created_at
+                 LIMIT 1
+               ) run_id
+        FROM ingest_target target
+        WHERE target.tenant_id IS NULL
+          AND target.source_system_id=%s
+          AND target.target_kind='PACKAGE_VERSION'
+          AND target.target_key=%s
+        """,
+        (source_id, target.purl),
+    ).fetchone()
+    assert existing is not None
+    return EnsureTargetResult(
+        target_id=str(existing["id"]),
+        run_id=str(existing["run_id"]) if existing["run_id"] is not None else None,
+        target_key=target.purl,
+        created=False,
+    )
 
 
 def claim_run(
@@ -1111,6 +1208,10 @@ def _parser() -> argparse.ArgumentParser:
     work = subparsers.add_parser("work")
     work.add_argument("--worker-id")
     work.add_argument("--lease-seconds", type=int, default=300)
+    serve = subparsers.add_parser("serve")
+    serve.add_argument("--worker-id")
+    serve.add_argument("--lease-seconds", type=int, default=300)
+    serve.add_argument("--poll-seconds", type=float, default=2.0)
     schedule = subparsers.add_parser("schedule")
     schedule.add_argument("--limit", type=int, default=100)
     run = subparsers.add_parser("run")
@@ -1127,6 +1228,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     database_url = _database_url(parser)
+    if args.command == "serve":
+        if args.poll_seconds < 0:
+            parser.error("--poll-seconds must not be negative")
+        while True:
+            result = run_once(
+                database_url,
+                worker_id=args.worker_id,
+                lease_seconds=args.lease_seconds,
+            )
+            print(json.dumps(asdict(result), sort_keys=True), flush=True)
+            if result.status in {"IDLE", "RETRY_SCHEDULED"}:
+                time.sleep(max(0.1, args.poll_seconds))
     if args.command == "enqueue":
         result: object = enqueue_package_version(
             database_url,

@@ -17,6 +17,8 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from stackgraph_data.catalog import sha256_key
+from stackgraph_data.depsdev import PackageVersionKey
+from stackgraph_data.depsdev_worker import ensure_package_version_target_connection
 
 
 SOURCE_KEY = "github-enterprise"
@@ -37,6 +39,7 @@ class PersistResult:
     replayed: bool
     fact_count: int
     usage_summary_count: int
+    enrichment_target_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,6 +182,13 @@ def persist_scanner_result_connection(
         if isinstance(subject, Mapping) and subject.get("type") == "Repository":
             if subject.get("key") != context["target_key"]:
                 raise ValueError("repository fact does not match the ingest target")
+    enrichment_purls = sorted(
+        {
+            purl
+            for fact in facts
+            if (purl := _public_package_version_purl(fact)) is not None
+        }
+    )
 
     if raw_observation is not None:
         _persist_raw_observation(
@@ -202,7 +212,14 @@ def persist_scanner_result_connection(
             "SELECT count(*) count FROM fact_assertion WHERE source_snapshot_id=%s",
             (existing["id"],),
         ).fetchone()
-        return PersistResult(str(existing["id"]), "PUBLISHED", True, int(count["count"]), 0)
+        enrichment_target_count = sum(
+            ensure_package_version_target_connection(connection, purl).created
+            for purl in enrichment_purls
+        )
+        return PersistResult(
+            str(existing["id"]), "PUBLISHED", True, int(count["count"]), 0,
+            enrichment_target_count,
+        )
     if existing:
         snapshot_id: UUID = existing["id"]
     else:
@@ -227,7 +244,13 @@ def persist_scanner_result_connection(
     for fact in facts:
         subject_id = _upsert_entity(connection, tenant_id, fact["subject"])
         object_entity = fact.get("object_entity")
-        object_id = _upsert_entity(connection, tenant_id, object_entity) if isinstance(object_entity, Mapping) else None
+        public_package_purl = _public_package_version_purl(fact)
+        object_tenant_id = None if public_package_purl is not None else tenant_id
+        object_id = (
+            _upsert_entity(connection, object_tenant_id, object_entity)
+            if isinstance(object_entity, Mapping)
+            else None
+        )
         logical_key = _logical_key(fact)
         inserted = connection.execute(
             """
@@ -337,7 +360,40 @@ def persist_scanner_result_connection(
         """,
         (target_id,),
     )
-    return PersistResult(str(snapshot_id), "PUBLISHED", False, fact_count, usage_count)
+    enrichment_target_count = sum(
+        ensure_package_version_target_connection(connection, purl).created
+        for purl in enrichment_purls
+    )
+    return PersistResult(
+        str(snapshot_id), "PUBLISHED", False, fact_count, usage_count,
+        enrichment_target_count,
+    )
+
+
+def _public_package_version_purl(fact: Mapping[str, Any]) -> str | None:
+    if fact.get("predicate") != "DEPENDS_ON":
+        return None
+    entity = fact.get("object_entity")
+    if (
+        not isinstance(entity, Mapping)
+        or entity.get("namespace") != "TECHNOLOGY"
+        or entity.get("type") != "PackageVersion"
+        or not isinstance(entity.get("key"), str)
+    ):
+        return None
+    try:
+        target = PackageVersionKey.from_purl(entity["key"])
+    except ValueError:
+        return None
+    properties = fact.get("properties")
+    registry = properties.get("registry_resolution") if isinstance(properties, Mapping) else None
+    if (
+        not isinstance(registry, Mapping)
+        or registry.get("visibility") != "PUBLIC"
+        or bool(registry.get("custom_registry"))
+    ):
+        return None
+    return target.purl
 
 
 def _persist_code_implementation_summary(
