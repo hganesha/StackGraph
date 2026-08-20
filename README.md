@@ -40,3 +40,27 @@ Deployment → Infrastructure → OSS ecosystem → Viability → Modernization
 actions**
 
 Git repositories are a primary sensor, not the final product.
+
+## Importing the public npm OSS catalog
+
+The data platform can import the currently 5,232-row
+[DeepKlarity top npm packages dataset](https://huggingface.co/datasets/deepklarity/top-npm-packages)
+as global, evidence-backed OSS metadata:
+
+```sh
+make backend-up
+make oss-catalog-import
+```
+
+The importer keeps every dataset column under `entity.properties.catalog_metadata`,
+creates package, latest-version, OSS-project, and repository entities, and publishes
+idempotent `EXTERNAL_MEASURED` facts. It pins the CSV revision and records its
+November 5, 2024 effective date so the metrics are not presented as current.
+Re-running unchanged content is a no-op. To load a reviewed local copy instead:
+
+```sh
+docker compose run --rm \
+  -v "$PWD/npm_packages.csv:/input/npm_packages.csv:ro" \
+  oss-catalog --csv-file /input/npm_packages.csv \
+  --effective-at 2024-11-05T09:18:44Z
+```

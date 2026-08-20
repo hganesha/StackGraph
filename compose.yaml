@@ -190,6 +190,17 @@ services:
     entrypoint: ["python", "-m", "stackgraph_data.npm_registry_cli"]
     command: ["--help"]
 
+  oss-catalog:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    entrypoint: ["python", "-m", "stackgraph_data.huggingface_npm_catalog"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   osv:
     profiles: [tools]
     build:
