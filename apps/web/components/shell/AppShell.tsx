@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <TopBar onToggleNav={() => setNavOpen((v) => !v)} navOpen={navOpen} />
       <div className={styles.body}>
-        <LeftRail open={navOpen} compact={fullBleed} onNavigate={() => setNavOpen(false)} />
+        <LeftRail open={navOpen} onNavigate={() => setNavOpen(false)} />
         {navOpen ? <button className={styles.backdrop} aria-label="Close navigation" onClick={() => setNavOpen(false)} /> : null}
         <main className={`${styles.workspace} ${fullBleed ? styles.workspaceFullBleed : ""}`} id="main">
           {children}
