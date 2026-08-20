@@ -170,3 +170,8 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     }
     assert len(database.queries) == 5
     assert all("OFFSET" not in query.upper() for query in database.queries)
+    estate_queries = "\n".join(database.queries[:4])
+    assert "observed_technology" in estate_queries
+    assert "relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+    assert "estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+    assert "e.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries

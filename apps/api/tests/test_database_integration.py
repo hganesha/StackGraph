@@ -53,11 +53,9 @@ async def exercise_read_models() -> None:
         assert summary.contract_version == "1.0.0"
         assert summary.counts.applications >= 0
         assert 0 <= summary.coverage.facts_with_evidence_ratio <= 1
-        assert technology_summary.ranked_items
-        assert all(
-            item.domain in {"TECHNOLOGY", "OSS"}
-            for item in technology_summary.ranked_items
-        )
+        # A globally visible reference catalog is not itself a tenant estate.
+        assert summary.counts.technologies == 0
+        assert technology_summary.ranked_items == []
         assert modernization.contract_version == "1.0.0"
         assert answer.result_kind == "TABLE"
 
@@ -159,8 +157,8 @@ def test_http_api_queries_seeded_database() -> None:
     summary, technology, graph, evidence, ask = responses
 
     assert summary.status_code == 200
-    # The curated catalog can grow independently while preserving the seeded baseline.
-    assert summary.json()["counts"]["technologies"] >= 192
+    # The seeded global catalog remains queryable but does not inflate an unconnected estate.
+    assert summary.json()["counts"]["technologies"] == 0
     assert technology.status_code == 200
     assert graph.status_code == 200
     assert graph.json()["truncated"] is True
@@ -380,8 +378,8 @@ def test_golden_billing_vertical_slice() -> None:
         assert summary["counts"]["applications"] == 1
         assert summary["counts"]["repositories"] == 1
         assert summary["counts"]["services"] == 1
-        # Tenant estates intentionally inherit the global curated technology catalog.
-        assert summary["counts"]["technologies"] >= 2
+        # Only technologies evidenced by tenant relationships belong to the estate.
+        assert summary["counts"]["technologies"] == 2
         assert summary["ranked_items"][0]["name"] == "Billing API"
         assert summary["ranked_items"][0]["priority"]["confidence_label"] == "HIGH"
 
