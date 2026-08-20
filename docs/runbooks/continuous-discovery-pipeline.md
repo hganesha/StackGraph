@@ -12,7 +12,8 @@ The `pipeline` Compose profile runs four restartable services:
 1. `github-webhook` verifies and records provider deliveries, then creates or advances durable targets/runs.
 2. `github-control-loop` schedules due installation and repository targets and leases one run at a time.
 3. `projection-continuous` drains fact close/upsert events into AGE.
-4. `intelligence-continuous` drains complete repository snapshots into capability and modernization analysis.
+4. `intelligence-continuous` drains complete repository snapshots into capability and modernization analysis,
+   resolving the encrypted provider/model independently for each job's tenant.
 
 The database is the queue of record. Provider work is never inferred from an in-memory timer alone. A worker
 restart either leaves a pending run claimable or lets a running lease expire and become claimable again. A lease
@@ -26,6 +27,7 @@ GitHub installation before starting the services. The local profile resolves `en
 ```shell
 export GITHUB_INSTALLATION_TOKEN=ghs_short_lived_value
 export GITHUB_WEBHOOK_SECRET=replace-with-runtime-secret
+export STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY=replace-with-at-least-32-random-characters
 make pipeline-up
 make pipeline-logs
 ```

@@ -10,8 +10,8 @@
 export type DataSource = "fixtures" | "live";
 
 export const config = {
-  /** "fixtures" (default) serves contracts/v1 fixtures; "live" calls the real API. */
-  dataSource: (process.env.NEXT_PUBLIC_DATA_SOURCE as DataSource | undefined) ?? "fixtures",
+  /** "live" (default) calls the API; set "fixtures" explicitly for an offline demo. */
+  dataSource: (process.env.NEXT_PUBLIC_DATA_SOURCE as DataSource | undefined) ?? "live",
   /** Base URL of the live read API. Contract mounts read models under /api/v1. */
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
 } as const;

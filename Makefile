@@ -96,7 +96,7 @@ intelligence-run: database-migrate
 	docker compose run --rm modernization-intelligence run --tenant-id "$(TENANT_ID)" --repository-id "$(REPOSITORY_ID)" $(if $(AI_UNMAPPED),--ai-unmapped --ai-route "$${AI_ROUTE:-default}",)
 
 intelligence-work: database-migrate
-	docker compose run --rm modernization-intelligence work --max-jobs "$${MAX_JOBS:-10}" $(if $(AI_UNMAPPED),--ai-unmapped --ai-route "$${AI_ROUTE:-default}",)
+	docker compose run --rm modernization-intelligence work --ai-unmapped --max-jobs "$${MAX_JOBS:-10}"
 
 intelligence-requeue: database-migrate
 	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)

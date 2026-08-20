@@ -782,6 +782,7 @@ export interface ConnectorUpdateRequest {
 
 export type AIProvider = "openrouter" | "openai" | "anthropic";
 export type AIConnectionTestStatus = "NOT_TESTED" | "SUCCEEDED" | "FAILED";
+export type AIEnrichmentStatus = "DISABLED" | "READY" | "QUEUED" | "RUNNING" | "ACTIVE" | "DEGRADED";
 
 export interface AIProviderConfiguration {
   contract_version: "1.0.0";
@@ -793,6 +794,11 @@ export interface AIProviderConfiguration {
   test_status: AIConnectionTestStatus;
   tested_at?: string | null;
   last_error?: string | null;
+  enrichment_status: AIEnrichmentStatus;
+  pending_enrichment_jobs: number;
+  running_enrichment_jobs: number;
+  failed_enrichment_jobs: number;
+  last_enrichment_at?: string | null;
   updated_by?: string | null;
   updated_at?: string | null;
 }

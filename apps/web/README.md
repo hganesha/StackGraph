@@ -26,10 +26,11 @@ pnpm build
 pnpm typecheck
 ```
 
-## Fixture-first ⇄ live (one flag, no component rewrite)
+## Live ⇄ fixtures (one flag, no component rewrite)
 
-The UI defaults to **fixtures** — every screen renders from `contracts/v1/fixtures/*` with no
-backend running. To point at the live API:
+The UI defaults to the **live API**, so Admin settings persist and can activate background
+intelligence. To run an offline contract demo instead, set `NEXT_PUBLIC_DATA_SOURCE=fixtures`.
+The live development settings are:
 
 ```bash
 # apps/web/.env.local
