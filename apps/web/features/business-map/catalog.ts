@@ -40,11 +40,11 @@ export interface ValueChainStep {
 }
 
 export const ORGANIZATION_UNIT_TEMPLATE: ValueChainStep[] = [
-  { id: 'org:executive', label: 'Executive Office', sublabel: 'Enterprise direction', color: '38', gradient: '', icon: 'building', order: 0 },
-  { id: 'org:growth', label: 'Product & Growth', sublabel: 'Markets and innovation', color: '38', gradient: '', icon: 'building', order: 1 },
-  { id: 'org:operations', label: 'Operations', sublabel: 'Delivery and supply', color: '38', gradient: '', icon: 'building', order: 2 },
-  { id: 'org:corporate', label: 'Corporate Services', sublabel: 'Enterprise enablement', color: '38', gradient: '', icon: 'building', order: 3 },
-  { id: 'org:digital', label: 'Digital & Data', sublabel: 'Technology foundation', color: '38', gradient: '', icon: 'building', order: 4 },
+  { id: 'org:executive', label: 'Executive Office', sublabel: 'Enterprise direction', color: '43', gradient: '', icon: 'building', order: 0 },
+  { id: 'org:growth', label: 'Product & Growth', sublabel: 'Markets and innovation', color: '43', gradient: '', icon: 'building', order: 1 },
+  { id: 'org:operations', label: 'Operations', sublabel: 'Delivery and supply', color: '43', gradient: '', icon: 'building', order: 2 },
+  { id: 'org:corporate', label: 'Corporate Services', sublabel: 'Enterprise enablement', color: '43', gradient: '', icon: 'building', order: 3 },
+  { id: 'org:digital', label: 'Digital & Data', sublabel: 'Technology foundation', color: '43', gradient: '', icon: 'building', order: 4 },
 ];
 
 // ─── VALUE CHAIN TEMPLATES ───────────────────────────────────────────────────
@@ -55,31 +55,31 @@ export const ORGANIZATION_UNIT_TEMPLATE: ValueChainStep[] = [
  */
 export const VALUE_CHAIN_TEMPLATES: Record<string, ValueChainStep[]> = {
   porter: [
-    { id: 'inbound', label: 'Inbound Logistics', sublabel: 'Receiving & storage', color: '243', gradient: '', icon: 'package', order: 0 },
-    { id: 'operations', label: 'Operations', sublabel: 'Transformation', color: '281', gradient: '', icon: 'cog', order: 1 },
-    { id: 'outbound', label: 'Outbound Logistics', sublabel: 'Distribution', color: '344', gradient: '', icon: 'truck', order: 2 },
-    { id: 'marketing', label: 'Marketing & Sales', sublabel: 'Demand generation', color: '16', gradient: '', icon: 'megaphone', order: 3 },
-    { id: 'service', label: 'Service', sublabel: 'After-sales support', color: '38', gradient: '', icon: 'lifebuoy', order: 4 },
+    { id: 'inbound', label: 'Inbound Logistics', sublabel: 'Receiving & storage', color: '214', gradient: '', icon: 'package', order: 0 },
+    { id: 'operations', label: 'Operations', sublabel: 'Transformation', color: '267', gradient: '', icon: 'cog', order: 1 },
+    { id: 'outbound', label: 'Outbound Logistics', sublabel: 'Distribution', color: '43', gradient: '', icon: 'truck', order: 2 },
+    { id: 'marketing', label: 'Marketing & Sales', sublabel: 'Demand generation', color: '43', gradient: '', icon: 'megaphone', order: 3 },
+    { id: 'service', label: 'Service', sublabel: 'After-sales support', color: '43', gradient: '', icon: 'lifebuoy', order: 4 },
   ],
   digital: [
-    { id: 'discover', label: 'Discover', sublabel: 'Insight & research', color: '206', gradient: '', icon: 'search', order: 0 },
-    { id: 'design', label: 'Design', sublabel: 'Product & experience', color: '243', gradient: '', icon: 'pen', order: 1 },
-    { id: 'develop', label: 'Develop', sublabel: 'Build & engineer', color: '281', gradient: '', icon: 'code', order: 2 },
-    { id: 'deploy', label: 'Deploy', sublabel: 'Release & scale', color: '152', gradient: '', icon: 'rocket', order: 3 },
-    { id: 'delight', label: 'Delight', sublabel: 'Retain & grow', color: '38', gradient: '', icon: 'sparkle', order: 4 },
+    { id: 'discover', label: 'Discover', sublabel: 'Insight & research', color: '173', gradient: '', icon: 'search', order: 0 },
+    { id: 'design', label: 'Design', sublabel: 'Product & experience', color: '214', gradient: '', icon: 'pen', order: 1 },
+    { id: 'develop', label: 'Develop', sublabel: 'Build & engineer', color: '267', gradient: '', icon: 'code', order: 2 },
+    { id: 'deploy', label: 'Deploy', sublabel: 'Release & scale', color: '173', gradient: '', icon: 'rocket', order: 3 },
+    { id: 'delight', label: 'Delight', sublabel: 'Retain & grow', color: '43', gradient: '', icon: 'sparkle', order: 4 },
   ],
   retail: [
-    { id: 'source', label: 'Sourcing', sublabel: 'Procurement & supply', color: '152', gradient: '', icon: 'globe', order: 0 },
-    { id: 'store', label: 'Store Operations', sublabel: 'Inventory & fulfilment', color: '206', gradient: '', icon: 'store', order: 1 },
-    { id: 'sell', label: 'Commerce', sublabel: 'Omnichannel sales', color: '281', gradient: '', icon: 'cart', order: 2 },
-    { id: 'serve', label: 'Customer Service', sublabel: 'Support & returns', color: '344', gradient: '', icon: 'message', order: 3 },
-    { id: 'sustain', label: 'Sustainability', sublabel: 'ESG & compliance', color: '16', gradient: '', icon: 'leaf', order: 4 },
+    { id: 'source', label: 'Sourcing', sublabel: 'Procurement & supply', color: '173', gradient: '', icon: 'globe', order: 0 },
+    { id: 'store', label: 'Store Operations', sublabel: 'Inventory & fulfilment', color: '173', gradient: '', icon: 'store', order: 1 },
+    { id: 'sell', label: 'Commerce', sublabel: 'Omnichannel sales', color: '267', gradient: '', icon: 'cart', order: 2 },
+    { id: 'serve', label: 'Customer Service', sublabel: 'Support & returns', color: '43', gradient: '', icon: 'message', order: 3 },
+    { id: 'sustain', label: 'Sustainability', sublabel: 'ESG & compliance', color: '43', gradient: '', icon: 'leaf', order: 4 },
   ],
   custom: [
-    { id: 'strategy', label: 'Strategy', sublabel: 'Direction & planning', color: '243', gradient: '', icon: 'target', order: 0 },
-    { id: 'execute', label: 'Execution', sublabel: 'Deliver & operate', color: '281', gradient: '', icon: 'zap', order: 1 },
-    { id: 'measure', label: 'Measure', sublabel: 'Monitor & learn', color: '206', gradient: '', icon: 'chart', order: 2 },
-    { id: 'optimize', label: 'Optimise', sublabel: 'Improve & scale', color: '152', gradient: '', icon: 'refresh', order: 3 },
+    { id: 'strategy', label: 'Strategy', sublabel: 'Direction & planning', color: '214', gradient: '', icon: 'target', order: 0 },
+    { id: 'execute', label: 'Execution', sublabel: 'Deliver & operate', color: '267', gradient: '', icon: 'zap', order: 1 },
+    { id: 'measure', label: 'Measure', sublabel: 'Monitor & learn', color: '173', gradient: '', icon: 'chart', order: 2 },
+    { id: 'optimize', label: 'Optimise', sublabel: 'Improve & scale', color: '173', gradient: '', icon: 'refresh', order: 3 },
   ],
 };
 
@@ -90,7 +90,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'strategy',
     name: 'Strategy & Corporate Development',
     description: 'Defines direction, portfolio, and growth agenda',
-    color: '#6366f1',
+    color: '#4A6FA5',
     gradient: 'from-indigo-500 to-violet-600',
     icon: '🎯',
     processes: [
@@ -124,7 +124,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'innovation',
     name: 'Innovation & Product',
     description: 'Drives new product development and innovation pipeline',
-    color: '#8b5cf6',
+    color: '#7B5AA6',
     gradient: 'from-violet-500 to-purple-600',
     icon: '💡',
     processes: [
@@ -166,7 +166,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'customer',
     name: 'Customer & Market',
     description: 'Acquires, grows, and retains customers across all channels',
-    color: '#ec4899',
+    color: '#2A9D8F',
     gradient: 'from-pink-500 to-rose-600',
     icon: '❤️',
     processes: [
@@ -211,7 +211,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'operations',
     name: 'Operations & Supply Chain',
     description: 'Delivers products and services efficiently and reliably',
-    color: '#10b981',
+    color: '#D4A843',
     gradient: 'from-emerald-500 to-teal-600',
     icon: '⚙️',
     processes: [
@@ -244,7 +244,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'technology',
     name: 'Technology & Digital',
     description: 'Builds and operates the technology foundation',
-    color: '#3b82f6',
+    color: '#2E4566',
     gradient: 'from-blue-500 to-cyan-600',
     icon: '💻',
     processes: [
@@ -286,7 +286,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'finance',
     name: 'Finance & Risk',
     description: 'Stewards financial performance and enterprise risk',
-    color: '#f59e0b',
+    color: '#4C3867',
     gradient: 'from-amber-500 to-orange-600',
     icon: '💰',
     processes: [
@@ -318,7 +318,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'people',
     name: 'People & Organization',
     description: 'Attracts, develops and enables great talent',
-    color: '#f43f5e',
+    color: '#1A6159',
     gradient: 'from-rose-500 to-pink-600',
     icon: '👥',
     processes: [
@@ -351,7 +351,7 @@ export const BUSINESS_FUNCTIONS: BusinessFunction[] = [
     id: 'legal',
     name: 'Legal & Governance',
     description: 'Protects the enterprise and ensures ethical conduct',
-    color: '#64748b',
+    color: '#83682A',
     gradient: 'from-slate-500 to-gray-600',
     icon: '⚖️',
     processes: [
