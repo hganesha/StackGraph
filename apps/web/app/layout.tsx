@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import Script from "next/script";
 import type { ReactNode } from "react";
 // Self-hosted IBM Plex faces (Strata typography). No third-party runtime font call.
 import "@fontsource/ibm-plex-sans/400.css";
@@ -17,18 +19,26 @@ export const metadata: Metadata = {
   description: "Evidence-first intelligence across your Business, Enterprise, and OSS graphs.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+// A request-scoped CSP nonce cannot be attached to statically generated HTML.
+export const dynamic = "force-dynamic";
+
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Set theme before paint to avoid a flash (plan §1.3 calm). */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-      </head>
       <body>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
       </body>
+      {/* Set theme before paint to avoid a flash (plan §1.3 calm). */}
+      <Script
+        id="stackgraph-theme-init"
+        nonce={nonce}
+        strategy="beforeInteractive"
+        dangerouslySetInnerHTML={{ __html: themeInitScript }}
+      />
     </html>
   );
 }
