@@ -360,6 +360,7 @@ def test_signed_session_supplies_tenant_and_actor() -> None:
     ))
     token = create_session_token(
         secret, actor_key="signed-user", tenant_id=tenant_id, expires_at=int(time.time()) + 60,
+        capabilities=["review"],
     )
     response = asyncio.run(request(
         app,
@@ -401,6 +402,61 @@ def test_signed_session_rejects_missing_expired_and_tampered_tokens() -> None:
 
 def _business_map_state() -> dict:
     return {"title": "Map", "view_mode": "value-chain", "template_id": "porter"}
+
+
+def test_session_endpoint_reports_actor_tenant_and_capabilities() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, _ = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    token = create_session_token(
+        secret, actor_key="reviewer", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=["review"],
+    )
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/session", headers={"Authorization": f"Bearer {token}"},
+    ))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["actor_key"] == "reviewer"
+    assert body["tenant_id"] == str(tenant_id)
+    assert body["capabilities"] == ["review"]
+
+
+def test_session_defaults_to_view_only_without_token_capabilities() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    app, _ = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    token = create_session_token(
+        secret, actor_key="viewer", tenant_id=None, expires_at=int(time.time()) + 60,
+    )
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/session", headers={"Authorization": f"Bearer {token}"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["capabilities"] == ["view"]
+
+
+def test_review_route_requires_review_capability() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, _ = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    view_only = create_session_token(
+        secret, actor_key="viewer", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=["view"],
+    )
+    response = asyncio.run(request(
+        app, "POST",
+        "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+        headers={"Authorization": f"Bearer {view_only}"},
+        json={"decision": "CONFIRM", "rationale": "Verified.", "expected_version": 1},
+    ))
+    assert response.status_code == 403
+    assert response.json()["details"]["required_capability"] == "review"
 
 
 def test_business_map_write_requires_execute_capability() -> None:
