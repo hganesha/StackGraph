@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import socket
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -436,6 +437,12 @@ def main() -> None:
         default=int(os.environ.get("STACKGRAPH_PROJECTION_BATCH_SIZE", "100")),
     )
     parser.add_argument("--max-batches", type=int)
+    parser.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=0,
+        help="poll continuously at this interval; zero runs one bounded drain",
+    )
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("--batch-size must be at least 1")
@@ -444,14 +451,20 @@ def main() -> None:
     if not database_url:
         parser.error("STACKGRAPH_DATABASE_URL is required")
 
-    result = project_database(
-        database_url,
-        graph_name=args.graph_name,
-        batch_size=args.batch_size,
-        max_batches=args.max_batches,
-        app_role=os.environ.get("STACKGRAPH_DB_APP_USER", "stackgraph_app"),
-    )
-    print(json.dumps(asdict(result), sort_keys=True))
+    if args.poll_seconds < 0:
+        parser.error("--poll-seconds must not be negative")
+    while True:
+        result = project_database(
+            database_url,
+            graph_name=args.graph_name,
+            batch_size=args.batch_size,
+            max_batches=args.max_batches,
+            app_role=os.environ.get("STACKGRAPH_DB_APP_USER", "stackgraph_app"),
+        )
+        print(json.dumps(asdict(result), sort_keys=True), flush=True)
+        if args.poll_seconds == 0:
+            break
+        time.sleep(args.poll_seconds)
 
 
 if __name__ == "__main__":

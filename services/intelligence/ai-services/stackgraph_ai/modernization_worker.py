@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import socket
+import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -943,12 +944,13 @@ def _fail_job(database_url: str, job: Mapping[str, Any], error: Exception) -> bo
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run repository modernization intelligence")
-    parser.add_argument("command", choices=("run", "work", "requeue"))
+    parser.add_argument("command", choices=("run", "work", "serve", "requeue"))
     parser.add_argument("--tenant-id", type=UUID)
     parser.add_argument("--repository-id", type=UUID)
     parser.add_argument("--capability-catalog-dir", type=Path, default=Path("/code/capabilities"))
     parser.add_argument("--alternatives", type=Path, default=Path("/code/alternatives/default.json"))
     parser.add_argument("--max-jobs", type=int, default=1)
+    parser.add_argument("--poll-seconds", type=float, default=2.0)
     parser.add_argument("--worker-id", default=f"{socket.gethostname()}:{os.getpid()}")
     parser.add_argument("--ai-unmapped", action="store_true")
     parser.add_argument("--ai-route", default="default")
@@ -990,17 +992,22 @@ def main(argv: list[str] | None = None) -> int:
             "configuration_fingerprint": fingerprint,
         }, sort_keys=True))
         return 0
-    result = work_jobs(
-        database_url,
-        capability_catalog_dir=args.capability_catalog_dir,
-        alternatives_path=args.alternatives,
-        worker_id=args.worker_id,
-        max_jobs=max(1, args.max_jobs),
-        use_ai_for_unmapped=args.ai_unmapped,
-        ai_route=args.ai_route,
-    )
-    print(json.dumps(asdict(result), sort_keys=True))
-    return 0
+    if args.poll_seconds < 0:
+        raise SystemExit("--poll-seconds must not be negative")
+    while True:
+        result = work_jobs(
+            database_url,
+            capability_catalog_dir=args.capability_catalog_dir,
+            alternatives_path=args.alternatives,
+            worker_id=args.worker_id,
+            max_jobs=max(1, args.max_jobs),
+            use_ai_for_unmapped=args.ai_unmapped,
+            ai_route=args.ai_route,
+        )
+        print(json.dumps(asdict(result), sort_keys=True), flush=True)
+        if args.command == "work":
+            return 0
+        time.sleep(max(0.1, args.poll_seconds))
 
 
 if __name__ == "__main__":

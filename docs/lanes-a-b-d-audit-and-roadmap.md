@@ -12,16 +12,16 @@ StackGraph has a sound, tested foundation for all three audited lanes. The autho
 temporal publication rules, evidence requirements, tenant isolation, provider adapters, repository scanner,
 capability inference, modernization analysis, and AGE projection all work together on a fresh database.
 
-The main remaining risk is operationalization, not the absence of core algorithms. Acquisition, scheduling,
-scanning, projection, and intelligence can be invoked and replayed, but there is not yet a continuously deployed
-control loop that connects tenant onboarding to recurring repository and OSS refresh. The local durable evidence
-slice is implemented, but production object-storage lifecycle controls, provider operations, production
+The main remaining risk is production operationalization, not the absence of core algorithms. A checked-in
+continuous profile now connects GitHub installation/repository scheduling, acquisition, scanning, publication,
+projection, intelligence, and freshness through durable leases and queues. It is a deployable reference topology,
+not evidence of a production deployment. Production object-storage lifecycle controls, provider operations,
 policy/catalog governance, calibration, and owned alerting are not complete.
 
 | Area | Status | Evidence-backed conclusion | Primary remaining boundary |
 | --- | --- | --- | --- |
-| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, AGE projection, a local durable evidence backend, and GitHub webhook delivery routing are implemented and tested | Continuously deployed scheduling, production webhook ingress/alerting, production object-storage lifecycle controls, provider operations, PyPI metadata, and additional ecosystems |
-| Lane B — Enterprise discovery | **Partial** | GitHub installation registration/reconciliation, webhook routing, snapshot acquisition, npm/Python scanning, registry resolution, API-surface/code-unit evidence, persistence, and intelligence enqueueing are implemented and tested | Hosted GitHub App callback/token minting, automatic acquisition-to-publication orchestration, semantic deployment/IaC parsing, two-pass operation, runtime collection, and pilot-scale proof |
+| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, AGE projection, local durable evidence, GitHub webhook routing, and a continuous reference topology are implemented and tested | Production deployment, webhook ingress/alerting, object-storage lifecycle controls, provider operations, PyPI metadata, and additional ecosystems |
+| Lane B — Enterprise discovery | **Partial** | GitHub installation/reconciliation, webhook routing, leased acquisition-to-publication orchestration, npm/Python scanning, registry resolution, API-surface/code-unit evidence, persistence, and intelligence enqueueing are implemented and tested | Hosted GitHub App callback/token minting, production rollout, semantic deployment/IaC parsing, two-pass operation, runtime collection, and pilot-scale proof |
 | Lane D — Intelligence/quality | **Partial** | Versioned taxonomy, evidence-constrained inference, duplicate detection, eligibility-gated modernization, impact, review/outcome capture, metrics, AI Ask, replay, and RLS are implemented and tested | Tenant policy/catalog rollout, calibration targets, dashboards/alerts, runtime validation, business-capability intelligence, and Phase 4 evidence |
 | Cross-lane contract gate | **Verified** | The v1 ontology, fact, raw-observation, scanner, read-model, and OpenAPI fixtures validate together | Generated types and drift enforcement remain incomplete; TypeScript read-model types are still maintained manually |
 | Pilot operations | **Missing** | No repository evidence demonstrates a complete 100+ repository production drill with owned SLOs, backups, replay, and alerts | Build and exercise the production control plane before claiming pilot readiness |
@@ -54,6 +54,22 @@ The fresh database bootstrapped the authoritative schema and verified migration 
 removed after verification. These checks prove code and schema integration; they do not prove production provider
 credentials, quotas, schedules, scale, backups, or operational ownership.
 
+### Post-audit P0 implementation verification
+
+The continuous control-loop implementation was verified on a separate fresh PostgreSQL/AGE Compose project and
+does not replace the historical audit counts above:
+
+| Verification | Result |
+| --- | ---: |
+| Enterprise discovery plus control loop | 43 passed; 1 optional local `jsonschema` check skipped |
+| Data-platform regression | 31 passed |
+| Intelligence regression | 22 passed |
+| Changed/unchanged vertical integration | One changed revision published once and enqueued projection/intelligence; the next unchanged revision completed without a second snapshot |
+| Continuous topology smoke | Discovery, projection, and intelligence stayed live; projection backlog reached 0 and generated intelligence jobs reached `SUCCEEDED` |
+
+The isolated containers, network, database volume, snapshot volume, and evidence volume were removed after the
+verification run. This proves the checked-in reference topology, not production provider or operations readiness.
+
 Primary verification sources:
 
 - [contract validator](../stackgraph-foundation/scripts/validate-contracts.mjs) and
@@ -72,8 +88,8 @@ lanes only. Lane C completion is intentionally not scored here.
 | Milestone | Status | Delivered in A/B/D | Remaining A/B/D gate |
 | --- | --- | --- | --- |
 | 0 — Contract hardening | **Verified** | Canonical ontology and predicates, fact/evidence contract, raw observations, complete/partial snapshots, ingestion state, identity, RLS, outbox, golden fixtures, and migration checksums | Generate TypeScript/Python models from the frozen schemas and make generated drift a required gate |
-| 1 — Running ingestion substrate | **Partial** | PostgreSQL/AGE, targets/runs, leases, retries, replay, dead letters, freshness, deps.dev, OSV, npm acquisition, local content-addressed evidence storage, and projection are implemented | Deploy the scheduler/worker control loop, production object-storage/lifecycle controls, webhook processing, and provider observability |
-| 2 — First vertical estate slice | **Partial** | GitHub snapshot acquisition, npm/Python scanning, exact registry-qualified dependencies, evidence persistence, projection, and bounded graph reads exist | Automate GitHub installation reconciliation through scan/publication and prove it against a real tenant slice |
+| 1 — Running ingestion substrate | **Partial** | PostgreSQL/AGE, targets/runs, leases/recovery, retries, replay, dead letters, freshness, deps.dev, OSV, npm acquisition, local content-addressed evidence, continuous GitHub scheduling, and continuous projection are implemented | Deploy the topology with production object storage, webhook ingress, metrics/alerts, and provider observability |
+| 2 — First vertical estate slice | **Partial** | GitHub reconciliation and revision detection automatically connect immutable acquisition, npm/Python scanning, publication, projection, intelligence, and bounded graph reads | Prove the topology against a real tenant slice with production credentials, quotas, and scale |
 | 3 — V0 intelligence | **Partial** | Capability and modernization backends, deterministic evidence, AI-assisted constrained inference, Ask orchestration, reviews, outcomes, and metrics exist | Populate governed production policies/catalogs, calibrate results, attach alerts, and run continuously on live scans |
 | 4 — Pilot readiness | **Missing** | Unit and fresh-database integration coverage are strong | Complete security/tenant review, quota behavior, backup/replay drills, 100+ repository load tests, and owned SLOs |
 | 5 — V1 intelligence | **Partial** | Technical capability inference, dependency/internal duplication, alternatives, impact, and portfolio-ready recommendation records exist | Add business-capability mapping, entropy/reuse measures, business criticality, governed portfolio ranking, and outcome-driven recalibration |
@@ -96,18 +112,19 @@ lanes only. Lane C completion is intentionally not scored here.
 | Ingestion queue primitives | **Verified** | `ingest_target`, `ingest_run`, `ingest_item`, leases, due times, priorities, retries, and `FOR UPDATE SKIP LOCKED` claims are present in the schema and workers | Worker unit tests and database integration tests |
 | Replay, failure, and freshness state | **Verified** | Idempotency keys, run fingerprints, `dead_letter`, and `freshness_state` are used by workers and persistence paths | deps.dev, OSV, scanner-ingest, and migration tests |
 | AGE projection | **Verified** | [projector](../services/data-platform/stackgraph_data/project.py) claims outbox events, parameterizes Cypher, preserves evidence/confidence, and acknowledges in the database transaction | Projection unit/smoke tests and fresh projection of all 337 seed facts |
+| Continuous GitHub control loop | **Verified** | [control loop](../services/enterprise-discovery/stackgraph_discovery/github_control_loop.py) schedules due targets, prioritizes durable triggers, recovers leases, retries provider failures, dead-letters terminal work, and feeds publication; [Compose](../compose.yaml) continuously runs discovery, projection, and intelligence | Control-loop unit/PostgreSQL tests and [continuous pipeline runbook](runbooks/continuous-discovery-pipeline.md) |
 | SQL as authority | **Verified** | Projection is explicitly asynchronous; read paths can fall back to tenant-filtered SQL when AGE is unavailable, stale, or divergent | [local backend runbook](runbooks/local-backend.md) and graph aggregation tests |
 
 ### Implemented but not operationalized
 
-- Worker code can schedule due targets and process bounded batches, but [compose.yaml](../compose.yaml) exposes
-  deps.dev, OSV, projection, scanner ingestion, and intelligence primarily as profile-gated tools. There is no
-  continuously deployed scheduler or supervisor definition in this repository.
+- The [Compose `pipeline` profile](../compose.yaml) is a continuous reference topology for GitHub discovery,
+  projection, and intelligence. It has not been deployed with production resource limits, autoscaling, graceful
+  termination policy, SLOs, or operational ownership; deps.dev and OSV remain bounded tool workers.
 - `source_artifact` and `raw_observation` retain `blob_uri` references, hashes, and metadata, but the local stack
   contains no S3-compatible object store, retention policy, lifecycle policy, or restore procedure.
 - The GitHub webhook receiver verifies signatures, archives bodies, deduplicates deliveries, and routes lifecycle
-  events locally. Production TLS ingress, secret rotation, delivery/reconciliation alerting, and a continuously
-  supervised deployment are not defined.
+  events into the continuous control loop. Production TLS ingress, secret rotation, delivery/reconciliation
+  alerting, and a supervised deployment are not defined.
 - Freshness and queue state are queryable in PostgreSQL, while production dashboards, alert routes, and named
   owners are not defined.
 - npm registry acquisition is implemented as a bounded client/CLI, not a leased refresh worker equivalent to
@@ -117,7 +134,7 @@ lanes only. Lane C completion is intentionally not scored here.
 
 | ID | Priority | Gap | Required deliverable | Exit condition |
 | --- | --- | --- | --- | --- |
-| A-01 | P0 | Continuous control loop | Deployable scheduler and worker topology for due targets, projection, retries, and reconciliation, with graceful shutdown and lease recovery | Restarting any worker loses no work; due targets advance automatically; queue age and terminal failures are visible |
+| A-01 | P0 | Productionize continuous control loop | Deploy the checked-in durable scheduler/worker topology with graceful termination, resource/concurrency policy, queue metrics, and owned operations | Restarting any worker loses no work; due targets advance automatically; queue age and terminal failures are visible and alerted |
 | A-02 | P0 | Durable raw-object storage | Tenant-scoped object-storage adapter for raw observations, source artifacts, and repository snapshots with checksums, retention, encryption, and deletion policy | Every persisted blob reference resolves; replay works after database/process restart; tenant deletion removes governed objects |
 | A-03 | P0 | Webhook ingestion | Authenticated GitHub webhook receiver, signature verification, dedupe, event-to-target routing, and missed-event reconciliation | Duplicate/out-of-order deliveries are harmless and a missed delivery is repaired by reconciliation |
 | A-04 | P0 | Production operations | Metrics export and owned alerts for queue age, retry/terminal failure, dead letters, provider quota, normalization failure, stale targets, projection lag, and parity | Dashboards have thresholds, routes, runbooks, and a named owner; injected failures alert and recover |
@@ -144,14 +161,16 @@ lanes only. Lane C completion is intentionally not scored here.
 | Code-unit evidence | **Verified** | Scanner persists Python and JS/TS function/class fingerprints, semantic tokens, dependency keys, test links, dynamic-risk signals, touchpoints, and vendored status | Code-unit scanner tests and migration 008 integration coverage |
 | Scanner persistence | **Verified** | [scanner ingest](../services/data-platform/stackgraph_data/scanner_ingest.py) validates tenant/run/revision boundaries, publishes snapshots transactionally, persists usage summaries/code units, and supports replay | Scanner-ingest database integration tests |
 | Automatic intelligence enqueue | **Verified** | A complete `repository-dependency-usage` publication triggers an idempotent `REPOSITORY_MODERNIZATION` job; the worker runs capability inference before modernization | Migration 007/008, modernization-worker tests, and fresh database intelligence tests |
+| Acquisition-to-publication orchestration | **Verified** | [GitHub control loop](../services/enterprise-discovery/stackgraph_discovery/github_control_loop.py) leases installation/repository runs, short-circuits unchanged revisions, durably stores changed snapshots, scans, publishes, and updates freshness; projection and intelligence consume publication queues continuously | Control-loop tests, existing acquisition/scanner/persistence suites, and [pipeline runbook](runbooks/continuous-discovery-pipeline.md) |
 
 ### Implemented but not operationalized
 
 - GitHub installation registration, authorized-repository pagination, removal/revocation, and webhook routing are
   implemented. A hosted authorization callback and production secret-broker adapter for minting/refreshing
   installation tokens are still absent; the checked-in local resolver supports `env://` references only.
-- The Makefile exposes acquisition, scan, enqueue, persistence, projection, and intelligence commands, but no
-  durable orchestrator moves one repository automatically through every step or records the entire workflow.
+- The checked-in control loop durably moves changed repositories through acquisition, scan, publication,
+  projection, and intelligence, and avoids blob/scan work for unchanged revisions. Production deployment proof,
+  concurrency/quota tuning, provider metrics, and a 100+ repository drill remain absent.
 - `Dockerfile`, Compose files, and selected deployment/config YAML are acquired. The scanner records them as
   impact touchpoints; it does not parse Docker images, Kubernetes workloads, Terraform resources, environments,
   regions, or deployment relationships into canonical facts. `.tf` files are not currently selected.
@@ -165,8 +184,8 @@ lanes only. Lane C completion is intentionally not scored here.
 | ID | Priority | Gap | Required deliverable | Exit condition |
 | --- | --- | --- | --- | --- |
 | B-01 | P0 | GitHub App and organization lifecycle | Installation callback/service, credential reference, org/repository discovery, pagination, token refresh, removal handling, and reconciliation | Installing one tenant discovers the authorized repositories without accepting a raw token and removal stops/finalizes their targets safely |
-| B-02 | P0 | End-to-end repository orchestration | Durable workflow from revision detection through snapshot, scan, publication, projection, intelligence, and freshness update | A changed default branch automatically produces current evidence and intelligence; an unchanged revision avoids blob/scan work |
-| B-03 | P0 | Webhook/reconciliation integration | Connect GitHub push/repository/installation events to Lane A delivery records and target scheduling | Duplicate events do not duplicate facts, and reconciliation repairs a missed event |
+| B-02 | P0 | Productionize repository orchestration | Deploy and exercise the implemented durable revision-to-intelligence workflow with bounded concurrency and provider quotas | A real changed default branch automatically produces current evidence and intelligence; an unchanged revision avoids blob/scan work under production operations |
+| B-03 | P0 | Productionize webhook/reconciliation | Deploy the implemented delivery routing and periodic reconciliation with TLS ingress, delivery lag metrics, and alerts | Duplicate events do not duplicate facts, and an injected missed delivery is repaired and alerted by reconciliation |
 | B-04 | P1 | Semantic deployment and IaC scan | Deterministic Docker, Compose, Kubernetes, and Terraform parsers using the shared fact/evidence contract | Golden repository emits declared image, workload, compute, environment, infrastructure, and locator-backed relationships |
 | B-05 | P1 | Two-pass scanning | Fast inventory/early-finding pass followed by bounded deeper symbol, API, reachability, and code-unit analysis | Time to first inventory/finding is measured independently from deep-scan completion and partial results cannot close complete state |
 | B-06 | P1 | Runtime evidence acquisition | Versioned runtime/deployment observation contract and bounded collectors or import adapters | Runtime claims link to source/revision/environment and can change `UNKNOWN` only with direct evidence |
@@ -235,13 +254,17 @@ Implementation progress on `codex/lane-a-b-d-p0`:
 - Work package 2 / B-01 + A-03 is **Partial**. Credential-reference installation registration, bounded complete
   repository reconciliation, safe removal/revocation, an HMAC-verifying HTTP receiver, durable webhook bodies,
   delivery dedupe, and default-branch push routing are implemented. It remains open for the hosted installation
-  callback, production token broker/refresh, continuous scheduler ownership, TLS ingress, and delivery alerts.
+  callback, production token broker/refresh, production scheduler ownership, TLS ingress, and delivery alerts.
+- Work package 3 / A-01 + B-02 + B-03 is **Partial**. The checked-in control loop and Compose topology now cover
+  due scheduling, trigger priority, lease recovery/renewal, provider-aware retry/dead letters, unchanged revision
+  short-circuiting, durable acquisition, scan publication, freshness, projection, and intelligence. It remains
+  open for production deployment, concurrency/quota policy, metrics/alerts, and pilot-scale recovery proof.
 
 | Order | Work package | Owner | Prerequisites | Deliverable and exit condition |
 | ---: | --- | --- | --- | --- |
 | 1 | Durable evidence plane | A | Existing raw/source contracts | Complete A-02; raw artifacts and snapshots survive process/database replacement and remain replayable |
 | 2 | GitHub tenant lifecycle | B with A | Credential references and durable evidence plane | Complete B-01 and A-03 for one tenant installation, including removal and missed-event reconciliation |
-| 3 | Continuous repository/OSS control loop | A + B | Orders 1–2 | Complete A-01, B-02, and B-03; changed repositories automatically reach published facts, projection, intelligence, and freshness |
+| 3 | Productionize repository/OSS control loop | A + B | Orders 1–2 | Deploy and operate the implemented A-01/B-02/B-03 topology; changed repositories reach published facts, projection, intelligence, and freshness under production credentials, quotas, metrics, and alerts |
 | 4 | Production telemetry and recovery | A | Continuous control loop | Complete A-04 and A-07; failure injection proves alerts, lease recovery, restore, replay, and projection rebuild |
 | 5 | Governed intelligence inputs | D | Stable tenant ingestion | Complete D-01 and D-02; requeue all repositories under explicit policy/catalog fingerprints |
 | 6 | Calibration and promotion | D | Governed inputs and reviewed results | Complete D-03 and D-04; quality thresholds and version-aware promotion gates are owned |

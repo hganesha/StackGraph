@@ -110,9 +110,11 @@ Revocation marks the connector `REVOKED`, disables its installation and reposito
 runs. Running or already-published work is not destructively deleted; its evidence remains available for audit and
 tenant lifecycle policy.
 
-## Current deployment boundary
+## Continuous processing and deployment boundary
 
-The repository now contains the persistence, reconciliation, HTTP verification, delivery dedupe, and event-routing
-services. B-01/A-03 remain partial until a hosted GitHub App callback exchanges installation authorization for a
-credential reference, a production secret broker mints/refreshes installation tokens, the scheduler continuously
-claims due installation targets, and alerting covers failed/stale deliveries and reconciliation lag.
+The checked-in [`pipeline` profile](continuous-discovery-pipeline.md) continuously claims due installation and
+repository targets, recovers expired leases, and connects changed revisions to durable evidence, scanning,
+publication, projection, intelligence, and freshness. B-01/A-03 remain partial until a hosted GitHub App callback
+exchanges installation authorization for a credential reference, a production secret broker mints/refreshes
+installation tokens, ingress is deployed with TLS, and alerting covers failed/stale deliveries and reconciliation
+lag.

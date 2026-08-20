@@ -196,6 +196,10 @@ class RepositorySnapshot:
             "tenant_key": tenant_key,
             "target_key": self.canonical_key,
             "source_revision": self.source_revision,
+            # One immutable revision can be observed more than once with different
+            # provider metadata. Bind idempotency to this exact observation so a
+            # replay is stable while a later observation cannot collide.
+            "observed_at": self.observed_at,
             "completeness": self.completeness,
             "files": [item.as_dict() for item in self.files],
             "diagnostics": [item.as_dict() for item in self.diagnostics],

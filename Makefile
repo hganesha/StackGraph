@@ -1,4 +1,4 @@
-.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
+.PHONY: backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist
 
 backend-up:
 	docker compose up --build -d database api
@@ -122,6 +122,20 @@ github-webhook-up:
 
 github-webhook-down:
 	docker compose --profile github stop github-webhook
+
+github-pipeline-work: database-migrate
+	docker compose run --rm github-control-loop work
+
+pipeline-up: database-migrate
+	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
+	@test -n "$$GITHUB_INSTALLATION_TOKEN" || (echo "GITHUB_INSTALLATION_TOKEN is required for env://GITHUB_INSTALLATION_TOKEN connectors" >&2; exit 2)
+	docker compose --profile pipeline up --build -d github-webhook github-control-loop projection-continuous intelligence-continuous
+
+pipeline-down:
+	docker compose --profile pipeline stop github-webhook github-control-loop projection-continuous intelligence-continuous
+
+pipeline-logs:
+	docker compose --profile pipeline logs -f github-webhook github-control-loop projection-continuous intelligence-continuous
 
 repository-acquire:
 	@test -n "$(REPOSITORY)" || (echo "REPOSITORY is required (owner/name)" >&2; exit 2)

@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/code
+
+WORKDIR /code
+
+COPY services/enterprise-discovery/requirements.txt /tmp/discovery-requirements.txt
+COPY services/data-platform/requirements.txt /tmp/data-platform-requirements.txt
+RUN pip install --no-cache-dir \
+    --requirement /tmp/discovery-requirements.txt \
+    --requirement /tmp/data-platform-requirements.txt
+
+COPY services/enterprise-discovery/stackgraph_discovery ./stackgraph_discovery
+COPY services/data-platform/stackgraph_data ./stackgraph_data
+
+ENTRYPOINT ["python", "-m", "stackgraph_discovery.github_control_loop"]
