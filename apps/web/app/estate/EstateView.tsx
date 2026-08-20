@@ -30,7 +30,9 @@ export function EstateView() {
       </header>
 
       {isError ? (
-        <div className={styles.notice}>Couldn’t load the estate summary. Retry, or check the API connection.</div>
+        <div className={styles.notice} role="alert">
+          Couldn’t load the estate summary. Retry, or check the API connection.
+        </div>
       ) : null}
 
       <section className={styles.tiles} aria-label="Estate counts">

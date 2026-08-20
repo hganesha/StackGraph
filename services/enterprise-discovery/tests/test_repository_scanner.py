@@ -318,6 +318,9 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertIn({"kind": "DEPLOYMENT", "path": "compose.yaml"}, invoice["touchpoints"])
         self.assertIn("DYNAMIC_IMPORT", plugin["dynamic_signals"])
         self.assertEqual(result["stats"]["code_units_emitted"], len(summaries))
+        self.assertGreater(result["stats"]["pass_a_inventory_items"], 0)
+        self.assertIn("pass_a_inventory", result["stats"]["phase_timings_ms"])
+        self.assertIn("pass_b_refinement", result["stats"]["phase_timings_ms"])
 
     def test_python_structural_fingerprint_ignores_local_names_and_literals(self) -> None:
         with TemporaryDirectory() as first_directory, TemporaryDirectory() as second_directory:

@@ -8,8 +8,10 @@ Repository content acquisition and scanning continue in
 ## Security boundary
 
 - StackGraph stores only `connector_account.credential_reference`; registration never accepts a token argument.
-- The local runtime resolves `env://GITHUB_INSTALLATION_TOKEN`. Production deployments should provide a
-  secret-manager resolver that returns a short-lived installation token on every reconciliation invocation.
+- The normal `github-app://installation/<id>` runtime creates a short-lived RS256 App JWT, mints an installation
+  token, and refreshes the in-memory cache before expiry. The App private key must come from the deployment secret
+  broker through `GITHUB_APP_PRIVATE_KEY` or a broker-mounted `GITHUB_APP_PRIVATE_KEY_FILE`.
+- `env://GITHUB_INSTALLATION_TOKEN` remains a local-development fallback for an already short-lived token.
 - Required minimum permissions are `contents:read` and `metadata:read`.
 - Webhook signatures are verified with `X-Hub-Signature-256` before JSON parsing or database writes.
 - Signature headers and credential values are never persisted. Webhook bodies are checksum-addressed in the
@@ -17,11 +19,12 @@ Repository content acquisition and scanning continue in
 
 ## 1. Register the installation
 
-The tenant must already exist and be active. For the local environment, expose a short-lived installation token
-through the referenced variable:
+The tenant must already exist and be active. Configure the App identity and private key through the local
+environment or a secret-broker mount:
 
 ```shell
-export GITHUB_INSTALLATION_TOKEN=ghs_short_lived_value
+export GITHUB_APP_ID=123456
+export GITHUB_APP_PRIVATE_KEY_FILE=/run/secrets/stackgraph-github-app.pem
 
 make github-installation-register \
   TENANT_KEY=acme \
@@ -38,9 +41,8 @@ GitHub installation IDs are treated as globally assigned. Registering the same i
 rejected. Replaying registration for the same tenant updates the credential reference and permission set without
 creating another connector.
 
-For a production secret provider, invoke the CLI directly and use an approved URI such as
-`vault://stackgraph/github/installations/12345678`. The checked-in local resolver supports only `env://`; a
-deployment-specific resolver must handle Vault or cloud secret-manager references.
+The default credential reference is `github-app://installation/<installation-id>`. A deployment secret broker
+must inject or mount the App private key; the database never stores the key, App JWT, or installation token.
 
 ## 2. Reconcile authorized repositories
 
@@ -114,7 +116,7 @@ tenant lifecycle policy.
 
 The checked-in [`pipeline` profile](continuous-discovery-pipeline.md) continuously claims due installation and
 repository targets, recovers expired leases, and connects changed revisions to durable evidence, scanning,
-publication, projection, intelligence, and freshness. B-01/A-03 remain partial until a hosted GitHub App callback
-exchanges installation authorization for a credential reference, a production secret broker mints/refreshes
-installation tokens, ingress is deployed with TLS, and alerting covers failed/stale deliveries and reconciliation
-lag.
+publication, projection, intelligence, and freshness. The remaining deployment boundary is a hosted GitHub App
+setup/OAuth callback that binds opaque state to the authenticated tenant and verifies installation ownership,
+secret-broker delivery of the App private key, TLS ingress, and routed alerting for failed/stale deliveries and
+reconciliation lag.

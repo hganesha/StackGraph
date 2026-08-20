@@ -21,6 +21,8 @@ try:
         MAX_ATTEMPTS,
         _acquire_scan_publish,
         _policy_int,
+        _quota_status,
+        _record_github_quota,
         _retry_delay,
         claim_run,
         fail_exhausted_leases,
@@ -73,12 +75,39 @@ class GitHubControlLoopUnitTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 _policy_int({"limit": value}, "limit", 10)
 
+    def test_quota_status_distinguishes_ok_throttled_and_exhausted(self) -> None:
+        self.assertEqual(_quota_status(42), "OK")
+        self.assertEqual(_quota_status(None, throttled=True), "THROTTLED")
+        self.assertEqual(_quota_status(0), "EXHAUSTED")
+
 
 @unittest.skipUnless(
     psycopg and DATABASE_URL,
     "PostgreSQL integration dependencies are unavailable",
 )
 class GitHubControlLoopPersistenceTests(unittest.TestCase):
+    def test_github_quota_observation_is_tenant_scoped_and_refreshes(self) -> None:
+        tenant_key = f"github-quota-{uuid4()}"
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            tenant = connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'GitHub quota') RETURNING id",
+                (tenant_key,),
+            ).fetchone()
+        reset_epoch = int(datetime.now(UTC).timestamp()) + 3600
+        _record_github_quota(
+            DATABASE_URL, tenant_id=tenant["id"], remaining=4875,
+            limit=5000, reset_epoch=reset_epoch,
+        )
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            quota = connection.execute(
+                "SELECT * FROM connector_quota WHERE tenant_id=%s AND provider='GITHUB_APP'",
+                (tenant["id"],),
+            ).fetchone()
+        self.assertEqual(quota["used"], 125)
+        self.assertEqual(quota["limit_value"], 5000)
+        self.assertEqual(quota["status"], "OK")
+        self.assertIsNotNone(quota["resets_at"])
+
     def test_rescan_jobs_roll_up_shared_run_success_and_failure(self) -> None:
         tenant_key = f"github-rescan-rollup-{uuid4()}"
         with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:

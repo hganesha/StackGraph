@@ -23,7 +23,18 @@
         "facts_emitted": {"type": "integer", "minimum": 0},
         "bytes_read": {"type": "integer", "minimum": 0},
         "duration_ms": {"type": "integer", "minimum": 0},
-        "code_units_emitted": {"type": "integer", "minimum": 0}
+        "code_units_emitted": {"type": "integer", "minimum": 0},
+        "pass_a_inventory_items": {"type": "integer", "minimum": 0},
+        "material_findings_emitted": {"type": "integer", "minimum": 0},
+        "phase_timings_ms": {
+          "type": "object",
+          "required": ["pass_a_inventory", "pass_b_refinement"],
+          "properties": {
+            "pass_a_inventory": {"type": "integer", "minimum": 0},
+            "pass_b_refinement": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },

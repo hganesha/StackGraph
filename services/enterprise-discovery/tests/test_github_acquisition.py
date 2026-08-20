@@ -83,7 +83,11 @@ def repository_response() -> HttpResponse:
             "default_branch": "main",
         },
         ETag='"repo-etag"',
-        **{"X-RateLimit-Remaining": "4998", "X-RateLimit-Reset": "1900000000"},
+        **{
+            "X-RateLimit-Limit": "5000",
+            "X-RateLimit-Remaining": "4998",
+            "X-RateLimit-Reset": "1900000000",
+        },
     )
 
 
@@ -158,6 +162,9 @@ class GitHubAcquisitionTests(unittest.TestCase):
             )
 
             self.assertEqual(result.status, "CHANGED")
+            self.assertEqual(result.rate_limit_limit, 5000)
+            self.assertEqual(result.rate_limit_remaining, 4996)
+            self.assertEqual(result.rate_limit_reset, 1900000000)
             self.assertEqual(result.snapshot.completeness, "COMPLETE")
             self.assertEqual(len(result.snapshot.files), 3)
             self.assertEqual(
@@ -222,6 +229,8 @@ class GitHubAcquisitionTests(unittest.TestCase):
 
         self.assertEqual(result.status, "UNCHANGED")
         self.assertIsNone(result.snapshot)
+        self.assertEqual(result.rate_limit_limit, 5000)
+        self.assertEqual(result.rate_limit_remaining, 4998)
         self.assertEqual(len(transport.requests), 2)
         self.assertNotIn("Authorization", transport.requests[0].headers)
 
@@ -296,6 +305,7 @@ class GitHubAcquisitionTests(unittest.TestCase):
                     403,
                     {
                         "X-RateLimit-Remaining": "0",
+                        "X-RateLimit-Limit": "5000",
                         "X-RateLimit-Reset": "1900000000",
                     },
                     b'{"message":"API rate limit exceeded"}',
@@ -306,6 +316,8 @@ class GitHubAcquisitionTests(unittest.TestCase):
             GitHubClient(transport=transport).get_json("/repos/acme/widgets")
 
         self.assertTrue(context.exception.retriable)
+        self.assertEqual(context.exception.rate_limit_remaining, 0)
+        self.assertEqual(context.exception.rate_limit_limit, 5000)
         self.assertEqual(context.exception.rate_limit_reset, 1900000000)
         self.assertEqual(context.exception.status_code, 403)
         self.assertEqual(

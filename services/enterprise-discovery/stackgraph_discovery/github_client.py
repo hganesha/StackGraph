@@ -98,12 +98,16 @@ class GitHubApiError(RuntimeError):
         status_code: int,
         retriable: bool,
         retry_after_seconds: int | None = None,
+        rate_limit_remaining: int | None = None,
+        rate_limit_limit: int | None = None,
         rate_limit_reset: int | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retriable = retriable
         self.retry_after_seconds = retry_after_seconds
+        self.rate_limit_remaining = rate_limit_remaining
+        self.rate_limit_limit = rate_limit_limit
         self.rate_limit_reset = rate_limit_reset
 
 
@@ -120,6 +124,10 @@ class ApiResult:
     @property
     def rate_limit_remaining(self) -> int | None:
         return _optional_int(self.headers.get("x-ratelimit-remaining"))
+
+    @property
+    def rate_limit_limit(self) -> int | None:
+        return _optional_int(self.headers.get("x-ratelimit-limit"))
 
     @property
     def rate_limit_reset(self) -> int | None:
@@ -232,6 +240,7 @@ def _api_error(status: int, headers: Mapping[str, str], body: bytes) -> GitHubAp
         pass
 
     remaining = _optional_int(headers.get("x-ratelimit-remaining"))
+    limit = _optional_int(headers.get("x-ratelimit-limit"))
     retry_after = _optional_int(headers.get("retry-after"))
     reset = _optional_int(headers.get("x-ratelimit-reset"))
     rate_limited = status == 429 or (
@@ -247,6 +256,8 @@ def _api_error(status: int, headers: Mapping[str, str], body: bytes) -> GitHubAp
         status_code=status,
         retriable=rate_limited or status >= 500,
         retry_after_seconds=retry_after,
+        rate_limit_remaining=remaining,
+        rate_limit_limit=limit,
         rate_limit_reset=reset,
     )
 
