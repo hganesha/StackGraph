@@ -29,6 +29,7 @@ from stackgraph_ai.capabilities import (
 )
 from stackgraph_ai.database import PostgresDatabase
 from stackgraph_ai.sync_capabilities import sync_capabilities
+from stackgraph_ai.tenant_config import load_tenant_ai_settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +54,7 @@ async def analyze_repository(
     taxonomy_key: str = "stackgraph.technical-capabilities",
     use_ai_for_unmapped: bool = False,
     ai_route: str = "default",
+    credential_encryption_key: str | None = None,
 ) -> AnalysisResult:
     sync_capabilities(
         database_url,
@@ -93,16 +95,34 @@ async def analyze_repository(
     ai_count = 0
     if use_ai_for_unmapped and unmapped:
         database = PostgresDatabase(database_url)
-        ai = build_ai_service(AISettings.from_env(), database=database)
-        for usage in unmapped:
-            proposals.append(await infer_with_ai(
-                ai,
-                taxonomy,
-                usage,
-                tenant_id=tenant_id,
-                route=ai_route,
-            ))
-            ai_count += 1
+        tenant_settings = load_tenant_ai_settings(
+            database_url,
+            tenant_id=tenant_id,
+            encryption_key=(
+                credential_encryption_key
+                or os.getenv(
+                    "STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY",
+                    "stackgraph-local-development-credential-key",
+                )
+            ),
+        )
+        settings = tenant_settings
+        if settings is None:
+            try:
+                settings = AISettings.from_env()
+            except ValueError:
+                settings = None
+        if settings is not None:
+            ai = build_ai_service(settings, database=database)
+            for usage in unmapped:
+                proposals.append(await infer_with_ai(
+                    ai,
+                    taxonomy,
+                    usage,
+                    tenant_id=tenant_id,
+                    route="default" if tenant_settings is not None else ai_route,
+                ))
+                ai_count += 1
 
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         persisted, replayed = _persist_inferences(

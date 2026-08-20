@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiRequestError, stackGraphClient, type AIProvider } from "@stackgraph/shared";
+import {
+  ApiRequestError,
+  stackGraphClient,
+  type AIEnrichmentStatus,
+  type AIProvider,
+} from "@stackgraph/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import styles from "./admin.module.css";
 
@@ -51,6 +56,15 @@ const PROVIDERS: Record<AIProvider, ProviderDetails> = {
       { id: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 — fast" },
     ],
   },
+};
+
+const ENRICHMENT_LABELS: Record<AIEnrichmentStatus, string> = {
+  DISABLED: "Disabled",
+  READY: "Ready",
+  QUEUED: "Queued",
+  RUNNING: "Running",
+  ACTIVE: "Active",
+  DEGRADED: "Needs attention",
 };
 
 function errorMessage(error: unknown): string {
@@ -123,6 +137,7 @@ export function IntelligenceSection() {
   );
   const meta = PROVIDERS[provider];
   const modelIsRecommended = meta.models.some((option) => option.id === model);
+  const enrichmentStatus = persisted?.enrichment_status ?? "DISABLED";
 
   const changeProvider = (next: AIProvider) => {
     if (next === provider) return;
@@ -175,6 +190,18 @@ export function IntelligenceSection() {
       <div className={`${styles.residency} ${meta.widensEgress ? styles.residencyWarn : ""}`}>
         <span className={styles.residencyLabel}>Data residency</span>
         <span className={styles.residencyText}>{meta.residency}</span>
+      </div>
+
+      <div className={`${styles.residency} ${enrichmentStatus === "DEGRADED" ? styles.residencyWarn : ""}`}>
+        <span className={styles.residencyLabel}>AI enrichment · {ENRICHMENT_LABELS[enrichmentStatus]}</span>
+        <span className={styles.residencyText}>
+          {enrichmentStatus === "DISABLED"
+            ? "Save an enabled provider, model, and API key to activate AI inference for unmapped packages."
+            : `${persisted?.pending_enrichment_jobs ?? 0} queued · ${persisted?.running_enrichment_jobs ?? 0} running · ${persisted?.failed_enrichment_jobs ?? 0} failed`}
+        </span>
+        {persisted?.last_enrichment_at ? (
+          <span className={styles.help}>Last completed {new Date(persisted.last_enrichment_at).toLocaleString()}</span>
+        ) : null}
       </div>
 
       <div className={styles.field}>

@@ -9,7 +9,9 @@ reviewable migration recommendations.
 1. The repository scanner publishes a `COMPLETE` `repository-dependency-usage` snapshot.
 2. The publication trigger inserts one idempotent `REPOSITORY_MODERNIZATION` job for the tenant, repository,
    source revision, and configuration fingerprint. That job runs capability inference before modernization.
-3. The intelligence worker synchronizes the active capability taxonomy and applies curated mappings. Unmapped active usage can optionally be sent through the configured AI capability-inference route.
+3. The intelligence worker synchronizes the active capability taxonomy and applies curated mappings. Unmapped
+   active usage is sent through the tenant provider configured in Admin. If no tenant provider is enabled, the
+   worker completes the deterministic portion without attempting AI inference.
 4. Multiple active dependencies mapped to one capability become duplicate-capability candidates.
 5. The scanner's persisted code-unit fingerprints generate internal or vendored duplication candidates within
    the tenant. Structural similarity is review evidence, not a behavioral-equivalence claim.
@@ -47,13 +49,17 @@ MAX_JOBS=10 make intelligence-work
 
 The requeue command is idempotent for the computed configuration fingerprint.
 
-To enable AI inference only for active dependency usage that has no curated mapping:
+`intelligence-work` and the continuous pipeline automatically enable AI only for active dependency usage that
+has no curated mapping. Configure the provider, model, and write-only key in Admin before running the worker:
 
 ```shell
-AI_UNMAPPED=1 AI_ROUTE=default MAX_JOBS=10 make intelligence-work
+MAX_JOBS=10 make intelligence-work
 ```
 
-Provider credentials remain server-side. AI output must use a known taxonomy capability and only evidence references supplied in the invocation.
+Saving a valid tenant configuration enqueues the latest complete published repository snapshot under a
+configuration-specific fingerprint, so existing repositories are reanalyzed as well as future scans. Provider
+credentials remain server-side. AI output must use a known taxonomy capability and only evidence references
+supplied in the invocation.
 
 ## API
 

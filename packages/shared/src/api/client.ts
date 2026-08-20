@@ -156,7 +156,8 @@ const adminRescans = new Map<string, { idempotencyKey: string; job: RescanJob }>
 let adminScanPolicy: ScanPolicy = { contract_version: "1.0.0", cadence: "DAILY", enabled: true };
 let adminAIConfiguration: AIProviderConfiguration = {
   contract_version: "1.0.0", provider: "anthropic", model: "", enabled: true,
-  key_configured: false, test_status: "NOT_TESTED",
+  key_configured: false, test_status: "NOT_TESTED", enrichment_status: "DISABLED",
+  pending_enrichment_jobs: 0, running_enrichment_jobs: 0, failed_enrichment_jobs: 0,
 };
 {
   const now = "2026-08-19T12:00:00.000Z";
@@ -455,6 +456,12 @@ const fixtureClient: StackGraphClient = {
       key_configured: body.api_key ? true : adminAIConfiguration.key_configured,
       key_fingerprint: body.api_key ? body.api_key.slice(-4) : adminAIConfiguration.key_fingerprint,
       test_status: "NOT_TESTED",
+      enrichment_status: body.enabled !== false && Boolean(body.model) && Boolean(body.api_key || adminAIConfiguration.key_configured)
+        ? "READY" : "DISABLED",
+      pending_enrichment_jobs: 0,
+      running_enrichment_jobs: 0,
+      failed_enrichment_jobs: 0,
+      last_enrichment_at: null,
       tested_at: null,
       last_error: null,
       updated_by: "fixture-admin",
@@ -467,6 +474,8 @@ const fixtureClient: StackGraphClient = {
     adminAIConfiguration = {
       ...adminAIConfiguration, key_configured: false, key_fingerprint: null,
       test_status: "NOT_TESTED", tested_at: null, last_error: null,
+      enrichment_status: "DISABLED", pending_enrichment_jobs: 0,
+      running_enrichment_jobs: 0, failed_enrichment_jobs: 0, last_enrichment_at: null,
     };
     return clone(adminAIConfiguration);
   },

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 from collections import defaultdict, deque
@@ -3645,7 +3646,7 @@ class ReadModelStore:
             """,
             tenant_id=tenant_id,
         )
-        return self._ai_provider_configuration(row)
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
 
     async def update_ai_provider_configuration(
         self,
@@ -3730,12 +3731,20 @@ class ReadModelStore:
                     "enabled": request.enabled,
                 },
             )
+            if request.enabled and secret_id is not None and request.model.strip():
+                await self._enqueue_tenant_ai_reanalysis(
+                    connection,
+                    tenant_id=tenant_id,
+                    provider=request.provider,
+                    model=request.model.strip(),
+                    secret_id=secret_id,
+                )
             fingerprint_cursor = await connection.execute(
                 "SELECT fingerprint FROM tenant_secret WHERE id=%s", (secret_id,),
             ) if secret_id is not None else None
             fingerprint_row = await fingerprint_cursor.fetchone() if fingerprint_cursor is not None else None
         row["key_fingerprint"] = fingerprint_row["fingerprint"] if fingerprint_row else None
-        return self._ai_provider_configuration(row)
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
 
     async def remove_ai_provider_key(
         self, *, tenant_id: UUID | None, actor_key: str,
@@ -3769,7 +3778,7 @@ class ReadModelStore:
                 target_id=tenant_id, detail={"provider": row["provider"]},
             )
         row["key_fingerprint"] = None
-        return self._ai_provider_configuration(row)
+        return await self._ai_provider_configuration_with_status(row, tenant_id=tenant_id)
 
     async def test_ai_provider_connection(
         self, *, tenant_id: UUID | None, actor_key: str,
@@ -3778,7 +3787,7 @@ class ReadModelStore:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to test AI configuration.")
         row = await self.database.fetch_one(
             """
-            SELECT c.provider,
+            SELECT c.provider,c.model,
               pgp_sym_decrypt(s.ciphertext,%s)::text AS api_key
             FROM tenant_ai_configuration c
             JOIN tenant_secret s ON s.id=c.credential_secret_id
@@ -3795,7 +3804,8 @@ class ReadModelStore:
                 response = await client.get(url, headers=headers)
                 response.raise_for_status()
                 payload = response.json()
-            models = self._ai_model_ids(payload)[:100]
+            available_models = self._ai_model_ids(payload)
+            models = available_models[:100]
         except (httpx.HTTPError, ValueError, TypeError) as error:
             message = "Provider authentication or model discovery failed."
             await self.database.fetch_one(
@@ -3806,6 +3816,16 @@ class ReadModelStore:
                 (message, actor_key), tenant_id=tenant_id,
             )
             raise APIError(502, "AI_CONNECTION_FAILED", message) from error
+        if available_models and row["model"] not in available_models:
+            message = f"The selected model {row['model']!r} is not available to this provider key."
+            await self.database.fetch_one(
+                """
+                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
+                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+                """,
+                (message, actor_key), tenant_id=tenant_id,
+            )
+            raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
         await self.database.fetch_one(
             """
             UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
@@ -3833,6 +3853,109 @@ class ReadModelStore:
             str(item["id"]) for item in payload["data"]
             if isinstance(item, dict) and isinstance(item.get("id"), str)
         )
+
+    async def _ai_provider_configuration_with_status(
+        self,
+        row: dict[str, Any] | None,
+        *,
+        tenant_id: UUID,
+    ) -> AIProviderConfiguration:
+        configuration = self._ai_provider_configuration(row)
+        if (
+            row is None
+            or not row["enabled"]
+            or not row["model"]
+            or row["credential_secret_id"] is None
+        ):
+            return configuration
+        configuration_fingerprint = self._tenant_ai_configuration_fingerprint(
+            row["provider"], row["model"], row["credential_secret_id"],
+        )
+        stats = await self.database.fetch_one(
+            """
+            SELECT
+              count(*) FILTER (WHERE status='PENDING') pending_jobs,
+              count(*) FILTER (WHERE status='RUNNING') running_jobs,
+              count(*) FILTER (WHERE status='FAILED') failed_jobs,
+              count(*) FILTER (WHERE status='SUCCEEDED') succeeded_jobs,
+              max(completed_at) FILTER (WHERE status='SUCCEEDED') last_enrichment_at
+            FROM intelligence_job
+            WHERE configuration_fingerprint=%s
+            """,
+            (configuration_fingerprint,),
+            tenant_id=tenant_id,
+        )
+        pending = int(stats["pending_jobs"] or 0) if stats else 0
+        running = int(stats["running_jobs"] or 0) if stats else 0
+        failed = int(stats["failed_jobs"] or 0) if stats else 0
+        succeeded = int(stats["succeeded_jobs"] or 0) if stats else 0
+        status = (
+            "DEGRADED" if failed
+            else "RUNNING" if running
+            else "QUEUED" if pending
+            else "ACTIVE" if succeeded
+            else "READY"
+        )
+        return configuration.model_copy(update={
+            "enrichment_status": status,
+            "pending_enrichment_jobs": pending,
+            "running_enrichment_jobs": running,
+            "failed_enrichment_jobs": failed,
+            "last_enrichment_at": stats["last_enrichment_at"] if stats else None,
+        })
+
+    async def _enqueue_tenant_ai_reanalysis(
+        self,
+        connection: Any,
+        *,
+        tenant_id: UUID,
+        provider: str,
+        model: str,
+        secret_id: UUID,
+    ) -> None:
+        configuration_fingerprint = self._tenant_ai_configuration_fingerprint(
+            provider, model, secret_id,
+        )
+        await connection.execute(
+            """
+            WITH latest_snapshot AS (
+              SELECT DISTINCT ON (repository.id)
+                repository.id repository_id,snapshot.id snapshot_id,snapshot.source_revision
+              FROM entity repository
+              JOIN ingest_target target
+                ON target.tenant_id=repository.tenant_id
+               AND target.target_kind='REPOSITORY'
+               AND target.target_key=repository.canonical_key
+              JOIN source_snapshot snapshot ON snapshot.ingest_target_id=target.id
+              WHERE repository.tenant_id=%s
+                AND repository.namespace='ENTERPRISE'
+                AND repository.entity_type='Repository'
+                AND snapshot.status='PUBLISHED'
+                AND snapshot.completeness='COMPLETE'
+                AND snapshot.extractor_key='repository-dependency-usage'
+              ORDER BY repository.id,snapshot.observed_at DESC,
+                       snapshot.published_at DESC,snapshot.id DESC
+            )
+            INSERT INTO intelligence_job(
+              tenant_id,repository_entity_id,source_snapshot_id,source_revision,
+              job_kind,configuration_fingerprint
+            )
+            SELECT %s,repository_id,snapshot_id,source_revision,
+                   'REPOSITORY_MODERNIZATION',%s
+            FROM latest_snapshot
+            ON CONFLICT DO NOTHING
+            """,
+            (tenant_id, tenant_id, configuration_fingerprint),
+        )
+
+    @staticmethod
+    def _tenant_ai_configuration_fingerprint(
+        provider: str,
+        model: str,
+        secret_id: UUID,
+    ) -> str:
+        payload = f"tenant-ai-v1\x1f{provider}\x1f{model}\x1f{secret_id}".encode()
+        return "sha256:" + hashlib.sha256(payload).hexdigest()
 
     @staticmethod
     def _ai_provider_configuration(row: dict[str, Any] | None) -> AIProviderConfiguration:

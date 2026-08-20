@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 import psycopg
+from psycopg.rows import dict_row
 from httpx import ASGITransport, AsyncClient
 
 from app.config import Settings
@@ -12,6 +13,7 @@ from app.database import Database
 from app.models import AskRequest
 from app.read_models import ReadModelStore
 from app.main import create_app
+from stackgraph_ai.tenant_config import load_tenant_ai_settings
 from tests.contract_support import ContractValidator
 from tests.golden_billing import (
     APPLICATION_ID,
@@ -525,6 +527,43 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         "/admin/github/repositories",
                         json={"repository": "acme/billing"},
                     )
+                    with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
+                        configure_tenant(connection)
+                        target = connection.execute(
+                            """
+                            SELECT target.id,run.id run_id
+                            FROM ingest_target target
+                            JOIN ingest_run run ON run.ingest_target_id=target.id
+                            WHERE target.tenant_id=%s
+                              AND target.target_key='github:repo-name:acme/billing'
+                            ORDER BY run.created_at DESC LIMIT 1
+                            """,
+                            (tenant_id,),
+                        ).fetchone()
+                        assert target is not None
+                        connection.execute(
+                            """
+                            INSERT INTO entity(
+                              tenant_id,namespace,entity_type,canonical_key,name,properties
+                            ) VALUES (
+                              %s,'ENTERPRISE','Repository',
+                              'github:repo-name:acme/billing','Billing repository','{}'
+                            )
+                            """,
+                            (tenant_id,),
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO source_snapshot(
+                              tenant_id,ingest_run_id,ingest_target_id,source_revision,
+                              extractor_key,extractor_version,completeness,status,observed_at,stats
+                            ) VALUES (
+                              %s,%s,%s,'configured-revision',
+                              'repository-dependency-usage','1.0.0','COMPLETE','PUBLISHED',now(),'{}'
+                            )
+                            """,
+                            (tenant_id, target["run_id"], target["id"]),
+                        )
                     policy = await client.put(
                         "/admin/scan-policy", json={"cadence": "HOURLY", "enabled": True},
                     )
@@ -542,15 +581,20 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                               "api_key": "integration-secret-5678"},
                     )
                     ai_read = await client.get("/admin/ai-configuration")
+                    tenant_ai = load_tenant_ai_settings(
+                        admin_database_url,
+                        tenant_id=UUID(tenant_id),
+                        encryption_key="stackgraph-local-development-credential-key",
+                    )
                     ai_removed = await client.delete("/admin/ai-configuration/key")
                     return (
                         member, members, connector, repository, policy, rescan_a, rescan_b,
-                        status, raw, ai_saved, ai_read, ai_removed,
+                        status, raw, ai_saved, ai_read, tenant_ai, ai_removed,
                     )
 
         (
             member, members, connector, repository, policy, rescan_a, rescan_b,
-            status, raw, ai_saved, ai_read, ai_removed,
+            status, raw, ai_saved, ai_read, tenant_ai, ai_removed,
         ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
@@ -566,9 +610,16 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert status.status_code == 200 and status.json()["policy"]["cadence"] == "HOURLY"
         assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
         assert ai_saved.status_code == 200 and ai_saved.json()["key_fingerprint"] == "5678"
+        assert ai_saved.json()["enrichment_status"] == "QUEUED"
+        assert ai_saved.json()["pending_enrichment_jobs"] == 1
         assert "api_key" not in ai_saved.json()
         assert ai_read.json()["model"] == "test/model" and ai_read.json()["key_configured"] is True
+        assert tenant_ai is not None
+        assert tenant_ai.routes[0].provider == "openrouter"
+        assert tenant_ai.routes[0].model == "test/model"
+        assert tenant_ai.openrouter_api_key == "integration-secret-5678"
         assert ai_removed.json()["key_configured"] is False
+        assert ai_removed.json()["enrichment_status"] == "DISABLED"
 
         with psycopg.connect(database_url) as connection:
             configure_tenant(connection)
@@ -593,6 +644,12 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
+            connection.execute("DELETE FROM intelligence_job WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
+            connection.execute(
+                "DELETE FROM entity WHERE tenant_id=%s AND entity_type='Repository'",
+                (tenant_id,),
+            )
             connection.execute(
                 """
                 DELETE FROM ingest_run WHERE ingest_target_id IN (
@@ -604,9 +661,9 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM connector_account WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
-                for table in (
-                    "ai_model_invocation", "admin_audit_log",
-                    "tenant_ai_configuration", "tenant_secret",
+            for table in (
+                "ai_model_invocation", "admin_audit_log",
+                "tenant_ai_configuration", "tenant_secret",
                 "rescan_job", "connector_quota",
                 "scan_policy", "connector", "tenant_member",
             ):

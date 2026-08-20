@@ -811,6 +811,7 @@ class ConnectorUpdateRequest(ContractModel):
 
 AIProvider = Literal["openrouter", "openai", "anthropic"]
 AIConnectionTestStatus = Literal["NOT_TESTED", "SUCCEEDED", "FAILED"]
+AIEnrichmentStatus = Literal["DISABLED", "READY", "QUEUED", "RUNNING", "ACTIVE", "DEGRADED"]
 
 
 class AIProviderConfiguration(ContractModel):
@@ -823,6 +824,11 @@ class AIProviderConfiguration(ContractModel):
     test_status: AIConnectionTestStatus = "NOT_TESTED"
     tested_at: datetime | None = None
     last_error: str | None = None
+    enrichment_status: AIEnrichmentStatus = "DISABLED"
+    pending_enrichment_jobs: int = Field(default=0, ge=0)
+    running_enrichment_jobs: int = Field(default=0, ge=0)
+    failed_enrichment_jobs: int = Field(default=0, ge=0)
+    last_enrichment_at: datetime | None = None
     updated_by: str | None = None
     updated_at: datetime | None = None
 
