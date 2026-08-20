@@ -12,7 +12,8 @@
     "tokens": "node packages/design-system/scripts/generate-tokens.mjs",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
-    "lint:css": "stylelint \"{apps,packages}/**/*.css\""
+    "lint:css": "stylelint \"{apps,packages}/**/*.css\"",
+    "perf:budget": "node scripts/check-bundle-budget.mjs"
   },
   "devDependencies": {
     "stylelint": "^16.12.0"

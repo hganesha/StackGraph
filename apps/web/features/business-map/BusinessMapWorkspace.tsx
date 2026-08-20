@@ -496,7 +496,7 @@ function ValueChainCanvas({
 }) {
   return (
     <main className={`${styles.canvas} ${controller.showGrid ? styles.canvasGrid : ""}`} aria-label="Value chain canvas">
-      <div className={styles.canvasScroll}>
+      <div className={styles.canvasScroll} tabIndex={0} role="group" aria-label="Scrollable map region">
         <div
           className={styles.stageGrid}
           style={{
@@ -624,7 +624,7 @@ function OrganizationCanvas({
 }) {
   return (
     <main className={`${styles.canvas} ${controller.showGrid ? styles.canvasGrid : ""}`} aria-label="Organization to function map">
-      <div className={styles.canvasScroll}>
+      <div className={styles.canvasScroll} tabIndex={0} role="group" aria-label="Scrollable map region">
         <div
           className={`${styles.stageGrid} ${styles.organizationGrid}`}
           style={{
