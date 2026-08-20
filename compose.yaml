@@ -171,6 +171,19 @@ services:
     volumes:
       - ./services/enterprise-discovery/repository-snapshots:/snapshots
 
+  repository-acquirer:
+    profiles: [tools]
+    build:
+      context: ./services/enterprise-discovery
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
+    entrypoint: ["python", "-m", "stackgraph_discovery.github_snapshot"]
+    command: ["--help"]
+    volumes:
+      - ./services/enterprise-discovery/repository-snapshots:/snapshots
+      - stackgraph_evidence_data:/evidence
+
   scanner-ingest:
     profiles: [tools]
     build:
@@ -230,3 +243,4 @@ services:
 
 volumes:
   stackgraph_postgres_data:
+  stackgraph_evidence_data:

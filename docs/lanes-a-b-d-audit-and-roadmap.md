@@ -14,12 +14,13 @@ capability inference, modernization analysis, and AGE projection all work togeth
 
 The main remaining risk is operationalization, not the absence of core algorithms. Acquisition, scheduling,
 scanning, projection, and intelligence can be invoked and replayed, but there is not yet a continuously deployed
-control loop that connects tenant onboarding to recurring repository and OSS refresh. Durable raw-object storage,
-provider operations, production policy/catalog governance, calibration, and owned alerting are also not complete.
+control loop that connects tenant onboarding to recurring repository and OSS refresh. The local durable evidence
+slice is implemented, but production object-storage lifecycle controls, provider operations, production
+policy/catalog governance, calibration, and owned alerting are not complete.
 
 | Area | Status | Evidence-backed conclusion | Primary remaining boundary |
 | --- | --- | --- | --- |
-| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, and AGE projection are implemented and tested | Continuously deployed scheduling, webhooks, durable raw storage, provider operations, PyPI metadata, and additional ecosystems |
+| Lane A — Data platform/OSS | **Partial** | Schema, seed, temporal facts, evidence, deps.dev, OSV, npm metadata, queue primitives, replay, freshness, dead letters, AGE projection, and a local durable evidence backend are implemented and tested | Continuously deployed scheduling, webhooks, production object-storage lifecycle controls, provider operations, PyPI metadata, and additional ecosystems |
 | Lane B — Enterprise discovery | **Partial** | GitHub snapshot acquisition, npm/Python dependency and usage scanning, registry resolution, API-surface extraction, code-unit evidence, persistence, and intelligence enqueueing are implemented and tested | GitHub App/org lifecycle, automatic acquisition-to-publication orchestration, semantic deployment/IaC parsing, two-pass operation, runtime collection, and pilot-scale proof |
 | Lane D — Intelligence/quality | **Partial** | Versioned taxonomy, evidence-constrained inference, duplicate detection, eligibility-gated modernization, impact, review/outcome capture, metrics, AI Ask, replay, and RLS are implemented and tested | Tenant policy/catalog rollout, calibration targets, dashboards/alerts, runtime validation, business-capability intelligence, and Phase 4 evidence |
 | Cross-lane contract gate | **Verified** | The v1 ontology, fact, raw-observation, scanner, read-model, and OpenAPI fixtures validate together | Generated types and drift enforcement remain incomplete; TypeScript read-model types are still maintained manually |
@@ -71,7 +72,7 @@ lanes only. Lane C completion is intentionally not scored here.
 | Milestone | Status | Delivered in A/B/D | Remaining A/B/D gate |
 | --- | --- | --- | --- |
 | 0 — Contract hardening | **Verified** | Canonical ontology and predicates, fact/evidence contract, raw observations, complete/partial snapshots, ingestion state, identity, RLS, outbox, golden fixtures, and migration checksums | Generate TypeScript/Python models from the frozen schemas and make generated drift a required gate |
-| 1 — Running ingestion substrate | **Partial** | PostgreSQL/AGE, targets/runs, leases, retries, replay, dead letters, freshness, deps.dev, OSV, npm acquisition, and projection are implemented | Deploy the scheduler/worker control loop, durable blob storage, webhook processing, and provider observability |
+| 1 — Running ingestion substrate | **Partial** | PostgreSQL/AGE, targets/runs, leases, retries, replay, dead letters, freshness, deps.dev, OSV, npm acquisition, local content-addressed evidence storage, and projection are implemented | Deploy the scheduler/worker control loop, production object-storage/lifecycle controls, webhook processing, and provider observability |
 | 2 — First vertical estate slice | **Partial** | GitHub snapshot acquisition, npm/Python scanning, exact registry-qualified dependencies, evidence persistence, projection, and bounded graph reads exist | Automate GitHub installation reconciliation through scan/publication and prove it against a real tenant slice |
 | 3 — V0 intelligence | **Partial** | Capability and modernization backends, deterministic evidence, AI-assisted constrained inference, Ask orchestration, reviews, outcomes, and metrics exist | Populate governed production policies/catalogs, calibrate results, attach alerts, and run continuously on live scans |
 | 4 — Pilot readiness | **Missing** | Unit and fresh-database integration coverage are strong | Complete security/tenant review, quota behavior, backup/replay drills, 100+ repository load tests, and owned SLOs |
@@ -131,7 +132,7 @@ lanes only. Lane C completion is intentionally not scored here.
 | Capability | Status | Implementation evidence | Verification evidence |
 | --- | --- | --- | --- |
 | GitHub repository acquisition | **Verified** | [GitHub client](../services/enterprise-discovery/stackgraph_discovery/github_client.py) and [snapshot acquirer](../services/enterprise-discovery/stackgraph_discovery/github_snapshot.py) resolve immutable repository/commit identity, enforce bounds, reject unsafe paths/origins, and classify retryable failures | GitHub acquisition tests cover unchanged revisions, truncation, rate limits, unsafe paths, and private-installation identity |
-| Immutable local snapshots | **Verified** | Revision-addressed snapshot directories contain selected files, `snapshot.json`, and a contract-v1 raw observation; existing destinations are validated before reuse | Acquisition tests and [enterprise-discovery README](../services/enterprise-discovery/README.md) |
+| Immutable snapshots and durable descriptors | **Verified** | Revision-addressed materializations contain selected files, `snapshot.json`, and a contract-v1 raw observation; a configured local evidence backend creates a deterministic checksum-addressed archive and scanner evidence retains archive-member URIs | Acquisition/evidence-store tests and [enterprise-discovery README](../services/enterprise-discovery/README.md) |
 | npm manifests and locks | **Verified** | [repository scanner](../services/enterprise-discovery/stackgraph_discovery/repository_scanner.py) reads package manifests plus npm, Yarn, and pnpm locks, with workspace/component scope | Scanner tests cover resolved dependencies and line-level evidence |
 | Python manifests and locks | **Verified** | Scanner supports `pyproject.toml`, Poetry, uv, Pipenv, and requirements files with exact-version resolution where available | Scanner tests cover Python lock, import, and reachability evidence |
 | npm registry resolution | **Verified** | [resolver](../services/enterprise-discovery/stackgraph_discovery/npm_resolution.py) combines lockfiles and repository-owned `.npmrc`, redacts auth, preserves custom origins, and distinguishes public/private identity | Resolution tests cover scoped registries, custom origins, tarballs, credentials, and portability |
@@ -220,6 +221,14 @@ lanes only. Lane C completion is intentionally not scored here.
 
 The order below is intentionally cross-lane. Later work must not compensate for missing evidence or operations by
 increasing model confidence.
+
+Implementation progress on `codex/lane-a-b-d-p0`:
+
+- Work package 1 / A-02 is **Partial**. Repository snapshots now have a tenant-scoped, content-addressed local
+  evidence backend with atomic writes, checksum verification, deterministic archives, raw-observation database
+  persistence, and archive-member URIs on persisted source artifacts.
+- A-02 remains open until a production object-store backend, encryption/key policy, retention/legal-hold rules,
+  authorized deletion workflow, restore/replay drill, and operational telemetry satisfy its exit condition.
 
 | Order | Work package | Owner | Prerequisites | Deliverable and exit condition |
 | ---: | --- | --- | --- | --- |

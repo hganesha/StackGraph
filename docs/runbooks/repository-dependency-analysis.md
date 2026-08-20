@@ -6,6 +6,7 @@ usage-evidence path. The pipeline is revision-aware and tenant-safe:
 ```text
 GitHub default-branch SHA
   -> bounded immutable repository snapshot
+  -> tenant-scoped content-addressed evidence archive
   -> scanner request v1
   -> dependency and usage facts
   -> transactional PostgreSQL publication
@@ -29,19 +30,18 @@ surfaces and per-dependency usage summaries.
 ## 2. Acquire a revision snapshot
 
 The Compose tools share `services/enterprise-discovery/repository-snapshots` as
-`/snapshots`. Acquire into that host directory:
+`/snapshots`. The acquisition tool also writes a deterministic archive to the
+`stackgraph_evidence_data` volume using a tenant-scoped, content-addressed path:
 
 ```shell
-PYTHONPATH=services/enterprise-discovery \
-python -m stackgraph_discovery.github_snapshot acme/widgets \
-  --tenant-key acme \
-  --output-dir services/enterprise-discovery/repository-snapshots
+make repository-acquire REPOSITORY=acme/widgets TENANT_KEY=acme
 ```
 
 For a private repository, set `GITHUB_TOKEN` and pass its GitHub App installation
-ID. The output reports the canonical repository key, exact source revision, and
-snapshot directory. If `--previous-revision` matches, acquisition returns
-`UNCHANGED` without fetching the tree or blobs.
+ID as `INSTALLATION_ID`. The output reports the canonical repository key, exact
+source revision, snapshot directory, archive URI, SHA-256 checksum, and byte size.
+If `PREVIOUS_REVISION` matches, acquisition returns `UNCHANGED` without fetching
+the tree or blobs.
 
 ## 3. Enqueue and build the scanner request
 
@@ -64,10 +64,17 @@ materialized `files` directory, for example:
   "snapshot": {
     "source_revision": "7f83b1657ff1fc53b92dc18148a1d65dfa135014",
     "checkout_root": "/snapshots/github-repo-123/7f83b1657ff1fc53b92dc18148a1d65dfa135014/files",
-    "requested_at": "2026-08-19T14:00:00Z"
+    "requested_at": "2026-08-19T14:00:00Z",
+    "blob_uri": "stackgraph-evidence://local/tenants/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/sha256/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "content_size_bytes": 4096
   }
 }
 ```
+
+Use the exact `blob_uri`, `content_hash`, and `content_size_bytes` printed by the
+acquisition result. These fields are optional only for backward compatibility;
+when one is supplied, all three are required.
 
 The complete document must remain valid against
 `stackgraph-foundation/contracts/v1/schemas/scanner-request.schema.json`.
@@ -83,14 +90,16 @@ make repository-scan \
 
 make scanner-persist \
   SCANNER_RESULT=/snapshots/result.json \
+  RAW_OBSERVATION=/snapshots/github-repo-123/7f83b1657ff1fc53b92dc18148a1d65dfa135014/raw-observation.json \
   TARGET_ID=00000000-0000-4000-8000-000000000100 \
   RUN_ID=00000000-0000-4000-8000-000000000101
 ```
 
 Persistence validates run/target/tenant/revision/extractor alignment, preserves
-source-artifact immutability, writes exact evidence, publishes the source
-snapshot, and advances the ingest run in one transaction. Replaying a published
-result is idempotent.
+source-artifact immutability, stores the raw observation and archive descriptor,
+writes exact archive-member evidence URIs, publishes the source snapshot, and
+advances the ingest run in one transaction. Replaying a published result is
+idempotent.
 
 ## 5. Extract a package API surface
 

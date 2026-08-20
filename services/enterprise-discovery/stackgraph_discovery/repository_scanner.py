@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from .github_snapshot import manifest_kind
 from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
@@ -52,6 +52,7 @@ JS_ARROW_FUNCTION = re.compile(
     r"(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*\{"
 )
 IDENTIFIER_PART = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|[0-9]+")
+SHA256_CONTENT_HASH = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 def canonical_json(value: object) -> str:
@@ -97,15 +98,25 @@ class Evidence:
     excerpt_hash: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
-    def as_dict(self, repository_key: str, source_revision: str) -> dict[str, Any]:
+    def as_dict(
+        self,
+        repository_key: str,
+        source_revision: str,
+        snapshot_blob_uri: str | None = None,
+    ) -> dict[str, Any]:
+        source_artifact: dict[str, Any] = {
+            "key": f"{repository_key}:{self.path}",
+            "type": "REPOSITORY_FILE",
+            "revision": source_revision,
+            "content_hash": self.content_hash,
+        }
+        if snapshot_blob_uri is not None:
+            source_artifact["uri"] = (
+                f"{snapshot_blob_uri}#path=files/{quote(self.path, safe='/')}"
+            )
         value: dict[str, Any] = {
             "type": self.evidence_type,
-            "source_artifact": {
-                "key": f"{repository_key}:{self.path}",
-                "type": "REPOSITORY_FILE",
-                "revision": source_revision,
-                "content_hash": self.content_hash,
-            },
+            "source_artifact": source_artifact,
             "locator": dict(self.locator),
         }
         if self.excerpt_hash is not None:
@@ -192,9 +203,20 @@ class ScanInput:
     source_revision: str
     checkout_root: Path
     observed_at: str
+    snapshot_blob_uri: str | None
+    snapshot_content_hash: str | None
+    snapshot_content_size_bytes: int | None
     max_files: int
     max_bytes: int
     deadline_seconds: int
+
+
+def _evidence_dict(evidence: Evidence, scan_input: ScanInput) -> dict[str, Any]:
+    return evidence.as_dict(
+        scan_input.repository_key,
+        scan_input.source_revision,
+        scan_input.snapshot_blob_uri,
+    )
 
 
 def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
@@ -282,6 +304,41 @@ def _parse_request(request: Mapping[str, Any]) -> ScanInput:
         raise ValueError("scanner limits must be positive")
     requested_at = str(snapshot.get("requested_at") or "")
     datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    descriptor_values = (
+        snapshot.get("blob_uri"),
+        snapshot.get("content_hash"),
+        snapshot.get("content_size_bytes"),
+    )
+    if any(value is not None for value in descriptor_values) and not all(
+        value is not None for value in descriptor_values
+    ):
+        raise ValueError(
+            "snapshot.blob_uri, content_hash, and content_size_bytes must be supplied together"
+        )
+    snapshot_blob_uri: str | None = None
+    snapshot_content_hash: str | None = None
+    snapshot_content_size_bytes: int | None = None
+    if all(value is not None for value in descriptor_values):
+        snapshot_blob_uri = str(descriptor_values[0])
+        parsed_uri = urlsplit(snapshot_blob_uri)
+        if (
+            not parsed_uri.scheme
+            or not parsed_uri.netloc
+            or parsed_uri.username is not None
+            or parsed_uri.password is not None
+            or parsed_uri.query
+            or parsed_uri.fragment
+        ):
+            raise ValueError(
+                "snapshot.blob_uri must be an absolute URI without credentials, query, or fragment"
+            )
+        snapshot_content_hash = str(descriptor_values[1])
+        if not SHA256_CONTENT_HASH.fullmatch(snapshot_content_hash):
+            raise ValueError("snapshot.content_hash must be a SHA-256 content hash")
+        size = descriptor_values[2]
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise ValueError("snapshot.content_size_bytes must be a non-negative integer")
+        snapshot_content_size_bytes = size
     repository_name = str(target.get("name") or target.get("canonical_key") or "repository")
     return ScanInput(
         run_id=str(request.get("run_id") or ""),
@@ -291,6 +348,9 @@ def _parse_request(request: Mapping[str, Any]) -> ScanInput:
         source_revision=str(snapshot.get("source_revision") or ""),
         checkout_root=root,
         observed_at=requested_at,
+        snapshot_blob_uri=snapshot_blob_uri,
+        snapshot_content_hash=snapshot_content_hash,
+        snapshot_content_size_bytes=snapshot_content_size_bytes,
         **values,
     )
 
@@ -1083,7 +1143,7 @@ def _code_unit_facts(scan_input: ScanInput, units: Iterable[CodeUnit]) -> list[d
             "source_revision": scan_input.source_revision,
             "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
             "properties": {"analysis_kind": "CODE_IMPLEMENTATION_SUMMARY"},
-            "evidence": [evidence.as_dict(scan_input.repository_key, scan_input.source_revision)],
+            "evidence": [_evidence_dict(evidence, scan_input)],
         })
     return facts
 
@@ -1311,7 +1371,7 @@ def _dependency_facts(
             "source_revision": scan_input.source_revision,
             "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
             "properties": properties,
-            "evidence": [item.as_dict(scan_input.repository_key, scan_input.source_revision) for item in evidence],
+            "evidence": [_evidence_dict(item, scan_input) for item in evidence],
         })
     return facts
 
@@ -1355,14 +1415,26 @@ def _usage_findings(
             "denominator": "public API size unknown until artifact analysis",
             "limitations": limitations,
         }
-        evidence = [dependency.declaration.as_dict(scan_input.repository_key, scan_input.source_revision)]
-        evidence.extend(Evidence(
-            reference.path,
-            "SOURCE_REFERENCE",
-            _content_hash_from_evidence_context(reference.path, scan_input.checkout_root),
-            {"path": reference.path, "line_start": reference.line, "line_end": reference.line},
-            sha256_key(reference.path, reference.line, sorted(reference.symbols)),
-        ).as_dict(scan_input.repository_key, scan_input.source_revision) for reference in matches)
+        evidence = [_evidence_dict(dependency.declaration, scan_input)]
+        evidence.extend(
+            _evidence_dict(
+                Evidence(
+                    reference.path,
+                    "SOURCE_REFERENCE",
+                    _content_hash_from_evidence_context(
+                        reference.path, scan_input.checkout_root
+                    ),
+                    {
+                        "path": reference.path,
+                        "line_start": reference.line,
+                        "line_end": reference.line,
+                    },
+                    sha256_key(reference.path, reference.line, sorted(reference.symbols)),
+                ),
+                scan_input,
+            )
+            for reference in matches
+        )
         identity = {
             "tenant": scan_input.tenant_key,
             "repository": scan_input.repository_key,

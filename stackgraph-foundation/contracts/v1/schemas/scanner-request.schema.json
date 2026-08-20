@@ -27,7 +27,15 @@
       "properties": {
         "source_revision": {"type": "string", "minLength": 7},
         "checkout_root": {"type": "string", "minLength": 1},
-        "requested_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+        "requested_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "blob_uri": {"type": "string", "format": "uri"},
+        "content_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "content_size_bytes": {"type": "integer", "minimum": 0}
+      },
+      "dependentRequired": {
+        "blob_uri": ["content_hash", "content_size_bytes"],
+        "content_hash": ["blob_uri", "content_size_bytes"],
+        "content_size_bytes": ["blob_uri", "content_hash"]
       },
       "additionalProperties": false
     },

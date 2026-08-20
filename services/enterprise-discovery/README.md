@@ -13,6 +13,7 @@ It supports public repositories without authentication and private/customer repo
 - Enforces per-file, total-byte, and file-count limits.
 - Marks snapshots `PARTIAL` when GitHub truncates the tree or a configured limit skips a target file.
 - Writes an immutable, revision-addressed directory containing retrieved files, `snapshot.json`, and a contract-v1 `raw-observation.json` envelope.
+- When an evidence-store root is configured, creates a deterministic tar archive, verifies its SHA-256 checksum, and atomically stores it beneath a hashed tenant prefix. The raw observation then contains a durable `blob_uri` instead of an inline payload.
 
 ## Run locally
 
@@ -21,7 +22,8 @@ From this directory:
 ```shell
 python -m stackgraph_discovery.github_snapshot owner/repository \
   --output-dir /tmp/stackgraph-snapshots \
-  --tenant-key example-tenant
+  --tenant-key example-tenant \
+  --evidence-store-root /var/lib/stackgraph/evidence
 ```
 
 For a private repository, expose a short-lived GitHub App installation token or another read-only token through an environment variable:
@@ -34,6 +36,12 @@ GITHUB_TOKEN=... python -m stackgraph_discovery.github_snapshot owner/private-re
 ```
 
 The token needs read access to repository contents. The default token variable can be changed with `--token-env`; the token itself is never accepted as a command-line argument. `--installation-id` qualifies a customer repository identity by its GitHub App installation. Omit it for a globally shared public OSS repository target.
+
+The local evidence backend uses `stackgraph-evidence://local/...` descriptors so
+database records never expose host paths or tenant keys. Content is addressed by
+checksum and replays verify the existing object before reuse. Tenant deletion is
+available only as an explicit lifecycle operation; the acquisition command never
+removes evidence.
 
 Reconciliation can skip unchanged content:
 
@@ -62,6 +70,8 @@ contract. It emits purl-based dependency facts from npm and Python manifests and
 locks, then independently records declared, resolved, referenced, statically
 reachable, and optionally runtime-observed use. Unused and narrow-use candidates
 are emitted only for complete source scans and always include limitations.
+When the request contains the snapshot `blob_uri`, checksum, and size descriptor,
+every file evidence reference points to its exact archive member.
 
 ```shell
 python -m stackgraph_discovery.repository_scanner request.json --output result.json
