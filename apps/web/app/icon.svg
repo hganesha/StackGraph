@@ -1,0 +1,91 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="StackGraph">
+  <defs>
+    <style>
+      .bg-dark { display: none; }
+      @media (prefers-color-scheme: dark) {
+        .bg-light { display: none; }
+        .bg-dark  { display: block; }
+      }
+    </style>
+    <linearGradient id="bgLight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#F1F0EC"/>
+    </linearGradient>
+    <linearGradient id="bgDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232630"/><stop offset="1" stop-color="#14151A"/>
+    </linearGradient>
+
+    <linearGradient id="blueTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9BC4"/><stop offset="1" stop-color="#5D80B4"/>
+    </linearGradient>
+    <linearGradient id="purpleTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A78CC7"/><stop offset="1" stop-color="#8368AE"/>
+    </linearGradient>
+    <linearGradient id="tealTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#63BEB2"/><stop offset="1" stop-color="#3AA294"/>
+    </linearGradient>
+
+    <radialGradient id="blueNode" cx="0.35" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#7E9BC4"/><stop offset="1" stop-color="#4A6FA5"/>
+    </radialGradient>
+    <radialGradient id="purpleNode" cx="0.35" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#A78CC7"/><stop offset="1" stop-color="#7B5AA6"/>
+    </radialGradient>
+    <radialGradient id="tealNode" cx="0.35" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#63BEB2"/><stop offset="1" stop-color="#2A9D8F"/>
+    </radialGradient>
+    <radialGradient id="redNode" cx="0.35" cy="0.30" r="0.85">
+      <stop offset="0" stop-color="#D0483F"/><stop offset="1" stop-color="#B3261E"/>
+    </radialGradient>
+
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1B2A44" flood-opacity="0.18"/>
+    </filter>
+    <filter id="nodeShadow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1B2A44" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+
+  <!-- adaptive background -->
+  <rect class="bg-light" x="62" y="62" width="900" height="900" rx="210" fill="url(#bgLight)"/>
+  <rect class="bg-dark"  x="62" y="62" width="900" height="900" rx="210" fill="url(#bgDark)"/>
+
+  <!-- connectors -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M570,300 C 640,300 648,235 718,235" stroke="#4A6FA5" stroke-width="15"/>
+    <path d="M570,415 C 645,415 645,400 718,400" stroke="#7B5AA6" stroke-width="15"/>
+    <path d="M570,530 C 645,530 648,565 718,565" stroke="#2A9D8F" stroke-width="15"/>
+    <path d="M470,655 C 560,720 620,730 718,730" stroke="#B3261E" stroke-width="15" stroke-dasharray="4 30"/>
+  </g>
+
+  <!-- stacked layers -->
+  <g filter="url(#cardShadow)">
+    <polygon points="380,395 570,300 570,355 380,450" fill="#3D5B87"/>
+    <polygon points="190,300 380,395 380,450 190,355" fill="#4A6FA5"/>
+    <polygon points="380,205 570,300 380,395 190,300" fill="url(#blueTop)"/>
+  </g>
+  <g filter="url(#cardShadow)">
+    <polygon points="380,510 570,415 570,470 380,565" fill="#654A88"/>
+    <polygon points="190,415 380,510 380,565 190,470" fill="#7B5AA6"/>
+    <polygon points="380,320 570,415 380,510 190,415" fill="url(#purpleTop)"/>
+  </g>
+  <g filter="url(#cardShadow)">
+    <polygon points="380,625 570,530 570,585 380,680" fill="#228175"/>
+    <polygon points="190,530 380,625 380,680 190,585" fill="#2A9D8F"/>
+    <polygon points="380,435 570,530 380,625 190,530" fill="url(#tealTop)"/>
+  </g>
+
+  <!-- nodes -->
+  <g filter="url(#nodeShadow)">
+    <circle cx="780" cy="235" r="62" fill="url(#blueNode)"/>
+    <circle cx="780" cy="400" r="62" fill="url(#purpleNode)"/>
+    <circle cx="780" cy="565" r="62" fill="url(#tealNode)"/>
+    <circle cx="780" cy="730" r="62" fill="url(#redNode)"/>
+  </g>
+
+  <!-- warning glyph -->
+  <g>
+    <path d="M780,699 L807,745 A9,9 0 0 1 799,754 L761,754 A9,9 0 0 1 753,745 Z" fill="#FFFFFF"/>
+    <rect x="775" y="716" width="10" height="21" rx="5" fill="#B3261E"/>
+    <circle cx="780" cy="746" r="5.5" fill="#B3261E"/>
+  </g>
+</svg>
