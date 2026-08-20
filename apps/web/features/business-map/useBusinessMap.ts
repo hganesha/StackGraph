@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { stackGraphClient, ApiRequestError } from "@stackgraph/shared";
+import { useCan } from "@/lib/session";
 import {
   BUSINESS_FUNCTIONS,
   ORGANIZATION_UNIT_TEMPLATE,
@@ -11,6 +13,10 @@ import {
   type Process,
   type ValueChainStep,
 } from "./catalog";
+import { fromApiState, toApiState } from "./serialize";
+
+// A single canonical map per tenant for now; the workspace loads or creates it by this key.
+const MAP_KEY = "enterprise.value-chain";
 
 export type PanelMode = "capability" | null;
 
@@ -162,6 +168,8 @@ function isSavedState(value: unknown): value is BusinessMapState {
 }
 
 export function useBusinessMap() {
+  // Editing writes to the server; a view-only session stays on the local draft only.
+  const canEdit = useCan("execute");
   const [map, setMap] = useState<BusinessMapState>(createInitialState);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelMode>(null);
@@ -170,9 +178,20 @@ export function useBusinessMap() {
   const [zoom, setZoomState] = useState(1);
   const [hydrated, setHydrated] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [serverBacked, setServerBacked] = useState(false);
   const skipFirstSave = useRef(true);
+  // Server identity/version for optimistic-concurrency saves; refs so the debounced
+  // save reads the latest without re-subscribing.
+  const mapIdRef = useRef<string | null>(null);
+  const versionRef = useRef<number>(0);
+  const savingRef = useRef(false);
 
+  // Hydrate: seed instantly from the local draft (offline-first), then reconcile with the
+  // server — load the tenant's map or create it from the local/default state. If the API is
+  // unreachable the workspace stays fully usable on the local draft alone.
   useEffect(() => {
+    let cancelled = false;
+    let seeded = createInitialState();
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY)
         ?? window.localStorage.getItem(PREVIOUS_STORAGE_KEY)
@@ -183,7 +202,7 @@ export function useBusinessMap() {
           const defaults = createInitialState();
           const catalog = Array.isArray(parsed.catalog) ? parsed.catalog : defaults.catalog;
           const organizationUnits = Array.isArray(parsed.organizationUnits) ? parsed.organizationUnits : defaults.organizationUnits;
-          setMap({
+          seeded = {
             ...defaults,
             ...parsed,
             viewMode: parsed.viewMode === "organization" ? "organization" : "value-chain",
@@ -193,16 +212,47 @@ export function useBusinessMap() {
             functionAssignments: Array.isArray(parsed.functionAssignments)
               ? parsed.functionAssignments
               : seedFunctionAssignments(catalog, organizationUnits),
-          });
+          };
+          setMap(seeded);
         }
       }
     } catch {
       // A corrupt local draft should never block the workspace.
-    } finally {
-      setHydrated(true);
     }
+
+    (async () => {
+      try {
+        const list = await stackGraphClient.listBusinessMaps();
+        const existing = list.maps.find((m) => m.map_key === MAP_KEY);
+        if (existing) {
+          const detail = await stackGraphClient.getBusinessMap(existing.id);
+          if (cancelled) return;
+          mapIdRef.current = detail.id;
+          versionRef.current = detail.version;
+          setMap(fromApiState(detail.state));
+          setServerBacked(true);
+        } else if (canEdit) {
+          // No server map yet — only a user who can edit may create it.
+          const detail = await stackGraphClient.createBusinessMap({ map_key: MAP_KEY, state: toApiState(seeded) });
+          if (cancelled) return;
+          mapIdRef.current = detail.id;
+          versionRef.current = detail.version;
+          setServerBacked(true);
+        }
+      } catch {
+        // Offline / fixtures-without-backend: keep working from the local draft.
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // Persist: always cache the draft locally; when server-backed, debounce a whole-map save
+  // guarded by the optimistic version, refetching once on a version conflict.
   useEffect(() => {
     if (!hydrated) return;
     if (skipFirstSave.current) {
@@ -212,6 +262,32 @@ export function useBusinessMap() {
     const timer = window.setTimeout(() => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
       setSavedAt(Date.now());
+      const mapId = mapIdRef.current;
+      if (!mapId || !canEdit || savingRef.current) return;
+      savingRef.current = true;
+      (async () => {
+        try {
+          try {
+            const saved = await stackGraphClient.saveBusinessMap(mapId, {
+              expected_version: versionRef.current,
+              state: toApiState(map),
+            });
+            versionRef.current = saved.version;
+          } catch (error) {
+            if (error instanceof ApiRequestError && error.status === 409) {
+              const latest = await stackGraphClient.getBusinessMap(mapId);
+              const retried = await stackGraphClient.saveBusinessMap(mapId, {
+                expected_version: latest.version,
+                state: toApiState(map),
+              });
+              versionRef.current = retried.version;
+            }
+            // Other errors: the local draft already holds the change; retry on next edit.
+          }
+        } finally {
+          savingRef.current = false;
+        }
+      })();
     }, 350);
     return () => window.clearTimeout(timer);
   }, [hydrated, map]);
@@ -657,6 +733,7 @@ export function useBusinessMap() {
     setZoom,
     hydrated,
     savedAt,
+    serverBacked,
     placementsByStage,
     capabilityById,
     selectCapability,

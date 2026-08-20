@@ -522,6 +522,137 @@ class Phase3IntelligenceMetrics(ContractModel):
     model_latency_ms_p95: float | None = Field(default=None, ge=0)
 
 
+# --- Business Map -----------------------------------------------------------
+# The contract mirrors the workspace's client state (kebab view modes, string keys as ids)
+# so the UI serializes with a thin adapter and no reducer changes. The store maps these
+# keys to the persisted UUIDs and the DB's uppercase enums.
+
+MaturityLevel = Literal[1, 2, 3, 4, 5]
+BusinessMapViewMode = Literal["value-chain", "organization"]
+BusinessMapStatus = Literal["DRAFT", "ACTIVE", "ARCHIVED"]
+
+
+class BusinessMapLane(ContractModel):
+    id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    sublabel: str = ""
+    color: str = ""
+    gradient: str = ""
+    icon: str = ""
+    order: int = Field(ge=0)
+
+
+class BusinessMapCapabilityNode(ContractModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    kpis: list[str] = Field(default_factory=list)
+    owner: str | None = None
+
+
+class BusinessMapProcessNode(ContractModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    capabilities: list[BusinessMapCapabilityNode] = Field(default_factory=list)
+
+
+class BusinessMapFunctionNode(ContractModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    color: str = ""
+    gradient: str = ""
+    icon: str = ""
+    processes: list[BusinessMapProcessNode] = Field(default_factory=list)
+
+
+class BusinessMapPlacement(ContractModel):
+    capability_id: str = Field(min_length=1)
+    stage_id: str | None = None
+    maturity: MaturityLevel
+    source_function_id: str | None = None
+
+
+class BusinessMapSharedGroup(ContractModel):
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = ""
+    capability_ids: list[str] = Field(default_factory=list)
+    start_stage_id: str = Field(min_length=1)
+    end_stage_id: str = Field(min_length=1)
+
+
+class BusinessMapFunctionAssignment(ContractModel):
+    function_id: str = Field(min_length=1)
+    unit_id: str = Field(min_length=1)
+
+
+class BusinessMapStateModel(ContractModel):
+    title: str = Field(min_length=1)
+    view_mode: BusinessMapViewMode = "value-chain"
+    template_id: str = Field(min_length=1)
+    stages: list[BusinessMapLane] = Field(default_factory=list)
+    organization_units: list[BusinessMapLane] = Field(default_factory=list)
+    catalog: list[BusinessMapFunctionNode] = Field(default_factory=list)
+    placements: list[BusinessMapPlacement] = Field(default_factory=list)
+    shared_groups: list[BusinessMapSharedGroup] = Field(default_factory=list)
+    function_assignments: list[BusinessMapFunctionAssignment] = Field(default_factory=list)
+
+
+class BusinessMapSummary(ContractModel):
+    id: UUID
+    map_key: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    view_mode: BusinessMapViewMode
+    template_id: str = Field(min_length=1)
+    status: BusinessMapStatus
+    version: int = Field(ge=1)
+    created_at: datetime
+    updated_at: datetime
+
+
+class BusinessMapList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    maps: list[BusinessMapSummary]
+    page_info: PageInfo
+
+
+class BusinessMapDetail(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    map_key: str = Field(min_length=1)
+    status: BusinessMapStatus
+    version: int = Field(ge=1)
+    created_at: datetime
+    updated_at: datetime
+    state: BusinessMapStateModel
+
+
+class BusinessMapCreateRequest(ContractModel):
+    map_key: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    state: BusinessMapStateModel
+
+
+class BusinessMapSaveRequest(ContractModel):
+    expected_version: int = Field(ge=1)
+    state: BusinessMapStateModel
+
+
+class BusinessMapRevisionSummary(ContractModel):
+    version: int = Field(ge=1)
+    actor_key: str = Field(min_length=1)
+    created_at: datetime
+
+
+class BusinessMapRevisionList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    business_map_id: UUID
+    revisions: list[BusinessMapRevisionSummary]
+
+
 class ErrorResponse(ContractModel):
     code: str
     message: str

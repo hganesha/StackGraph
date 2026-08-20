@@ -6,10 +6,17 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request
 
 from app.auth import Principal
+from app.errors import APIError
 from app.models import (
     ApplicationDetail,
     AskRequest,
     AskResponse,
+    BusinessMapCreateRequest,
+    BusinessMapDetail,
+    BusinessMapList,
+    BusinessMapRevisionList,
+    BusinessMapSaveRequest,
+    BusinessMapSummary,
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
@@ -82,6 +89,24 @@ class ReadModelsProtocol(Protocol):
     async def phase3_intelligence_metrics(
         self, *, tenant_id: UUID | None,
     ) -> Phase3IntelligenceMetrics: ...
+    async def list_business_maps(
+        self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
+    ) -> BusinessMapList: ...
+    async def create_business_map(
+        self, request: BusinessMapCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapDetail: ...
+    async def business_map_detail(
+        self, map_id: UUID, *, tenant_id: UUID | None,
+    ) -> BusinessMapDetail: ...
+    async def save_business_map(
+        self, map_id: UUID, request: BusinessMapSaveRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapDetail: ...
+    async def archive_business_map(
+        self, map_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> BusinessMapSummary: ...
+    async def business_map_revisions(
+        self, map_id: UUID, *, tenant_id: UUID | None,
+    ) -> BusinessMapRevisionList: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -103,6 +128,16 @@ def _principal(request: Request) -> Principal:
 
 def _store(request: Request) -> ReadModelsProtocol:
     return request.app.state.read_models
+
+
+def _require(principal: Principal, capability: str) -> None:
+    """Enforce a capability on the ladder; raise 403 when the principal lacks it."""
+    if not principal.has_capability(capability):
+        raise APIError(
+            403, "FORBIDDEN",
+            f"This action requires the '{capability}' capability.",
+            {"required_capability": capability},
+        )
 
 
 def _ask_service(request: Request) -> AskServiceProtocol:
@@ -356,3 +391,75 @@ async def record_modernization_validation_outcome(
 async def get_phase3_intelligence_metrics(request: Request) -> Phase3IntelligenceMetrics:
     principal = _principal(request)
     return await _store(request).phase3_intelligence_metrics(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/business-maps", response_model=BusinessMapList,
+    response_model_exclude_none=True, operation_id="listBusinessMaps", tags=["business-map"],
+)
+async def list_business_maps(
+    request: Request,
+    cursor: str | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> BusinessMapList:
+    principal = _principal(request)
+    _require(principal, "view")
+    return await _store(request).list_business_maps(
+        tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
+    )
+
+
+@router.post(
+    "/business-maps", response_model=BusinessMapDetail, status_code=201,
+    response_model_exclude_none=True, operation_id="createBusinessMap", tags=["business-map"],
+)
+async def create_business_map(body: BusinessMapCreateRequest, request: Request) -> BusinessMapDetail:
+    principal = _principal(request)
+    _require(principal, "execute")
+    return await _store(request).create_business_map(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/business-maps/{id}", response_model=BusinessMapDetail,
+    response_model_exclude_none=True, operation_id="getBusinessMap", tags=["business-map"],
+)
+async def get_business_map(id: UUID, request: Request) -> BusinessMapDetail:
+    principal = _principal(request)
+    _require(principal, "view")
+    return await _store(request).business_map_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/business-maps/{id}", response_model=BusinessMapDetail,
+    response_model_exclude_none=True, operation_id="saveBusinessMap", tags=["business-map"],
+)
+async def save_business_map(id: UUID, body: BusinessMapSaveRequest, request: Request) -> BusinessMapDetail:
+    principal = _principal(request)
+    _require(principal, "execute")
+    return await _store(request).save_business_map(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.delete(
+    "/business-maps/{id}", response_model=BusinessMapSummary,
+    response_model_exclude_none=True, operation_id="archiveBusinessMap", tags=["business-map"],
+)
+async def archive_business_map(id: UUID, request: Request) -> BusinessMapSummary:
+    principal = _principal(request)
+    _require(principal, "execute")
+    return await _store(request).archive_business_map(
+        id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/business-maps/{id}/revisions", response_model=BusinessMapRevisionList,
+    response_model_exclude_none=True, operation_id="listBusinessMapRevisions", tags=["business-map"],
+)
+async def list_business_map_revisions(id: UUID, request: Request) -> BusinessMapRevisionList:
+    principal = _principal(request)
+    _require(principal, "view")
+    return await _store(request).business_map_revisions(id, tenant_id=principal.tenant_id)

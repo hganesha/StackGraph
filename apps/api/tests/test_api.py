@@ -36,6 +36,9 @@ from app.models import (
     ModernizationValidationOutcomeResult,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
+    BusinessMapDetail,
+    BusinessMapList,
+    BusinessMapStateModel,
 )
 
 
@@ -70,6 +73,22 @@ class StubReadModels:
 
     async def ask(self, request: AskRequest, *, tenant_id):
         return AskResponse(text=request.question, citations=[], result_kind="UNSUPPORTED")
+
+    def _business_map_detail(self) -> BusinessMapDetail:
+        return BusinessMapDetail(
+            id=UUID("00000000-0000-4000-8000-000000000901"), map_key="enterprise.value-chain",
+            status="ACTIVE", version=1, created_at=NOW, updated_at=NOW,
+            state=BusinessMapStateModel(title="Map", view_mode="value-chain", template_id="porter"),
+        )
+
+    async def list_business_maps(self, *, tenant_id, cursor, limit):
+        self.last_tenant_id = tenant_id
+        return BusinessMapList(as_of=NOW, maps=[], page_info=PageInfo(has_next_page=False))
+
+    async def create_business_map(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._business_map_detail()
 
     async def application_detail(self, application_id, *, tenant_id):
         raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
@@ -378,6 +397,59 @@ def test_signed_session_rejects_missing_expired_and_tampered_tokens() -> None:
     assert (missing.status_code, missing.json()["code"]) == (401, "AUTH_REQUIRED")
     assert (expired_response.status_code, expired_response.json()["code"]) == (401, "SESSION_EXPIRED")
     assert (tampered.status_code, tampered.json()["code"]) == (401, "INVALID_SESSION")
+
+
+def _business_map_state() -> dict:
+    return {"title": "Map", "view_mode": "value-chain", "template_id": "porter"}
+
+
+def test_business_map_write_requires_execute_capability() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    view_only = create_session_token(
+        secret, actor_key="viewer", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=["view"],
+    )
+
+    # A viewer may read the list...
+    listed = asyncio.run(request(
+        app, "GET", "/api/v1/business-maps", headers={"Authorization": f"Bearer {view_only}"},
+    ))
+    assert listed.status_code == 200
+
+    # ...but may not create.
+    forbidden = asyncio.run(request(
+        app, "POST", "/api/v1/business-maps",
+        headers={"Authorization": f"Bearer {view_only}"},
+        json={"map_key": "enterprise.value-chain", "state": _business_map_state()},
+    ))
+    assert forbidden.status_code == 403
+    assert forbidden.json()["code"] == "FORBIDDEN"
+    assert forbidden.json()["details"]["required_capability"] == "execute"
+    assert store.last_actor_key is None  # the store was never reached
+
+
+def test_business_map_write_allowed_with_execute_capability() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    editor = create_session_token(
+        secret, actor_key="editor", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=["execute"],
+    )
+
+    created = asyncio.run(request(
+        app, "POST", "/api/v1/business-maps",
+        headers={"Authorization": f"Bearer {editor}"},
+        json={"map_key": "enterprise.value-chain", "state": _business_map_state()},
+    ))
+    assert created.status_code == 201
+    assert store.last_actor_key == "editor"
 
 
 def test_api_errors_use_contract_shape_and_request_id() -> None:
