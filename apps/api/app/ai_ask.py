@@ -66,6 +66,55 @@ class AIInvoker(Protocol):
 
 
 @dataclass(slots=True)
+class TenantConfiguredAIAskService:
+    """Resolve a tenant's encrypted provider configuration at request time."""
+
+    database: Any
+    deterministic: DeterministicAskService
+    encryption_key: str
+    environment_fallback: DeterministicAskService | None = None
+    fallback_enabled: bool = True
+    max_evidence_chars: int = 50_000
+
+    async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse:
+        if tenant_id is None:
+            return await self._fallback(request, tenant_id=tenant_id)
+        try:
+            row = await self.database.fetch_one(
+                """
+                SELECT c.provider,c.model,c.enabled,
+                  pgp_sym_decrypt(s.ciphertext,%s)::text AS api_key
+                FROM tenant_ai_configuration c
+                LEFT JOIN tenant_secret s ON s.id=c.credential_secret_id
+                """,
+                (self.encryption_key,), tenant_id=tenant_id,
+            )
+        except PsycopgError:
+            logger.warning("Tenant AI configuration unavailable; using Ask fallback")
+            return await self._fallback(request, tenant_id=tenant_id)
+        if not row or not row["enabled"] or not row["model"] or not row["api_key"]:
+            return await self._fallback(request, tenant_id=tenant_id)
+
+        from stackgraph_ai import AISettings, build_ai_service
+
+        ai = build_ai_service(
+            AISettings.for_provider(row["provider"], row["model"], row["api_key"]),
+            database=self.database,
+        )
+        return await AIAskOrchestrator(
+            deterministic=self.deterministic,
+            ai=ai,
+            route="default",
+            fallback_enabled=self.fallback_enabled,
+            max_evidence_chars=self.max_evidence_chars,
+        ).ask(request, tenant_id=tenant_id)
+
+    async def _fallback(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse:
+        service = self.environment_fallback or self.deterministic
+        return await service.ask(request, tenant_id=tenant_id)
+
+
+@dataclass(slots=True)
 class AIAskOrchestrator:
     """Lets a model select and explain allowlisted deterministic estate queries."""
 

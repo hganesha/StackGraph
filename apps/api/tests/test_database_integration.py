@@ -39,12 +39,23 @@ async def exercise_read_models() -> None:
     try:
         store = ReadModelStore(database)
         summary = await store.estate_summary(tenant_id=None, cursor=None, limit=10)
+        technology_summary = await store.estate_summary(
+            tenant_id=None,
+            cursor=None,
+            limit=10,
+            namespaces=["TECHNOLOGY", "OSS"],
+        )
         modernization = await store.modernization(tenant_id=None, cursor=None, limit=10)
         answer = await store.ask(AskRequest(question="How many items are in the estate?"), tenant_id=None)
 
         assert summary.contract_version == "1.0.0"
         assert summary.counts.applications >= 0
         assert 0 <= summary.coverage.facts_with_evidence_ratio <= 1
+        assert technology_summary.ranked_items
+        assert all(
+            item.domain in {"TECHNOLOGY", "OSS"}
+            for item in technology_summary.ranked_items
+        )
         assert modernization.contract_version == "1.0.0"
         assert answer.result_kind == "TABLE"
 
@@ -525,9 +536,22 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         json={"provider": "OTHER", "display_name": "bad",
                               "credential_reference": "ghp_" + "a" * 36},
                     )
-                    return member, members, connector, repository, policy, rescan_a, rescan_b, status, raw
+                    ai_saved = await client.put(
+                        "/admin/ai-configuration",
+                        json={"provider": "openrouter", "model": "test/model",
+                              "api_key": "integration-secret-5678"},
+                    )
+                    ai_read = await client.get("/admin/ai-configuration")
+                    ai_removed = await client.delete("/admin/ai-configuration/key")
+                    return (
+                        member, members, connector, repository, policy, rescan_a, rescan_b,
+                        status, raw, ai_saved, ai_read, ai_removed,
+                    )
 
-        member, members, connector, repository, policy, rescan_a, rescan_b, status, raw = asyncio.run(exercise())
+        (
+            member, members, connector, repository, policy, rescan_a, rescan_b,
+            status, raw, ai_saved, ai_read, ai_removed,
+        ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
         assert members.status_code == 200 and len(members.json()["members"]) == 1
@@ -541,6 +565,10 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert rescan_a.json()["id"] == rescan_b.json()["id"]
         assert status.status_code == 200 and status.json()["policy"]["cadence"] == "HOURLY"
         assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
+        assert ai_saved.status_code == 200 and ai_saved.json()["key_fingerprint"] == "5678"
+        assert "api_key" not in ai_saved.json()
+        assert ai_read.json()["model"] == "test/model" and ai_read.json()["key_configured"] is True
+        assert ai_removed.json()["key_configured"] is False
 
         with psycopg.connect(database_url) as connection:
             configure_tenant(connection)
@@ -576,8 +604,10 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM connector_account WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
-            for table in (
-                "admin_audit_log", "rescan_job", "connector_quota",
+                for table in (
+                    "ai_model_invocation", "admin_audit_log",
+                    "tenant_ai_configuration", "tenant_secret",
+                "rescan_job", "connector_quota",
                 "scan_policy", "connector", "tenant_member",
             ):
                 connection.execute(f"DELETE FROM {table} WHERE tenant_id=%s", (tenant_id,))

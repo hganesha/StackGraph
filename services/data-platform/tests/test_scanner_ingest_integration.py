@@ -130,7 +130,11 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
             self.assertEqual(persisted.usage_summary_count, 1)
             self.assertTrue(replay.replayed)
             usage = connection.execute(
-                "SELECT referenced,static_reachability FROM dependency_usage_summary"
+                """
+                SELECT referenced,static_reachability
+                FROM dependency_usage_summary WHERE tenant_id=%s
+                """,
+                (tenant["id"],),
             ).fetchone()
             self.assertEqual(usage, {"referenced": True, "static_reachability": "OBSERVED"})
             code_unit = connection.execute(
@@ -142,6 +146,53 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
             ).fetchone()
             self.assertEqual(code_unit["qualified_name"], "debounceRequest")
             self.assertEqual(code_unit["covering_tests"], ["src/client.test.ts"])
+
+            replay_run = connection.execute(
+                """
+                INSERT INTO ingest_run(
+                  tenant_id,ingest_target_id,trigger_kind,requested_source_revision
+                ) VALUES (%s,%s,'MANUAL','revision-1') RETURNING id
+                """,
+                (tenant["id"], target["id"]),
+            ).fetchone()
+            replay_with_new_scanner = _result(
+                tenant_key=tenant_key,
+                repository_key=repository_key,
+                run_id=str(replay_run["id"]),
+                revision="revision-1",
+                extractor_version="1.1.0",
+                include_fact=True,
+            )
+            for fact in replay_with_new_scanner["facts"]:
+                fact["idempotency_key"] = sha256_key(
+                    fact["idempotency_key"], "scanner-version-1.1.0"
+                )
+            refreshed = persist_scanner_result_connection(
+                connection,
+                replay_with_new_scanner,
+                target_id=target["id"],
+                run_id=replay_run["id"],
+                raw_observation=_raw_observation(
+                    tenant_key, repository_key, "revision-1"
+                ),
+            )
+            self.assertFalse(refreshed.replayed)
+            refreshed_code_unit = connection.execute(
+                """
+                SELECT summary.source_snapshot_id,summary.fact_assertion_id,
+                       fact.extractor_version
+                FROM code_implementation_summary summary
+                JOIN fact_assertion fact ON fact.id=summary.fact_assertion_id
+                WHERE summary.tenant_id=%s
+                """,
+                (tenant["id"],),
+            ).fetchall()
+            self.assertEqual(len(refreshed_code_unit), 1)
+            self.assertEqual(refreshed_code_unit[0]["extractor_version"], "1.1.0")
+            self.assertEqual(
+                str(refreshed_code_unit[0]["source_snapshot_id"]),
+                refreshed.snapshot_id,
+            )
             artifacts = connection.execute(
                 """
                 SELECT external_key,blob_uri FROM source_artifact

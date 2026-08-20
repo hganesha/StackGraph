@@ -48,12 +48,16 @@ import type {
   ConnectorRegisterRequest,
   GitHubRepositoryConnectRequest,
   ConnectorUpdateRequest,
+  AIProviderConfiguration,
+  AIProviderConfigurationUpdateRequest,
+  AIProviderConnectionTest,
   ScanPolicy,
   ScanPolicyUpdateRequest,
   ScanStatus,
   RescanRequest,
   RescanJob,
   RescanJobList,
+  Namespace,
 } from "../contracts/read-models";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
@@ -74,8 +78,14 @@ import repositoryModernization from "../fixtures/repository-modernization-intell
 import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
 import businessMapDetail from "../fixtures/business-map-detail.json";
 
+export interface EstateSummaryParams {
+  cursor?: string;
+  limit?: number;
+  domains?: Namespace[];
+}
+
 export interface StackGraphClient {
-  getEstateSummary(): Promise<EstateSummary>;
+  getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
   getTechnology(id: string): Promise<TechnologyDetail>;
   listModernization(): Promise<ModernizationList>;
@@ -114,6 +124,10 @@ export interface StackGraphClient {
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
+  getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
+  updateAIProviderConfiguration(body: AIProviderConfigurationUpdateRequest): Promise<AIProviderConfiguration>;
+  removeAIProviderKey(): Promise<AIProviderConfiguration>;
+  testAIProviderConnection(): Promise<AIProviderConnectionTest>;
   getScanPolicy(): Promise<ScanPolicy>;
   updateScanPolicy(body: ScanPolicyUpdateRequest): Promise<ScanPolicy>;
   getScanStatus(): Promise<ScanStatus>;
@@ -140,6 +154,10 @@ const adminMembers = new Map<string, TenantMember>();
 const adminConnectors = new Map<string, Connector>();
 const adminRescans = new Map<string, { idempotencyKey: string; job: RescanJob }>();
 let adminScanPolicy: ScanPolicy = { contract_version: "1.0.0", cadence: "DAILY", enabled: true };
+let adminAIConfiguration: AIProviderConfiguration = {
+  contract_version: "1.0.0", provider: "anthropic", model: "", enabled: true,
+  key_configured: false, test_status: "NOT_TESTED",
+};
 {
   const now = "2026-08-19T12:00:00.000Z";
   for (const seed of [
@@ -188,9 +206,17 @@ const summarize = (m: BusinessMapDetail): BusinessMapSummary => ({
 });
 
 const fixtureClient: StackGraphClient = {
-  async getEstateSummary() {
+  async getEstateSummary(params) {
     await delay();
-    return estateSummary as EstateSummary;
+    const summary = clone(estateSummary as EstateSummary);
+    if (params?.domains?.length) {
+      summary.ranked_items = summary.ranked_items.filter((item) =>
+        params.domains?.includes(item.domain),
+      );
+    }
+    if (params?.limit) summary.ranked_items = summary.ranked_items.slice(0, params.limit);
+    summary.page_info = { has_next_page: false };
+    return summary;
   },
   async getApplication() {
     await delay();
@@ -415,6 +441,45 @@ const fixtureClient: StackGraphClient = {
     adminConnectors.delete(id);
     return clone(connector);
   },
+  async getAIProviderConfiguration() {
+    await delay();
+    return clone(adminAIConfiguration);
+  },
+  async updateAIProviderConfiguration(body) {
+    await delay();
+    adminAIConfiguration = {
+      ...adminAIConfiguration,
+      provider: body.provider,
+      model: body.model ?? "",
+      enabled: body.enabled ?? true,
+      key_configured: body.api_key ? true : adminAIConfiguration.key_configured,
+      key_fingerprint: body.api_key ? body.api_key.slice(-4) : adminAIConfiguration.key_fingerprint,
+      test_status: "NOT_TESTED",
+      tested_at: null,
+      last_error: null,
+      updated_by: "fixture-admin",
+      updated_at: new Date().toISOString(),
+    };
+    return clone(adminAIConfiguration);
+  },
+  async removeAIProviderKey() {
+    await delay();
+    adminAIConfiguration = {
+      ...adminAIConfiguration, key_configured: false, key_fingerprint: null,
+      test_status: "NOT_TESTED", tested_at: null, last_error: null,
+    };
+    return clone(adminAIConfiguration);
+  },
+  async testAIProviderConnection() {
+    await delay();
+    if (!adminAIConfiguration.key_configured) {
+      throw new FixtureApiError(422, { message: "Save a provider API key before testing the connection." });
+    }
+    adminAIConfiguration = {
+      ...adminAIConfiguration, test_status: "SUCCEEDED", tested_at: new Date().toISOString(), last_error: null,
+    };
+    return { contract_version: "1.0.0", provider: adminAIConfiguration.provider, status: "SUCCEEDED", models: [] };
+  },
   async getScanPolicy() {
     await delay();
     return clone(adminScanPolicy);
@@ -490,7 +555,14 @@ export class ApiRequestError extends Error {
 }
 
 const liveClient: StackGraphClient = {
-  getEstateSummary: () => req("/estate/summary"),
+  getEstateSummary: (params) => {
+    const query = new URLSearchParams();
+    if (params?.cursor) query.set("cursor", params.cursor);
+    if (params?.limit) query.set("limit", String(params.limit));
+    for (const domain of params?.domains ?? []) query.append("domain", domain);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return req(`/estate/summary${suffix}`);
+  },
   getApplication: (id) => req(`/applications/${id}`),
   getTechnology: (id) => req(`/technologies/${id}`),
   listModernization: () => req("/modernization"),
@@ -563,6 +635,11 @@ const liveClient: StackGraphClient = {
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
+  getAIProviderConfiguration: () => req("/admin/ai-configuration"),
+  updateAIProviderConfiguration: (body) =>
+    req("/admin/ai-configuration", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  removeAIProviderKey: () => req("/admin/ai-configuration/key", { method: "DELETE" }),
+  testAIProviderConnection: () => req("/admin/ai-configuration/test", { method: "POST" }),
   getScanPolicy: () => req("/admin/scan-policy"),
   updateScanPolicy: (body) =>
     req("/admin/scan-policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

@@ -377,7 +377,23 @@ def _persist_code_implementation_summary(
           structural_fingerprint,semantic_tokens,dependency_keys,covering_tests,
           dynamic_signals,touchpoints,vendored,completeness,limitations
         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        ON CONFLICT(fact_assertion_id) DO NOTHING
+        ON CONFLICT(
+          tenant_id,repository_entity_id,source_revision,path,qualified_name,
+          line_start,structural_fingerprint
+        ) DO UPDATE SET
+          source_snapshot_id=EXCLUDED.source_snapshot_id,
+          fact_assertion_id=EXCLUDED.fact_assertion_id,
+          language=EXCLUDED.language,
+          symbol_kind=EXCLUDED.symbol_kind,
+          line_end=EXCLUDED.line_end,
+          semantic_tokens=EXCLUDED.semantic_tokens,
+          dependency_keys=EXCLUDED.dependency_keys,
+          covering_tests=EXCLUDED.covering_tests,
+          dynamic_signals=EXCLUDED.dynamic_signals,
+          touchpoints=EXCLUDED.touchpoints,
+          vendored=EXCLUDED.vendored,
+          completeness=EXCLUDED.completeness,
+          limitations=EXCLUDED.limitations
         """,
         (
             tenant_id, snapshot_id, repository_id, fact_id, source_revision,

@@ -23,7 +23,7 @@ from .github_installation_store import (
     resolve_environment_credential,
 )
 from .github_snapshot import GitHubRepositoryAcquirer, SnapshotLimits
-from .repository_scanner import scan_repository
+from .repository_scanner import SCANNER_KEY, SCANNER_VERSION, scan_repository
 
 
 MAX_ATTEMPTS = 5
@@ -303,6 +303,22 @@ def _acquire_scan_publish(
         raise ValueError("GitHub acquisition identity does not match the leased target")
     _renew_lease(database_url, claimed)
     if result.status == "UNCHANGED":
+        if not _scanner_snapshot_exists(
+            database_url, claimed.target_id, result.source_revision,
+        ):
+            request, raw_observation = _cached_scanner_request(
+                claimed,
+                repository_id=result.repository_id,
+                source_revision=result.source_revision,
+                snapshot_root=snapshot_root,
+            )
+            return _scan_publish_request(
+                database_url,
+                claimed,
+                request=request,
+                raw_observation=raw_observation,
+                source_revision=result.source_revision,
+            )
         _complete_run(
             database_url, claimed, result.source_revision,
             {"operation": "acquire", "changed": False},
@@ -338,11 +354,28 @@ def _acquire_scan_publish(
             "deadline_seconds": _policy_int(policy, "scan_deadline_seconds", 1200),
         },
     }
-    scan_result = scan_repository(request)
-    _renew_lease(database_url, claimed)
     raw_observation = result.snapshot.raw_observation(
         claimed.tenant_key, result.stored_evidence,
     )
+    return _scan_publish_request(
+        database_url,
+        claimed,
+        request=request,
+        raw_observation=raw_observation,
+        source_revision=result.source_revision,
+    )
+
+
+def _scan_publish_request(
+    database_url: str,
+    claimed: ClaimedRun,
+    *,
+    request: Mapping[str, Any],
+    raw_observation: Mapping[str, Any],
+    source_revision: str,
+) -> WorkResult:
+    scan_result = scan_repository(request)
+    _renew_lease(database_url, claimed)
     # The data-platform publisher is imported here so discovery-only commands retain
     # their small runtime. The continuous-worker image includes both packages.
     from stackgraph_data.scanner_ingest import persist_scanner_result_connection
@@ -356,15 +389,15 @@ def _acquire_scan_publish(
         # Another run may have published the same immutable revision while this
         # worker was scanning. Close this leased run without republishing facts.
         _complete_run(
-            database_url, claimed, result.source_revision,
+            database_url, claimed, source_revision,
             {"operation": "publish", "replayed_snapshot": True},
         )
     else:
-        _mark_target_fresh(database_url, claimed, result.source_revision)
+        _mark_target_fresh(database_url, claimed, source_revision)
     return WorkResult(
         status="REPLAYED" if persisted.replayed else "PUBLISHED",
         run_id=str(claimed.run_id),
-        target_key=claimed.target_key, source_revision=result.source_revision,
+        target_key=claimed.target_key, source_revision=source_revision,
     )
 
 
@@ -379,6 +412,78 @@ def _previous_revision(database_url: str, target_id: UUID) -> str | None:
             (target_id,),
         ).fetchone()
     return None if row is None else str(row["source_revision"])
+
+
+def _scanner_snapshot_exists(
+    database_url: str,
+    target_id: UUID,
+    source_revision: str,
+) -> bool:
+    with psycopg.connect(database_url) as connection:
+        row = connection.execute(
+            """
+            SELECT 1 FROM source_snapshot
+            WHERE ingest_target_id=%s AND source_revision=%s AND status='PUBLISHED'
+              AND extractor_key=%s AND extractor_version=%s
+            """,
+            (target_id, source_revision, SCANNER_KEY, SCANNER_VERSION),
+        ).fetchone()
+    return row is not None
+
+
+def _cached_scanner_request(
+    claimed: ClaimedRun,
+    *,
+    repository_id: str,
+    source_revision: str,
+    snapshot_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    materialized = (
+        snapshot_root.resolve() / f"github-repo-{repository_id}" / source_revision
+    ).resolve()
+    if not materialized.is_relative_to(snapshot_root.resolve()):
+        raise ValueError("cached snapshot path escapes the snapshot root")
+    snapshot_path = materialized / "snapshot.json"
+    raw_path = materialized / "raw-observation.json"
+    files_path = materialized / "files"
+    if not snapshot_path.is_file() or not raw_path.is_file() or not files_path.is_dir():
+        raise FileNotFoundError("cached repository snapshot is unavailable for scanner replay")
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    raw_observation = json.loads(raw_path.read_text(encoding="utf-8"))
+    if not isinstance(snapshot, dict) or not isinstance(raw_observation, dict):
+        raise ValueError("cached repository snapshot metadata is invalid")
+    if snapshot.get("source_revision") != source_revision:
+        raise ValueError("cached repository snapshot revision does not match the acquisition")
+    content = raw_observation.get("content")
+    if not isinstance(content, dict):
+        raise ValueError("cached raw observation content descriptor is missing")
+    policy = claimed.refresh_policy
+    request = {
+        "scanner_contract_version": "1.0.0",
+        "run_id": str(claimed.run_id),
+        "tenant_key": claimed.tenant_key,
+        "target": {
+            "provider": "github", "repository_id": repository_id,
+            "canonical_key": claimed.target_key,
+            "owner": _required_policy_string(policy, "owner"),
+            "name": _required_policy_string(policy, "name"),
+            "default_branch": snapshot.get("default_branch"),
+        },
+        "snapshot": {
+            "source_revision": source_revision,
+            "checkout_root": str(files_path),
+            "requested_at": snapshot.get("observed_at"),
+            "blob_uri": content.get("blob_uri"),
+            "content_hash": content.get("hash"),
+            "content_size_bytes": content.get("size_bytes"),
+        },
+        "limits": {
+            "max_files": _policy_int(policy, "scan_max_files", 100_000),
+            "max_bytes": _policy_int(policy, "scan_max_bytes", 1024 * 1024 * 1024),
+            "deadline_seconds": _policy_int(policy, "scan_deadline_seconds", 1200),
+        },
+    }
+    return request, raw_observation
 
 
 def _promote_direct_repository(

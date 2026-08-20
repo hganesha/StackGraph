@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ai_ask_route: str = "default"
     ai_ask_fallback_enabled: bool = True
     ai_ask_max_evidence_chars: int = Field(default=50_000, ge=1_024, le=200_000)
+    credential_encryption_key: str = Field(
+        default="stackgraph-local-development-credential-key",
+        min_length=32,
+    )
 
     @model_validator(mode="after")
     def validate_auth(self) -> "Settings":
@@ -38,6 +42,11 @@ class Settings(BaseSettings):
             self.auth_session_secret is None or len(self.auth_session_secret) < 32
         ):
             raise ValueError("auth_session_secret must contain at least 32 characters in signed_session mode")
+        if (
+            self.environment.lower() not in {"development", "dev", "test"}
+            and self.credential_encryption_key == "stackgraph-local-development-credential-key"
+        ):
+            raise ValueError("credential_encryption_key must be overridden outside development and test")
         return self
 
     @property

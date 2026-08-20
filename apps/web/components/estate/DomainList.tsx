@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RankedTable, Skeleton } from "@stackgraph/design-system";
 import type { Namespace } from "@stackgraph/shared";
-import { useEstateSummary } from "@/lib/queries";
+import { useEstateDomainSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "./FilterBar";
@@ -17,14 +17,18 @@ export function DomainList({
   subtitle,
   domains,
   hrefBase,
+  emptyTitle = "No matching items.",
+  emptyBody,
 }: {
   title: string;
   subtitle: string;
   domains: Namespace[];
   hrefBase: string;
+  emptyTitle?: string;
+  emptyBody?: string;
 }) {
   const router = useRouter();
-  const { data, isLoading } = useEstateSummary();
+  const { data, isLoading } = useEstateDomainSummary(domains);
   const { query, setQuery, applyLens, reset } = useEstateQuery();
 
   const scoped = useMemo(
@@ -63,10 +67,12 @@ export function DomainList({
         </div>
       ) : items.length === 0 ? (
         <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No matching items.</p>
-          <button type="button" className={styles.emptyBody} onClick={reset}>
-            Clear filters.
-          </button>
+          <p className={styles.emptyTitle}>{scoped.length === 0 ? emptyTitle : "No matching items."}</p>
+          {scoped.length === 0 && emptyBody ? (
+            <p className={styles.emptyNote}>{emptyBody}</p>
+          ) : (
+            <button type="button" className={styles.emptyBody} onClick={reset}>Clear filters.</button>
+          )}
         </div>
       ) : (
         <RankedTable

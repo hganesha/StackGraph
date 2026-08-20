@@ -45,6 +45,23 @@ class AISettings:
             max_attempts=max(1, int(os.getenv("STACKGRAPH_AI_MAX_ATTEMPTS", "2"))),
         )
 
+    @classmethod
+    def for_provider(cls, provider: str, model: str, api_key: str) -> "AISettings":
+        """Build one tenant-selected route while retaining operator-controlled endpoints."""
+        default_prompts = Path(__file__).resolve().parent.parent / "prompts"
+        values: dict[str, object] = {
+            "prompts_dir": Path(os.getenv("STACKGRAPH_AI_PROMPTS_DIR", str(default_prompts))),
+            "routes": (ModelRoute(name="default", provider=provider, model=model),),
+            "openai_base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            "anthropic_base_url": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"),
+            "openrouter_base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+            "openrouter_site_url": os.getenv("OPENROUTER_SITE_URL"),
+            "openrouter_site_name": os.getenv("OPENROUTER_SITE_NAME", "StackGraph"),
+            "max_attempts": max(1, int(os.getenv("STACKGRAPH_AI_MAX_ATTEMPTS", "2"))),
+        }
+        values[f"{provider}_api_key"] = api_key
+        return cls(**values)  # type: ignore[arg-type]
+
 
 def _routes_from_env() -> tuple[ModelRoute, ...]:
     raw_routes = os.getenv("STACKGRAPH_AI_ROUTES_JSON")

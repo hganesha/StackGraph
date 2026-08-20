@@ -162,6 +162,7 @@ lanes only. Lane C completion is intentionally not scored here.
 | Scanner persistence | **Verified** | [scanner ingest](../services/data-platform/stackgraph_data/scanner_ingest.py) validates tenant/run/revision boundaries, publishes snapshots transactionally, persists usage summaries/code units, and supports replay | Scanner-ingest database integration tests |
 | Automatic intelligence enqueue | **Verified** | A complete `repository-dependency-usage` publication triggers an idempotent `REPOSITORY_MODERNIZATION` job; the worker runs capability inference before modernization | Migration 007/008, modernization-worker tests, and fresh database intelligence tests |
 | Acquisition-to-publication orchestration | **Verified** | [GitHub control loop](../services/enterprise-discovery/stackgraph_discovery/github_control_loop.py) leases installation/repository runs, short-circuits unchanged revisions, durably stores changed snapshots, scans, publishes, and updates freshness; projection and intelligence consume publication queues continuously | Control-loop tests, existing acquisition/scanner/persistence suites, and [pipeline runbook](runbooks/continuous-discovery-pipeline.md) |
+| Provisional application boundary | **Verified** | The repository scanner emits a cited, tenant-scoped `Application IMPLEMENTED_BY Repository` inference. One-repository fallback is explicitly provisional; monorepo signals lower confidence and mark the entity as a portfolio boundary pending review or catalog evidence | Scanner contract tests cover ordinary and monorepo boundaries; scanner persistence and application read models consume the shared fact contract |
 
 ### Implemented but not operationalized
 
@@ -191,6 +192,7 @@ lanes only. Lane C completion is intentionally not scored here.
 | B-06 | P1 | Runtime evidence acquisition | Versioned runtime/deployment observation contract and bounded collectors or import adapters | Runtime claims link to source/revision/environment and can change `UNKNOWN` only with direct evidence |
 | B-07 | P1 | Pilot-scale performance | Representative 100+ repository corpus, concurrency/quota policy, load harness, and failure injection | Pilot target reaches first inventory and material findings within measured goals while queues remain bounded |
 | B-08 | P2 | Language breadth | Deterministic manifest, source-reference, API-surface, and code-unit support for additional languages | Each language matches existing completeness, evidence, limitation, replay, and tenant-isolation guarantees |
+| B-09 | P0 | Governed application boundaries | Reconcile provisional repository-derived applications with curated mappings, service catalogs, CMDB imports, and reviewed monorepo/service discovery; supersede fallback facts without losing history | Every scanned repository is either linked to a reviewed canonical application/service or has an explicit provisional boundary and limitation; the Applications screen never conflates “not modeled” with “no scan results” |
 
 ## Lane D — Intelligence and quality
 
