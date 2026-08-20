@@ -9,12 +9,47 @@ from psycopg.rows import dict_row
 
 from stackgraph_data.catalog import sha256_key
 from stackgraph_data.scanner_ingest import (
+    _public_package_version_purl,
     persist_api_surface_connection,
     persist_scanner_result_connection,
 )
 
 
 DATABASE_URL = os.environ.get("STACKGRAPH_TEST_DATABASE_URL")
+
+
+class EnrichmentTargetSelectionTests(unittest.TestCase):
+    def test_selects_only_exact_public_package_versions(self) -> None:
+        fact = {
+            "predicate": "DEPENDS_ON",
+            "object_entity": {
+                "namespace": "TECHNOLOGY",
+                "type": "PackageVersion",
+                "key": "pkg:npm/Axios@1.7.9",
+            },
+            "properties": {
+                "registry_resolution": {
+                    "visibility": "PUBLIC",
+                    "custom_registry": False,
+                }
+            },
+        }
+        self.assertEqual(
+            _public_package_version_purl(fact),
+            "pkg:npm/axios@1.7.9",
+        )
+
+        fact["properties"]["registry_resolution"]["custom_registry"] = True
+        self.assertIsNone(_public_package_version_purl(fact))
+        fact["properties"]["registry_resolution"]["custom_registry"] = False
+        fact["object_entity"]["key"] = "pkg:npm/axios"
+        self.assertIsNone(_public_package_version_purl(fact))
+        fact["object_entity"].update({
+            "type": "PackageVersion",
+            "key": "pkg:pypi/requests@2.32.5",
+        })
+        fact["properties"].pop("registry_resolution")
+        self.assertIsNone(_public_package_version_purl(fact))
 
 
 @unittest.skipUnless(DATABASE_URL, "STACKGRAPH_TEST_DATABASE_URL is not configured")
@@ -94,6 +129,12 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
                 extractor_version="1.0.0",
                 include_fact=True,
             )
+            package_name = f"scanner-dependency-{uuid4().hex}"
+            package_purl = f"pkg:npm/{package_name}@4.17.21"
+            first["facts"][0]["object_entity"].update({
+                "key": package_purl,
+                "name": f"{package_name} 4.17.21",
+            })
             wrong_tenant_observation = _raw_observation(
                 tenant_key, repository_key, "revision-1"
             )
@@ -128,7 +169,39 @@ class ScannerPersistenceIntegrationTests(unittest.TestCase):
 
             self.assertEqual(persisted.fact_count, 2)
             self.assertEqual(persisted.usage_summary_count, 1)
+            self.assertEqual(persisted.enrichment_target_count, 1)
             self.assertTrue(replay.replayed)
+            self.assertEqual(replay.enrichment_target_count, 0)
+            enrichment = connection.execute(
+                """
+                SELECT target.tenant_id,target.target_key,run.trigger_kind,run.status
+                FROM ingest_target target
+                JOIN source_system source ON source.id=target.source_system_id
+                JOIN ingest_run run ON run.ingest_target_id=target.id
+                WHERE source.source_key='deps.dev'
+                  AND target.target_key=%s
+                """,
+                (package_purl,),
+            ).fetchone()
+            self.assertEqual(
+                enrichment,
+                {
+                    "tenant_id": None,
+                    "target_key": package_purl,
+                    "trigger_kind": "RECONCILIATION",
+                    "status": "PENDING",
+                },
+            )
+            package_entity = connection.execute(
+                """
+                SELECT package.tenant_id
+                FROM fact_assertion fact
+                JOIN entity package ON package.id=fact.object_entity_id
+                WHERE fact.source_snapshot_id=%s AND fact.predicate='DEPENDS_ON'
+                """,
+                (persisted.snapshot_id,),
+            ).fetchone()
+            self.assertIsNone(package_entity["tenant_id"])
             usage = connection.execute(
                 """
                 SELECT referenced,static_reachability

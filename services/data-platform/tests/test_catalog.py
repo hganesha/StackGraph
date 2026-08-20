@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from stackgraph_data.catalog import load_catalog, sha256_key
-from stackgraph_data.migrate import file_checksum
+from stackgraph_data.migrate import file_checksum, migration_paths
 
 
 class CatalogTests(unittest.TestCase):
@@ -35,6 +35,17 @@ class CatalogTests(unittest.TestCase):
             first_checksum = file_checksum(path)
             path.write_text("SELECT 2;\n", encoding="utf-8")
             self.assertNotEqual(first_checksum, file_checksum(path))
+
+    def test_migration_discovery_ignores_noncanonical_duplicate_files(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "001_example.sql").write_text("SELECT 1;\n", encoding="utf-8")
+            (root / "001_example 2.sql").write_text("SELECT 2;\n", encoding="utf-8")
+            (root / "notes.sql").write_text("SELECT 3;\n", encoding="utf-8")
+            self.assertEqual(
+                [path.name for path in migration_paths(root)],
+                ["001_example.sql"],
+            )
 
 
 if __name__ == "__main__":

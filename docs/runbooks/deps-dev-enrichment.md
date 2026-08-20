@@ -2,6 +2,8 @@
 
 The Lane A deps.dev worker enriches explicitly observed or curated npm and PyPI package versions. It does not crawl arbitrary packages or use the v3alpha API.
 
+Repository scanner publication automatically creates a global deps.dev target and an initial reconciliation run for each newly observed exact package-version purl with evidence that it resolved from a public registry. Replayed scans and already-known targets do not reset the target's freshness schedule. Private, custom-registry, or registry-unknown packages are not enqueued. npm scans currently provide this registry provenance; PyPI remains available through explicit targets until Python index provenance is captured by the scanner.
+
 For each exact package-version purl, the worker retrieves stable deps.dev v3 version metadata and its resolved dependency graph, stores the combined response as an immutable raw observation, and publishes evidence-backed facts for:
 
 - package-to-version membership;
@@ -33,7 +35,7 @@ docker compose run --rm depsdev schedule
 make depsdev-work
 ```
 
-The worker itself never loops or sleeps. A process supervisor or scheduled task invokes `schedule` and `work`; PostgreSQL provides `FOR UPDATE SKIP LOCKED` leasing and retry availability.
+The `depsdev-continuous` pipeline service runs `serve`, which drains available work and polls for due targets. The bounded `schedule` and `work` commands remain available for operators and tests; PostgreSQL provides `FOR UPDATE SKIP LOCKED` leasing and retry availability.
 
 ## Safety and replay
 

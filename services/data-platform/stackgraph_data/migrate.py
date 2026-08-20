@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -16,12 +17,23 @@ class MigrationResult:
     skipped: list[str]
 
 
+MIGRATION_FILENAME = re.compile(r"^[0-9]{3}_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$")
+
+
 def file_checksum(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def migration_paths(migrations_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in migrations_dir.glob("*.sql")
+        if MIGRATION_FILENAME.fullmatch(path.name)
+    )
+
+
 def apply_migrations(database_url: str, migrations_dir: Path) -> MigrationResult:
-    migration_paths = sorted(migrations_dir.glob("*.sql"))
+    paths = migration_paths(migrations_dir)
     applied: list[str] = []
     skipped: list[str] = []
 
@@ -36,7 +48,7 @@ def apply_migrations(database_url: str, migrations_dir: Path) -> MigrationResult
             """
         )
 
-        for path in migration_paths:
+        for path in paths:
             version = path.name
             checksum = file_checksum(path)
             row = connection.execute(
