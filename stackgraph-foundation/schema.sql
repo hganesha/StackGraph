@@ -592,5 +592,6 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('010_admin_and_review_queue.sql','dd91b5ccda713baed50c26dca094028f472f662dea628de679e49ab6bbac4493'),
  ('011_tenant_ai_provider_configuration.sql','20f0096023b1f959de30e5a81764923392153caef120dd41eb2b85386078818c'),
  ('012_activate_tenant_ai_enrichment.sql','32fcc5401f4e0549c74e3e23997f19ada49b90de421c4ebd394f80ac4193b0b5'),
- ('013_auth_token_revocation.sql','835e327b669036047fbdf882a9abc4a1c2bf6829d838a084d3aa9bbc1c82617b'); -- gitleaks:allow; migration checksum, not a credential
+ ('013_auth_token_revocation.sql','835e327b669036047fbdf882a9abc4a1c2bf6829d838a084d3aa9bbc1c82617b'), -- gitleaks:allow; migration checksum, not a credential
+ ('014_repair_dependency_usage_legacy.sql','1d9becc7e78515554e3872aa5a06b52415360c69c9bfba8b3790f24c3bd26c77'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

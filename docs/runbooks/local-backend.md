@@ -96,6 +96,11 @@ Complete repository dependency-usage snapshots automatically enqueue capability 
 
 The checked-in foundation catalog is loaded as global curated knowledge. The loader is versioned and idempotent, writes evidence-backed facts into PostgreSQL, and queues AGE projection through `projection_outbox`.
 
+The migrator recognizes the one documented pre-canonical checksum for migration 005 only after verifying
+its installed schema. Migration 014 then replaces the legacy global package-analysis uniqueness rule with
+the tenant-scoped canonical rule. The historical ledger entry is preserved; every other checksum mismatch
+continues to fail closed.
+
 ```shell
 make database-seed-test
 make database-seed

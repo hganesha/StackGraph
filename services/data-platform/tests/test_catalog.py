@@ -4,7 +4,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from stackgraph_data.catalog import load_catalog, sha256_key
-from stackgraph_data.migrate import file_checksum, migration_paths
+from stackgraph_data.migrate import (
+    CANONICAL_DEPENDENCY_USAGE_CHECKSUM,
+    LEGACY_DEPENDENCY_USAGE_CHECKSUM,
+    LEGACY_DEPENDENCY_USAGE_VERSION,
+    file_checksum,
+    legacy_checksum_candidate,
+    migration_paths,
+)
 
 
 class CatalogTests(unittest.TestCase):
@@ -46,6 +53,28 @@ class CatalogTests(unittest.TestCase):
                 [path.name for path in migration_paths(root)],
                 ["001_example.sql"],
             )
+
+    def test_only_the_known_005_checksum_pair_is_a_legacy_candidate(self) -> None:
+        self.assertTrue(legacy_checksum_candidate(
+            LEGACY_DEPENDENCY_USAGE_VERSION,
+            LEGACY_DEPENDENCY_USAGE_CHECKSUM,
+            CANONICAL_DEPENDENCY_USAGE_CHECKSUM,
+        ))
+        self.assertFalse(legacy_checksum_candidate(
+            LEGACY_DEPENDENCY_USAGE_VERSION,
+            "0" * 64,
+            CANONICAL_DEPENDENCY_USAGE_CHECKSUM,
+        ))
+        self.assertFalse(legacy_checksum_candidate(
+            LEGACY_DEPENDENCY_USAGE_VERSION,
+            LEGACY_DEPENDENCY_USAGE_CHECKSUM,
+            "f" * 64,
+        ))
+        self.assertFalse(legacy_checksum_candidate(
+            "006_capability_intelligence.sql",
+            LEGACY_DEPENDENCY_USAGE_CHECKSUM,
+            CANONICAL_DEPENDENCY_USAGE_CHECKSUM,
+        ))
 
 
 if __name__ == "__main__":
