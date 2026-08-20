@@ -510,6 +510,10 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                               "external_account_key": "acme", "scopes": ["repo:read"],
                               "credential_reference": "vault://gh/acme"},
                     )
+                    repository = await client.post(
+                        "/admin/github/repositories",
+                        json={"repository": "acme/billing"},
+                    )
                     policy = await client.put(
                         "/admin/scan-policy", json={"cadence": "HOURLY", "enabled": True},
                     )
@@ -521,14 +525,16 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         json={"provider": "OTHER", "display_name": "bad",
                               "credential_reference": "ghp_" + "a" * 36},
                     )
-                    return member, members, connector, policy, rescan_a, rescan_b, status, raw
+                    return member, members, connector, repository, policy, rescan_a, rescan_b, status, raw
 
-        member, members, connector, policy, rescan_a, rescan_b, status, raw = asyncio.run(exercise())
+        member, members, connector, repository, policy, rescan_a, rescan_b, status, raw = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
         assert members.status_code == 200 and len(members.json()["members"]) == 1
         assert connector.status_code == 201 and connector.json()["provider"] == "GITHUB_APP"
         assert "credential_reference" not in connector.json()  # never surfaced
+        assert repository.status_code == 201
+        assert repository.json()["external_account_key"] == "github:repository:acme/billing"
         assert policy.status_code == 200 and policy.json()["cadence"] == "HOURLY"
         assert rescan_a.status_code == 201
         assert rescan_b.status_code == 200  # idempotent replay
@@ -542,9 +548,34 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                 "SELECT count(*) FROM admin_audit_log WHERE tenant_id=%s", (tenant_id,),
             ).fetchone()[0]
             assert audits >= 4
+            target = connection.execute(
+                """
+                SELECT target.target_key,target.refresh_policy,run.trigger_kind,run.status
+                FROM connector admin_connector
+                JOIN ingest_target target
+                  ON admin_connector.metadata->>'ingest_target_id'=target.id::text
+                JOIN ingest_run run ON run.ingest_target_id=target.id
+                WHERE admin_connector.id=%s
+                """,
+                (repository.json()["id"],),
+            ).fetchone()
+            assert target[0] == "github:repo-name:acme/billing"
+            assert target[1]["direct_repository"] is True
+            assert target[2:] == ("MANUAL", "PENDING")
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
+            connection.execute(
+                """
+                DELETE FROM ingest_run WHERE ingest_target_id IN (
+                  SELECT id FROM ingest_target WHERE tenant_id=%s
+                )
+                """,
+                (tenant_id,),
+            )
+            connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM connector_account WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
             for table in (
                 "admin_audit_log", "rescan_job", "connector_quota",
                 "scan_policy", "connector", "tenant_member",

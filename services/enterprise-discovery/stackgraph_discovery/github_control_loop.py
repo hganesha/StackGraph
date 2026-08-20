@@ -5,7 +5,7 @@ import json
 import os
 import socket
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Mapping
@@ -78,6 +78,7 @@ def schedule_due_targets(
               WHERE source.source_key='github-app' AND connector.status='ACTIVE'
                 AND (%s::uuid IS NULL OR target.tenant_id=%s)
                 AND target.enabled AND target.next_due_at<=now()
+                AND coalesce((target.refresh_policy->>'schedule_enabled')::boolean,true)
                 AND target.target_kind IN ('GITHUB_INSTALLATION','REPOSITORY')
                 AND NOT EXISTS (
                   SELECT 1 FROM ingest_run active
@@ -268,8 +269,13 @@ def _acquire_scan_publish(
     evidence_root: Path,
 ) -> WorkResult:
     policy = claimed.refresh_policy
-    installation_id = _required_policy_string(policy, "installation_id")
-    repository_id = _required_policy_string(policy, "repository_id")
+    direct_repository = policy.get("direct_repository") is True
+    installation_id = _optional_policy_string(policy, "installation_id")
+    repository_id = _optional_policy_string(policy, "repository_id")
+    if not direct_repository and installation_id is None:
+        raise ValueError("refresh policy installation_id must be a non-empty string")
+    if not direct_repository and repository_id is None:
+        raise ValueError("refresh policy repository_id must be a non-empty string")
     full_name = _required_policy_string(policy, "full_name")
     token = resolve_environment_credential(claimed.credential_reference)
     previous_revision = _previous_revision(database_url, claimed.target_id)
@@ -287,7 +293,13 @@ def _acquire_scan_publish(
             max_file_bytes=_policy_int(policy, "max_file_bytes", 2 * 1024 * 1024),
         ),
     )
-    if result.canonical_key != claimed.target_key or result.repository_id != repository_id:
+    if direct_repository:
+        if repository_id is not None and result.repository_id != repository_id:
+            raise ValueError("GitHub acquisition repository ID changed for the connected repository")
+        claimed = _promote_direct_repository(database_url, claimed, result)
+        policy = claimed.refresh_policy
+        repository_id = result.repository_id
+    elif result.canonical_key != claimed.target_key or result.repository_id != repository_id:
         raise ValueError("GitHub acquisition identity does not match the leased target")
     _renew_lease(database_url, claimed)
     if result.status == "UNCHANGED":
@@ -310,7 +322,7 @@ def _acquire_scan_publish(
             "canonical_key": claimed.target_key,
             "owner": _required_policy_string(policy, "owner"),
             "name": _required_policy_string(policy, "name"),
-            "default_branch": _required_policy_string(policy, "default_branch"),
+            "default_branch": result.snapshot.default_branch,
         },
         "snapshot": {
             "source_revision": result.source_revision,
@@ -369,6 +381,38 @@ def _previous_revision(database_url: str, target_id: UUID) -> str | None:
     return None if row is None else str(row["source_revision"])
 
 
+def _promote_direct_repository(
+    database_url: str,
+    claimed: ClaimedRun,
+    result: Any,
+) -> ClaimedRun:
+    if result.snapshot is None and result.canonical_key != claimed.target_key:
+        raise ValueError("an unchanged direct repository cannot change target identity")
+    default_branch = (
+        result.snapshot.default_branch
+        if result.snapshot is not None
+        else _required_policy_string(claimed.refresh_policy, "default_branch")
+    )
+    policy = {
+        **claimed.refresh_policy,
+        "repository_id": result.repository_id,
+        "default_branch": default_branch,
+    }
+    with psycopg.connect(database_url) as connection:
+        updated = connection.execute(
+            """
+            UPDATE ingest_target
+            SET target_key=%s,refresh_policy=%s,updated_at=now()
+            WHERE id=%s AND target_key=%s
+            RETURNING id
+            """,
+            (result.canonical_key, Jsonb(policy), claimed.target_id, claimed.target_key),
+        ).fetchone()
+        if updated is None:
+            raise LeaseLostError("the direct repository target changed during acquisition")
+    return replace(claimed, target_key=result.canonical_key, refresh_policy=policy)
+
+
 def _complete_run(
     database_url: str,
     claimed: ClaimedRun,
@@ -392,13 +436,15 @@ def _complete_run(
         ).fetchone()
         if completed is None:
             raise LeaseLostError("ingest run lease was lost before completion")
+        schedule_enabled = claimed.refresh_policy.get("schedule_enabled", True) is True
         connection.execute(
             """
             UPDATE ingest_target SET desired_source_revision=%s,last_success_at=now(),
-              next_due_at=now()+(%s*interval '1 second'),updated_at=now()
+              next_due_at=CASE WHEN %s THEN now()+(%s*interval '1 second') ELSE NULL END,
+              updated_at=now()
             WHERE id=%s
             """,
-            (source_revision, cadence, claimed.target_id),
+            (source_revision, schedule_enabled, cadence, claimed.target_id),
         )
         _upsert_freshness_connection(
             connection, claimed, source_revision=source_revision,
@@ -413,13 +459,15 @@ def _mark_target_fresh(
 ) -> None:
     cadence = _policy_int(claimed.refresh_policy, "cadence_seconds", DEFAULT_CADENCE_SECONDS)
     with psycopg.connect(database_url) as connection:
+        schedule_enabled = claimed.refresh_policy.get("schedule_enabled", True) is True
         connection.execute(
             """
             UPDATE ingest_target SET desired_source_revision=%s,
-              next_due_at=now()+(%s*interval '1 second'),updated_at=now()
+              next_due_at=CASE WHEN %s THEN now()+(%s*interval '1 second') ELSE NULL END,
+              updated_at=now()
             WHERE id=%s
             """,
-            (source_revision, cadence, claimed.target_id),
+            (source_revision, schedule_enabled, cadence, claimed.target_id),
         )
         _upsert_freshness_connection(
             connection, claimed, source_revision=source_revision,
@@ -549,6 +597,15 @@ def _required_policy_string(policy: Mapping[str, Any], key: str) -> str:
     value = policy.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"refresh policy {key} must be a non-empty string")
+    return value
+
+
+def _optional_policy_string(policy: Mapping[str, Any], key: str) -> str | None:
+    value = policy.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"refresh policy {key} must be a non-empty string when present")
     return value
 
 

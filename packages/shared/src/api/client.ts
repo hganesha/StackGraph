@@ -46,6 +46,7 @@ import type {
   ConnectorList,
   Connector,
   ConnectorRegisterRequest,
+  GitHubRepositoryConnectRequest,
   ConnectorUpdateRequest,
   ScanPolicy,
   ScanPolicyUpdateRequest,
@@ -110,6 +111,7 @@ export interface StackGraphClient {
   removeMember(id: string): Promise<TenantMember>;
   listConnectors(): Promise<ConnectorList>;
   registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
+  connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getScanPolicy(): Promise<ScanPolicy>;
@@ -387,6 +389,15 @@ const fixtureClient: StackGraphClient = {
     adminConnectors.set(id, connector);
     return clone(connector);
   },
+  async connectGitHubRepository(body) {
+    return this.registerConnector({
+      provider: "GITHUB_APP",
+      display_name: body.repository,
+      external_account_key: `github:repository:${body.repository.toLowerCase()}`,
+      credential_reference: body.credential_reference ?? "env://GITHUB_TOKEN",
+      scopes: ["contents:read", "metadata:read"],
+    });
+  },
   async updateConnector(id, body) {
     await delay();
     const connector = adminConnectors.get(id);
@@ -547,6 +558,8 @@ const liveClient: StackGraphClient = {
   listConnectors: () => req("/admin/connectors"),
   registerConnector: (body) =>
     req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  connectGitHubRepository: (body) =>
+    req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),

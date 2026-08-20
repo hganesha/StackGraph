@@ -86,6 +86,7 @@ from app.models import (
     Connector,
     ConnectorList,
     ConnectorRegisterRequest,
+    GitHubRepositoryConnectRequest,
     ConnectorUpdateRequest,
     ScanPolicy,
     ScanPolicyUpdateRequest,
@@ -3351,6 +3352,162 @@ class ReadModelStore:
             )
         return self._connector(row)
 
+    async def connect_github_repository(
+        self,
+        request: GitHubRepositoryConnectRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        self._reject_raw_secret(request.credential_reference)
+        owner, name = request.repository.split("/", 1)
+        full_name = f"{owner}/{name}"
+        normalized_name = full_name.lower()
+        external_account_key = f"github:repository:{normalized_name}"
+        pending_target_key = f"github:repo-name:{normalized_name}"
+        scopes = ["contents:read", "metadata:read"]
+
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM connector WHERE provider='GITHUB_APP' AND external_account_key=%s",
+                (external_account_key,),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409,
+                    "CONNECTOR_EXISTS",
+                    "This GitHub repository is already connected.",
+                    {"repository": full_name},
+                )
+
+            policy_cursor = await connection.execute(
+                "SELECT cadence,enabled FROM scan_policy WHERE tenant_id=%s",
+                (tenant_id,),
+            )
+            policy = await policy_cursor.fetchone()
+            cadence = policy["cadence"] if policy is not None else "DAILY"
+            schedule_enabled = bool(policy["enabled"] if policy is not None else True) and cadence != "MANUAL"
+            cadence_seconds = {
+                "HOURLY": 3600,
+                "DAILY": 86400,
+                "WEEKLY": 604800,
+                "MANUAL": 86400,
+            }[cadence]
+
+            source_cursor = await connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri,metadata)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com',%s::jsonb)
+                ON CONFLICT(tenant_id,source_key) DO UPDATE
+                  SET base_uri=EXCLUDED.base_uri,
+                      metadata=source_system.metadata || EXCLUDED.metadata
+                RETURNING id
+                """,
+                (tenant_id, json.dumps({"provider": "github", "direct_repository": True})),
+            )
+            source = await source_cursor.fetchone()
+            assert source is not None
+            account_cursor = await connection.execute(
+                """
+                INSERT INTO connector_account(
+                  tenant_id,source_system_id,external_account_key,credential_reference,
+                  permissions,status
+                ) VALUES (%s,%s,%s,%s,%s::jsonb,'ACTIVE')
+                ON CONFLICT(tenant_id,source_system_id,external_account_key) DO UPDATE
+                  SET credential_reference=EXCLUDED.credential_reference,
+                      permissions=EXCLUDED.permissions,status='ACTIVE',updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id,
+                    source["id"],
+                    external_account_key,
+                    request.credential_reference,
+                    json.dumps(scopes),
+                ),
+            )
+            account = await account_cursor.fetchone()
+            assert account is not None
+            target_cursor = await connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,enabled,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'REPOSITORY',%s,'HOT',true,%s::jsonb,
+                          CASE WHEN %s THEN now() ELSE NULL END)
+                ON CONFLICT(tenant_id,source_system_id,target_kind,target_key) DO UPDATE
+                  SET connector_account_id=EXCLUDED.connector_account_id,enabled=true,
+                      refresh_policy=EXCLUDED.refresh_policy,
+                      next_due_at=EXCLUDED.next_due_at,updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id,
+                    source["id"],
+                    account["id"],
+                    pending_target_key,
+                    json.dumps({
+                        "provider": "github",
+                        "direct_repository": True,
+                        "owner": owner,
+                        "name": name,
+                        "full_name": full_name,
+                        "cadence_seconds": cadence_seconds,
+                        "schedule_enabled": schedule_enabled,
+                    }),
+                    schedule_enabled,
+                ),
+            )
+            target = await target_cursor.fetchone()
+            assert target is not None
+            connector_cursor = await connection.execute(
+                """
+                INSERT INTO connector(
+                  tenant_id,provider,display_name,external_account_key,credential_reference,
+                  scopes,metadata,created_by
+                ) VALUES (%s,'GITHUB_APP',%s,%s,%s,%s,%s::jsonb,%s)
+                RETURNING *
+                """,
+                (
+                    tenant_id,
+                    full_name,
+                    external_account_key,
+                    request.credential_reference,
+                    scopes,
+                    json.dumps({
+                        "connection_mode": "DIRECT_REPOSITORY",
+                        "ingest_target_id": str(target["id"]),
+                    }),
+                    actor_key,
+                ),
+            )
+            row = await connector_cursor.fetchone()
+            assert row is not None
+            # The first sync is explicit, including when the recurring policy is MANUAL.
+            await connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
+                SELECT %s,%s,'MANUAL',jsonb_build_object('connector_id',%s::text)
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM ingest_run
+                  WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                )
+                """,
+                (tenant_id, target["id"], str(row["id"]), target["id"]),
+            )
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="github_repository.connect",
+                target_kind="connector",
+                target_id=row["id"],
+                detail={"repository": full_name, "ingest_target_id": str(target["id"])},
+            )
+        return self._connector(row)
+
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector:
@@ -3399,11 +3556,35 @@ class ReadModelStore:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to remove a connector.")
         async with self.database.session(tenant_id) as connection:
             cursor = await connection.execute(
-                "DELETE FROM connector WHERE id = %s RETURNING *", (connector_id,),
+                "SELECT * FROM connector WHERE id = %s FOR UPDATE", (connector_id,),
             )
             row = await cursor.fetchone()
             if row is None:
                 raise APIError(404, "CONNECTOR_NOT_FOUND", "The connector was not found.")
+            target_id = row["metadata"].get("ingest_target_id") if row.get("metadata") else None
+            if target_id:
+                await connection.execute(
+                    """
+                    UPDATE connector_account account
+                    SET status='DISABLED',updated_at=now()
+                    FROM ingest_target target
+                    WHERE target.id=%s AND account.id=target.connector_account_id
+                    """,
+                    (target_id,),
+                )
+                await connection.execute(
+                    "UPDATE ingest_target SET enabled=false,next_due_at=NULL,updated_at=now() WHERE id=%s",
+                    (target_id,),
+                )
+                await connection.execute(
+                    """
+                    UPDATE ingest_run SET status='CANCELLED',completed_at=now(),
+                      lease_owner=NULL,lease_expires_at=NULL
+                    WHERE ingest_target_id=%s AND status='PENDING'
+                    """,
+                    (target_id,),
+                )
+            await connection.execute("DELETE FROM connector WHERE id=%s", (connector_id,))
             await self._write_admin_audit(
                 connection, tenant_id=tenant_id, actor_key=actor_key, action="connector.remove",
                 target_kind="connector", target_id=connector_id, detail={"provider": row["provider"]},
@@ -3458,6 +3639,30 @@ class ReadModelStore:
             )
             row = await cursor.fetchone()
             assert row is not None
+            cadence_seconds = {
+                "HOURLY": 3600,
+                "DAILY": 86400,
+                "WEEKLY": 604800,
+                "MANUAL": 86400,
+            }[request.cadence]
+            schedule_enabled = request.enabled and request.cadence != "MANUAL"
+            await connection.execute(
+                """
+                UPDATE ingest_target target
+                SET refresh_policy=jsonb_set(
+                      jsonb_set(target.refresh_policy,'{cadence_seconds}',to_jsonb(%s::integer),true),
+                      '{schedule_enabled}',to_jsonb(%s::boolean),true
+                    ),
+                    next_due_at=CASE
+                      WHEN %s THEN coalesce(target.next_due_at,now()) ELSE NULL
+                    END,
+                    updated_at=now()
+                FROM connector admin_connector
+                WHERE admin_connector.tenant_id=%s
+                  AND admin_connector.metadata->>'ingest_target_id'=target.id::text
+                """,
+                (cadence_seconds, schedule_enabled, schedule_enabled, tenant_id),
+            )
             await self._write_admin_audit(
                 connection, tenant_id=tenant_id, actor_key=actor_key, action="scan_policy.update",
                 target_kind="scan_policy", target_id=tenant_id,
@@ -3495,10 +3700,50 @@ class ReadModelStore:
                 row = await cursor.fetchone()
                 assert row is not None
                 return self._rescan_job(row), False
+            targets_cursor = await connection.execute(
+                """
+                SELECT DISTINCT target.id
+                FROM ingest_target target
+                JOIN connector admin_connector
+                  ON admin_connector.tenant_id=target.tenant_id
+                 AND admin_connector.metadata->>'ingest_target_id'=target.id::text
+                WHERE target.enabled
+                  AND (%s::uuid IS NULL OR admin_connector.id=%s)
+                """,
+                (request.connector_id, request.connector_id),
+            )
+            targets = list(await targets_cursor.fetchall())
+            queued = 0
+            for target in targets:
+                run_cursor = await connection.execute(
+                    """
+                    INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
+                    SELECT %s,%s,'MANUAL',jsonb_build_object(
+                      'rescan_job_id',%s::text,'connector_id',%s::text
+                    )
+                    WHERE NOT EXISTS (
+                      SELECT 1 FROM ingest_run
+                      WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        tenant_id,
+                        target["id"],
+                        str(row["id"]),
+                        str(request.connector_id) if request.connector_id else "",
+                        target["id"],
+                    ),
+                )
+                if await run_cursor.fetchone() is not None:
+                    queued += 1
             await self._write_admin_audit(
                 connection, tenant_id=tenant_id, actor_key=actor_key, action="rescan.request",
                 target_kind="rescan_job", target_id=row["id"],
-                detail={"connector_id": str(request.connector_id) if request.connector_id else None},
+                detail={
+                    "connector_id": str(request.connector_id) if request.connector_id else None,
+                    "ingest_runs_queued": queued,
+                },
             )
         return self._rescan_job(row), True
 

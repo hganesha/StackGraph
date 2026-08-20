@@ -13,6 +13,7 @@ from uuid import uuid4
 try:
     import psycopg
     from psycopg.rows import dict_row
+    from psycopg.types.json import Jsonb
 
     from stackgraph_discovery.github_client import GitHubApiError, GitHubTransportError
     from stackgraph_discovery.github_client import ApiResult
@@ -260,6 +261,85 @@ class GitHubControlLoopPersistenceTests(unittest.TestCase):
         self.assertGreater(counts["projection"], 0)
         self.assertEqual(counts["intelligence"], 1)
         self.assertEqual(counts["succeeded_runs"], 3)
+
+    def test_direct_repository_target_resolves_and_promotes_github_identity(self) -> None:
+        tenant_key = f"github-direct-{uuid4()}"
+        repository_id = str(uuid4().int)[:12]
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            tenant = connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'GitHub direct') RETURNING id",
+                (tenant_key,),
+            ).fetchone()
+            source = connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com') RETURNING id
+                """,
+                (tenant["id"],),
+            ).fetchone()
+            account = connection.execute(
+                """
+                INSERT INTO connector_account(
+                  tenant_id,source_system_id,external_account_key,credential_reference,permissions
+                ) VALUES (%s,%s,'github:repository:acme/billing','env://GITHUB_TOKEN',%s)
+                RETURNING id
+                """,
+                (tenant["id"], source["id"], Jsonb(["contents:read", "metadata:read"])),
+            ).fetchone()
+            target = connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'REPOSITORY','github:repo-name:acme/billing','HOT',%s,now())
+                RETURNING id
+                """,
+                (
+                    tenant["id"], source["id"], account["id"],
+                    Jsonb({
+                        "provider": "github", "direct_repository": True,
+                        "owner": "acme", "name": "billing", "full_name": "acme/billing",
+                        "cadence_seconds": 86400, "schedule_enabled": True,
+                    }),
+                ),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind)
+                VALUES (%s,%s,'MANUAL')
+                """,
+                (tenant["id"], target["id"]),
+            )
+
+        claimed = claim_run(
+            DATABASE_URL, worker_id="direct-repository-test", lease_seconds=300,
+            tenant_id=tenant["id"],
+        )
+        self.assertIsNotNone(claimed)
+        assert claimed is not None
+        with TemporaryDirectory() as snapshots, TemporaryDirectory() as evidence:
+            with patch(
+                "stackgraph_discovery.github_control_loop._client",
+                return_value=_RepositoryClient(repository_id),
+            ), patch.dict(os.environ, {"GITHUB_TOKEN": "github-token-runtime"}):
+                result = _acquire_scan_publish(
+                    DATABASE_URL, claimed,
+                    snapshot_root=Path(snapshots), evidence_root=Path(evidence),
+                )
+        self.assertEqual(result.status, "PUBLISHED")
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            promoted = connection.execute(
+                "SELECT target_key,refresh_policy,last_success_at FROM ingest_target WHERE id=%s",
+                (target["id"],),
+            ).fetchone()
+            connection.execute(
+                "UPDATE ingest_target SET enabled=false,next_due_at=NULL WHERE id=%s",
+                (target["id"],),
+            )
+        self.assertEqual(promoted["target_key"], f"github:repo:{repository_id}")
+        self.assertEqual(promoted["refresh_policy"]["repository_id"], repository_id)
+        self.assertEqual(promoted["refresh_policy"]["default_branch"], "main")
+        self.assertIsNotNone(promoted["last_success_at"])
 
 
 class _RepositoryClient:

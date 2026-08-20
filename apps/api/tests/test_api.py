@@ -295,6 +295,17 @@ class StubReadModels:
             scopes=request.scopes, status="CONNECTED", created_at=NOW, updated_at=NOW,
         )
 
+    async def connect_github_repository(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return Connector(
+            id=UUID("00000000-0000-4000-8000-000000000b02"), provider="GITHUB_APP",
+            display_name=request.repository,
+            external_account_key=f"github:repository:{request.repository.lower()}",
+            scopes=["contents:read", "metadata:read"], status="CONNECTED",
+            created_at=NOW, updated_at=NOW,
+        )
+
     async def update_connector(self, connector_id, request, *, tenant_id, actor_key):
         self.last_tenant_id = tenant_id
         self.last_actor_key = actor_key
@@ -733,6 +744,7 @@ def test_admin_routes_require_admin_capability() -> None:
         ("GET", "/api/v1/admin/members", None),
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
+        ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
         ("GET", "/api/v1/admin/scan-status", None),
         ("PUT", "/api/v1/admin/scan-policy", {"cadence": "DAILY", "enabled": True}),
         ("POST", "/api/v1/admin/rescans", {"idempotency_key": "k1"}),
@@ -769,6 +781,35 @@ def test_register_connector_creates() -> None:
     ))
     assert response.status_code == 201
     assert response.json()["provider"] == "GITHUB_APP"
+
+
+def test_connect_github_repository_queues_admin_connection() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/repositories",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"repository": "Acme/Billing"},
+    ))
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "Acme/Billing"
+    assert response.json()["external_account_key"] == "github:repository:acme/billing"
+    assert store.last_actor_key == "operator"
+
+
+def test_connect_github_repository_rejects_tokens_and_invalid_identity() -> None:
+    app, _ = _signed_app()
+    admin = _token(SECRET, ["admin"], TENANT)
+    invalid = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/repositories",
+        headers={"Authorization": f"Bearer {admin}"}, json={"repository": "not-a-repository"},
+    ))
+    secret = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/repositories",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={"repository": "acme/billing", "credential_reference": "ghp_" + "a" * 36},
+    ))
+    assert invalid.status_code == 422
+    assert secret.status_code == 422
 
 
 def test_rescan_is_created_then_idempotent() -> None:

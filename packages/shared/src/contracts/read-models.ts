@@ -765,6 +765,12 @@ export interface ConnectorRegisterRequest {
   scopes?: string[];
 }
 
+export interface GitHubRepositoryConnectRequest {
+  /** GitHub's owner/repository identity. A token is never accepted by this contract. */
+  repository: string;
+  credential_reference?: "env://GITHUB_TOKEN";
+}
+
 export interface ConnectorUpdateRequest {
   display_name?: string;
   status?: ConnectorStatus;
