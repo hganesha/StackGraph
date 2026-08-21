@@ -173,6 +173,68 @@ final result: passed
 
 ---
 
+# Shared filter bar design QA
+
+## Evidence
+
+- Source visual truth: `/Users/hariganesh/Desktop/Screenshot 2026-08-21 at 9.22.04 AM.png`
+- Applications implementation: `artifacts/filter-bar-applications-production.png`
+- Estate implementation with Domain control: `artifacts/filter-bar-estate-full.png`
+- Narrow-width implementation: `artifacts/filter-bar-narrow.png`
+- Source and implementation comparison: `artifacts/filter-bar-comparison.png`
+- Viewport: 1440 x 900 CSS pixels at device scale factor 1 for the desktop captures; 768 x 800 CSS pixels for the narrow-width capture.
+- Dimensions: source 1125 x 92 pixels; Applications filter-bar crop 1100 x 62 CSS/pixels; full Applications capture 1440 x 900 pixels. The comparison preserves both source and implementation at native scale and centers them on one canvas; no density resampling was required.
+- State: light theme, default lens, confidence, freshness, sort, and direction; Applications shows 5 of 5 and Estate shows 50 of 50.
+
+The full-view captures establish the bar in product context. The combined focused comparison is needed because the filter typography, border radii, control spacing, chevrons, and result count are too small to judge reliably in the full view.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none remaining.
+- P3: The concept includes shortcut keycaps inside search. They are intentionally omitted because Command/Ctrl-K is already the product-wide Ask shortcut; duplicating that hint on the estate name filter would be misleading.
+- P3: The Estate route includes a Domain control that is absent from the concept and the domain-scoped Applications route. This is intentional product behavior.
+
+## Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans remains the app-native face. Labels and current values stay on one line at the default state; the result count retains the evidence-mono treatment. No control text wraps.
+- Spacing and layout rhythm: the bar is 62 px high with 40 px controls, 8 px gaps, 10 px panel padding, token radii, and subtle token elevation. Search grows into available room while filter controls retain compact fixed widths. At the 1176 px Estate workspace, the full bar including Domain and count fits exactly without overflow. At 768 px, controls remain on one horizontal track and the strip becomes horizontally scrollable (`929 px` content in a `748 px` scroller) instead of wrapping.
+- Colors and visual tokens: panel, base surface, borders, muted labels, focus rings, and hover states use existing Strata tokens in both light and dark themes.
+- Image quality and asset fidelity: the source contains no raster product imagery. Search, chevron, and direction icons use the installed Tabler icon set; no text-glyph or handcrafted SVG substitutes were added.
+- Copy and content: Search, Lens, Domain where applicable, Confidence, Freshness, Sort, and result-count copy match the product vocabulary and the reference concept.
+
+## Comparison history
+
+### Pass 1 — single-row conversion
+
+- P1: The original shared bar split filters into two wrapping rows with labels stacked above inputs, which was the exact usability issue reported.
+- P2: The first single-row implementation allowed native select widths to expand to their longest option. On Estate, the added Domain control pushed the result count beyond the initially visible 1176 px workspace.
+
+Fixes applied:
+
+- Reordered the shared bar to search first, followed by Lens, optional Domain, Confidence, Freshness, Sort/direction, and result count.
+- Replaced vertical field labels with inline labels and Tabler icons.
+- Added compact fixed control widths while leaving search flexible.
+- Kept one non-wrapping flex track and enabled contained horizontal scrolling only below the width needed to show every control.
+
+Post-fix evidence: `artifacts/filter-bar-comparison.png`, `artifacts/filter-bar-estate-full.png`, and `artifacts/filter-bar-narrow.png`. On Estate, `scrollWidth` and `clientWidth` both measured 1154 px after the fix, and the count was visible. All filter/control top coordinates matched on the 768 px capture.
+
+## Functional verification
+
+- Verified the shared bar on `/estate` and `/applications`, including the route-specific Domain control.
+- Searched for `acorn`, selected Low confidence, changed sort to Name, toggled ascending direction, and confirmed the URL state and `6 of 50` result count.
+- Cleared two active filters and confirmed the default URL, empty search, and `50 of 50` count.
+- Verified the 768 px and 390 px layouts remain one row with horizontal overflow instead of wrapping.
+- Production-mode browser console: 0 errors and 0 warnings.
+- `pnpm --filter @stackgraph/web build` passed.
+- `pnpm --filter @stackgraph/web typecheck` passed after the build completed.
+- Targeted Stylelint and `git diff --check` passed.
+
+final result: passed
+
+---
+
 # Application Detail design QA — Option 3
 
 ## Evidence
@@ -249,5 +311,13 @@ Post-fix evidence: `docs/audits/application-detail/option-3-comparison.jpg`.
 - Targeted Stylelint passed for `application.module.css`.
 - Docker production-style Next.js build completed successfully and the local web container was rebuilt/restarted.
 - Browser console: 0 errors and 0 warnings after the final restart and interaction checks.
+
+final result: passed
+
+---
+
+# Latest design QA result — shared filter bar
+
+The current report is `Shared filter bar design QA` above. Its source, implementation, comparison, responsive measurements, interaction checks, console check, build check, typecheck, and comparison history are the latest QA evidence in this file.
 
 final result: passed
