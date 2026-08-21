@@ -17,7 +17,7 @@ from stackgraph_ai.modernization import (
     evaluate_alternative,
 )
 from stackgraph_ai.errors import ProviderRequestError
-from stackgraph_ai.modernization_worker import _job_failure_is_terminal
+from stackgraph_ai.modernization_worker import _job_failure_is_terminal, _structural_groups
 
 
 CATALOG = Path(__file__).resolve().parents[1] / "alternatives" / "default.json"
@@ -160,6 +160,57 @@ class ModernizationTests(unittest.TestCase):
         self.assertEqual(analysis.impact.covered_call_sites, 1)
         self.assertIn("src/token_test.py", analysis.impact.affected_test_files)
         self.assertEqual(analysis.recommendation.action, "REFACTOR")
+        self.assertEqual(analysis.recommendation.title, "Review duplicate code")
+
+    def test_structural_duplication_ignores_tiny_cross_repository_helpers(self) -> None:
+        repository = UUID("00000000-0000-4000-8000-000000000020")
+        other_repository = UUID("00000000-0000-4000-8000-000000000021")
+
+        def unit(index: int, repository_id: UUID, path: str, line_end: int) -> CodeUnitEvidence:
+            return CodeUnitEvidence(
+                id=UUID(f"00000000-0000-4000-8100-{index:012d}"),
+                repository_id=repository_id,
+                fact_id=UUID(f"00000000-0000-4000-9100-{index:012d}"),
+                source_revision="revision-1", language="javascript",
+                qualified_name="cn", path=path, line_start=4, line_end=line_end,
+                structural_fingerprint="sha256:" + "a" * 64,
+                semantic_tokens=("class", "value"),
+                dependency_keys=("pkg:npm/clsx", "pkg:npm/tailwind-merge"),
+                covering_tests=(), dynamic_signals=(), touchpoints=(),
+            )
+
+        groups = _structural_groups(
+            (
+                unit(1, repository, "src/lib/utils.ts", 6),
+                unit(2, other_repository, "apps/web/src/lib/utils.ts", 6),
+            ),
+            repository,
+        )
+
+        self.assertEqual(groups, ())
+
+    def test_structural_duplication_keeps_material_cross_repository_matches(self) -> None:
+        repository = UUID("00000000-0000-4000-8000-000000000020")
+        other_repository = UUID("00000000-0000-4000-8000-000000000021")
+
+        def unit(index: int, repository_id: UUID, path: str) -> CodeUnitEvidence:
+            return CodeUnitEvidence(
+                id=UUID(f"00000000-0000-4000-8100-{index:012d}"),
+                repository_id=repository_id,
+                fact_id=UUID(f"00000000-0000-4000-9100-{index:012d}"),
+                source_revision="revision-1", language="javascript",
+                qualified_name="normalizeToken", path=path, line_start=4, line_end=12,
+                structural_fingerprint="sha256:" + "b" * 64,
+                semantic_tokens=("normalize", "token"), dependency_keys=(),
+                covering_tests=(), dynamic_signals=(), touchpoints=(),
+            )
+
+        expected = (
+            unit(1, repository, "src/token.ts"),
+            unit(2, other_repository, "src/auth.ts"),
+        )
+
+        self.assertEqual(_structural_groups(expected, repository), (expected,))
 
     def test_native_replacement_requires_eligible_alternative_before_replace(self) -> None:
         repository = UUID("00000000-0000-4000-8000-000000000020")

@@ -7,6 +7,7 @@ import { stackGraphClient } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
+import { RecommendationFocus } from "./RecommendationFocus";
 import styles from "./repository.module.css";
 
 function EntityLinks({
@@ -37,8 +38,15 @@ function TagList({ values }: { values: string[] }) {
   );
 }
 
-export default function RepositoryPage({ params }: { params: Promise<{ id: string }> }) {
+export default function RepositoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ recommendation?: string }>;
+}) {
   const { id } = use(params);
+  const { recommendation } = use(searchParams);
   const openEvidence = useEvidenceStore((state) => state.open);
   const { data, isLoading } = useQuery({
     queryKey: ["repository", id],
@@ -52,14 +60,12 @@ export default function RepositoryPage({ params }: { params: Promise<{ id: strin
         <Skeleton height={36} width="48%" />
         <Skeleton height={150} width="100%" />
         <Skeleton height={260} width="100%" />
-        <DeterministicInsightsPanel
-          scopeEntityId={id}
-          title="Repository findings"
-          description="Current deterministic findings whose evidence or affected scope includes this repository."
-          limit={12}
-        />
       </div>
     );
+  }
+
+  if (recommendation) {
+    return <RecommendationFocus recommendationId={recommendation} repository={data} />;
   }
 
   const { profile } = data;
