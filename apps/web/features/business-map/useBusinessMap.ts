@@ -443,6 +443,21 @@ export function useBusinessMap() {
     }));
   }, []);
 
+  const setCriticality = useCallback((capabilityId: string, criticality: MaturityLevel) => {
+    setMap((current) => ({
+      ...current,
+      catalog: current.catalog.map((fn) => ({
+        ...fn,
+        processes: fn.processes.map((process) => ({
+          ...process,
+          capabilities: process.capabilities.map((capability) =>
+            capability.id === capabilityId ? { ...capability, criticality } : capability,
+          ),
+        })),
+      })),
+    }));
+  }, []);
+
   const removeCapability = useCallback((capabilityId: string) => {
     setMap((current) => ({
       ...current,
@@ -825,6 +840,7 @@ export function useBusinessMap() {
     addCapability,
     moveCapability,
     setMaturity,
+    setCriticality,
     removeCapability,
     createFunction,
     updateFunction,

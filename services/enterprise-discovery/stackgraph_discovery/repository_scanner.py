@@ -2539,14 +2539,29 @@ def _kubernetes_facts(
     facts: list[dict[str, Any]] = []
     supported = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"}
     for index, document in enumerate(documents):
-        if not isinstance(document, Mapping) or document.get("kind") not in supported:
+        if not isinstance(document, Mapping):
             continue
         metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
         workload_name = str(metadata.get("name") or f"document-{index + 1}")
         namespace = str(metadata.get("namespace") or "default")
         line = _line_for_yaml_key(text, workload_name)
+        kind = str(document.get("kind") or "")
+        exposure = _kubernetes_external_exposure(document)
+        if exposure is not None:
+            entrypoint = {
+                "namespace": "DEPLOYMENT", "type": "InfrastructureResource",
+                "key": f"kubernetes:{scan_input.repository_key}:{kind.lower()}:{namespace}/{workload_name}",
+                "name": f"{kind} {namespace}/{workload_name}",
+            }
+            facts.append(_entity_relationship_fact(
+                scan_input, path, line, _repository_ref(scan_input), "USES", entrypoint,
+                {"source_kind": "KUBERNETES", "kind": kind, "namespace": namespace,
+                 "external_exposure": exposure},
+            ))
+        if kind not in supported:
+            continue
         deployment = _deployment_ref(
-            scan_input, path, str(document["kind"]).lower(), f"{namespace}/{workload_name}",
+            scan_input, path, kind.lower(), f"{namespace}/{workload_name}",
         )
         facts.append(_entity_relationship_fact(
             scan_input, path, line, _repository_ref(scan_input), "DEPLOYED_AS", deployment,
@@ -2567,6 +2582,27 @@ def _kubernetes_facts(
                 {"source_kind": "KUBERNETES", "kind": document["kind"], "image": image},
             ))
     return facts
+
+
+def _kubernetes_external_exposure(document: Mapping[str, Any]) -> str | None:
+    """Return only exposure explicitly declared by Kubernetes configuration."""
+    kind = str(document.get("kind") or "")
+    metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
+    annotations = metadata.get("annotations") if isinstance(metadata.get("annotations"), Mapping) else {}
+    annotation_text = " ".join(f"{key}={value}" for key, value in annotations.items()).casefold()
+    internal = any(token in annotation_text for token in (
+        "scheme=internal", "internal=true", "internal-load-balancer=true",
+    ))
+    if kind == "Service":
+        spec = document.get("spec") if isinstance(document.get("spec"), Mapping) else {}
+        if spec.get("type") == "LoadBalancer":
+            return "PRIVATE" if internal else "PUBLIC"
+    if kind == "Ingress":
+        if internal:
+            return "PRIVATE"
+        if any(token in annotation_text for token in ("internet-facing", "external", "public")):
+            return "PUBLIC"
+    return None
 
 
 def _terraform_facts(

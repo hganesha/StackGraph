@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import styles from "./repository.module.css";
 
 function EntityLinks({
@@ -51,6 +52,12 @@ export default function RepositoryPage({ params }: { params: Promise<{ id: strin
         <Skeleton height={36} width="48%" />
         <Skeleton height={150} width="100%" />
         <Skeleton height={260} width="100%" />
+        <DeterministicInsightsPanel
+          scopeEntityId={id}
+          title="Repository findings"
+          description="Current deterministic findings whose evidence or affected scope includes this repository."
+          limit={12}
+        />
       </div>
     );
   }
@@ -143,6 +150,13 @@ export default function RepositoryPage({ params }: { params: Promise<{ id: strin
           <EntityLinks items={data.technologies} kind="technologies" />
         </section>
       </div>
+
+      <DeterministicInsightsPanel
+        scopeEntityId={id}
+        title="Repository findings"
+        description="Current deterministic findings whose evidence or affected scope includes this repository."
+        limit={12}
+      />
 
       {profile && profile.limitations.length > 0 ? (
         <aside className={styles.limitations} aria-label="Profile limitations">

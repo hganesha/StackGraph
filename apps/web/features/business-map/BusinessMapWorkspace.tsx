@@ -54,6 +54,8 @@ const MATURITY = [
   { value: 5, label: "Optimising", detail: "Continuously improving" },
 ] as const;
 
+const CRITICALITY = ["Low", "Standard", "Material", "High", "Mission critical"] as const;
+
 type BusinessMapController = ReturnType<typeof useBusinessMap>;
 
 type CatalogEditorTarget =
@@ -784,6 +786,27 @@ function CapabilityPanel({
           <h2>{capability.name}</h2>
           <p>{capability.description}</p>
         </div>
+        <section className={styles.panelSection}>
+          <div className={styles.panelSectionHeading}>
+            <h3>Business criticality</h3>
+            <span className="sg-mono">{String(capability.criticality ?? 3).padStart(2, "0")}</span>
+          </div>
+          <p className={styles.controlHelp}>Governs business-impact weighting for every mapped application.</p>
+          <label className={styles.criticalityControl}>
+            <span>{CRITICALITY[(capability.criticality ?? 3) - 1]}</span>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              value={capability.criticality ?? 3}
+              disabled={!editing}
+              aria-label={`${capability.name} business criticality`}
+              onChange={(event) => controller.setCriticality(capability.id, Number(event.target.value) as MaturityLevel)}
+            />
+            <span className={styles.criticalityScale} aria-hidden="true"><i>Low</i><i>Critical</i></span>
+          </label>
+        </section>
         <section className={styles.panelSection}>
           <h3>Maturity assessment</h3>
           {editing ? <div className={styles.maturityOptions}>

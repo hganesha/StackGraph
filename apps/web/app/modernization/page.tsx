@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RankedTable, StatTile, Skeleton } from "@stackgraph/design-system";
 import { stackGraphClient } from "@stackgraph/shared";
 import { useModernization } from "@/lib/queries";
+import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import styles from "./modernization.module.css";
 
 export default function ModernizationPage() {
@@ -53,6 +54,13 @@ export default function ModernizationPage() {
           </div>
         )}
       </section>
+
+      <DeterministicInsightsPanel
+        title="Current evidence findings"
+        description="Portfolio-wide dependency, reachability, runtime, and deployment findings derived from current graph facts. Priority is calculated independently from evidence coverage."
+        limit={50}
+        showFilters
+      />
 
       <section className={styles.scenario} aria-labelledby="scenario-title">
         <div>

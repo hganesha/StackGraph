@@ -291,6 +291,11 @@ class RepositoryScannerTests(unittest.TestCase):
                 "    spec:\n      containers:\n        - name: api\n"
                 "          image: ghcr.io/acme/billing:1.2.3\n"
             )
+            (root / "k8s" / "service.yaml").write_text(
+                "apiVersion: v1\nkind: Service\nmetadata:\n  name: billing-public\n"
+                "  namespace: production\nspec:\n  type: LoadBalancer\n"
+                "  selector:\n    app: billing\n  ports:\n    - port: 443\n"
+            )
             (root / "infra.tf").write_text(
                 'resource "aws_s3_bucket" "invoices" {\n  bucket = "invoices"\n}\n'
             )
@@ -312,6 +317,12 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(terraform["object_entity"]["name"], "aws_s3_bucket.invoices")
         self.assertEqual(terraform["evidence"][0]["locator"]["path"], "infra.tf")
         self.assertEqual(terraform["assertion_class"], "DECLARED")
+        public_entrypoint = next(
+            fact for fact in result["facts"]
+            if fact.get("properties", {}).get("external_exposure") == "PUBLIC"
+        )
+        self.assertEqual(public_entrypoint["properties"]["source_kind"], "KUBERNETES")
+        self.assertEqual(public_entrypoint["evidence"][0]["locator"]["path"], "k8s/service.yaml")
 
     def test_snapshot_blob_descriptor_must_be_complete(self) -> None:
         with TemporaryDirectory() as directory:

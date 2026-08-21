@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient, sanitizeOrigin } from "@stackgraph/shared";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import styles from "./technology.module.css";
 
 const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
@@ -29,6 +30,12 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
       <div className={styles.page}>
         <Skeleton height={28} width="45%" />
         <Skeleton height={16} width="70%" />
+        <DeterministicInsightsPanel
+          scopeEntityId={id}
+          title="Technology findings"
+          description="Dependency and portfolio findings deterministically tied to this technology and its observed estate usage."
+          limit={12}
+        />
       </div>
     );
   }
@@ -202,6 +209,13 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
           </ul>
         </section>
       ) : null}
+
+      <DeterministicInsightsPanel
+        scopeEntityId={id}
+        title="Technology findings"
+        description="Dependency and portfolio findings deterministically tied to this technology and its observed estate usage."
+        limit={12}
+      />
 
       {/* Recommendation engine */}
       <section className={styles.section} aria-label="Recommendations">

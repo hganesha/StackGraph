@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   IconBrain,
   IconPlugConnected,
@@ -76,8 +77,12 @@ function SectionTabs({
 }
 
 export default function AdminPage() {
+  const searchParams = useSearchParams();
   const isAdmin = useCan("admin");
-  const [tab, setTab] = useState<TabKey>("data");
+  const requestedTab = searchParams.get("tab");
+  const [tab, setTab] = useState<TabKey>(
+    TABS.some((item) => item.key === requestedTab) ? requestedTab as TabKey : "data",
+  );
   const [dataView, setDataView] = useState<(typeof DATA_VIEWS)[number]["key"]>("connections");
   const [intelligenceView, setIntelligenceView] = useState<(typeof INTELLIGENCE_VIEWS)[number]["key"]>("ai");
   const [governanceView, setGovernanceView] = useState<(typeof GOVERNANCE_VIEWS)[number]["key"]>("modernization");
@@ -162,7 +167,9 @@ export default function AdminPage() {
               <div className={styles.section}>
                 <SectionTabs scope="policy" label="Policy and rule settings" items={GOVERNANCE_VIEWS} active={governanceView} onChange={(key) => setGovernanceView(key as typeof governanceView)} />
                 <div id={`policy-panel-${governanceView}`} role="tabpanel" aria-labelledby={`policy-tab-${governanceView}`}>
-                  {governanceView === "modernization" ? <GovernanceSection /> : <CodePoliciesSection />}
+            {governanceView === "modernization" ? (
+              <GovernanceSection initialView={searchParams.get("area")} />
+            ) : <CodePoliciesSection />}
                 </div>
               </div>
             ) : null}

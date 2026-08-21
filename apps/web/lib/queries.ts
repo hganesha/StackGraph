@@ -63,6 +63,14 @@ export function useModernization() {
   });
 }
 
+export function useEnterpriseInsightReports() {
+  return useQuery({
+    queryKey: ["insights", "enterprise-reports"],
+    queryFn: () => stackGraphClient.listEnterpriseInsightReports(),
+    staleTime: 60_000,
+  });
+}
+
 export function useGraphNeighborhood(centerId: string, depth = 1) {
   return useQuery({
     queryKey: ["graph", centerId, depth],

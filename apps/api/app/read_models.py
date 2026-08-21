@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Mapping
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
@@ -24,6 +24,8 @@ from stackgraph_ai.governance import (
 
 from app.age_graph import AgeGraphReader, AgeTopology
 from app.database import Database
+from app.deterministic_insights import invalidate_deterministic_insight_cache
+from app.deterministic_insights import list_deterministic_insights
 from app.errors import APIError
 from app.read_models_admin import AdminReadModelsMixin
 from app.models import (
@@ -68,6 +70,9 @@ from app.models import (
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     DuplicateCapabilityCandidateSummary,
+    DeterministicInsightList,
+    EnterpriseInsightReport,
+    EnterpriseInsightReportList,
     EntitySummary,
     EstateCounts,
     EstateSummary,
@@ -139,6 +144,73 @@ logger = logging.getLogger(__name__)
 # The DB stores uppercase enums; the API contract and UI use the workspace's kebab form.
 _VIEW_MODE_TO_DB = {"value-chain": "VALUE_CHAIN", "organization": "ORGANIZATION"}
 _VIEW_MODE_FROM_DB = {value: key for key, value in _VIEW_MODE_TO_DB.items()}
+
+_ENTERPRISE_INSIGHT_REPORTS: tuple[dict[str, str], ...] = (
+    {
+        "key": "systemic_dependency_risk", "title": "Systemic dependency risk",
+        "category": "ENTERPRISE_RISK", "metric_label": "highest risk score",
+        "question": "Show me the top 20 dependencies representing systemic enterprise risk.",
+        "populated_status": "ACTION_REQUIRED", "metric_field": "risk_score",
+    },
+    {
+        "key": "reachable_vulnerabilities", "title": "Reachable Tier-1 vulnerabilities",
+        "category": "ENTERPRISE_RISK", "metric_label": "reachable impact paths",
+        "question": "Which vulnerabilities are actually reachable in production Tier-1 applications?",
+        "populated_status": "ACTION_REQUIRED", "metric_field": "row_count",
+        "empty_requires_data": "true",
+    },
+    {
+        "key": "package_business_blast_radius", "title": "Package blast radius · next",
+        "category": "ENTERPRISE_RISK", "metric_label": "enterprise impact groups",
+        "question": "If package next disappeared tomorrow, what business capabilities would be affected?",
+        "populated_status": "WATCH", "metric_field": "row_count", "empty_requires_data": "true",
+        "requires_mapped_rows": "true",
+    },
+    {
+        "key": "duplicate_capability_implementations", "title": "Duplicated capabilities",
+        "category": "TECHNOLOGY_RATIONALIZATION", "metric_label": "duplicated capabilities",
+        "question": "Where have teams independently implemented the same capability?",
+        "populated_status": "WATCH", "metric_field": "row_count",
+    },
+    {
+        "key": "technology_diversity", "title": "Unnecessary technology diversity",
+        "category": "TECHNOLOGY_RATIONALIZATION", "metric_label": "diverse package categories",
+        "question": "Which package categories have the most unnecessary technology diversity?",
+        "populated_status": "WATCH", "metric_field": "row_count",
+    },
+    {
+        "key": "modernization_blockers", "title": "Modernization blockers",
+        "category": "TECHNOLOGY_RATIONALIZATION", "metric_label": "unsupported blockers",
+        "question": "Which unsupported dependencies block our Node/Python/.NET modernization?",
+        "populated_status": "ACTION_REQUIRED", "metric_field": "row_count",
+        "empty_requires_data": "true",
+    },
+    {
+        "key": "custom_to_internal_platform", "title": "Internal platform replacements",
+        "category": "TECHNOLOGY_RATIONALIZATION", "metric_label": "replacement candidates",
+        "question": "Which custom implementations should be replaced by existing internal platforms?",
+        "populated_status": "WATCH", "metric_field": "row_count", "empty_requires_data": "true",
+    },
+    {
+        "key": "internal_library_standards", "title": "Enterprise library standards",
+        "category": "PORTFOLIO_DECISIONS", "metric_label": "standard candidates",
+        "question": "Which internal libraries should become enterprise standards?",
+        "populated_status": "WATCH", "metric_field": "row_count", "empty_requires_data": "true",
+    },
+    {
+        "key": "application_retirement_consolidation", "title": "Retirement & consolidation",
+        "category": "PORTFOLIO_DECISIONS", "metric_label": "portfolio candidates",
+        "question": "What are our best application retirement/consolidation candidates?",
+        "populated_status": "WATCH", "metric_field": "row_count", "empty_requires_data": "true",
+    },
+    {
+        "key": "standardization_initiatives", "title": "Standardization payoff",
+        "category": "PORTFOLIO_DECISIONS", "metric_label": "highest payoff score",
+        "question": "What are the 10 engineering standardization initiatives with the largest enterprise payoff?",
+        "populated_status": "ACTION_REQUIRED", "metric_field": "enterprise_payoff",
+        "empty_requires_data": "true",
+    },
+)
 
 _GRAPH_NEIGHBORHOOD_CTE = """
 WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
@@ -1369,6 +1441,22 @@ class ReadModelStore(AdminReadModelsMixin):
             ),
         )
 
+    async def deterministic_insights(
+        self,
+        *,
+        tenant_id: UUID | None,
+        scope_entity_id: UUID | None,
+        rule_key: str | None,
+        limit: int,
+    ) -> DeterministicInsightList:
+        return await list_deterministic_insights(
+            self.database,
+            tenant_id=tenant_id,
+            scope_entity_id=scope_entity_id,
+            rule_key=rule_key,
+            limit=limit,
+        )
+
     async def capability_footprints(
         self, *, tenant_id: UUID | None,
     ) -> CapabilityFootprintList:
@@ -1456,9 +1544,14 @@ class ReadModelStore(AdminReadModelsMixin):
             """
             SELECT recommendation.id,recommendation.title,recommendation.rationale,
                    recommendation.action,recommendation.confidence recommendation_confidence,
+                   recommendation.review_state recommendation_review_state,
                    recommendation.supporting_fact_ids,recommendation.created_at,
                    recommendation.updated_at,candidate.confidence candidate_confidence,
-                   candidate.capability_definition_id,repository.id repository_entity_id,
+                   candidate.capability_definition_id,candidate.candidate_kind,
+                   candidate.review_state candidate_review_state,
+                   definition.name capability_name,selected.name standard_target,
+                   recommendation.affected_call_sites,recommendation.affected_files,
+                   repository.id repository_entity_id,
                    repository.name repository_name,repository.canonical_key repository_key,
                    coalesce(impact.effort_points,
                      CASE recommendation.estimated_effort WHEN 'LOW' THEN 3 WHEN 'MEDIUM' THEN 8
@@ -2213,9 +2306,196 @@ class ReadModelStore(AdminReadModelsMixin):
             closed_at=fact.get("system_to"),
         )
 
+    async def enterprise_insight_reports(
+        self, *, tenant_id: UUID | None,
+    ) -> EnterpriseInsightReportList:
+        """Materialize the ten executive reports without invoking an AI provider."""
+        phase2_ready = await self._phase2_report_readiness(tenant_id=tenant_id)
+        results = await asyncio.gather(*(
+            self.ask(AskRequest(question=definition["question"]), tenant_id=tenant_id)
+            for definition in _ENTERPRISE_INSIGHT_REPORTS
+        ))
+        reports: list[EnterpriseInsightReport] = []
+        for definition, result in zip(_ENTERPRISE_INSIGHT_REPORTS, results, strict=True):
+            rows = result.rows or []
+            mapped_rows_required = definition.get("requires_mapped_rows") == "true"
+            has_mapped_row = any(
+                row.get("business_capability") not in (None, "UNMAPPED") for row in rows
+            )
+            empty_needs_data = (
+                not rows
+                and definition.get("empty_requires_data") == "true"
+                and not phase2_ready.get(definition["key"], False)
+            )
+            waiting = result.result_kind == "UNSUPPORTED" or empty_needs_data or (
+                mapped_rows_required and not has_mapped_row
+            )
+            status = (
+                "WAITING_FOR_DATA" if waiting
+                else definition["populated_status"] if rows
+                else "HEALTHY"
+            )
+            metric_field = definition["metric_field"]
+            if waiting:
+                metric_value = "—"
+            elif metric_field == "row_count":
+                metric_value = str(len(rows))
+            else:
+                values = [
+                    value for row in rows
+                    if isinstance((value := row.get(metric_field)), (int, float, Decimal))
+                    and not isinstance(value, bool)
+                ]
+                metric = max((float(value) for value in values), default=0)
+                metric_value = str(int(metric)) if metric.is_integer() else f"{metric:.2f}"
+
+            confidence_values = [
+                float(value) for row in rows
+                if isinstance((value := row.get("confidence")), (int, float, Decimal))
+                and not isinstance(value, bool) and 0 <= float(value) <= 1
+            ]
+            confidence = (
+                round(sum(confidence_values) / len(confidence_values), 4)
+                if confidence_values else None
+            )
+            reports.append(EnterpriseInsightReport(
+                key=definition["key"], title=definition["title"],
+                category=definition["category"], question=definition["question"],
+                metric_value=metric_value, metric_label=definition["metric_label"],
+                status=status, answerable=not waiting, confidence=confidence,
+                evidence_count=len(result.citations), summary=result.text, response=result,
+            ))
+
+        return EnterpriseInsightReportList(
+            method_version="enterprise-insights/v1", evaluated_at=datetime.now(UTC),
+            answerable_reports=sum(report.answerable for report in reports),
+            total_reports=len(reports), reports=reports,
+        )
+
+    async def _phase2_report_readiness(
+        self, *, tenant_id: UUID | None,
+    ) -> dict[str, bool]:
+        """Distinguish a defensible zero from a result blocked by missing governance."""
+        row = await self.database.fetch_one(
+            """
+            SELECT
+              EXISTS(
+                SELECT 1 FROM current_capability_application_relationship
+              ) capability_mapped,
+              EXISTS(
+                SELECT 1 FROM current_capability_application_relationship
+                WHERE criticality>=4
+              ) tier1_mapped,
+              EXISTS(
+                SELECT 1 FROM modernization_internal_component
+                WHERE tenant_id=%s AND review_state='APPROVED' AND status='APPROVED'
+              ) internal_catalog_governed,
+              (
+                EXISTS(
+                  SELECT 1 FROM assessment lifecycle
+                  JOIN fact_assertion relationship
+                    ON relationship.object_entity_id=lifecycle.subject_entity_id
+                   AND relationship.tenant_id=%s AND relationship.system_to IS NULL
+                   AND relationship.predicate IN ('DEPENDS_ON','USES','HAS_VERSION')
+                  WHERE lifecycle.status='CURRENT'
+                    AND lower(lifecycle.dimension) IN ('supportability','runtime_support','package_support')
+                ) OR (
+                  EXISTS(
+                    SELECT 1 FROM modernization_policy
+                    WHERE tenant_id=%s AND status='ACTIVE' AND runtime_versions<>'{}'::jsonb
+                  ) AND EXISTS(
+                    SELECT 1 FROM fact_assertion runtime_fact
+                    JOIN entity image ON image.id=runtime_fact.object_entity_id
+                      AND image.entity_type='ContainerImage'
+                    WHERE runtime_fact.tenant_id=%s AND runtime_fact.predicate='RUNS_ON'
+                      AND runtime_fact.system_to IS NULL
+                      AND (
+                        lower(image.name) ~ '(^|/)node(js)?:'
+                        OR lower(image.name) ~ '(^|/)python:'
+                        OR lower(image.name) ~ '(^|/)dotnet:'
+                        OR lower(image.name) LIKE '%%/dotnet/%%'
+                      )
+                  )
+                )
+              ) lifecycle_covered,
+              coalesce((
+                SELECT count(*)>0 AND bool_and(target.refresh_policy ? 'archived')
+                FROM ingest_target target
+                WHERE target.tenant_id=%s AND target.target_kind='REPOSITORY'
+                  AND target.enabled
+              ),false) archive_covered
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
+        ) or {}
+        capability_mapped = bool(row.get("capability_mapped"))
+        internal_catalog_governed = bool(row.get("internal_catalog_governed"))
+        return {
+            "reachable_vulnerabilities": bool(row.get("tier1_mapped")),
+            "package_business_blast_radius": capability_mapped,
+            "modernization_blockers": bool(row.get("lifecycle_covered")),
+            "custom_to_internal_platform": internal_catalog_governed,
+            "internal_library_standards": internal_catalog_governed,
+            "application_retirement_consolidation": (
+                capability_mapped and bool(row.get("archive_covered"))
+            ),
+            # Standardization only needs analyzed candidates; a zero after analysis
+            # is already defensible and the query normally returns scored rows.
+            "standardization_initiatives": True,
+        }
+
     async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse:
         normalized = " ".join(request.question.lower().split())
         context_ids = request.context_entity_ids or []
+
+        if "systemic dependency risk" in normalized or (
+            "top" in normalized and "dependenc" in normalized and "enterprise risk" in normalized
+        ):
+            return await self._ask_systemic_dependency_risk(tenant_id=tenant_id)
+
+        if "reachable" in normalized and "vulnerabil" in normalized and any(
+            phrase in normalized for phrase in ("production", "tier-1", "tier 1")
+        ):
+            return await self._ask_reachable_vulnerabilities(tenant_id=tenant_id)
+
+        if "independently implemented same capability" in normalized or (
+            "same capability" in normalized and any(word in normalized for word in ("implement", "team", "independent"))
+        ):
+            return await self._ask_duplicate_capability_implementations(tenant_id=tenant_id)
+
+        if "modernization blocker" in normalized or (
+            "unsupported" in normalized and "block" in normalized
+        ):
+            return await self._ask_modernization_blockers(tenant_id=tenant_id)
+
+        if "package business capability blast radius" in normalized or (
+            "package" in normalized and any(
+                phrase in normalized for phrase in ("disappeared", "business capabilities", "blast radius")
+            )
+        ):
+            return await self._ask_package_business_blast_radius(
+                normalized, context_ids=context_ids, tenant_id=tenant_id,
+            )
+
+        if "technology diversity" in normalized and any(
+            word in normalized for word in ("package", "category", "unnecessary")
+        ):
+            return await self._ask_technology_diversity(tenant_id=tenant_id)
+
+        if "internal librar" in normalized and any(
+            word in normalized for word in ("standard", "enterprise", "promote")
+        ):
+            return await self._ask_internal_library_standards(tenant_id=tenant_id)
+
+        if "custom implementation" in normalized and "internal platform" in normalized:
+            return await self._ask_custom_to_internal_platform(tenant_id=tenant_id)
+
+        if ("retirement" in normalized or "retire" in normalized) and "consolidat" in normalized:
+            return await self._ask_application_retirement_consolidation(tenant_id=tenant_id)
+
+        if "standardization initiative" in normalized and any(
+            word in normalized for word in ("payoff", "enterprise", "largest", "top 10")
+        ):
+            return await self._ask_standardization_initiatives(tenant_id=tenant_id)
 
         if "unsupported" in normalized and any(word in normalized for word in ("runtime", "node", "python", "java")):
             rows = await self.database.fetch_all(
@@ -2538,6 +2818,894 @@ class ReadModelStore(AdminReadModelsMixin):
                   "Try asking for estate counts, dependencies, usage, or modernization opportunities."),
             citations=[], result_kind="UNSUPPORTED",
         )
+
+    async def _ask_systemic_dependency_risk(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH dependency AS (
+              SELECT fact.id fact_id,fact.subject_entity_id repository_id,
+                     fact.object_entity_id dependency_id,
+                     coalesce(usage.static_reachability,'UNKNOWN') static_reachability,
+                     coalesce(usage.runtime_observed,'UNKNOWN') runtime_observed
+              FROM fact_assertion fact
+              JOIN entity repository ON repository.id=fact.subject_entity_id
+                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+              LEFT JOIN dependency_usage_summary usage
+                ON usage.dependency_fact_assertion_id=fact.id
+              WHERE fact.tenant_id=%s AND fact.predicate='DEPENDS_ON' AND fact.system_to IS NULL
+            ), vulnerability AS (
+              SELECT affected.subject_entity_id dependency_id,
+                     count(DISTINCT affected.object_entity_id)::integer vulnerability_count,
+                     array_agg(DISTINCT affected.id) vulnerability_fact_ids
+              FROM fact_assertion affected
+              JOIN entity vulnerability ON vulnerability.id=affected.object_entity_id
+                AND vulnerability.entity_type='Vulnerability'
+              WHERE affected.predicate='AFFECTED_BY' AND affected.system_to IS NULL
+                AND (affected.tenant_id IS NULL OR affected.tenant_id=%s)
+              GROUP BY affected.subject_entity_id
+            ), deprecated AS (
+              SELECT metadata.subject_entity_id dependency_id,true deprecated,
+                     array_agg(DISTINCT metadata.id) metadata_fact_ids
+              FROM fact_assertion metadata
+              WHERE metadata.predicate='HAS_PROPERTY' AND metadata.system_to IS NULL
+                AND lower(coalesce(
+                  metadata.object_value->>'is_deprecated',
+                  metadata.object_value->>'deprecated','false'
+                )) IN ('true','1','yes')
+              GROUP BY metadata.subject_entity_id
+            ), application_context AS (
+              SELECT dependency.repository_id,application.subject_entity_id application_id,
+                     max(mapping.criticality)::integer criticality
+              FROM dependency
+              JOIN fact_assertion application
+                ON application.object_entity_id=dependency.repository_id
+               AND application.predicate='IMPLEMENTED_BY' AND application.system_to IS NULL
+               AND application.tenant_id=%s
+              LEFT JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application.subject_entity_id
+              GROUP BY dependency.repository_id,application.subject_entity_id
+            ), production AS (
+              SELECT deployment.subject_entity_id repository_id,
+                     true code_production
+              FROM fact_assertion deployment
+              WHERE deployment.tenant_id=%s AND deployment.predicate='DEPLOYED_AS'
+                AND deployment.system_to IS NULL
+                AND coalesce(deployment.properties->>'source_kind','') IN ('KUBERNETES','COMPOSE','DOCKERFILE')
+              GROUP BY deployment.subject_entity_id
+            ), scored AS (
+              SELECT entity.id dependency_id,entity.name dependency,
+                     entity.canonical_key,
+                     count(DISTINCT dependency.repository_id)::integer repositories,
+                     count(DISTINCT dependency.repository_id)
+                       FILTER (WHERE dependency.static_reachability='OBSERVED')::integer reachable_repositories,
+                     count(DISTINCT dependency.repository_id)
+                       FILTER (WHERE dependency.runtime_observed='OBSERVED')::integer runtime_repositories,
+                     count(DISTINCT dependency.repository_id)
+                       FILTER (WHERE production.code_production)::integer code_production_repositories,
+                     count(DISTINCT application_context.application_id)
+                       FILTER (WHERE application_context.criticality>=4)::integer critical_applications,
+                     coalesce(vulnerability.vulnerability_count,0)::integer vulnerabilities,
+                     coalesce(deprecated.deprecated,false) deprecated,
+                     array_agg(DISTINCT dependency.fact_id)
+                       ||coalesce(vulnerability.vulnerability_fact_ids,'{}'::uuid[])
+                       ||coalesce(deprecated.metadata_fact_ids,'{}'::uuid[]) fact_ids
+              FROM dependency
+              JOIN entity ON entity.id=dependency.dependency_id
+              LEFT JOIN vulnerability ON vulnerability.dependency_id=dependency.dependency_id
+              LEFT JOIN deprecated ON deprecated.dependency_id=dependency.dependency_id
+              LEFT JOIN application_context ON application_context.repository_id=dependency.repository_id
+              LEFT JOIN production ON production.repository_id=dependency.repository_id
+              GROUP BY entity.id,entity.name,entity.canonical_key,
+                       vulnerability.vulnerability_count,vulnerability.vulnerability_fact_ids,
+                       deprecated.deprecated,deprecated.metadata_fact_ids
+            )
+            SELECT scored.*,
+                   least(100,
+                     vulnerabilities*15 + repositories*4 + reachable_repositories*6
+                     + runtime_repositories*8 + code_production_repositories*6
+                     + critical_applications*7 + CASE WHEN deprecated THEN 10 ELSE 0 END
+                   )::integer risk_score
+            FROM scored
+            WHERE vulnerabilities>0 OR deprecated OR repositories>1
+            ORDER BY risk_score DESC,repositories DESC,dependency
+            LIMIT 20
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "dependency": row["dependency"],
+            "risk_score": int(row["risk_score"]),
+            "repositories": int(row["repositories"]),
+            "vulnerabilities": int(row["vulnerabilities"]),
+            "reachable_repositories": int(row["reachable_repositories"]),
+            "runtime_repositories": int(row["runtime_repositories"]),
+            "code_deployable_repositories": int(row["code_production_repositories"]),
+            "critical_applications": int(row["critical_applications"]),
+            "deprecated": bool(row["deprecated"]),
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"I ranked {len(rows)} dependencies by deterministic systemic risk across "
+                "vulnerability, reachability, runtime, code-declared deployability, business criticality, and estate breadth."
+                if rows else "I found no dependencies with enough admitted evidence to calculate systemic risk."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_reachable_vulnerabilities(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH production_repository AS (
+              SELECT deployment.subject_entity_id repository_id
+              FROM fact_assertion deployment
+              WHERE deployment.tenant_id=%s AND deployment.predicate='DEPLOYED_AS'
+                AND deployment.system_to IS NULL
+                AND coalesce(deployment.properties->>'source_kind','')
+                    IN ('KUBERNETES','COMPOSE','DOCKERFILE')
+              GROUP BY deployment.subject_entity_id
+            ), critical_application AS (
+              SELECT mapping.application_entity_id,max(mapping.criticality)::integer criticality,
+                     string_agg(DISTINCT capability.name,', ' ORDER BY capability.name) capabilities
+              FROM current_capability_application_relationship mapping
+              JOIN entity capability ON capability.id=mapping.capability_entity_id
+              GROUP BY mapping.application_entity_id
+              HAVING max(mapping.criticality)>=4
+            )
+            SELECT vulnerability.id vulnerability_id,vulnerability.name vulnerability,
+                   dependency.id dependency_id,dependency.name dependency,
+                   repository.id repository_id,repository.name repository,
+                   application.id application_id,application.name application,
+                   critical_application.criticality,critical_application.capabilities,
+                   dependency_fact.id dependency_fact_id,affected.id affected_fact_id
+            FROM fact_assertion dependency_fact
+            JOIN dependency_usage_summary usage
+              ON usage.dependency_fact_assertion_id=dependency_fact.id
+             AND usage.static_reachability='OBSERVED'
+            JOIN entity repository ON repository.id=dependency_fact.subject_entity_id
+              AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+            JOIN production_repository ON production_repository.repository_id=repository.id
+            JOIN entity dependency ON dependency.id=dependency_fact.object_entity_id
+            JOIN fact_assertion affected ON affected.subject_entity_id=dependency.id
+              AND affected.predicate='AFFECTED_BY' AND affected.system_to IS NULL
+              AND (affected.tenant_id IS NULL OR affected.tenant_id=%s)
+            JOIN entity vulnerability ON vulnerability.id=affected.object_entity_id
+              AND vulnerability.entity_type='Vulnerability'
+            JOIN fact_assertion application_link ON application_link.object_entity_id=repository.id
+              AND application_link.predicate='IMPLEMENTED_BY' AND application_link.system_to IS NULL
+              AND application_link.tenant_id=%s
+            JOIN entity application ON application.id=application_link.subject_entity_id
+            JOIN critical_application ON critical_application.application_entity_id=application.id
+            WHERE dependency_fact.tenant_id=%s AND dependency_fact.predicate='DEPENDS_ON'
+              AND dependency_fact.system_to IS NULL
+            ORDER BY critical_application.criticality DESC,vulnerability.name,application.name,repository.name
+            LIMIT 100
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        fact_ids = [
+            fact_id for row in rows
+            for fact_id in (row.get("dependency_fact_id"), row.get("affected_fact_id"))
+            if fact_id is not None
+        ]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "vulnerability": row["vulnerability"], "dependency": row["dependency"],
+            "application": row["application"], "repository": row["repository"],
+            "capabilities": row["capabilities"], "criticality": int(row["criticality"]),
+            "production_basis": "DECLARED_IN_CODE",
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} statically reachable vulnerability impact path"
+                f"{'s' if len(rows) != 1 else ''} in code-declared deployable Tier-1 applications mapped to criticality 4–5 capabilities. "
+                "This does not claim a live deployment is currently running."
+                if rows else "I found no statically reachable vulnerabilities with both code-declared deployable evidence and criticality 4–5 capability mappings."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_duplicate_capability_implementations(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            SELECT capability.id capability_id,capability.name capability,
+                   count(DISTINCT inference.repository_entity_id)::integer repositories,
+                   string_agg(DISTINCT repository.name,', ' ORDER BY repository.name) repository_names,
+                   round(avg(inference.confidence)::numeric,4) confidence,
+                   count(*) FILTER (WHERE inference.review_state='CONFIRMED')::integer confirmed,
+                   array_agg(DISTINCT fact_id) fact_ids
+            FROM capability_inference inference
+            JOIN capability_definition capability ON capability.id=inference.capability_definition_id
+            JOIN entity repository ON repository.id=inference.repository_entity_id
+            CROSS JOIN LATERAL unnest(inference.supporting_fact_ids) fact_id
+            WHERE inference.tenant_id=%s AND inference.stale_at IS NULL
+              AND inference.review_state<>'REJECTED'
+              AND (inference.assertion_class='CURATED' OR inference.review_state='CONFIRMED')
+            GROUP BY capability.id,capability.name
+            HAVING count(DISTINCT inference.repository_entity_id)>=2
+            ORDER BY repositories DESC,confidence DESC,capability.name
+            LIMIT 50
+            """,
+            (tenant_id,), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "capability": row["capability"],
+            "repositories": int(row["repositories"]), "repository_names": row["repository_names"],
+            "confidence": float(row["confidence"]), "confirmed_inferences": int(row["confirmed"]),
+            "ownership_basis": "REPOSITORIES; team ownership not curated",
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} capabilities independently evidenced in multiple repositories. "
+                "Results identify repository implementations; team attribution remains unknown until repository ownership is curated."
+                if rows else "I found no non-rejected capability inferences spanning multiple repositories."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_modernization_blockers(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH assessed_blocker AS (
+              SELECT technology.id technology_id,technology.name technology,
+                     technology.entity_type technology_kind,
+                     coalesce(assessment.categorical_value,'UNSUPPORTED') support_state,
+                     assessment.rationale,repository.id repository_id,
+                     repository.name repository_name,relationship.id fact_id
+              FROM assessment
+              JOIN entity technology ON technology.id=assessment.subject_entity_id
+                AND technology.entity_type IN ('Runtime','Package','PackageVersion','Framework')
+              JOIN fact_assertion relationship ON relationship.object_entity_id=technology.id
+                AND relationship.tenant_id=%s AND relationship.system_to IS NULL
+                AND relationship.predicate IN ('DEPENDS_ON','USES','HAS_VERSION')
+              JOIN entity repository ON repository.id=relationship.subject_entity_id
+                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+              WHERE assessment.status='CURRENT'
+                AND lower(assessment.dimension) IN ('supportability','runtime_support','package_support')
+                AND upper(coalesce(assessment.categorical_value,technology.properties->>'support_status',''))
+                  IN ('UNSUPPORTED','END_OF_LIFE','EOL')
+            ), runtime_observation AS (
+              SELECT image.id technology_id,image.name technology,'ContainerImage' technology_kind,
+                     repository.id repository_id,repository.name repository_name,
+                     runtime_fact.id fact_id,
+                     CASE
+                       WHEN lower(image.name) ~ '(^|/)node(js)?:' THEN 'node'
+                       WHEN lower(image.name) ~ '(^|/)python:' THEN 'python'
+                       WHEN lower(image.name) ~ '(^|/)dotnet:'
+                         OR lower(image.name) LIKE '%%/dotnet/%%' THEN 'dotnet'
+                     END runtime_key,
+                     substring(image.name from ':v?([0-9]+([.][0-9]+){0,2})') observed_version
+              FROM fact_assertion deployment
+              JOIN entity repository ON repository.id=deployment.subject_entity_id
+                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+              JOIN fact_assertion runtime_fact
+                ON runtime_fact.subject_entity_id=deployment.object_entity_id
+               AND runtime_fact.tenant_id=deployment.tenant_id
+               AND runtime_fact.predicate='RUNS_ON' AND runtime_fact.system_to IS NULL
+              JOIN entity image ON image.id=runtime_fact.object_entity_id
+                AND image.entity_type='ContainerImage'
+              WHERE deployment.tenant_id=%s AND deployment.predicate='DEPLOYED_AS'
+                AND deployment.system_to IS NULL
+            ), policy_baseline AS (
+              SELECT lower(baseline.key) runtime_key,baseline.value baseline_value,
+                     substring(baseline.value from '([0-9]+([.][0-9]+){0,2})') baseline_version
+              FROM modernization_policy policy
+              CROSS JOIN LATERAL jsonb_each_text(policy.runtime_versions) baseline
+              WHERE policy.tenant_id=%s AND policy.status='ACTIVE'
+            ), baseline_blocker AS (
+              SELECT observation.technology_id,observation.technology,
+                     observation.technology_kind,'UNSUPPORTED'::text support_state,
+                     'Code-declared runtime ' || observation.observed_version
+                       || ' is below tenant baseline ' || baseline.baseline_value || '.' rationale,
+                     observation.repository_id,observation.repository_name,observation.fact_id
+              FROM runtime_observation observation
+              JOIN policy_baseline baseline USING(runtime_key)
+              WHERE observation.runtime_key IS NOT NULL
+                AND observation.observed_version IS NOT NULL
+                AND baseline.baseline_version IS NOT NULL
+                AND (
+                  split_part(observation.observed_version,'.',1)::integer
+                    < split_part(baseline.baseline_version,'.',1)::integer
+                  OR (
+                    split_part(observation.observed_version,'.',1)::integer
+                      = split_part(baseline.baseline_version,'.',1)::integer
+                    AND coalesce(nullif(split_part(observation.observed_version,'.',2),''),'0')::integer
+                      < coalesce(nullif(split_part(baseline.baseline_version,'.',2),''),'0')::integer
+                  )
+                )
+            ), blocker AS (
+              SELECT * FROM assessed_blocker
+              UNION ALL
+              SELECT * FROM baseline_blocker
+            )
+            SELECT technology_id,technology,technology_kind,support_state,rationale,
+                   count(DISTINCT repository_id)::integer repositories,
+                   string_agg(DISTINCT repository_name,', ' ORDER BY repository_name) repository_names,
+                   array_agg(DISTINCT fact_id) fact_ids
+            FROM blocker
+            GROUP BY technology_id,technology,technology_kind,support_state,rationale
+            ORDER BY repositories DESC,technology
+            LIMIT 100
+            """,
+            (tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        def ecosystem(row: Mapping[str, Any]) -> str:
+            value = f"{row['technology']}".casefold()
+            if any(token in value for token in ("node", "npm", "javascript", "typescript")):
+                return "NODE"
+            if any(token in value for token in ("python", "pypi")):
+                return "PYTHON"
+            if any(token in value for token in (".net", "dotnet", "nuget")):
+                return "DOTNET"
+            return "OTHER"
+        result_rows = [{
+            "technology": row["technology"],
+            "kind": row["technology_kind"], "ecosystem": ecosystem(row),
+            "support_state": row["support_state"], "repositories": int(row["repositories"]),
+            "repository_names": row["repository_names"], "rationale": row.get("rationale"),
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} evidence-backed unsupported technology blocker"
+                f"{'s' if len(rows) != 1 else ''} from lifecycle assessments or code-declared runtime images. .NET results appear only when NuGet or .NET runtime evidence has been ingested."
+                if rows else "I found no runtime below the active tenant baseline and no current unsupported package assessment linked to a repository."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_package_business_blast_radius(
+        self, normalized: str, *, context_ids: list[UUID], tenant_id: UUID | None,
+    ) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH target AS (
+              SELECT entity.id,
+                     coalesce(identity.package_name,entity.name) name,
+                     entity.canonical_key
+              FROM entity
+              LEFT JOIN package_registry_identity identity ON identity.entity_id=entity.id
+              WHERE entity.entity_type IN ('Package','PackageVersion')
+                AND (
+                  entity.id=ANY(%s::uuid[])
+                  OR (cardinality(%s::uuid[])=0 AND %s LIKE '%%' || lower(
+                    coalesce(identity.package_name,regexp_replace(entity.name,'@[^@]+$',''))
+                  ) || '%%')
+                )
+              ORDER BY CASE WHEN entity.id=ANY(%s::uuid[]) THEN 0 ELSE 1 END,entity.name
+              LIMIT 50
+            ), dependency AS (
+              SELECT target.id package_id,target.name package,
+                     fact.subject_entity_id repository_id,fact.id fact_id
+              FROM target
+              JOIN fact_assertion fact ON fact.object_entity_id=target.id
+                AND fact.tenant_id=%s AND fact.predicate='DEPENDS_ON' AND fact.system_to IS NULL
+            ), impact AS (
+              SELECT dependency.package_id,dependency.package,
+                     repository.id repository_id,repository.name repository,
+                     application.id application_id,application.name application,
+                     capability.id capability_id,capability.name capability,
+                     mapping.criticality,dependency.fact_id
+              FROM dependency
+              JOIN entity repository ON repository.id=dependency.repository_id
+              LEFT JOIN fact_assertion application_link
+                ON application_link.object_entity_id=repository.id
+               AND application_link.predicate='IMPLEMENTED_BY' AND application_link.system_to IS NULL
+               AND application_link.tenant_id=%s
+              LEFT JOIN entity application ON application.id=application_link.subject_entity_id
+              LEFT JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application.id
+              LEFT JOIN entity capability ON capability.id=mapping.capability_entity_id
+            )
+            SELECT (array_agg(DISTINCT package_id))[1] package_id,package,
+                   capability_id,capability,
+                   max(criticality)::integer criticality,
+                   count(DISTINCT repository_id)::integer repositories,
+                   count(DISTINCT application_id)::integer applications,
+                   string_agg(DISTINCT repository,', ' ORDER BY repository) repository_names,
+                   string_agg(DISTINCT application,', ' ORDER BY application) application_names,
+                   array_agg(DISTINCT fact_id) fact_ids
+            FROM impact
+            GROUP BY package,capability_id,capability
+            ORDER BY criticality DESC NULLS LAST,applications DESC,repositories DESC,package,capability
+            LIMIT 100
+            """,
+            (context_ids, context_ids, normalized, context_ids, tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        if not rows:
+            return AskResponse(
+                text="I could not resolve that package to an evidence-backed repository dependency. Select a package or include its exact package name.",
+                citations=[], result_kind="UNSUPPORTED", rows=[],
+            )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "package": row["package"],
+            "business_capability": row.get("capability") or "UNMAPPED",
+            "criticality": int(row["criticality"]) if row.get("criticality") is not None else None,
+            "repositories": int(row["repositories"]), "applications": int(row["applications"]),
+            "repository_names": row.get("repository_names"), "application_names": row.get("application_names"),
+        } for row in rows]
+        mapped = sum(row.get("capability_id") is not None for row in rows)
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} package-to-enterprise impact group{'s' if len(rows) != 1 else ''}; "
+                f"{mapped} include governed business-capability mappings. Unmapped applications remain explicit."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_technology_diversity(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH accepted AS (
+              SELECT inference.repository_entity_id,inference.subject_entity_id,
+                     inference.capability_definition_id,inference.confidence,
+                     inference.supporting_fact_ids
+              FROM capability_inference inference
+              WHERE inference.tenant_id=%s AND inference.stale_at IS NULL
+                AND (inference.assertion_class='CURATED' OR inference.review_state='CONFIRMED')
+                AND inference.review_state<>'REJECTED'
+            ), family AS (
+              SELECT accepted.*,capability.name category,
+                     coalesce(registry.ecosystem,
+                       CASE
+                         WHEN technology.canonical_key LIKE 'pkg:npm/%%' THEN 'NPM'
+                         WHEN technology.canonical_key LIKE 'pkg:pypi/%%' THEN 'PYPI'
+                         WHEN technology.canonical_key LIKE 'pkg:maven/%%' THEN 'MAVEN'
+                         WHEN technology.canonical_key LIKE 'pkg:nuget/%%' THEN 'NUGET'
+                         ELSE 'UNKNOWN'
+                       END) ecosystem,
+                     coalesce(identity.package_name,
+                       regexp_replace(
+                         regexp_replace(technology.name,'@[^@]+$',''),
+                         '[[:space:]]+v?[0-9]+([.][0-9A-Za-z_-]+)*$',''
+                       )) package_name
+              FROM accepted
+              JOIN capability_definition capability
+                ON capability.id=accepted.capability_definition_id
+              JOIN entity technology ON technology.id=accepted.subject_entity_id
+              LEFT JOIN package_registry_identity identity
+                ON identity.entity_id=accepted.subject_entity_id
+              LEFT JOIN package_registry registry ON registry.id=identity.package_registry_id
+            ), package_stat AS (
+              SELECT capability_definition_id,category,ecosystem,package_name,
+                     count(DISTINCT repository_entity_id)::integer repositories,
+                     avg(confidence) confidence
+              FROM family
+              GROUP BY capability_definition_id,category,ecosystem,package_name
+            ), category_stat AS (
+              SELECT capability_definition_id,ecosystem,
+                     count(DISTINCT repository_entity_id)::integer repositories
+              FROM family GROUP BY capability_definition_id,ecosystem
+            ), evidence AS (
+              SELECT family.capability_definition_id,family.ecosystem,
+                     family.package_name,fact_id
+              FROM family CROSS JOIN LATERAL unnest(family.supporting_fact_ids) fact_id
+            )
+            SELECT package_stat.capability_definition_id,package_stat.category,
+                   package_stat.ecosystem,
+                   count(DISTINCT package_stat.package_name)::integer packages,
+                   category_stat.repositories,
+                   count(DISTINCT package_stat.package_name)
+                     FILTER (WHERE package_stat.repositories=1)::integer low_adoption_packages,
+                   max(package_stat.repositories)::integer leading_package_repositories,
+                   string_agg(DISTINCT package_stat.package_name,', '
+                     ORDER BY package_stat.package_name) package_names,
+                   round(min(package_stat.confidence)::numeric,4) confidence,
+                   array_agg(DISTINCT evidence.fact_id) fact_ids
+            FROM package_stat
+            JOIN category_stat USING(capability_definition_id,ecosystem)
+            JOIN evidence ON evidence.capability_definition_id=package_stat.capability_definition_id
+              AND evidence.ecosystem=package_stat.ecosystem
+              AND evidence.package_name=package_stat.package_name
+            GROUP BY package_stat.capability_definition_id,package_stat.category,
+                     package_stat.ecosystem,category_stat.repositories
+            HAVING count(DISTINCT package_stat.package_name)>1
+            ORDER BY packages DESC,low_adoption_packages DESC,category,ecosystem
+            LIMIT 50
+            """,
+            (tenant_id,), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "package_category": row["category"],
+            "ecosystem": row["ecosystem"],
+            "diversity_score": min(
+                100,
+                (int(row["packages"]) - 1) * 12
+                + int(row["low_adoption_packages"]) * 7
+                + int(row["repositories"]) * 4,
+            ),
+            "package_families": int(row["packages"]),
+            "repositories": int(row["repositories"]),
+            "low_adoption_packages": int(row["low_adoption_packages"]),
+            "leading_package_repositories": int(row["leading_package_repositories"]),
+            "packages": row["package_names"],
+            "confidence": float(row["confidence"]),
+        } for row in rows]
+        result_rows.sort(key=lambda row: (
+            -row["diversity_score"], row["package_category"], row["ecosystem"],
+        ))
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} governed package-category and ecosystem combinations with multiple implementations. "
+                "The deterministic score increases with package-family count, one-repository choices, and estate breadth; it does not assume all diversity is harmful."
+                if rows else "I found no within-ecosystem package category with multiple curated or confirmed implementations. Cross-language choices are not treated as unnecessary diversity."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_internal_library_standards(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH criticality AS (
+              SELECT application_link.object_entity_id repository_id,
+                     max(mapping.criticality)::integer criticality
+              FROM fact_assertion application_link
+              JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application_link.subject_entity_id
+              WHERE application_link.tenant_id=%s
+                AND application_link.predicate='IMPLEMENTED_BY'
+                AND application_link.system_to IS NULL
+              GROUP BY application_link.object_entity_id
+            ), production AS (
+              SELECT deployment.subject_entity_id repository_id,
+                     true code_production
+              FROM fact_assertion deployment
+              WHERE deployment.tenant_id=%s AND deployment.predicate='DEPLOYED_AS'
+                AND deployment.system_to IS NULL
+                AND coalesce(deployment.properties->>'source_kind','')
+                    IN ('KUBERNETES','COMPOSE','DOCKERFILE')
+              GROUP BY deployment.subject_entity_id
+            )
+            SELECT component.component_key,component.version,entity.name,
+                   capability.name capability,component.owner,component.security_status,
+                   count(DISTINCT repository.id)::integer repositories,
+                   count(DISTINCT repository.id) FILTER
+                     (WHERE usage.static_reachability='OBSERVED')::integer reachable_repositories,
+                   count(DISTINCT repository.id) FILTER
+                     (WHERE production.code_production)::integer code_production_repositories,
+                   count(DISTINCT repository.id) FILTER
+                     (WHERE criticality.criticality>=4)::integer critical_repositories,
+                   array_remove(array_agg(DISTINCT relationship.id),NULL)
+                     ||component.supporting_fact_ids fact_ids
+            FROM modernization_internal_component component
+            JOIN entity ON entity.id=component.component_entity_id
+            JOIN capability_definition capability
+              ON capability.id=component.capability_definition_id
+            LEFT JOIN fact_assertion relationship
+              ON relationship.object_entity_id=component.component_entity_id
+             AND relationship.tenant_id=%s AND relationship.system_to IS NULL
+             AND relationship.predicate IN ('DEPENDS_ON','USES')
+            LEFT JOIN entity repository ON repository.id=relationship.subject_entity_id
+              AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+            LEFT JOIN dependency_usage_summary usage
+              ON usage.dependency_fact_assertion_id=relationship.id
+            LEFT JOIN production ON production.repository_id=repository.id
+            LEFT JOIN criticality ON criticality.repository_id=repository.id
+            WHERE component.tenant_id=%s AND component.review_state='APPROVED'
+              AND component.status='APPROVED'
+            GROUP BY component.id,component.component_key,component.version,entity.name,
+                     capability.name,component.owner,component.security_status,
+                     component.supporting_fact_ids
+            HAVING count(DISTINCT repository.id)>0
+            ORDER BY repositories DESC,reachable_repositories DESC,entity.name
+            LIMIT 50
+            """,
+            (tenant_id, tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "internal_library": row["name"], "version": row["version"],
+            "capability": row["capability"],
+            "standardization_score": min(
+                100,
+                int(row["repositories"]) * 12
+                + int(row["reachable_repositories"]) * 10
+                + int(row["code_production_repositories"]) * 8
+                + int(row["critical_repositories"]) * 10
+                + (10 if row["security_status"] == "CLEAR" else 0)
+                + (5 if row.get("owner") else 0),
+            ),
+            "repositories": int(row["repositories"]),
+            "reachable_repositories": int(row["reachable_repositories"]),
+            "code_deployable_repositories": int(row["code_production_repositories"]),
+            "critical_repositories": int(row["critical_repositories"]),
+            "owner": row.get("owner"), "security_status": row["security_status"],
+        } for row in rows]
+        result_rows.sort(key=lambda row: (-row["standardization_score"], row["internal_library"]))
+        return AskResponse(
+            text=(
+                f"I ranked {len(rows)} governed internal libraries as enterprise-standard candidates using adoption, reachability, code-declared deployability, criticality, ownership, and security status."
+                if rows else "I found no adopted, approved internal component to rank. Govern candidates in Admin → Governance → Modernization before StackGraph recommends them as enterprise standards."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_custom_to_internal_platform(self, *, tenant_id: UUID | None) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH business_context AS (
+              SELECT application_link.object_entity_id repository_id,
+                     max(mapping.criticality)::integer criticality
+              FROM fact_assertion application_link
+              JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application_link.subject_entity_id
+              WHERE application_link.tenant_id=%s
+                AND application_link.predicate='IMPLEMENTED_BY'
+                AND application_link.system_to IS NULL
+              GROUP BY application_link.object_entity_id
+            )
+            SELECT DISTINCT ON (candidate.id)
+                   candidate.id,repository.name repository,capability.name capability,
+                   component_entity.name internal_platform,component.owner,
+                   option.compatibility,option.score option_score,
+                   impact.affected_call_sites,impact.affected_files,impact.effort_points,
+                   candidate.confidence,candidate.review_state,
+                   coalesce(business_context.criticality,0)::integer criticality,
+                   coalesce(recommendation.title,candidate.summary) initiative,
+                   candidate.supporting_fact_ids||option.supporting_fact_ids
+                     ||component.supporting_fact_ids fact_ids
+            FROM modernization_candidate candidate
+            JOIN entity repository ON repository.id=candidate.repository_entity_id
+            JOIN capability_definition capability
+              ON capability.id=candidate.capability_definition_id
+            JOIN modernization_option option
+              ON option.modernization_candidate_id=candidate.id
+             AND option.option_kind='INTERNAL'
+            JOIN modernization_option_evaluation evaluation
+              ON evaluation.modernization_option_id=option.id AND evaluation.eligible
+            JOIN modernization_internal_component component
+              ON component.component_entity_id=option.target_entity_id
+             AND component.capability_definition_id=candidate.capability_definition_id
+             AND component.review_state='APPROVED' AND component.status='APPROVED'
+            JOIN entity component_entity ON component_entity.id=component.component_entity_id
+            LEFT JOIN modernization_impact impact
+              ON impact.modernization_candidate_id=candidate.id
+            LEFT JOIN LATERAL (
+              SELECT value.title FROM modernization_recommendation value
+              WHERE value.modernization_candidate_id=candidate.id
+                AND value.stale_at IS NULL
+                AND value.review_state NOT IN ('REJECTED','DISMISSED')
+              ORDER BY value.updated_at DESC,value.id LIMIT 1
+            ) recommendation ON true
+            LEFT JOIN business_context ON business_context.repository_id=repository.id
+            WHERE candidate.tenant_id=%s AND candidate.stale_at IS NULL
+              AND candidate.review_state<>'REJECTED'
+              AND candidate.candidate_kind IN ('INTERNAL_DUPLICATION','NATIVE_REPLACEMENT')
+            ORDER BY candidate.id,option.score DESC,option.rank,option.id
+            LIMIT 100
+            """,
+            (tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        coverage = await self.database.fetch_one(
+            """
+            SELECT count(*)::integer internal_code_options,
+                   count(*) FILTER (WHERE component.id IS NOT NULL)::integer governed_platform_options
+            FROM modernization_option option
+            JOIN modernization_candidate candidate
+              ON candidate.id=option.modernization_candidate_id
+             AND candidate.stale_at IS NULL AND candidate.review_state<>'REJECTED'
+            LEFT JOIN modernization_internal_component component
+              ON component.component_entity_id=option.target_entity_id
+             AND component.capability_definition_id=candidate.capability_definition_id
+             AND component.review_state='APPROVED' AND component.status='APPROVED'
+            WHERE candidate.tenant_id=%s AND option.option_kind='INTERNAL'
+            """,
+            (tenant_id,), tenant_id=tenant_id,
+        ) or {"internal_code_options": 0, "governed_platform_options": 0}
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "initiative": row["initiative"], "repository": row["repository"],
+            "capability": row["capability"], "internal_platform": row["internal_platform"],
+            "platform_owner": row.get("owner"), "compatibility": row["compatibility"],
+            "option_score": float(row["option_score"]),
+            "affected_call_sites": int(row.get("affected_call_sites") or 0),
+            "affected_files": int(row.get("affected_files") or 0),
+            "criticality": int(row["criticality"]), "review_state": row["review_state"],
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"I found {len(rows)} custom implementations with an eligible, governed internal-platform replacement. Candidate review state remains visible before action."
+                if rows else
+                f"I found no eligible governed internal-platform replacement. StackGraph has {int(coverage['internal_code_options'])} internal code-reuse options, but {int(coverage['governed_platform_options'])} point to approved platform catalog entries; govern platforms in Admin before treating them as replacement standards."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_application_retirement_consolidation(
+        self, *, tenant_id: UUID | None,
+    ) -> AskResponse:
+        rows = await self.database.fetch_all(
+            """
+            WITH app_repository AS (
+              SELECT link.subject_entity_id application_id,link.object_entity_id repository_id,
+                     link.id link_fact_id
+              FROM fact_assertion link
+              WHERE link.tenant_id=%s AND link.predicate='IMPLEMENTED_BY'
+                AND link.system_to IS NULL
+            ), app_criticality AS (
+              SELECT application_entity_id application_id,
+                     max(criticality)::integer criticality
+              FROM current_capability_application_relationship
+              GROUP BY application_entity_id
+            ), retirement AS (
+              SELECT application.id application_id,application.name application,
+                     repository.name repository,
+                     greatest(0,90-coalesce(app_criticality.criticality,3)*10)::integer score,
+                     coalesce(app_criticality.criticality,3)::integer criticality,
+                     ARRAY[app_repository.link_fact_id] fact_ids
+              FROM ingest_target target
+              JOIN entity repository ON repository.canonical_key=target.target_key
+                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+              JOIN app_repository ON app_repository.repository_id=repository.id
+              JOIN entity application ON application.id=app_repository.application_id
+              LEFT JOIN app_criticality ON app_criticality.application_id=application.id
+              WHERE target.tenant_id=%s AND target.target_kind='REPOSITORY'
+                AND coalesce((target.refresh_policy->>'archived')::boolean,false)
+            ), capability_pair AS (
+              SELECT left_map.application_entity_id left_application_id,
+                     right_map.application_entity_id right_application_id,
+                     count(DISTINCT left_map.capability_entity_id)::integer shared_capabilities
+              FROM current_capability_application_relationship left_map
+              JOIN current_capability_application_relationship right_map
+                ON right_map.capability_entity_id=left_map.capability_entity_id
+               AND right_map.application_entity_id>left_map.application_entity_id
+              GROUP BY left_map.application_entity_id,right_map.application_entity_id
+            ), dependency_family AS (
+              SELECT app_repository.application_id,dependency.id fact_id,
+                     coalesce(identity.package_name,
+                       regexp_replace(
+                         regexp_replace(package.name,'@[^@]+$',''),
+                         '[[:space:]]+v?[0-9]+([.][0-9A-Za-z_-]+)*$',''
+                       )) package_name
+              FROM app_repository
+              JOIN fact_assertion dependency
+                ON dependency.subject_entity_id=app_repository.repository_id
+               AND dependency.predicate='DEPENDS_ON' AND dependency.system_to IS NULL
+               AND dependency.tenant_id=%s
+              JOIN entity package ON package.id=dependency.object_entity_id
+              LEFT JOIN package_registry_identity identity ON identity.entity_id=package.id
+            ), dependency_pair AS (
+              SELECT left_dep.application_id left_application_id,
+                     right_dep.application_id right_application_id,
+                     count(DISTINCT left_dep.package_name)::integer shared_packages,
+                     array_agg(DISTINCT left_dep.fact_id)
+                       ||array_agg(DISTINCT right_dep.fact_id) fact_ids
+              FROM dependency_family left_dep
+              JOIN dependency_family right_dep
+                ON right_dep.package_name=left_dep.package_name
+               AND right_dep.application_id>left_dep.application_id
+              GROUP BY left_dep.application_id,right_dep.application_id
+            ), consolidation AS (
+              SELECT left_app.name application,right_app.name comparison_application,
+                     least(100,capability_pair.shared_capabilities*25
+                       +dependency_pair.shared_packages*3
+                       +greatest(0,20-coalesce(greatest(left_criticality.criticality,
+                         right_criticality.criticality),3)*4))::integer score,
+                     capability_pair.shared_capabilities,dependency_pair.shared_packages,
+                     coalesce(greatest(left_criticality.criticality,
+                       right_criticality.criticality),3)::integer criticality,
+                     dependency_pair.fact_ids
+              FROM capability_pair
+              JOIN dependency_pair USING(left_application_id,right_application_id)
+              JOIN entity left_app ON left_app.id=left_application_id
+              JOIN entity right_app ON right_app.id=right_application_id
+              LEFT JOIN app_criticality left_criticality
+                ON left_criticality.application_id=left_application_id
+              LEFT JOIN app_criticality right_criticality
+                ON right_criticality.application_id=right_application_id
+              WHERE capability_pair.shared_capabilities>0
+                AND dependency_pair.shared_packages>0
+            )
+            SELECT 'RETIRE' candidate_kind,application candidate,
+                   NULL::text comparison_application,score opportunity_score,
+                   0::integer shared_capabilities,0::integer shared_packages,
+                   criticality,'Git repository is archived; validate ownership and runtime absence' basis,
+                   fact_ids
+            FROM retirement
+            UNION ALL
+            SELECT 'CONSOLIDATE',application,comparison_application,score,
+                   shared_capabilities,shared_packages,criticality,
+                   'Shared governed capabilities and overlapping package families',fact_ids
+            FROM consolidation
+            ORDER BY opportunity_score DESC,candidate,comparison_application NULLS FIRST
+            LIMIT 50
+            """,
+            (tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "candidate_kind": row["candidate_kind"], "application": row["candidate"],
+            "comparison_application": row.get("comparison_application"),
+            "opportunity_score": int(row["opportunity_score"]),
+            "shared_capabilities": int(row["shared_capabilities"]),
+            "shared_packages": int(row["shared_packages"]),
+            "max_criticality": int(row["criticality"]), "basis": row["basis"],
+        } for row in rows]
+        retirement_count = sum(row["candidate_kind"] == "RETIRE" for row in rows)
+        consolidation_count = len(rows) - retirement_count
+        return AskResponse(
+            text=(
+                f"I found {retirement_count} retirement and {consolidation_count} consolidation candidates. Retirement requires a Git-archived repository; consolidation requires shared governed capabilities plus package overlap. Neither is an automatic action."
+                if rows else "I found no defensible retirement or consolidation candidate. Retirement needs a Git-archived repository; consolidation needs overlapping Business Map capabilities and package evidence."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_standardization_initiatives(self, *, tenant_id: UUID | None) -> AskResponse:
+        scored = (await self._governed_portfolio_scores(tenant_id))[:10]
+        fact_ids = [
+            fact_id for row, _value in scored
+            for fact_id in (row.get("supporting_fact_ids") or [])
+        ]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "initiative": row["title"].replace(
+                " implementation implementations", " implementations",
+            ),
+            "category": row["candidate_kind"],
+            "repository": row["repository_name"],
+            "proposed_target": row.get("standard_target"),
+            "enterprise_payoff": round(value.score * 100, 2),
+            "affected_call_sites": int(row.get("affected_call_sites") or 0),
+            "affected_files": int(row.get("affected_files") or 0),
+            "effort_points": int(row["effort_points"]),
+            "confidence": round(value.candidate.confidence, 4),
+            "governance_state": (
+                f"candidate:{row['candidate_review_state']} / "
+                f"recommendation:{row['recommendation_review_state']}"
+            ),
+            "policy_version": value.policy_version,
+        } for row, value in scored]
+        policy_version = scored[0][1].policy_version if scored else None
+        policy_basis = (
+            "the active governed modernization portfolio policy"
+            if policy_version and not policy_version.endswith("unconfigured")
+            else "deterministic default portfolio weights; publish a portfolio policy in Admin to govern the weights"
+        )
+        return AskResponse(
+            text=(
+                f"I ranked {len(scored)} engineering standardization initiatives using {policy_basis}. Payoff combines business footprint, viability gap, technology entropy, reuse, confidence, and effort penalty."
+                if scored else "I found no active evidence-backed modernization recommendation to rank as a standardization initiative."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_citations(
+        self, fact_ids: list[UUID], *, tenant_id: UUID | None,
+    ) -> list[Citation]:
+        unique_ids = list(dict.fromkeys(fact_ids))[:200]
+        if not unique_ids:
+            return []
+        rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT ON (fact.id) fact.id fact_id,
+                   coalesce(artifact.name,artifact.external_key,fact.predicate) label
+            FROM fact_assertion fact
+            LEFT JOIN evidence ON evidence.fact_assertion_id=fact.id
+            LEFT JOIN source_artifact artifact ON artifact.id=evidence.source_artifact_id
+            WHERE fact.id=ANY(%s::uuid[])
+            ORDER BY fact.id,evidence.observed_at DESC
+            """,
+            (unique_ids,), tenant_id=tenant_id,
+        )
+        return [Citation(
+            fact_id=row["fact_id"], label=row["label"],
+            href=f"/api/v1/facts/{row['fact_id']}/evidence",
+        ) for row in rows]
 
     async def review_identity_assertion(
         self,
@@ -3235,6 +4403,7 @@ class ReadModelStore(AdminReadModelsMixin):
                 connection, map_id=map_id, tenant_id=tenant_id, version=1,
                 state=request.state, actor_key=actor_key,
             )
+            invalidate_deterministic_insight_cache(tenant_id)
             return await self._business_map_detail(connection, map_id)
 
     async def business_map_detail(
@@ -3288,6 +4457,7 @@ class ReadModelStore(AdminReadModelsMixin):
                 connection, map_id=map_id, tenant_id=tenant_id, version=new_version,
                 state=request.state, actor_key=actor_key,
             )
+            invalidate_deterministic_insight_cache(tenant_id)
             return await self._business_map_detail(connection, map_id)
 
     async def archive_business_map(
@@ -3459,6 +4629,7 @@ class ReadModelStore(AdminReadModelsMixin):
                                 "description": capability.description,
                                 "tags": capability.tags,
                                 "owner": capability.owner,
+                                "criticality": capability.criticality,
                                 "governance": "CURATED",
                             }),
                         ),
@@ -3467,13 +4638,13 @@ class ReadModelStore(AdminReadModelsMixin):
                     cursor = await connection.execute(
                         """
                         INSERT INTO business_map_capability
-                          (tenant_id,business_map_id,business_map_process_id,capability_key,entity_id,name,description,tags,kpis,owner,position)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                          (tenant_id,business_map_id,business_map_process_id,capability_key,entity_id,name,description,tags,kpis,owner,criticality,position)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
                         """,
                         (
                             tenant_id, map_id, process_id, capability.id, capability_entity_id,
                             capability.name, capability.description, capability.tags, capability.kpis,
-                            capability.owner, capability_order,
+                            capability.owner, capability.criticality, capability_order,
                         ),
                     )
                     capability_ids[capability.id] = (await cursor.fetchone())["id"]
@@ -3621,6 +4792,7 @@ class ReadModelStore(AdminReadModelsMixin):
                             BusinessMapCapabilityNode(
                                 id=cap["capability_key"], name=cap["name"], description=cap["description"],
                                 tags=list(cap["tags"]), kpis=list(cap["kpis"]), owner=cap["owner"],
+                                criticality=cap["criticality"],
                             )
                             for cap in capabilities_by_process.get(process["id"], [])
                         ],

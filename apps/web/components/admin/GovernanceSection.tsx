@@ -60,7 +60,9 @@ function PolicyEditor({ policy }: { policy?: ModernizationPolicySummary | null }
   const queryClient = useQueryClient();
   const [policyKey, setPolicyKey] = useState(policy?.policy_key ?? "modernization.default");
   const [version, setVersion] = useState(nextVersion(policy?.version));
-  const [runtimeVersions, setRuntimeVersions] = useState(formatKeyValues(policy?.runtime_versions ?? {}));
+  const [runtimeVersions, setRuntimeVersions] = useState(formatKeyValues(
+    policy?.runtime_versions ?? { node: "20", python: "3.12", dotnet: "8" },
+  ));
   const [licenses, setLicenses] = useState((policy?.allowed_licenses ?? []).join(", "));
   const [deniedOptions, setDeniedOptions] = useState((policy?.denied_option_keys ?? []).join("\n"));
   const [requiredTags, setRequiredTags] = useState((policy?.required_policy_tags ?? []).join(", "));
@@ -110,9 +112,9 @@ function PolicyEditor({ policy }: { policy?: ModernizationPolicySummary | null }
           </label>
         </div>
         <label className={styles.field}>
-          <span className={styles.label}>Runtime versions</span>
+          <span className={styles.label}>Minimum supported runtime baselines</span>
           <textarea className={styles.textarea} value={runtimeVersions} onChange={(event) => setRuntimeVersions(event.target.value)} placeholder={"node=20\npython=3.12"} />
-          <span className={styles.help}>One <span className="sg-mono">runtime=version</span> pair per line.</span>
+          <span className={styles.help}>One <span className="sg-mono">runtime=version</span> pair per line. StackGraph compares these baselines with runtime images declared in Dockerfiles, Compose, and Kubernetes code.</span>
         </label>
         <div className={styles.fieldGrid}>
           <label className={styles.field}>
@@ -158,6 +160,7 @@ function PolicyEditor({ policy }: { policy?: ModernizationPolicySummary | null }
 
 function InternalCatalogEditor({ state }: { state: ModernizationGovernanceState }) {
   const queryClient = useQueryClient();
+  const componentCandidates = state.internal_component_candidates ?? [];
   const [componentKey, setComponentKey] = useState("");
   const [entityId, setEntityId] = useState("");
   const [capabilityId, setCapabilityId] = useState("");
@@ -170,6 +173,7 @@ function InternalCatalogEditor({ state }: { state: ModernizationGovernanceState 
   const [status, setStatus] = useState<InternalCatalogComponentUpsertRequest["status"]>("APPROVED");
   const [securityStatus, setSecurityStatus] = useState<InternalCatalogComponentUpsertRequest["security_status"]>("UNKNOWN");
   const [decision, setDecision] = useState<InternalCatalogComponentUpsertRequest["decision"]>("APPROVE");
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
   const govern = useMutation({
     mutationFn: (body: InternalCatalogComponentUpsertRequest) => (
       stackGraphClient.governInternalCatalogComponent(componentKey.trim(), body)
@@ -191,6 +195,17 @@ function InternalCatalogEditor({ state }: { state: ModernizationGovernanceState 
     });
   }
 
+  function selectCandidate(candidateId: string) {
+    setSelectedCandidateId(candidateId);
+    const candidate = componentCandidates.find((item) => item.candidate_id === candidateId);
+    if (!candidate) return;
+    setComponentKey(candidate.component_key);
+    setEntityId(candidate.component_entity_id);
+    setCapabilityId(candidate.capability_definition_id);
+    setFactIds(candidate.supporting_fact_ids.join("\n"));
+    setApiSymbols(candidate.name);
+  }
+
   return (
     <section className={styles.governanceCard} aria-labelledby="internal-catalog-heading">
       <div className={styles.governanceCardHead}>
@@ -207,6 +222,24 @@ function InternalCatalogEditor({ state }: { state: ModernizationGovernanceState 
           ))}
         </ul>
       ) : <p className={styles.empty}>No internal components have been governed yet.</p>}
+      {componentCandidates.length ? (
+        <label className={styles.field}>
+          <span className={styles.label}>Evidence-backed component proposal</span>
+          <select
+            className={styles.select}
+            value={selectedCandidateId}
+            onChange={(event) => selectCandidate(event.target.value)}
+          >
+            <option value="">Select analyzed code evidence…</option>
+            {componentCandidates.map((candidate) => (
+              <option key={candidate.candidate_id} value={candidate.candidate_id}>
+                {candidate.repository_name} · {candidate.capability} · {candidate.name} · {Math.round(candidate.confidence * 100)}%
+              </option>
+            ))}
+          </select>
+          <span className={styles.help}>Selecting a proposal fills the component, capability, and fact identifiers. Approval remains an explicit governed decision and still requires an owner.</span>
+        </label>
+      ) : <p className={styles.empty}>No ungoverned internal component proposal has complete capability evidence.</p>}
       <form className={styles.governanceForm} onSubmit={submit}>
         <div className={styles.fieldGrid}>
           <label className={styles.field}><span className={styles.label}>Component key</span><input className={styles.input} value={componentKey} onChange={(event) => setComponentKey(event.target.value)} required /></label>
@@ -351,8 +384,13 @@ function EcosystemAdmissions({ state }: { state: ModernizationGovernanceState })
   );
 }
 
-export function GovernanceSection() {
-  const [view, setView] = useState<"rules" | "eligibility" | "catalog" | "calibration" | "ecosystems">("rules");
+type GovernanceView = "rules" | "eligibility" | "catalog" | "calibration" | "ecosystems";
+const GOVERNANCE_VIEWS: readonly GovernanceView[] = ["rules", "eligibility", "catalog", "calibration", "ecosystems"];
+
+export function GovernanceSection({ initialView }: { initialView?: string | null }) {
+  const [view, setView] = useState<GovernanceView>(
+    GOVERNANCE_VIEWS.includes(initialView as GovernanceView) ? initialView as GovernanceView : "rules",
+  );
   const governance = useQuery({
     queryKey: ["admin", "modernization-governance"],
     queryFn: () => stackGraphClient.getModernizationGovernance(),

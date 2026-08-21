@@ -7,6 +7,7 @@ import { stackGraphClient } from "@stackgraph/shared";
 import { ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
 import { TechnologyWorkspace } from "./TechnologyWorkspace";
+import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import styles from "./application.module.css";
 
 type ApplicationTab = "overview" | "technology" | "assessments" | "recommendations";
@@ -189,11 +190,18 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
         ) : null}
 
         {activeTab === "recommendations" ? (
-          <section className={styles.focusSection} aria-labelledby="recommendations-heading">
+          <div className={styles.recommendationWorkspace}>
+            <DeterministicInsightsPanel
+              scopeEntityId={id}
+              title="Current application findings"
+              description="Findings derived from the repositories, dependencies, runtime observations, and deployments currently linked to this application."
+              limit={12}
+            />
+            <section className={styles.focusSection} aria-labelledby="recommendations-heading">
             <div className={styles.sectionHeading}>
               <div>
                 <h2 id="recommendations-heading">Investigative recommendations</h2>
-                <p>Evidence-backed actions for this application.</p>
+                <p>AI-assisted or analyst-reviewed actions that build on the deterministic evidence above.</p>
               </div>
               <span>{data.recommendations.length}</span>
             </div>
@@ -211,7 +219,8 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
                 ))}
               </div>
             ) : <EmptyPanel>No recommendations are available yet.</EmptyPanel>}
-          </section>
+            </section>
+          </div>
         ) : null}
       </div>
     </div>

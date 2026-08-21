@@ -25,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        router.push("/ask");
+        router.push("/ask?view=ask");
       }
     };
     document.addEventListener("keydown", onKey);

@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from app.errors import APIError
+from app.models import AskResponse
 from app.read_models import (
     ReadModelStore,
     _confidence_label,
@@ -157,6 +158,61 @@ def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.85) == "HIGH"
     assert _confidence_label(0.5999) == "LOW"
     assert _confidence_label(0.60) == "MEDIUM"
+
+
+def test_enterprise_insight_reports_materialize_deterministic_cards_without_ai() -> None:
+    async def deterministic_ask(self, request, *, tenant_id=None):
+        if "top 20 dependencies" in request.question:
+            rows = [{"dependency": "shared-core", "risk_score": 87}]
+        elif "10 engineering standardization" in request.question:
+            rows = [{"initiative": "Standardize HTTP clients", "enterprise_payoff": 72.5}]
+        else:
+            rows = []
+        return AskResponse(
+            text=f"Deterministic result for {request.question}",
+            citations=[], result_kind="TABLE", rows=rows,
+        )
+
+    store = ReadModelStore(EstateDatabaseStub())
+    with patch.object(ReadModelStore, "ask", deterministic_ask):
+        result = asyncio.run(store.enterprise_insight_reports(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        ))
+
+    assert result.total_reports == 10
+    assert result.answerable_reports == 4
+    assert result.reports[0].metric_value == "87"
+    assert result.reports[0].status == "ACTION_REQUIRED"
+    assert result.reports[-1].metric_value == "72.50"
+    assert result.reports[-1].response.rows == [
+        {"initiative": "Standardize HTTP clients", "enterprise_payoff": 72.5},
+    ]
+
+
+def test_modernization_blockers_include_runtime_baseline_evidence() -> None:
+    class RuntimeBaselineDatabaseStub:
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            assert "policy_baseline" in query
+            assert "ContainerImage" in query
+            return [{
+                "technology_id": UUID("00000000-0000-4000-8000-000000000299"),
+                "technology": "python:3.10-slim", "technology_kind": "ContainerImage",
+                "support_state": "UNSUPPORTED",
+                "rationale": "Code-declared runtime 3.10 is below tenant baseline 3.12.",
+                "repositories": 2, "repository_names": "Billing, Ledger", "fact_ids": [],
+            }]
+
+    result = asyncio.run(ReadModelStore(RuntimeBaselineDatabaseStub())._ask_modernization_blockers(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    assert result.result_kind == "TABLE"
+    assert result.rows == [{
+        "technology": "python:3.10-slim", "kind": "ContainerImage", "ecosystem": "PYTHON",
+        "support_state": "UNSUPPORTED", "repositories": 2,
+        "repository_names": "Billing, Ledger",
+        "rationale": "Code-declared runtime 3.10 is below tenant baseline 3.12.",
+    }]
 
 
 def test_repository_detail_surfaces_cited_revision_pinned_profile() -> None:

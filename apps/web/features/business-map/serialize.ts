@@ -32,6 +32,7 @@ function serializeCatalog(catalog: BusinessFunction[]): BusinessMapFunctionNode[
         tags: capability.tags ?? [],
         kpis: capability.kpis ?? [],
         owner: capability.owner ?? null,
+        criticality: capability.criticality ?? 3,
       })),
     })),
   }));
@@ -110,6 +111,7 @@ export function fromApiState(state: BusinessMapStateModel): BusinessMapState {
           tags: capability.tags,
           kpis: capability.kpis,
           owner: capability.owner ?? undefined,
+          criticality: capability.criticality ?? 3,
         })),
       })),
     })),
