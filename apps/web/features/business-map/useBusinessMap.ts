@@ -196,6 +196,7 @@ export function useBusinessMap() {
   const mapIdRef = useRef<string | null>(null);
   const versionRef = useRef<number>(0);
   const savingRef = useRef(false);
+  const pendingSaveRef = useRef<BusinessMapState | null>(null);
   const seededRef = useRef<BusinessMapState | null>(null);
   const reconciledRef = useRef(false);
 
@@ -286,27 +287,40 @@ export function useBusinessMap() {
     const timer = window.setTimeout(() => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
       setSavedAt(Date.now());
+      pendingSaveRef.current = map;
       const mapId = mapIdRef.current;
       if (!mapId || !canEdit || savingRef.current) return;
       savingRef.current = true;
       (async () => {
         try {
-          try {
-            const saved = await stackGraphClient.saveBusinessMap(mapId, {
-              expected_version: versionRef.current,
-              state: toApiState(map),
-            });
-            versionRef.current = saved.version;
-          } catch (error) {
-            if (error instanceof ApiRequestError && error.status === 409) {
-              const latest = await stackGraphClient.getBusinessMap(mapId);
-              const retried = await stackGraphClient.saveBusinessMap(mapId, {
-                expected_version: latest.version,
-                state: toApiState(map),
-              });
-              versionRef.current = retried.version;
+          // Whole-map saves are serialized. If the user edits while a request is in
+          // flight, the newest state remains queued and is written immediately after it.
+          // This prevents a debounced edit from being dropped by `savingRef`.
+          while (pendingSaveRef.current) {
+            const pending = pendingSaveRef.current;
+            pendingSaveRef.current = null;
+            try {
+              try {
+                const saved = await stackGraphClient.saveBusinessMap(mapId, {
+                  expected_version: versionRef.current,
+                  state: toApiState(pending),
+                });
+                versionRef.current = saved.version;
+              } catch (error) {
+                if (!(error instanceof ApiRequestError) || error.status !== 409) throw error;
+                const latest = await stackGraphClient.getBusinessMap(mapId);
+                const retried = await stackGraphClient.saveBusinessMap(mapId, {
+                  expected_version: latest.version,
+                  state: toApiState(pending),
+                });
+                versionRef.current = retried.version;
+              }
+            } catch {
+              // A newer whole-map state supersedes this one. Otherwise retain the
+              // failed state locally so the next edit retries it.
+              if (!pendingSaveRef.current) pendingSaveRef.current = pending;
+              break;
             }
-            // Other errors: the local draft already holds the change; retry on next edit.
           }
         } finally {
           savingRef.current = false;
