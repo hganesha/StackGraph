@@ -134,6 +134,37 @@ class ProviderAdapterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.structured_output, {"answer": "yes"})
 
+    async def test_openrouter_accepts_one_unfenced_json_payload_in_prose(self) -> None:
+        def handler(_http_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {"content": "Result: {\"answer\":\"yes\"} End."},
+                }],
+            })
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            response = await OpenRouterAdapter("secret", client=client).complete(
+                request(output_schema=SCHEMA)
+            )
+
+        self.assertEqual(response.structured_output, {"answer": "yes"})
+
+    async def test_openrouter_rejects_ambiguous_embedded_json_payloads(self) -> None:
+        def handler(_http_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {"content": "First {\"answer\":\"yes\"}; second {\"answer\":\"no\"}."},
+                }],
+            })
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with self.assertRaisesRegex(ProviderResponseError, "exactly one JSON payload"):
+                await OpenRouterAdapter("secret", client=client).complete(
+                    request(output_schema=SCHEMA)
+                )
+
     async def test_openrouter_rejects_ambiguous_multiple_json_fences(self) -> None:
         def handler(_http_request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={
@@ -144,7 +175,7 @@ class ProviderAdapterTests(unittest.IsolatedAsyncioTestCase):
             })
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            with self.assertRaisesRegex(ProviderResponseError, "expected one JSON object"):
+            with self.assertRaisesRegex(ProviderResponseError, "exactly one JSON payload"):
                 await OpenRouterAdapter("secret", client=client).complete(
                     request(output_schema=SCHEMA)
                 )

@@ -98,6 +98,7 @@ def create_app(
         app_database,
         graph_read_mode=app_settings.graph_read_mode,
         graph_discovery_limit=app_settings.graph_discovery_limit,
+        graph_age_timeout_seconds=app_settings.graph_age_timeout_seconds,
         credential_encryption_key=app_settings.credential_encryption_key,
     )
     environment_ask_service = None

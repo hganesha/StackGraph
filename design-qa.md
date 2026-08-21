@@ -170,3 +170,84 @@ Post-fix evidence: `docs/audits/capability-mapper/28-view-mode/final-view.jpg`, 
 The mapper retains the source's dense hierarchical library, five-stage value-chain canvas, capability cards, stage metrics, maturity treatment, and direct manipulation. It now represents both vertical stage ownership and horizontal/shared capabilities, while the organization template maps the same durable business functions to the current operating structure. Visual CRUD covers functions, processes, capabilities, shared groups, and organization units. Global Ask remains the single intelligence entry point and receives either value-chain or organization-map context.
 
 final result: passed
+
+---
+
+# Application Detail design QA — Option 3
+
+## Evidence
+
+- Source visual truth: `docs/audits/application-detail/option-3-source.png`
+- Initial application screen: `docs/audits/application-detail/before-overview.jpg`
+- Initial unclassified inventory: `docs/audits/application-detail/before-unclassified.jpg`
+- Final browser-rendered implementation: `docs/audits/application-detail/option-3-implementation.jpg`
+- Full-view comparison: `docs/audits/application-detail/option-3-comparison.jpg`
+- Route: `http://localhost:3000/applications/3e6246ee-19ed-4290-9189-725075b73f3d`
+- Source visual: 1487 x 1058 pixels, generated for a 1440 x 1024 desktop target.
+- Implementation viewport: 1030 x 927 CSS pixels at device pixel ratio 2. The in-app browser capture is normalized to 1030 x 927 image pixels, so the implementation is compared at one image pixel per CSS pixel.
+- Combined comparison: 2533 x 1058 pixels, with the source and implementation kept at native capture sizes and aligned at the top edge. No scaling or density interpolation was applied.
+- State: dark theme; Technology tab active; By architecture active; dependency hierarchy collapsed; Frontend and Build & bundling expanded; `esbuild@0.25.12` selected; Unclassified collapsed; evidence inspector visible.
+
+The source target and implementation were opened together in the same comparison input and in the durable comparison artifact above. The implementation capture uses the user's available 1030 px in-app browser viewport, so the comparison judges the responsive mapping of hierarchy, density, typography, surfaces, and inspector behavior rather than claiming pixel-level equality with the 1440 px concept. A separate focused crop was not required because the technology table, disclosure controls, selected-row treatment, and evidence inspector remain legible in the native full-view captures. The evidence drawer was inspected directly in the browser as a focused interaction state.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none remaining.
+- P3: The source concept uses a full-height inspector flush to the right edge. The implementation keeps the inspector sticky within the existing StackGraph workspace at the verified 1030 px viewport, preserving the established shell and leaving the global evidence drawer free to overlay above it.
+- P3: The source concept uses illustrative `Backend` and one-source data. The live estate truth is `Middleware` with one linked technology and two distinct evidence source types for the selected package; the implementation intentionally renders the live data rather than mock values.
+- P3: Browser-rendered verification covered the available 1030 x 927 desktop viewport. The 900 px stacking breakpoint and mobile reflow were reviewed in CSS but could not be captured because the selected in-app browser surface does not expose viewport resizing.
+
+## Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans remains the narrative face and IBM Plex Mono remains the evidence/technology face. The implementation matches the source's 12–16 px product hierarchy, medium application title, compact uppercase-free data labels, and readable line heights without malformed wrapping.
+- Spacing and layout rhythm: the application header, local tab boundary, technology toolbar, collapsed dependency row, architecture disclosures, compact ledger, and 280–340 px inspector follow StackGraph's 4/8/12/16/24/32 spacing tokens. The 1030 px viewport keeps all persistent controls visible without document-level horizontal overflow.
+- Colors and visual tokens: all surfaces, borders, text levels, selection edge, confidence treatment, and active underlines use existing Strata tokens. The design adds no gradients, decorative shadows, or new semantic colors.
+- Image quality and assets: the target contains no raster product imagery. Visible interface icons use the installed Tabler icon family; there are no emoji, handcrafted SVGs, CSS drawings, placeholder assets, or generated product imagery in the implementation.
+- Copy and content: application, repository, architecture, role, confidence, and evidence labels use live estate data. `.` is presented as `Repository root`, singular/plural labels are correct, and duplicate citation labels are consolidated in the inspector.
+- Accessibility and interaction: tabs expose `tablist`/`tab`/`tabpanel` semantics and support arrow, Home, and End navigation; search has an accessible label; disclosure buttons expose expanded state; selected technology uses `aria-pressed`; focus uses the global visible-focus token; reduced motion remains honored globally.
+
+## Comparison history
+
+### Pass 1 — audit findings to selected concept
+
+- P1: The original page rendered all 185 unclassified technologies in the primary reading flow, making the application screen effectively an inventory dump.
+- P2: Technology identity, role, confidence, classification, and three repeated evidence controls competed as peer pills and wrapped into malformed rows.
+- P2: Dependency and architecture sections had weak hierarchy, `.` appeared as the component name, and singular counts rendered as `1 components`.
+
+Fixes applied:
+
+- Replaced the long page with application-level Overview, Technology, Assessments, and Recommendations tabs, defaulting to the selected Technology workspace.
+- Added collapsible architecture and function groups; Unclassified starts collapsed while the first classified group/function is expanded.
+- Consolidated evidence into a selected-technology inspector, deduplicated evidence labels, and kept the global evidence drawer as the source-detail drill-down.
+- Added filter and architecture/all views, correct disclosure icons, `Repository root` labeling, and count grammar.
+
+Post-fix evidence: `docs/audits/application-detail/option-3-implementation.jpg`.
+
+### Pass 2 — source-to-implementation visual comparison
+
+- P2: The first coded pass retained an Evidence column with source-count actions in every row. The selected visual keeps the ledger focused on Technology, Role, and Confidence and moves evidence into the inspector.
+
+Fix applied:
+
+- Removed the redundant Evidence column and source-count row actions. Evidence count and source labels now appear only in the inspector, matching the selected information architecture and reducing horizontal density.
+
+Post-fix evidence: `docs/audits/application-detail/option-3-comparison.jpg`.
+
+## Functional verification
+
+- Opened Overview, Assessments, Recommendations, and returned to Technology.
+- Verified Arrow, Home, and End keyboard navigation across application tabs.
+- Filtered the architecture view to `vite`, cleared the query, and confirmed matching groups update.
+- Switched between By architecture and All technologies.
+- Expanded and collapsed the 185-item Unclassified group.
+- Expanded and collapsed Dependency hierarchy; verified `Repository root` and the Explore graph link.
+- Selected `esbuild@0.25.12`, inspected role/classification/confidence, opened Technology usage evidence, verified the global evidence drawer, and closed it.
+- Confirmed the Open technology link targets the selected technology detail route.
+- `pnpm --filter @stackgraph/web typecheck` passed.
+- Targeted Stylelint passed for `application.module.css`.
+- Docker production-style Next.js build completed successfully and the local web container was rebuilt/restarted.
+- Browser console: 0 errors and 0 warnings after the final restart and interaction checks.
+
+final result: passed

@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     contracts_dir: Path = Path("/contracts/v1")
     graph_read_mode: Literal["auto", "age", "sql"] = "auto"
     graph_discovery_limit: int = Field(default=5000, ge=50, le=50000)
+    graph_age_timeout_seconds: float = Field(default=3.0, ge=0.1, le=30.0)
     ai_ask_enabled: bool = False
     ai_ask_route: str = "default"
     ai_ask_fallback_enabled: bool = True

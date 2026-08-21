@@ -6,11 +6,13 @@ import unittest
 from pathlib import Path
 from uuid import UUID, uuid4
 
+from jsonschema import Draft202012Validator
+
 from stackgraph_ai.catalog import CompositePromptCatalog, LocalPromptCatalog, PostgresPromptCatalog
 from stackgraph_ai.errors import PromptNotFoundError, PromptRenderError
 from stackgraph_ai.models import ModelResponse, ModelRoute, TokenUsage
 from stackgraph_ai.registry import ModelRouteRegistry, ProviderRegistry
-from stackgraph_ai.service import AIService
+from stackgraph_ai.service import AIService, _schema_validation_summary
 
 
 def prompt_record(*, version: str = "1.0.0", status: str = "ACTIVE") -> dict:
@@ -84,12 +86,11 @@ class PromptCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(explanation.output_schema)
         capability = next(prompt for prompt in prompts if prompt.key == "capability.inference")
         self.assertNotIn("temperature", capability.model_parameters)
-        self.assertEqual(capability.version, "1.1.0")
+        self.assertEqual(capability.version, "1.3.0")
         self.assertEqual(
             set(capability.output_schema["required"]),
             {
-                "capabilityKey", "confidence", "supportingEvidenceRefs",
-                "counterEvidenceRefs", "rationale",
+                "capability", "confidence", "rationale",
             },
         )
         self.assertEqual(
@@ -160,6 +161,23 @@ class PromptCatalogTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AIServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_schema_failure_summary_reports_only_structure(self) -> None:
+        schema = {
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        }
+        output = {"legacyAnswer": "sensitive provider content"}
+        error = next(Draft202012Validator(schema).iter_errors(output))
+
+        summary = _schema_validation_summary(error, output, schema)
+
+        self.assertIn("path=$", summary)
+        self.assertIn("missing=answer", summary)
+        self.assertIn("unexpected=legacyAnswer", summary)
+        self.assertNotIn("sensitive provider content", summary)
+
     async def test_service_keeps_prompt_provider_and_audit_boundaries_separate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "prompt.json"
