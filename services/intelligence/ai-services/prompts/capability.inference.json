@@ -35,7 +35,6 @@
   },
   "model_parameters": {
     "max_output_tokens": 1400,
-    "temperature": 0,
     "output_schema_name": "stackgraph_capability_inference"
   },
   "metadata": {

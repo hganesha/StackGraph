@@ -16,6 +16,8 @@ from stackgraph_ai.modernization import (
     analyze_structural_duplication,
     evaluate_alternative,
 )
+from stackgraph_ai.errors import ProviderRequestError
+from stackgraph_ai.modernization_worker import _job_failure_is_terminal
 
 
 CATALOG = Path(__file__).resolve().parents[1] / "alternatives" / "default.json"
@@ -36,6 +38,22 @@ def dependency(index: int, package: str, references: int) -> DependencyUsage:
 
 
 class ModernizationTests(unittest.TestCase):
+    def test_job_failure_retries_only_retryable_errors(self) -> None:
+        job = {"attempt": 1, "max_attempts": 5}
+        invalid_request = ProviderRequestError(
+            provider="openrouter", code="INVALID_REQUEST", message="bad parameters",
+            retryable=False, status_code=404,
+        )
+        rate_limit = ProviderRequestError(
+            provider="openrouter", code="RATE_LIMIT", message="try again",
+            retryable=True, status_code=429,
+        )
+
+        self.assertTrue(_job_failure_is_terminal(job, invalid_request))
+        self.assertFalse(_job_failure_is_terminal(job, rate_limit))
+        self.assertFalse(_job_failure_is_terminal(job, RuntimeError("transient")))
+        self.assertTrue(_job_failure_is_terminal({"attempt": 5, "max_attempts": 5}, rate_limit))
+
     def test_catalog_is_versioned_and_bounded(self) -> None:
         catalog = AlternativeCatalog.load(CATALOG)
         self.assertEqual(catalog.version, "2.0.0")

@@ -71,6 +71,20 @@ class GitHubRepositoryDatabaseStub:
         return [{"repository_name": "acme/already-connected"}]
 
 
+class AIConfigurationDatabaseStub:
+    def __init__(self, model: str = "anthropic/claude-sonnet-5") -> None:
+        self.model = model
+        self.updates: list[tuple[str, object]] = []
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "pgp_sym_decrypt" in query:
+            return {"provider": "openrouter", "model": self.model, "api_key": "secret-key"}
+        if "UPDATE tenant_ai_configuration" in query:
+            self.updates.append((query, params))
+            return {"tenant_id": tenant_id}
+        raise AssertionError(f"unexpected query: {query}")
+
+
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.8499) == "MEDIUM"
     assert _confidence_label(0.85) == "HIGH"
@@ -233,6 +247,81 @@ def test_available_github_repositories_sanitize_rejected_token_errors() -> None:
 
     assert raised.value.code == "GITHUB_TOKEN_REJECTED"
     assert "runtime-only-token" not in raised.value.message
+
+
+def test_openrouter_connection_test_authenticates_and_checks_zdr_model_compatibility() -> None:
+    paths: list[str] = []
+
+    def openrouter(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        assert request.headers["Authorization"] == "Bearer secret-key"
+        if request.url.path == "/api/v1/auth/key":
+            return httpx.Response(200, json={"data": {"label": "StackGraph"}})
+        if request.url.path == "/api/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "anthropic/claude-sonnet-5"}]})
+        if request.url.path == "/api/v1/endpoints/zdr":
+            return httpx.Response(200, json={"data": [{
+                "model_id": "anthropic/claude-sonnet-5",
+                "supported_parameters": ["max_tokens", "response_format"],
+            }]})
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    database = AIConfigurationDatabaseStub()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(openrouter))
+    with patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(ReadModelStore(database).test_ai_provider_connection(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+            actor_key="operator",
+        ))
+
+    assert paths == ["/api/v1/auth/key", "/api/v1/models", "/api/v1/endpoints/zdr"]
+    assert result.models == ["anthropic/claude-sonnet-5"]
+    assert "test_status='SUCCEEDED'" in database.updates[-1][0]
+
+
+def test_openrouter_connection_test_rejects_public_catalog_false_positive() -> None:
+    def openrouter(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/key":
+            return httpx.Response(401, json={"error": {"message": "invalid key"}})
+        raise AssertionError("model discovery must not run after authentication fails")
+
+    database = AIConfigurationDatabaseStub()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(openrouter))
+    with patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        with pytest.raises(APIError) as raised:
+            asyncio.run(ReadModelStore(database).test_ai_provider_connection(
+                tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+                actor_key="operator",
+            ))
+
+    assert raised.value.code == "AI_CONNECTION_FAILED"
+    assert "test_status='FAILED'" in database.updates[-1][0]
+
+
+def test_openrouter_connection_test_rejects_incompatible_zdr_route() -> None:
+    def openrouter(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/key":
+            return httpx.Response(200, json={"data": {}})
+        if request.url.path == "/api/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "anthropic/claude-sonnet-5"}]})
+        if request.url.path == "/api/v1/endpoints/zdr":
+            return httpx.Response(200, json={"data": [{
+                "model_id": "anthropic/claude-sonnet-5",
+                "supported_parameters": ["max_tokens"],
+            }]})
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    database = AIConfigurationDatabaseStub()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(openrouter))
+    with patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        with pytest.raises(APIError) as raised:
+            asyncio.run(ReadModelStore(database).test_ai_provider_connection(
+                tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+                actor_key="operator",
+            ))
+
+    assert raised.value.code == "AI_MODEL_INCOMPATIBLE"
+    assert "test_status='FAILED'" in database.updates[-1][0]
 
 
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:
