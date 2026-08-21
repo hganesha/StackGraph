@@ -26,7 +26,7 @@ from .github_client import (
 )
 
 
-ADAPTER_VERSION = "github-repository-snapshot/1.0.0"
+ADAPTER_VERSION = "github-repository-snapshot/1.1.0"
 REPOSITORY_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSTALLATION_ID = re.compile(r"^[0-9]+$")
 GIT_OBJECT_ID = re.compile(r"^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$")
@@ -64,6 +64,8 @@ SOURCE_SUFFIXES = {
     ".cts": "TYPESCRIPT_SOURCE",
     ".py": "PYTHON_SOURCE",
 }
+
+README_SUFFIXES = {"", ".md", ".markdown", ".mdown", ".rst", ".txt"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -511,6 +513,11 @@ def manifest_kind(path: str) -> str | None:
     if name in EXACT_MANIFEST_NAMES:
         return EXACT_MANIFEST_NAMES[name]
     lower_name = name.lower()
+    if (
+        (lower_name == "readme" or lower_name.startswith("readme."))
+        and pure_path.suffix.lower() in README_SUFFIXES
+    ):
+        return "REPOSITORY_DOCUMENTATION"
     if lower_name == "requirements.txt" or (
         lower_name.startswith("requirements-") and lower_name.endswith(".txt")
     ):
@@ -641,6 +648,8 @@ def manifest_kind_or_none(path: str) -> str | None:
         name = PurePosixPath(path).name
         if (
             name in EXACT_MANIFEST_NAMES
+            or name.lower() == "readme"
+            or name.lower().startswith("readme.")
             or name.lower().startswith("requirements")
             or PurePosixPath(name).suffix.lower() in SOURCE_SUFFIXES
         ):

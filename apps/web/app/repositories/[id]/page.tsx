@@ -1,0 +1,155 @@
+"use client";
+
+import { use } from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { stackGraphClient } from "@stackgraph/shared";
+import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
+import { useEvidenceStore } from "@/lib/evidenceStore";
+import styles from "./repository.module.css";
+
+function EntityLinks({
+  items,
+  kind,
+}: {
+  items: Array<{ id: string; name: string }>;
+  kind: "applications" | "technologies";
+}) {
+  if (items.length === 0) return <p className={styles.empty}>None linked yet.</p>;
+  return (
+    <ul className={styles.entityList}>
+      {items.map((item) => (
+        <li key={item.id}>
+          <Link href={`/${kind}/${item.id}`}>{item.name}</Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TagList({ values }: { values: string[] }) {
+  if (values.length === 0) return <span className={styles.unknown}>Not observed</span>;
+  return (
+    <ul className={styles.tags}>
+      {values.map((value) => <li key={value}>{value}</li>)}
+    </ul>
+  );
+}
+
+export default function RepositoryPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const openEvidence = useEvidenceStore((state) => state.open);
+  const { data, isLoading } = useQuery({
+    queryKey: ["repository", id],
+    queryFn: () => stackGraphClient.getRepository(id),
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div className={styles.page}>
+        <Skeleton height={18} width="26%" />
+        <Skeleton height={36} width="48%" />
+        <Skeleton height={150} width="100%" />
+        <Skeleton height={260} width="100%" />
+      </div>
+    );
+  }
+
+  const { profile } = data;
+  return (
+    <div className={styles.page}>
+      <nav className={styles.crumbs} aria-label="Breadcrumb">
+        <Link href="/estate">Estate</Link>
+        <span aria-hidden="true">›</span>
+        <span className={styles.crumbCurrent}>
+          <DomainBadge namespace="ENTERPRISE" />
+          <span className="sg-mono">{data.repository.name}</span>
+        </span>
+      </nav>
+
+      <header className={styles.head}>
+        <div>
+          <span className={styles.eyebrow}>Repository profile</span>
+          <h1 className={`${styles.title} sg-mono`}>{data.repository.name}</h1>
+          {data.repository.canonical_key ? (
+            <code className={`${styles.canonical} sg-mono`}>{data.repository.canonical_key}</code>
+          ) : null}
+        </div>
+        <span className={styles.freshness}>{data.freshness.status}</span>
+      </header>
+
+      <section className={styles.purpose} aria-labelledby="repository-purpose-heading">
+        <div className={styles.sectionHead}>
+          <div>
+            <span className={styles.eyebrow}>Declared intent</span>
+            <h2 id="repository-purpose-heading">What this repository does</h2>
+          </div>
+          {profile ? <ConfidenceChip label={profile.confidence_label} value={profile.confidence} /> : null}
+        </div>
+        <p className={profile?.purpose ? styles.purposeText : styles.empty}>
+          {profile?.purpose ?? "No purpose statement was found in the admitted README or manifest files."}
+        </p>
+        {profile ? (
+          <div className={styles.provenance}>
+            <span>
+              Source {profile.purpose_source ?? "repository inventory"} · revision{" "}
+              <code className="sg-mono">{profile.source_revision.slice(0, 12)}</code>
+            </span>
+            {profile.citations.map((citation) => (
+              <CitationChip
+                key={citation.fact_id}
+                label={citation.label}
+                onOpen={() => openEvidence(citation.fact_id, citation.label)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <div className={styles.grid}>
+        <section className={styles.card} aria-labelledby="repository-shape-heading">
+          <h2 id="repository-shape-heading">Repository shape</h2>
+          <dl className={styles.profileFacts}>
+            <div><dt>Languages</dt><dd><TagList values={profile?.languages ?? []} /></dd></div>
+            <div><dt>Components</dt><dd><TagList values={profile?.components ?? []} /></dd></div>
+            <div><dt>Operational signals</dt><dd><TagList values={profile?.operational_signals ?? []} /></dd></div>
+          </dl>
+        </section>
+
+        <section className={styles.card} aria-labelledby="repository-sources-heading">
+          <h2 id="repository-sources-heading">Summary sources</h2>
+          <TagList values={profile?.key_files ?? []} />
+          {profile && profile.descriptions.length > 1 ? (
+            <div className={styles.additionalDescription}>
+              <span>Additional declared description</span>
+              <p>{profile.descriptions[1]}</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className={styles.card} aria-labelledby="repository-applications-heading">
+          <div className={styles.cardHeading}>
+            <h2 id="repository-applications-heading">Applications</h2>
+            <span>{data.applications.length}</span>
+          </div>
+          <EntityLinks items={data.applications} kind="applications" />
+        </section>
+
+        <section className={styles.card} aria-labelledby="repository-technologies-heading">
+          <div className={styles.cardHeading}>
+            <h2 id="repository-technologies-heading">Technologies</h2>
+            <span>{data.technologies.length}</span>
+          </div>
+          <EntityLinks items={data.technologies} kind="technologies" />
+        </section>
+      </div>
+
+      {profile && profile.limitations.length > 0 ? (
+        <aside className={styles.limitations} aria-label="Profile limitations">
+          <strong>Interpretation limits</strong>
+          <ul>{profile.limitations.map((value) => <li key={value}>{value}</li>)}</ul>
+        </aside>
+      ) : null}
+    </div>
+  );
+}

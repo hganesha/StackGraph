@@ -9,6 +9,7 @@
 import { config, isFixtureMode } from "../config";
 import type {
   ApplicationDetail,
+  RepositoryDetail,
   AskRequest,
   AskResponse,
   EstateSummary,
@@ -70,6 +71,7 @@ import type {
 // The golden fixture is contracts/v1/fixtures/estate-summary.json.
 import estateSummary from "../fixtures/estate-summary.demo.json";
 import applicationDetail from "../fixtures/application-detail.json";
+import repositoryDetail from "../fixtures/repository-detail.json";
 import technologyDetail from "../fixtures/technology-detail.json";
 import modernizationList from "../fixtures/modernization-list.json";
 import askResponse from "../fixtures/ask-response.json";
@@ -94,6 +96,7 @@ export interface EstateSummaryParams {
 export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
+  getRepository(id: string): Promise<RepositoryDetail>;
   getTechnology(id: string): Promise<TechnologyDetail>;
   getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
@@ -235,6 +238,10 @@ const fixtureClient: StackGraphClient = {
   async getApplication() {
     await delay();
     return applicationDetail as ApplicationDetail;
+  },
+  async getRepository() {
+    await delay();
+    return repositoryDetail as RepositoryDetail;
   },
   async getTechnology() {
     await delay();
@@ -662,6 +669,7 @@ const liveClient: StackGraphClient = {
     return req(`/estate/summary${suffix}`);
   },
   getApplication: (id) => req(`/applications/${id}`),
+  getRepository: (id) => req(`/repositories/${id}`),
   getTechnology: (id) => req(`/technologies/${id}`),
   getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),

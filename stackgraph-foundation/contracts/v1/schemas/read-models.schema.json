@@ -247,6 +247,39 @@
       },
       "additionalProperties": false
     },
+    "repositoryProfile": {
+      "type": "object",
+      "required": ["descriptions", "languages", "components", "key_files", "operational_signals", "limitations", "source_revision", "confidence", "confidence_label", "citations"],
+      "properties": {
+        "purpose": {"type": "string"},
+        "purpose_source": {"type": "string"},
+        "descriptions": {"type": "array", "items": {"type": "string"}},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "components": {"type": "array", "items": {"type": "string"}},
+        "key_files": {"type": "array", "items": {"type": "string"}},
+        "operational_signals": {"type": "array", "items": {"type": "string"}},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "source_revision": {"type": "string", "minLength": 1},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+      },
+      "additionalProperties": false
+    },
+    "repositoryDetail": {
+      "type": "object",
+      "required": ["contract_version", "repository", "applications", "technologies", "deployments", "freshness"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "repository": {"$ref": "#/$defs/entitySummary"},
+        "profile": {"$ref": "#/$defs/repositoryProfile"},
+        "applications": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+      },
+      "additionalProperties": false
+    },
     "technologyDetail": {
       "type": "object",
       "required": ["contract_version", "technology", "internal_usage", "packages", "projects", "assessments", "recommendations", "freshness"],

@@ -347,6 +347,7 @@ def test_golden_billing_vertical_slice() -> None:
                 return {
                     "estateSummary": await client.get("/estate/summary"),
                     "applicationDetail": await client.get(f"/applications/{APPLICATION_ID}"),
+                    "repositoryDetail": await client.get(f"/repositories/{REPOSITORY_ID}"),
                     "technologyDetail": await client.get(f"/technologies/{PACKAGE_ID}"),
                     "technologyHierarchy": await client.get("/technologies/hierarchy"),
                     "modernizationList": await client.get("/modernization"),
@@ -386,7 +387,7 @@ def test_golden_billing_vertical_slice() -> None:
 
         contract = ContractValidator(Path("/contracts/v1"))
         for definition in (
-            "estateSummary", "applicationDetail", "technologyDetail",
+            "estateSummary", "applicationDetail", "repositoryDetail", "technologyDetail",
             "technologyHierarchy", "modernizationList", "graphNeighborhood", "evidenceDetail",
         ):
             contract.validate_read_model(definition, responses[definition].json())
@@ -418,6 +419,11 @@ def test_golden_billing_vertical_slice() -> None:
         assert dependency["direct"] is True
         assert dependency["scope"] == "runtime"
         assert dependency["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
+
+        repository = responses["repositoryDetail"].json()
+        assert repository["repository"]["id"] == REPOSITORY_ID
+        assert {item["id"] for item in repository["applications"]} == {APPLICATION_ID}
+        assert PACKAGE_ID in {item["id"] for item in repository["technologies"]}
 
         technology = responses["technologyDetail"].json()
         assert technology["internal_usage"]["repository_count"] == 1

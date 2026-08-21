@@ -109,11 +109,67 @@ class ServiceStatusDatabaseStub:
         return {"intelligence_failed": 5}
 
 
+class RepositoryDetailDatabaseStub:
+    def __init__(self) -> None:
+        self.fetch_one_calls = 0
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        self.fetch_one_calls += 1
+        if "FROM entity" in query:
+            return {
+                "id": UUID("00000000-0000-4000-8000-000000000401"),
+                "namespace": "ENTERPRISE", "entity_type": "Repository",
+                "canonical_key": "github:repo:billing", "name": "billing-api",
+                "properties": {}, "observed_at": NOW,
+            }
+        if "repository_profile" in query:
+            return {
+                "id": UUID("00000000-0000-4000-8000-000000000402"),
+                "object_value": {
+                    "purpose": "Creates invoices and coordinates payment collection.",
+                    "purpose_source": {"kind": "README", "path": "README.md"},
+                    "descriptions": ["Creates invoices and coordinates payment collection."],
+                    "languages": ["Python"], "components": ["Repository root"],
+                    "key_files": ["README.md", "pyproject.toml"],
+                    "operational_signals": ["Container build"],
+                    "limitations": ["documentation may be stale"],
+                },
+                "confidence": Decimal("0.95"), "source_revision": "revision-1",
+                "observed_at": NOW, "source_key": "github-enterprise",
+            }
+        raise AssertionError(f"unexpected query: {query}")
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        assert "FROM current_relationship" in query
+        return [{
+            "id": UUID("00000000-0000-4000-8000-000000000403"),
+            "namespace": "ENTERPRISE", "entity_type": "Application",
+            "canonical_key": "application:billing", "name": "Billing",
+            "properties": {}, "relationship_type": "IMPLEMENTED_BY", "observed_at": NOW,
+        }]
+
+
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.8499) == "MEDIUM"
     assert _confidence_label(0.85) == "HIGH"
     assert _confidence_label(0.5999) == "LOW"
     assert _confidence_label(0.60) == "MEDIUM"
+
+
+def test_repository_detail_surfaces_cited_revision_pinned_profile() -> None:
+    repository_id = UUID("00000000-0000-4000-8000-000000000401")
+    detail = asyncio.run(ReadModelStore(RepositoryDetailDatabaseStub()).repository_detail(
+        repository_id, tenant_id=UUID("00000000-0000-4000-8000-000000000499"),
+    ))
+
+    assert detail.repository.summary == "Creates invoices and coordinates payment collection."
+    assert detail.profile is not None
+    assert detail.profile.purpose_source == "README.md"
+    assert detail.profile.languages == ["Python"]
+    assert detail.profile.source_revision == "revision-1"
+    assert detail.profile.confidence_label == "HIGH"
+    assert detail.profile.citations[0].fact_id == UUID("00000000-0000-4000-8000-000000000402")
+    assert [application.name for application in detail.applications] == ["Billing"]
 
 
 def test_application_technologies_group_by_catalog_domain_and_capability() -> None:

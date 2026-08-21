@@ -38,6 +38,7 @@ from app.models import (
     ModernizationValidationOutcomeResult,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
+    RepositoryDetail,
     BusinessMapDetail,
     BusinessMapList,
     BusinessMapStateModel,
@@ -181,6 +182,17 @@ class StubReadModels:
 
     async def repository_capabilities(self, repository_id, *, tenant_id):
         raise NotImplementedError
+
+    async def repository_detail(self, repository_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return RepositoryDetail(
+            repository=EntitySummary(
+                id=repository_id, kind="Repository", name="billing-api",
+                canonical_key="github:repo:billing-api", summary="Creates invoices.",
+            ),
+            applications=[], technologies=[], deployments=[],
+            freshness=Freshness(observed_at=NOW, status="FRESH"),
+        )
 
     async def review_capability_inference(
         self, inference_id, review: CapabilityInferenceReviewRequest, *, tenant_id, actor_key,
@@ -514,6 +526,21 @@ def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
 
     assert response.status_code == 200
     assert response.json()["capabilities"][0]["key"] == "http-client"
+
+
+def test_repository_detail_is_exposed_on_versioned_path() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+    response = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/repositories/00000000-0000-4000-8000-000000000701",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["repository"]["summary"] == "Creates invoices."
+    assert "profile" not in response.json()
+    assert store.last_tenant_id == tenant_id
 
 
 def test_capability_review_forwards_tenant_and_actor() -> None:

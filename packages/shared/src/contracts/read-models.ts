@@ -257,6 +257,31 @@ export interface ApplicationDetail {
   freshness: Freshness;
 }
 
+export interface RepositoryProfile {
+  purpose?: string;
+  purpose_source?: string;
+  descriptions: string[];
+  languages: string[];
+  components: string[];
+  key_files: string[];
+  operational_signals: string[];
+  limitations: string[];
+  source_revision: string;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  citations: Citation[];
+}
+
+export interface RepositoryDetail {
+  contract_version: "1.0.0";
+  repository: EntitySummary;
+  profile?: RepositoryProfile;
+  applications: EntitySummary[];
+  technologies: EntitySummary[];
+  deployments: EntitySummary[];
+  freshness: Freshness;
+}
+
 export interface PackageSource {
   registry_key: string;
   origin: string;

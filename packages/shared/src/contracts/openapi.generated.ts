@@ -750,12 +750,37 @@ export interface RepositoryCapabilityIntelligence {
   taxonomy_version?: string | null;
 }
 
+export interface RepositoryDetail {
+  applications: Array<EntitySummary>;
+  contract_version?: "1.0.0";
+  deployments: Array<EntitySummary>;
+  freshness: Freshness;
+  profile?: RepositoryProfile | null;
+  repository: EntitySummary;
+  technologies: Array<EntitySummary>;
+}
+
 export interface RepositoryModernizationIntelligence {
   candidates: Array<ModernizationCandidateModel>;
   contract_version?: "1.0.0";
   repository: EntitySummary;
   source_revision?: string | null;
   truncated: boolean;
+}
+
+export interface RepositoryProfile {
+  citations: Array<Citation>;
+  components?: Array<string>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  descriptions?: Array<string>;
+  key_files?: Array<string>;
+  languages?: Array<string>;
+  limitations?: Array<string>;
+  operational_signals?: Array<string>;
+  purpose?: string | null;
+  purpose_source?: string | null;
+  source_revision: string;
 }
 
 export interface RescanJob {

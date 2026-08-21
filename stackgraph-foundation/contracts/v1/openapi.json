@@ -4654,6 +4654,63 @@
         "title": "RepositoryCapabilityIntelligence",
         "type": "object"
       },
+      "RepositoryDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "applications": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Applications",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Deployments",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "technologies": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Technologies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repository",
+          "applications",
+          "technologies",
+          "deployments",
+          "freshness"
+        ],
+        "title": "RepositoryDetail",
+        "type": "object"
+      },
       "RepositoryModernizationIntelligence": {
         "additionalProperties": false,
         "properties": {
@@ -4695,6 +4752,111 @@
           "truncated"
         ],
         "title": "RepositoryModernizationIntelligence",
+        "type": "object"
+      },
+      "RepositoryProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "components": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "descriptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Descriptions",
+            "type": "array"
+          },
+          "key_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Files",
+            "type": "array"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "operational_signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operational Signals",
+            "type": "array"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "purpose_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose Source"
+          },
+          "source_revision": {
+            "minLength": 1,
+            "title": "Source Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_revision",
+          "confidence",
+          "confidence_label",
+          "citations"
+        ],
+        "title": "RepositoryProfile",
         "type": "object"
       },
       "RescanJob": {
@@ -7987,6 +8149,49 @@
         "summary": "Record Modernization Validation Outcome",
         "tags": [
           "intelligence"
+        ]
+      }
+    },
+    "/repositories/{id}": {
+      "get": {
+        "operationId": "getRepository",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Repository",
+        "tags": [
+          "repositories"
         ]
       }
     },
