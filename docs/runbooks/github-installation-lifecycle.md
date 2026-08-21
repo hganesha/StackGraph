@@ -19,6 +19,30 @@ Repository content acquisition and scanning continue in
 
 ## 1. Register the installation
 
+Hosted setup is the normal path. Configure the GitHub App to request user authorization during
+installation and set its OAuth callback URL to:
+
+```text
+https://<stackgraph-domain>/api/v1/admin/github/installations/setup/callback
+```
+
+Set `STACKGRAPH_GITHUB_APP_SETUP_ENABLED=true`, the App slug/ID/client credentials, the exact
+callback URI, and the App private-key secret. Admin starts the flow through
+`POST /api/v1/admin/github/installations/setup`. StackGraph stores only a hash of the short-lived,
+single-use state. On callback it requires the same authenticated tenant administrator, verifies
+the installation through that GitHub user's authorization, verifies that it belongs to the
+configured App, and proves installation-token minting before registration. OAuth and installation
+tokens remain in memory and are never persisted.
+
+GitHub's optional **Setup URL** is distinct from the OAuth callback URL. Point it at an authenticated
+StackGraph administration page (or leave it unset for the pilot); do not point it at the callback endpoint,
+which requires the OAuth `code` and StackGraph-issued `state` values.
+
+After the hosted trace, disable the pilot fallback with
+`STACKGRAPH_GITHUB_MANUAL_BINDING_ENABLED=false`.
+
+### Manual pilot fallback
+
 The tenant must already exist and be active. Configure the App identity and private key through the local
 environment or a secret-broker mount:
 
@@ -119,4 +143,5 @@ repository targets, recovers expired leases, and connects changed revisions to d
 publication, projection, intelligence, and freshness. The remaining deployment boundary is a hosted GitHub App
 setup/OAuth callback that binds opaque state to the authenticated tenant and verifies installation ownership,
 secret-broker delivery of the App private key, TLS ingress, and routed alerting for failed/stale deliveries and
-reconciliation lag.
+reconciliation lag. The repository-owned hosted flow is complete; production acceptance still requires configuring
+the provider-side URLs and credentials and capturing the end-to-end trace described in ADR 004.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -712,11 +713,6 @@ class CalibrationCorpusPublishRequest(ContractModel):
     corpus_key: str = Field(default="modernization.pilot", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
     version: str = Field(min_length=1)
     case_fingerprints: list[str] = Field(min_length=1)
-    candidate_precision: float | None = Field(default=None, ge=0, le=1)
-    recommendation_acceptance: float | None = Field(default=None, ge=0, le=1)
-    validation_success: float | None = Field(default=None, ge=0, le=1)
-    affected_scope_mae: float | None = Field(default=None, ge=0)
-    effort_accuracy: float | None = Field(default=None, ge=0, le=1)
     minimum_candidate_precision: float = Field(default=0.8, ge=0, le=1)
     minimum_recommendation_acceptance: float = Field(default=0.5, ge=0, le=1)
     minimum_validation_success: float = Field(default=0.8, ge=0, le=1)
@@ -725,12 +721,23 @@ class CalibrationCorpusPublishRequest(ContractModel):
     minimum_reviewed_cases: int = Field(default=20, ge=1)
 
 
+class CalibrationObservedMetrics(ContractModel):
+    candidate_precision: float | None = Field(default=None, ge=0, le=1)
+    recommendation_acceptance: float | None = Field(default=None, ge=0, le=1)
+    validation_success: float | None = Field(default=None, ge=0, le=1)
+    affected_scope_mae: float | None = Field(default=None, ge=0)
+    effort_accuracy: float | None = Field(default=None, ge=0, le=1)
+    reviewed_cases: int = Field(ge=0)
+
+
 class CalibrationCorpusSummary(ContractModel):
     id: UUID
     corpus_key: str
     version: str
     case_count: int = Field(ge=0)
     corpus_fingerprint: str
+    observed_metrics: CalibrationObservedMetrics
+    metrics_source_version: str
     promotion_passed: bool
     promotion_failures: list[str]
     evaluation_fingerprint: str
@@ -768,6 +775,97 @@ class ModernizationGovernanceState(ContractModel):
     internal_components: list[InternalCatalogComponentSummary]
     active_calibration: CalibrationCorpusSummary | None = None
     ecosystem_admissions: list[EcosystemAdmissionSummary]
+
+
+# --- Tenant code-policy governance ---------------------------------------
+
+CodeFunctionSource = Literal["PRIMARY", "CUSTOM"]
+CodeFunctionStatus = Literal["ACTIVE", "RETIRED"]
+
+
+class CodePolicyTechnologySummary(ContractModel):
+    technology: EntitySummary
+    classification: TechnologyClassification
+    domain_key: str | None = None
+    category_key: str | None = None
+    detected_repository_count: int = Field(ge=0)
+
+
+class TenantCodeFunctionPolicySummary(ContractModel):
+    id: UUID
+    allowed_technology_ids: list[UUID]
+    prohibited_technology_ids: list[UUID]
+    policy_fingerprint: str
+    updated_by: str
+    updated_at: datetime
+
+
+class TenantCodeFunctionSummary(ContractModel):
+    function_key: str
+    name: str
+    description: str
+    domain_key: str
+    source: CodeFunctionSource
+    status: CodeFunctionStatus
+    policy: TenantCodeFunctionPolicySummary | None = None
+
+
+class TenantCodeFunctionUpsertRequest(ContractModel):
+    source: CodeFunctionSource
+    name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=4000)
+    domain_key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    status: CodeFunctionStatus = "ACTIVE"
+    allowed_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    prohibited_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+
+    @model_validator(mode="after")
+    def technology_decisions_do_not_overlap(self) -> TenantCodeFunctionUpsertRequest:
+        overlap = set(self.allowed_technology_ids) & set(self.prohibited_technology_ids)
+        if overlap:
+            raise ValueError("a technology cannot be both allowed and prohibited")
+        return self
+
+
+class CodePolicyViolation(ContractModel):
+    rule: Literal["PROHIBITED", "NOT_ALLOWED"]
+    function_key: str
+    function_name: str
+    technology: EntitySummary
+    matched_technology_id: UUID
+    fact_ids: list[UUID] = Field(min_length=1)
+    message: str
+
+
+class RepositoryCodePolicyEvaluation(ContractModel):
+    id: UUID
+    repository: EntitySummary
+    status: Literal["COMPLIANT", "MISALIGNED", "UNASSESSED", "STALE"]
+    violations: list[CodePolicyViolation]
+    unclassified_technologies: list[EntitySummary]
+    policy_set_fingerprint: str
+    evidence_fingerprint: str
+    evaluated_by: str
+    evaluated_at: datetime
+
+
+class TenantCodePolicySummary(ContractModel):
+    governed_functions: int = Field(ge=0)
+    custom_functions: int = Field(ge=0)
+    evaluated_repositories: int = Field(ge=0)
+    compliant_repositories: int = Field(ge=0)
+    misaligned_repositories: int = Field(ge=0)
+    stale_repositories: int = Field(ge=0)
+
+
+class TenantCodePolicyState(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    policy_set_fingerprint: str
+    functions: list[TenantCodeFunctionSummary]
+    available_technologies: list[CodePolicyTechnologySummary]
+    technology_catalog_truncated: bool = False
+    evaluations: list[RepositoryCodePolicyEvaluation]
+    summary: TenantCodePolicySummary
 
 
 class CapabilityFootprintModel(ContractModel):
@@ -1112,6 +1210,29 @@ class GitHubInstallationConnectRequest(ContractModel):
             "hosted setup callback binding remains required for general availability."
         )
     )
+
+
+class GitHubInstallationSetupRequest(ContractModel):
+    return_to: str = Field(default="/admin", min_length=1, max_length=1024)
+
+    @model_validator(mode="after")
+    def _safe_return_path(self) -> "GitHubInstallationSetupRequest":
+        parsed = urlsplit(self.return_to)
+        if (
+            not self.return_to.startswith("/")
+            or self.return_to.startswith("//")
+            or parsed.scheme
+            or parsed.netloc
+            or "\\" in self.return_to
+            or any(ord(character) < 32 for character in self.return_to)
+        ):
+            raise ValueError("return_to must be a safe absolute path")
+        return self
+
+
+class GitHubInstallationSetupResponse(ContractModel):
+    setup_url: str
+    expires_at: datetime
 
 
 class ConnectorUpdateRequest(ContractModel):

@@ -252,9 +252,12 @@ function CalibrationEditor({ state }: { state: ModernizationGovernanceState }) {
     event.preventDefault();
     publish.mutate({
       corpus_key: "modernization.pilot", version: version.trim(), case_fingerprints: splitValues(cases),
-      candidate_precision: Number(candidatePrecision), recommendation_acceptance: Number(acceptance),
-      validation_success: Number(validationSuccess), affected_scope_mae: Number(scopeMae),
-      effort_accuracy: Number(effortAccuracy), minimum_reviewed_cases: Number(minimumCases),
+      minimum_candidate_precision: Number(candidatePrecision),
+      minimum_recommendation_acceptance: Number(acceptance),
+      minimum_validation_success: Number(validationSuccess),
+      maximum_affected_scope_mae: Number(scopeMae),
+      minimum_effort_accuracy: Number(effortAccuracy),
+      minimum_reviewed_cases: Number(minimumCases),
     });
   }
 
@@ -265,6 +268,15 @@ function CalibrationEditor({ state }: { state: ModernizationGovernanceState }) {
         {current ? <span className={current.promotion_passed ? styles.statusGood : styles.statusBad}>{current.promotion_passed ? "Promoted" : "Gate failed"}</span> : <span className={styles.statusMuted}>No corpus</span>}
       </div>
       {current ? <p className={styles.sectionNote}>{current.case_count} reviewed cases · evaluated {new Date(current.evaluated_at).toLocaleString()}</p> : null}
+      {current ? (
+        <dl className={styles.metricGrid}>
+          <div><dt>Candidate precision</dt><dd>{current.observed_metrics.candidate_precision == null ? "Unavailable" : `${(current.observed_metrics.candidate_precision * 100).toFixed(1)}%`}</dd></div>
+          <div><dt>Recommendation acceptance</dt><dd>{current.observed_metrics.recommendation_acceptance == null ? "Unavailable" : `${(current.observed_metrics.recommendation_acceptance * 100).toFixed(1)}%`}</dd></div>
+          <div><dt>Validation success</dt><dd>{current.observed_metrics.validation_success == null ? "Unavailable" : `${(current.observed_metrics.validation_success * 100).toFixed(1)}%`}</dd></div>
+          <div><dt>Normalized scope MAE</dt><dd>{current.observed_metrics.affected_scope_mae == null ? "Unavailable" : current.observed_metrics.affected_scope_mae.toFixed(3)}</dd></div>
+          <div><dt>Effort accuracy</dt><dd>{current.observed_metrics.effort_accuracy == null ? "Unavailable" : `${(current.observed_metrics.effort_accuracy * 100).toFixed(1)}%`}</dd></div>
+        </dl>
+      ) : null}
       {current?.promotion_failures.length ? <ul className={styles.reasonList}>{current.promotion_failures.map((reason) => <li key={reason}>{reason}</li>)}</ul> : null}
       <form className={styles.governanceForm} onSubmit={submit}>
         <div className={styles.fieldGrid}>
@@ -273,12 +285,13 @@ function CalibrationEditor({ state }: { state: ModernizationGovernanceState }) {
         </div>
         <label className={styles.field}><span className={styles.label}>Reviewed analysis fingerprints</span><textarea className={`${styles.textarea} ${styles.codeTextarea}`} value={cases} onChange={(event) => setCases(event.target.value)} placeholder="sha256:…" required /><span className={styles.help}>Candidate or recommendation fingerprints must already have a human review.</span></label>
         <div className={styles.metricGrid}>
-          <label className={styles.field}><span className={styles.label}>Candidate precision</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={candidatePrecision} onChange={(event) => setCandidatePrecision(event.target.value)} required /></label>
-          <label className={styles.field}><span className={styles.label}>Recommendation acceptance</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={acceptance} onChange={(event) => setAcceptance(event.target.value)} required /></label>
-          <label className={styles.field}><span className={styles.label}>Validation success</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={validationSuccess} onChange={(event) => setValidationSuccess(event.target.value)} required /></label>
-          <label className={styles.field}><span className={styles.label}>Affected-scope MAE</span><input className={styles.input} type="number" min="0" step="0.01" value={scopeMae} onChange={(event) => setScopeMae(event.target.value)} required /></label>
-          <label className={styles.field}><span className={styles.label}>Effort accuracy</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={effortAccuracy} onChange={(event) => setEffortAccuracy(event.target.value)} required /></label>
+          <label className={styles.field}><span className={styles.label}>Minimum candidate precision</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={candidatePrecision} onChange={(event) => setCandidatePrecision(event.target.value)} required /></label>
+          <label className={styles.field}><span className={styles.label}>Minimum recommendation acceptance</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={acceptance} onChange={(event) => setAcceptance(event.target.value)} required /></label>
+          <label className={styles.field}><span className={styles.label}>Minimum validation success</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={validationSuccess} onChange={(event) => setValidationSuccess(event.target.value)} required /></label>
+          <label className={styles.field}><span className={styles.label}>Maximum normalized scope MAE</span><input className={styles.input} type="number" min="0" step="0.01" value={scopeMae} onChange={(event) => setScopeMae(event.target.value)} required /></label>
+          <label className={styles.field}><span className={styles.label}>Minimum effort accuracy</span><input className={styles.input} type="number" min="0" max="1" step="0.01" value={effortAccuracy} onChange={(event) => setEffortAccuracy(event.target.value)} required /></label>
         </div>
+        <p className={styles.help}>Observed metrics are computed server-side from the persisted reviews and latest validation outcomes in this immutable case manifest.</p>
         <button className={styles.primary} disabled={publish.isPending || splitValues(cases).length === 0} type="submit">{publish.isPending ? "Evaluating…" : "Evaluate and publish corpus"}</button>
         {publish.isError ? <p className={styles.error} role="alert">{errorMessage(publish.error)}</p> : null}
       </form>

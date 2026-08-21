@@ -557,6 +557,25 @@
 .metricGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.metricGrid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sg-space-2);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+}
+.metricGrid dt {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.metricGrid dd {
+  margin: 0;
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-evidence);
+}
 .textarea {
   min-block-size: 84px;
   resize: vertical;
@@ -687,6 +706,75 @@
   font: inherit;
 }
 
+/* tenant code policies */
+.subheading {
+  margin: 0;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.policyBoundary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+}
+.technologyPolicyList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-block-size: 420px;
+  overflow-y: auto;
+}
+.technologyPolicyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.technologyPolicyName {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+}
+.technologyPolicyName small {
+  color: var(--sg-text-muted);
+}
+.policyEvaluationList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.policyEvaluationItem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+}
+.policyEvaluationItem p {
+  margin: 0;
+}
+.policyEvaluationItem a {
+  margin-inline-start: var(--sg-space-2);
+  color: var(--sg-color-domain-enterprise-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 @media (max-width: 768px) {
   .select,
   .input {
@@ -699,5 +787,9 @@
   .metricGrid,
   .ecosystemGrid {
     grid-template-columns: 1fr;
+  }
+  .technologyPolicyRow {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

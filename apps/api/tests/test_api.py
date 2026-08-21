@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 import time
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import FastAPI
@@ -41,6 +42,9 @@ from app.models import (
     ModernizationScenarioResult,
     ModernizationGovernanceState,
     EcosystemAdmissionSummary,
+    TenantCodeFunctionSummary,
+    TenantCodePolicyState,
+    TenantCodePolicySummary,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
     RepositoryDetail,
@@ -391,6 +395,40 @@ class StubReadModels:
             created_at=NOW, updated_at=NOW,
         )
 
+    async def begin_github_installation_setup(
+        self, *, state_hash, return_to, expires_at, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        self.github_setup_state_hash = state_hash
+        self.github_setup_return_to = return_to
+        self.github_setup_expires_at = expires_at
+
+    async def validate_github_installation_setup(self, *, state_hash, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        assert state_hash == self.github_setup_state_hash
+        return self.github_setup_return_to
+
+    async def complete_hosted_github_installation(
+        self, *, state_hash, installation_id, account_login, account_id, target_type,
+        scopes, tenant_id, actor_key,
+    ):
+        assert state_hash == self.github_setup_state_hash
+        self.hosted_installation = {
+            "installation_id": installation_id,
+            "account_login": account_login,
+            "account_id": account_id,
+            "target_type": target_type,
+            "scopes": scopes,
+        }
+        return Connector(
+            id=UUID("00000000-0000-4000-8000-000000000b04"), provider="GITHUB_APP",
+            display_name=f"{account_login} GitHub installation",
+            external_account_key=f"github:installation:{installation_id}",
+            scopes=scopes, status="CONNECTED", created_at=NOW, updated_at=NOW,
+        )
+
     async def update_connector(self, connector_id, request, *, tenant_id, actor_key):
         self.last_tenant_id = tenant_id
         self.last_actor_key = actor_key
@@ -439,6 +477,37 @@ class StubReadModels:
                 decided_by=actor_key, decided_at=NOW,
             )],
         )
+
+    def _code_policy_state(self):
+        return TenantCodePolicyState(
+            policy_set_fingerprint="sha256:" + "3" * 64,
+            functions=[TenantCodeFunctionSummary(
+                function_key="client-state-management", name="Client state management",
+                description="Manage UI-local state.", domain_key="frontend",
+                source="PRIMARY", status="ACTIVE",
+            )],
+            available_technologies=[], evaluations=[],
+            summary=TenantCodePolicySummary(
+                governed_functions=0, custom_functions=0, evaluated_repositories=0,
+                compliant_repositories=0, misaligned_repositories=0, stale_repositories=0,
+            ),
+        )
+
+    async def get_tenant_code_policies(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return self._code_policy_state()
+
+    async def upsert_tenant_code_function(self, function_key, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        self.last_code_function_key = function_key
+        self.last_code_function_request = request
+        return self._code_policy_state()
+
+    async def evaluate_tenant_code_policies(self, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._code_policy_state()
 
     async def get_ai_provider_configuration(self, *, tenant_id):
         self.last_tenant_id = tenant_id
@@ -1011,11 +1080,22 @@ def test_admin_routes_require_admin_capability() -> None:
             "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
             {"minimum_repositories": 10, "minimum_dependency_share": 0.02},
         ),
+        ("GET", "/api/v1/admin/code-policies", None),
+        (
+            "PUT", "/api/v1/admin/code-policies/functions/client-state-management",
+            {
+                "source": "PRIMARY", "name": "Client state management",
+                "domain_key": "frontend", "allowed_technology_ids": [],
+                "prohibited_technology_ids": [],
+            },
+        ),
+        ("POST", "/api/v1/admin/code-policies/evaluations", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
         (
             "POST", "/api/v1/admin/github/installations",
             {"installation_id": "123456", "pilot_manual_binding_acknowledged": True},
         ),
+        ("POST", "/api/v1/admin/github/installations/setup", {"return_to": "/admin"}),
         ("GET", "/api/v1/admin/ai-configuration", None),
         ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
         ("DELETE", "/api/v1/admin/ai-configuration/key", None),
@@ -1072,6 +1152,36 @@ def test_ecosystem_admission_evaluation_forwards_thresholds_and_actor() -> None:
     admission = response.json()["ecosystem_admissions"][0]
     assert admission["status"] == "ADMITTED"
     assert admission["minimum_repositories"] == 12
+    assert store.last_actor_key == "operator"
+
+
+def test_tenant_code_policy_routes_forward_tenant_and_actor() -> None:
+    app, store = _signed_app()
+    admin = _token(SECRET, ["admin"], TENANT)
+    read = asyncio.run(request(
+        app, "GET", "/api/v1/admin/code-policies",
+        headers={"Authorization": f"Bearer {admin}"},
+    ))
+    saved = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/code-policies/functions/client-state-management",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={
+            "source": "PRIMARY", "name": "Client state management",
+            "description": "Ignored in favor of the primary definition.",
+            "domain_key": "frontend",
+            "allowed_technology_ids": [], "prohibited_technology_ids": [],
+        },
+    ))
+    evaluated = asyncio.run(request(
+        app, "POST", "/api/v1/admin/code-policies/evaluations",
+        headers={"Authorization": f"Bearer {admin}"},
+    ))
+    assert read.status_code == 200
+    assert saved.status_code == 200
+    assert evaluated.status_code == 200
+    assert saved.json()["functions"][0]["source"] == "PRIMARY"
+    assert store.last_code_function_key == "client-state-management"
+    assert store.last_tenant_id == TENANT
     assert store.last_actor_key == "operator"
 
 
@@ -1140,6 +1250,88 @@ def test_manual_github_installation_requires_pilot_acknowledgement() -> None:
         json={"installation_id": "12345678", "display_name": "Acme engineering"},
     ))
     assert response.status_code == 422
+
+
+class StubGitHubAppSetupClient:
+    enabled = True
+
+    def __init__(self) -> None:
+        self.state = ""
+
+    def installation_url(self, state: str) -> str:
+        self.state = state
+        return f"https://github.com/apps/stackgraph/installations/new?state={state}"
+
+    async def verify_installation(self, *, code: str, installation_id: str):
+        assert code == "oauth-code"
+        return SimpleNamespace(
+            installation_id=installation_id,
+            account_login="acme",
+            account_id=42,
+            target_type="Organization",
+            permissions=("contents:read", "metadata:read"),
+        )
+
+
+def test_hosted_github_setup_binds_verified_installation_and_redirects() -> None:
+    app, store = _signed_app()
+    github = StubGitHubAppSetupClient()
+    app.state.github_app_client = github
+    authorization = {"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"}
+    started = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/admin/github/installations/setup",
+        headers=authorization,
+        json={"return_to": "/admin?section=connections"},
+    ))
+    assert started.status_code == 201
+    assert started.json()["setup_url"].startswith("https://github.com/apps/stackgraph/")
+    assert github.state
+    assert store.github_setup_state_hash.startswith("sha256:")
+
+    completed = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/admin/github/installations/setup/callback",
+        headers=authorization,
+        params={
+            "code": "oauth-code",
+            "state": github.state,
+            "installation_id": "12345678",
+            "setup_action": "install",
+        },
+        follow_redirects=False,
+    ))
+    assert completed.status_code == 303
+    assert completed.headers["location"] == (
+        "/admin?section=connections&github=connected&installation_id=12345678"
+    )
+    assert store.hosted_installation == {
+        "installation_id": "12345678",
+        "account_login": "acme",
+        "account_id": 42,
+        "target_type": "Organization",
+        "scopes": ["contents:read", "metadata:read"],
+    }
+
+
+def test_manual_github_binding_can_be_disabled_after_hosted_rollout() -> None:
+    app, _ = app_with_stubs(Settings(
+        environment="test",
+        auth_mode="signed_session",
+        auth_session_secret=SECRET,
+        github_manual_binding_enabled=False,
+    ))
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/admin/github/installations",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"installation_id": "12345678", "pilot_manual_binding_acknowledged": True},
+    ))
+    assert response.status_code == 404
+    assert response.json()["code"] == "GITHUB_MANUAL_BINDING_DISABLED"
 
 
 def test_service_status_is_admin_visible() -> None:

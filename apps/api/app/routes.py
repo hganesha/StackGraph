@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response
+from fastapi.responses import RedirectResponse
 
 from app.auth import Principal
 from app.errors import APIError
@@ -51,6 +56,8 @@ from app.models import (
     CalibrationCorpusPublishRequest,
     EcosystemAdmissionEvaluateRequest,
     EcosystemName,
+    TenantCodeFunctionUpsertRequest,
+    TenantCodePolicyState,
     SessionInfo,
     TechnologyEstateHierarchy,
     TechnologyDetail,
@@ -67,6 +74,8 @@ from app.models import (
     GitHubRepositoryOptionList,
     ConnectorUpdateRequest,
     GitHubInstallationConnectRequest,
+    GitHubInstallationSetupRequest,
+    GitHubInstallationSetupResponse,
     ScanPolicy,
     ScanPolicyUpdateRequest,
     RescanRequest,
@@ -154,6 +163,16 @@ class ReadModelsProtocol(Protocol):
         self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> ModernizationGovernanceState: ...
+    async def get_tenant_code_policies(
+        self, *, tenant_id: UUID | None,
+    ) -> TenantCodePolicyState: ...
+    async def upsert_tenant_code_function(
+        self, function_key: str, request: TenantCodeFunctionUpsertRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState: ...
+    async def evaluate_tenant_code_policies(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState: ...
     async def list_business_maps(
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
     ) -> BusinessMapList: ...
@@ -198,6 +217,18 @@ class ReadModelsProtocol(Protocol):
     ) -> GitHubRepositoryOptionList: ...
     async def connect_github_installation(
         self, request: GitHubInstallationConnectRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
+    async def begin_github_installation_setup(
+        self, *, state_hash: str, return_to: str, expires_at: datetime,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> None: ...
+    async def validate_github_installation_setup(
+        self, *, state_hash: str, tenant_id: UUID | None, actor_key: str,
+    ) -> str: ...
+    async def complete_hosted_github_installation(
+        self, *, state_hash: str, installation_id: str, account_login: str,
+        account_id: int, target_type: str, scopes: list[str], tenant_id: UUID | None,
+        actor_key: str,
     ) -> Connector: ...
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
@@ -780,9 +811,85 @@ async def connect_github_installation(
 ) -> Connector:
     principal = await _principal(request)
     _require(principal, "admin")
+    if not request.app.state.settings.github_manual_binding_enabled:
+        raise APIError(
+            404,
+            "GITHUB_MANUAL_BINDING_DISABLED",
+            "Manual GitHub installation binding is disabled; use hosted GitHub setup.",
+        )
     return await _store(request).connect_github_installation(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
+
+
+@router.post(
+    "/admin/github/installations/setup", response_model=GitHubInstallationSetupResponse,
+    status_code=201, operation_id="startGitHubInstallationSetup", tags=["admin"],
+)
+async def start_github_installation_setup(
+    body: GitHubInstallationSetupRequest,
+    request: Request,
+) -> GitHubInstallationSetupResponse:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    client = request.app.state.github_app_client
+    if not client.enabled:
+        raise APIError(404, "GITHUB_APP_SETUP_DISABLED", "Hosted GitHub App setup is not enabled.")
+    state = secrets.token_urlsafe(48)
+    state_hash = "sha256:" + hashlib.sha256(state.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(UTC) + timedelta(minutes=10)
+    await _store(request).begin_github_installation_setup(
+        state_hash=state_hash,
+        return_to=body.return_to,
+        expires_at=expires_at,
+        tenant_id=principal.tenant_id,
+        actor_key=principal.actor_key,
+    )
+    return GitHubInstallationSetupResponse(
+        setup_url=client.installation_url(state),
+        expires_at=expires_at,
+    )
+
+
+@router.get(
+    "/admin/github/installations/setup/callback", response_model=None,
+    operation_id="completeGitHubInstallationSetup", tags=["admin"],
+)
+async def complete_github_installation_setup(
+    request: Request,
+    code: str = Query(min_length=1, max_length=1024),
+    state: str = Query(min_length=16, max_length=1024),
+    installation_id: str = Query(pattern=r"^[1-9][0-9]{0,19}$"),
+    setup_action: str | None = Query(default=None, pattern=r"^(install|update)$"),
+) -> RedirectResponse:
+    del setup_action
+    principal = await _principal(request)
+    _require(principal, "admin")
+    state_hash = "sha256:" + hashlib.sha256(state.encode("utf-8")).hexdigest()
+    return_to = await _store(request).validate_github_installation_setup(
+        state_hash=state_hash,
+        tenant_id=principal.tenant_id,
+        actor_key=principal.actor_key,
+    )
+    verified = await request.app.state.github_app_client.verify_installation(
+        code=code,
+        installation_id=installation_id,
+    )
+    await _store(request).complete_hosted_github_installation(
+        state_hash=state_hash,
+        installation_id=verified.installation_id,
+        account_login=verified.account_login,
+        account_id=verified.account_id,
+        target_type=verified.target_type,
+        scopes=list(verified.permissions),
+        tenant_id=principal.tenant_id,
+        actor_key=principal.actor_key,
+    )
+    parsed = urlsplit(return_to)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.update({"github": "connected", "installation_id": installation_id})
+    destination = urlunsplit(("", "", parsed.path, urlencode(query), parsed.fragment))
+    return RedirectResponse(destination, status_code=303, headers={"Cache-Control": "no-store"})
 
 
 @router.put(
@@ -876,6 +983,44 @@ async def evaluate_ecosystem_admission(
     _require(principal, "admin")
     return await _store(request).evaluate_ecosystem_admission(
         ecosystem, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: tenant code policies ----------------------------------------
+
+@router.get(
+    "/admin/code-policies", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="getTenantCodePolicies", tags=["admin"],
+)
+async def get_tenant_code_policies(request: Request) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_tenant_code_policies(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/code-policies/functions/{function_key}", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="upsertTenantCodeFunction", tags=["admin"],
+)
+async def upsert_tenant_code_function(
+    function_key: str, body: TenantCodeFunctionUpsertRequest, request: Request,
+) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).upsert_tenant_code_function(
+        function_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/admin/code-policies/evaluations", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="evaluateTenantCodePolicies", tags=["admin"],
+)
+async def evaluate_tenant_code_policies(request: Request) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).evaluate_tenant_code_policies(
+        tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

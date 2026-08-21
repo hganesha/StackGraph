@@ -175,6 +175,24 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                         "notes": "Migration validation passed.",
                     },
                 )
+                calibration = await client.put(
+                    "/api/v1/admin/modernization-governance/calibration",
+                    json={
+                        "corpus_key": "modernization.pilot",
+                        "version": "test-1",
+                        "case_fingerprints": ["sha256:" + "3" * 64, "sha256:" + "5" * 64],
+                        "minimum_reviewed_cases": 2,
+                    },
+                )
+                client_supplied_metrics = await client.put(
+                    "/api/v1/admin/modernization-governance/calibration",
+                    json={
+                        "corpus_key": "modernization.pilot",
+                        "version": "forged",
+                        "case_fingerprints": ["sha256:" + "3" * 64],
+                        "candidate_precision": 1.0,
+                    },
+                )
                 metrics = await client.get("/api/v1/intelligence/phase-3/metrics")
         other_tenant_app = create_app(settings=Settings(
             environment="test", database_url=database_url, default_tenant_id=uuid4(),
@@ -187,9 +205,15 @@ def test_modernization_read_model_and_optimistic_review() -> None:
                 cross_tenant = await other_tenant_client.get(
                     f"/api/v1/repositories/{repository['id']}/modernization-intelligence"
                 )
-        return read, candidate_review, review, conflict, outcome, metrics, cross_tenant
+        return (
+            read, candidate_review, review, conflict, outcome, calibration,
+            client_supplied_metrics, metrics, cross_tenant,
+        )
 
-    read, candidate_review, review, conflict, outcome, metrics, cross_tenant = asyncio.run(query_api())
+    (
+        read, candidate_review, review, conflict, outcome, calibration,
+        client_supplied_metrics, metrics, cross_tenant,
+    ) = asyncio.run(query_api())
     assert read.status_code == 200, read.text
     assert read.json()["candidates"][0]["recommendation"]["affected_call_sites"] == 2
     assert read.json()["candidates"][0]["options"][0]["canonical_key"] == "pkg:npm/axios"
@@ -202,6 +226,19 @@ def test_modernization_read_model_and_optimistic_review() -> None:
     assert conflict.status_code == 409
     assert conflict.json()["code"] == "VERSION_CONFLICT"
     assert outcome.status_code == 200
+    assert calibration.status_code == 200, calibration.text
+    calibration_state = calibration.json()["active_calibration"]
+    assert calibration_state["promotion_passed"] is True
+    assert calibration_state["metrics_source_version"] == "persisted-review-outcomes/v1"
+    assert calibration_state["observed_metrics"] == {
+        "candidate_precision": 1.0,
+        "recommendation_acceptance": 1.0,
+        "validation_success": 1.0,
+        "affected_scope_mae": pytest.approx(1 / 6),
+        "effort_accuracy": 1.0,
+        "reviewed_cases": 2,
+    }
+    assert client_supplied_metrics.status_code == 422
     assert metrics.status_code == 200
     assert metrics.json()["candidate_review_precision"] == 1.0
     assert metrics.json()["affected_call_site_mae"] == 1.0

@@ -18,6 +18,7 @@ from app.abuse import RateLimiter, RequestBodyLimitMiddleware
 from app.config import Settings, get_settings
 from app.database import Database, DatabaseReadiness
 from app.errors import APIError
+from app.github_app import GitHubAppSetupClient
 from app.observability import configure_logging
 from app.operations import QUERY as OPERATIONS_QUERY, normalize_metrics, prometheus_text
 from app.read_models import ReadModelStore
@@ -138,6 +139,7 @@ def create_app(
     )
     application.state.authenticator = Authenticator(app_settings, revocations)
     application.state.oidc_client = OIDCClient(app_settings)
+    application.state.github_app_client = GitHubAppSetupClient(app_settings)
     application.state.rate_limiter = RateLimiter(app_database)
 
     application.add_middleware(

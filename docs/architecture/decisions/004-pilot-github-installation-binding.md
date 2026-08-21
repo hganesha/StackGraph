@@ -16,7 +16,7 @@ following controls are enforced:
    request before production use, and is reconciled against repositories visible to that token.
 4. The bind, disable, and removal operations are tenant-scoped and written to `admin_audit_log`.
 5. A failed or revoked installation is disabled and surfaced as needing reauthorization.
-6. The hosted GitHub App setup callback remains the required production onboarding path. Manual
+6. The hosted GitHub App setup callback is the required production onboarding path. Manual
    binding must be feature-flagged off after that callback is deployed and verified.
 
 The existing `POST /api/v1/admin/github/installations` path satisfies the identity, tenancy,
@@ -36,5 +36,7 @@ self-service or general availability.
 
 ## Exit gate
 
-Deploy the implemented GitHub App setup callback, capture an end-to-end installation trace, test
-cross-tenant and replay rejection, then disable tenant-admin access to manual installation binding.
+Deploy the GitHub App setup callback implemented by
+`POST /api/v1/admin/github/installations/setup` and its callback route, enable GitHub user
+authorization during installation, capture an end-to-end installation trace, test cross-tenant
+and replay rejection, then set `STACKGRAPH_GITHUB_MANUAL_BINDING_ENABLED=false`.

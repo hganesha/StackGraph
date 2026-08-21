@@ -67,6 +67,12 @@ export function ConnectionsSection() {
       await queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
   });
+  const hostedSetup = useMutation({
+    mutationFn: () => stackGraphClient.startGitHubInstallationSetup({
+      return_to: `${window.location.pathname}${window.location.search}`,
+    }),
+    onSuccess: ({ setup_url }) => window.location.assign(setup_url),
+  });
   const disconnect = useMutation({
     mutationFn: (id: string) => stackGraphClient.removeConnector(id),
     onSuccess: async () => {
@@ -100,6 +106,25 @@ export function ConnectionsSection() {
 
       {showForm ? (
         <form className={styles.connectForm} onSubmit={submit}>
+          <div className={styles.residency}>
+            <span className={styles.residencyLabel}>Recommended</span>
+            <span className={styles.residencyText}>
+              Install through GitHub so StackGraph can verify your GitHub identity, App ownership, permissions,
+              and workspace binding before the first scan.
+            </span>
+            <button
+              type="button"
+              className={styles.primary}
+              disabled={hostedSetup.isPending}
+              onClick={() => hostedSetup.mutate()}
+            >
+              {hostedSetup.isPending ? "Opening GitHub…" : "Install and verify with GitHub"}
+            </button>
+            {hostedSetup.isError ? <span className={styles.error} role="alert">{errorMessage(hostedSetup.error)}</span> : null}
+          </div>
+          <p className={styles.sectionNote}>
+            Pilot recovery options remain below. Manual installation binding can be disabled by the deployment.
+          </p>
           <div className={styles.modeSwitch} role="group" aria-label="GitHub connection type">
             <button
               type="button"
@@ -111,7 +136,7 @@ export function ConnectionsSection() {
                 setConnectionMode("installation");
               }}
             >
-              GitHub App installation
+              Manual pilot binding
             </button>
             <button
               type="button"

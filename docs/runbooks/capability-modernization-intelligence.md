@@ -60,7 +60,11 @@ Policy and approved-internal changes compute a new explicit configuration finger
 the latest complete snapshot for every affected repository. A policy version is immutable: changed
 content must be published under a new version. Calibration fails closed when a required metric is
 missing or its representative-case threshold is not met; only a passing corpus promotes the active
-portfolio scoring policy.
+portfolio scoring policy. The publish request accepts case fingerprints and thresholds, never
+observed metrics. The server freezes an immutable manifest from current reviewed candidates or
+recommendations and their latest validation outcomes, then derives candidate precision,
+recommendation acceptance, validation success, normalized call-site/file scope error, and
+effort-band accuracy. Reusing a corpus version with different evidence is rejected.
 
 `intelligence-work` and the continuous pipeline automatically enable AI only for active dependency usage that
 has no curated mapping. Configure the provider, model, and write-only key in Admin before running the worker:

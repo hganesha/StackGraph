@@ -38,6 +38,19 @@ class Settings(BaseSettings):
     oidc_tenant_claim: str = "stackgraph_tenant_id"
     oidc_groups_claim: str = "groups"
     oidc_group_capabilities_json: str = '{"stackgraph-view":"view","stackgraph-review":"review","stackgraph-execute":"execute","stackgraph-admin":"admin"}'
+    github_app_setup_enabled: bool = False
+    github_app_slug: str = ""
+    github_app_id: str = ""
+    github_app_client_id: str = ""
+    github_app_client_secret: str = ""
+    github_app_private_key: str = ""
+    github_app_private_key_file: Path | None = None
+    github_app_setup_callback_uri: str = ""
+    github_app_web_return_uri: str = "/admin"
+    github_api_url: str = "https://api.github.com"
+    github_web_url: str = "https://github.com"
+    github_allow_insecure_localhost: bool = False
+    github_manual_binding_enabled: bool = True
     development_actor_key: str = "local-user"
     contracts_dir: Path = Path("/contracts/v1")
     graph_read_mode: Literal["auto", "age", "sql"] = "auto"
@@ -74,6 +87,37 @@ class Settings(BaseSettings):
             self.oidc_issuer, self.oidc_client_id, self.oidc_client_secret, self.oidc_redirect_uri,
         )):
             raise ValueError("oidc auth requires issuer, client ID, client secret, and redirect URI")
+        if self.github_app_setup_enabled and not all((
+            self.github_app_slug,
+            self.github_app_id,
+            self.github_app_client_id,
+            self.github_app_client_secret,
+            self.github_app_setup_callback_uri,
+        )):
+            raise ValueError(
+                "hosted GitHub setup requires the App slug, App ID, client ID, client secret, and callback URI"
+            )
+        private_key_file_configured = (
+            self.github_app_private_key_file is not None
+            and str(self.github_app_private_key_file).strip() not in {"", "."}
+        )
+        if self.github_app_setup_enabled and not (
+            self.github_app_private_key.strip() or private_key_file_configured
+        ):
+            raise ValueError("hosted GitHub setup requires a GitHub App private key or private-key file")
+        if self.github_app_slug and (
+            len(self.github_app_slug) > 100
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in self.github_app_slug)
+        ):
+            raise ValueError("github_app_slug must be GitHub's lowercase App slug")
+        if (
+            self.github_app_setup_enabled
+            and not self.github_app_setup_callback_uri.startswith("https://")
+            and not self.github_allow_insecure_localhost
+        ):
+            raise ValueError("the hosted GitHub setup callback URI must use HTTPS")
+        if not self.github_app_web_return_uri.startswith("/") or self.github_app_web_return_uri.startswith("//"):
+            raise ValueError("github_app_web_return_uri must be a safe absolute path")
         try:
             group_mapping = json.loads(self.oidc_group_capabilities_json)
         except json.JSONDecodeError as error:

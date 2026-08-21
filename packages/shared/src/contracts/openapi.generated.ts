@@ -247,19 +247,14 @@ export interface BusinessMapSummary {
 }
 
 export interface CalibrationCorpusPublishRequest {
-  affected_scope_mae?: number | null;
-  candidate_precision?: number | null;
   case_fingerprints: Array<string>;
   corpus_key?: string;
-  effort_accuracy?: number | null;
   maximum_affected_scope_mae?: number;
   minimum_candidate_precision?: number;
   minimum_effort_accuracy?: number;
   minimum_recommendation_acceptance?: number;
   minimum_reviewed_cases?: number;
   minimum_validation_success?: number;
-  recommendation_acceptance?: number | null;
-  validation_success?: number | null;
   version: string;
 }
 
@@ -270,9 +265,20 @@ export interface CalibrationCorpusSummary {
   evaluated_at: string;
   evaluation_fingerprint: string;
   id: string;
+  metrics_source_version: string;
+  observed_metrics: CalibrationObservedMetrics;
   promotion_failures: Array<string>;
   promotion_passed: boolean;
   version: string;
+}
+
+export interface CalibrationObservedMetrics {
+  affected_scope_mae?: number | null;
+  candidate_precision?: number | null;
+  effort_accuracy?: number | null;
+  recommendation_acceptance?: number | null;
+  reviewed_cases: number;
+  validation_success?: number | null;
 }
 
 export interface CapabilityDefinitionModel {
@@ -350,6 +356,24 @@ export interface Citation {
   fact_id: string;
   href?: string | null;
   label: string;
+}
+
+export interface CodePolicyTechnologySummary {
+  category_key?: string | null;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  detected_repository_count: number;
+  domain_key?: string | null;
+  technology: EntitySummary;
+}
+
+export interface CodePolicyViolation {
+  fact_ids: Array<string>;
+  function_key: string;
+  function_name: string;
+  matched_technology_id: string;
+  message: string;
+  rule: "PROHIBITED" | "NOT_ALLOWED";
+  technology: EntitySummary;
 }
 
 export interface Connector {
@@ -498,6 +522,15 @@ export interface GitHubInstallationConnectRequest {
   display_name?: string | null;
   installation_id: string;
   pilot_manual_binding_acknowledged: true;
+}
+
+export interface GitHubInstallationSetupRequest {
+  return_to?: string;
+}
+
+export interface GitHubInstallationSetupResponse {
+  expires_at: string;
+  setup_url: string;
 }
 
 export interface GitHubRepositoryConnectRequest {
@@ -907,6 +940,18 @@ export interface RepositoryCapabilityIntelligence {
   taxonomy_version?: string | null;
 }
 
+export interface RepositoryCodePolicyEvaluation {
+  evaluated_at: string;
+  evaluated_by: string;
+  evidence_fingerprint: string;
+  id: string;
+  policy_set_fingerprint: string;
+  repository: EntitySummary;
+  status: "COMPLIANT" | "MISALIGNED" | "UNASSESSED" | "STALE";
+  unclassified_technologies: Array<EntitySummary>;
+  violations: Array<CodePolicyViolation>;
+}
+
 export interface RepositoryDetail {
   applications: Array<EntitySummary>;
   contract_version?: "1.0.0";
@@ -1108,6 +1153,54 @@ export interface TechnologyEstateHierarchyNode {
   parent_technology_id?: string | null;
   relationship: string;
   technology: EntitySummary;
+}
+
+export interface TenantCodeFunctionPolicySummary {
+  allowed_technology_ids: Array<string>;
+  id: string;
+  policy_fingerprint: string;
+  prohibited_technology_ids: Array<string>;
+  updated_at: string;
+  updated_by: string;
+}
+
+export interface TenantCodeFunctionSummary {
+  description: string;
+  domain_key: string;
+  function_key: string;
+  name: string;
+  policy?: TenantCodeFunctionPolicySummary | null;
+  source: "PRIMARY" | "CUSTOM";
+  status: "ACTIVE" | "RETIRED";
+}
+
+export interface TenantCodeFunctionUpsertRequest {
+  allowed_technology_ids?: Array<string>;
+  description?: string;
+  domain_key: string;
+  name: string;
+  prohibited_technology_ids?: Array<string>;
+  source: "PRIMARY" | "CUSTOM";
+  status?: "ACTIVE" | "RETIRED";
+}
+
+export interface TenantCodePolicyState {
+  available_technologies: Array<CodePolicyTechnologySummary>;
+  contract_version?: "1.0.0";
+  evaluations: Array<RepositoryCodePolicyEvaluation>;
+  functions: Array<TenantCodeFunctionSummary>;
+  policy_set_fingerprint: string;
+  summary: TenantCodePolicySummary;
+  technology_catalog_truncated?: boolean;
+}
+
+export interface TenantCodePolicySummary {
+  compliant_repositories: number;
+  custom_functions: number;
+  evaluated_repositories: number;
+  governed_functions: number;
+  misaligned_repositories: number;
+  stale_repositories: number;
 }
 
 export interface TenantMember {

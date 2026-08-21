@@ -963,6 +963,15 @@ export interface GitHubInstallationConnectRequest {
   pilot_manual_binding_acknowledged: true;
 }
 
+export interface GitHubInstallationSetupRequest {
+  return_to?: string;
+}
+
+export interface GitHubInstallationSetupResponse {
+  setup_url: string;
+  expires_at: string;
+}
+
 export interface ConnectorUpdateRequest {
   display_name?: string;
   status?: ConnectorStatus;
@@ -1000,17 +1009,21 @@ export interface CalibrationCorpusPublishRequest {
   corpus_key?: string;
   version: string;
   case_fingerprints: string[];
-  candidate_precision?: number | null;
-  recommendation_acceptance?: number | null;
-  validation_success?: number | null;
-  affected_scope_mae?: number | null;
-  effort_accuracy?: number | null;
   minimum_candidate_precision?: number;
   minimum_recommendation_acceptance?: number;
   minimum_validation_success?: number;
   maximum_affected_scope_mae?: number;
   minimum_effort_accuracy?: number;
   minimum_reviewed_cases?: number;
+}
+
+export interface CalibrationObservedMetrics {
+  candidate_precision?: number | null;
+  recommendation_acceptance?: number | null;
+  validation_success?: number | null;
+  affected_scope_mae?: number | null;
+  effort_accuracy?: number | null;
+  reviewed_cases: number;
 }
 
 export interface ModernizationPolicySummary {
@@ -1048,6 +1061,8 @@ export interface CalibrationCorpusSummary {
   version: string;
   case_count: number;
   corpus_fingerprint: string;
+  observed_metrics: CalibrationObservedMetrics;
+  metrics_source_version: string;
   promotion_passed: boolean;
   promotion_failures: string[];
   evaluation_fingerprint: string;
@@ -1084,6 +1099,89 @@ export interface ModernizationGovernanceState {
   internal_components: InternalCatalogComponentSummary[];
   active_calibration?: CalibrationCorpusSummary | null;
   ecosystem_admissions: EcosystemAdmissionSummary[];
+}
+
+// --- Tenant code-policy governance --------------------------------------
+
+export type CodeFunctionSource = "PRIMARY" | "CUSTOM";
+export type CodeFunctionStatus = "ACTIVE" | "RETIRED";
+
+export interface CodePolicyTechnologySummary {
+  technology: EntitySummary;
+  classification: TechnologyClassification;
+  domain_key?: string | null;
+  category_key?: string | null;
+  detected_repository_count: number;
+}
+
+export interface TenantCodeFunctionPolicySummary {
+  id: UUID;
+  allowed_technology_ids: UUID[];
+  prohibited_technology_ids: UUID[];
+  policy_fingerprint: string;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface TenantCodeFunctionSummary {
+  function_key: string;
+  name: string;
+  description: string;
+  domain_key: string;
+  source: CodeFunctionSource;
+  status: CodeFunctionStatus;
+  policy?: TenantCodeFunctionPolicySummary | null;
+}
+
+export interface TenantCodeFunctionUpsertRequest {
+  source: CodeFunctionSource;
+  name: string;
+  description?: string;
+  domain_key: string;
+  status?: CodeFunctionStatus;
+  allowed_technology_ids?: UUID[];
+  prohibited_technology_ids?: UUID[];
+}
+
+export interface CodePolicyViolation {
+  rule: "PROHIBITED" | "NOT_ALLOWED";
+  function_key: string;
+  function_name: string;
+  technology: EntitySummary;
+  matched_technology_id: UUID;
+  fact_ids: UUID[];
+  message: string;
+}
+
+export interface RepositoryCodePolicyEvaluation {
+  id: UUID;
+  repository: EntitySummary;
+  status: "COMPLIANT" | "MISALIGNED" | "UNASSESSED" | "STALE";
+  violations: CodePolicyViolation[];
+  unclassified_technologies: EntitySummary[];
+  policy_set_fingerprint: string;
+  evidence_fingerprint: string;
+  evaluated_by: string;
+  evaluated_at: string;
+}
+
+export interface TenantCodePolicySummary {
+  governed_functions: number;
+  custom_functions: number;
+  evaluated_repositories: number;
+  compliant_repositories: number;
+  misaligned_repositories: number;
+  stale_repositories: number;
+}
+
+export interface TenantCodePolicyState {
+  contract_version: "1.0.0";
+  policy_set_fingerprint: string;
+  functions: TenantCodeFunctionSummary[];
+  available_technologies: CodePolicyTechnologySummary[];
+  technology_catalog_truncated: boolean;
+  evaluations: RepositoryCodePolicyEvaluation[];
+  summary: TenantCodePolicySummary;
 }
 
 // --- Admin: AI provider configuration -----------------------------------

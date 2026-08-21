@@ -39,6 +39,8 @@ import type {
   CalibrationCorpusPublishRequest,
   EcosystemAdmissionEvaluateRequest,
   EcosystemName,
+  TenantCodeFunctionUpsertRequest,
+  TenantCodePolicyState,
   TechnologyDetail,
   TechnologyEstateHierarchy,
   BusinessMapList,
@@ -60,6 +62,8 @@ import type {
   GitHubRepositoryConnectRequest,
   GitHubRepositoryOptionList,
   GitHubInstallationConnectRequest,
+  GitHubInstallationSetupRequest,
+  GitHubInstallationSetupResponse,
   ConnectorUpdateRequest,
   AIProviderConfiguration,
   AIProviderConfigurationUpdateRequest,
@@ -149,6 +153,7 @@ export interface StackGraphClient {
   listAvailableGitHubRepositories(): Promise<GitHubRepositoryOptionList>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
+  startGitHubInstallationSetup(body: GitHubInstallationSetupRequest): Promise<GitHubInstallationSetupResponse>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getModernizationGovernance(): Promise<ModernizationGovernanceState>;
@@ -156,6 +161,9 @@ export interface StackGraphClient {
   governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
   publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
   evaluateEcosystemAdmission(ecosystem: EcosystemName, body: EcosystemAdmissionEvaluateRequest): Promise<ModernizationGovernanceState>;
+  getTenantCodePolicies(): Promise<TenantCodePolicyState>;
+  upsertTenantCodeFunction(functionKey: string, body: TenantCodeFunctionUpsertRequest): Promise<TenantCodePolicyState>;
+  evaluateTenantCodePolicies(): Promise<TenantCodePolicyState>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
   updateAIProviderConfiguration(body: AIProviderConfigurationUpdateRequest): Promise<AIProviderConfiguration>;
   removeAIProviderKey(): Promise<AIProviderConfiguration>;
@@ -197,6 +205,45 @@ let adminAIConfiguration: AIProviderConfiguration = {
 let adminModernizationGovernance = clone(
   modernizationGovernance as ModernizationGovernanceState,
 );
+let adminCodePolicies: TenantCodePolicyState = {
+  contract_version: "1.0.0",
+  policy_set_fingerprint: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  functions: [
+    {
+      function_key: "client-state-management", name: "Client state management",
+      description: "Manage UI-local state that is not authoritative server data.",
+      domain_key: "frontend", source: "PRIMARY", status: "ACTIVE",
+      policy: {
+        id: "00000000-0000-4000-8000-000000000c01",
+        allowed_technology_ids: ["00000000-0000-4000-8000-000000000c11"],
+        prohibited_technology_ids: ["00000000-0000-4000-8000-000000000c12"],
+        policy_fingerprint: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        updated_by: "fixture-admin", updated_at: "2026-08-21T12:00:00.000Z",
+      },
+    },
+    {
+      function_key: "tenant-design-tokens", name: "Tenant design tokens",
+      description: "Distribute tenant-approved visual design decisions.",
+      domain_key: "frontend", source: "CUSTOM", status: "ACTIVE",
+    },
+  ],
+  available_technologies: [
+    {
+      technology: { id: "00000000-0000-4000-8000-000000000c11", kind: "Technology", name: "Zustand", canonical_key: "stackgraph:technology:zustand" },
+      classification: "CURATED", domain_key: "frontend", category_key: "client-state", detected_repository_count: 4,
+    },
+    {
+      technology: { id: "00000000-0000-4000-8000-000000000c12", kind: "Technology", name: "Redux", canonical_key: "stackgraph:technology:redux" },
+      classification: "CURATED", domain_key: "frontend", category_key: "client-state", detected_repository_count: 2,
+    },
+  ],
+  technology_catalog_truncated: false,
+  evaluations: [],
+  summary: {
+    governed_functions: 1, custom_functions: 1, evaluated_repositories: 0,
+    compliant_repositories: 0, misaligned_repositories: 0, stale_repositories: 0,
+  },
+};
 {
   const now = "2026-08-19T12:00:00.000Z";
   for (const seed of [
@@ -506,6 +553,13 @@ const fixtureClient: StackGraphClient = {
       scopes: ["contents:read", "metadata:read"],
     });
   },
+  async startGitHubInstallationSetup() {
+    await delay();
+    return {
+      setup_url: "https://github.com/apps/stackgraph/installations/new?state=fixture-state",
+      expires_at: new Date(Date.now() + 600_000).toISOString(),
+    };
+  },
   async updateConnector(id, body) {
     await delay();
     const connector = adminConnectors.get(id);
@@ -577,18 +631,26 @@ const fixtureClient: StackGraphClient = {
   async publishCalibrationCorpus(body) {
     await delay();
     const minimumReviewedCases = body.minimum_reviewed_cases ?? 20;
+    const observed = {
+      candidate_precision: 0.9,
+      recommendation_acceptance: 0.6,
+      validation_success: 0.9,
+      affected_scope_mae: 0.1,
+      effort_accuracy: 0.8,
+      reviewed_cases: body.case_fingerprints.length,
+    };
     const failures = [
       ...(body.case_fingerprints.length >= minimumReviewedCases
         ? [] : [`reviewed_cases ${body.case_fingerprints.length} < ${minimumReviewedCases}`]),
-      ...(body.candidate_precision != null && body.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
+      ...(observed.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
         ? [] : ["candidate_precision is unavailable or below threshold"]),
-      ...(body.recommendation_acceptance != null && body.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
+      ...(observed.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
         ? [] : ["recommendation_acceptance is unavailable or below threshold"]),
-      ...(body.validation_success != null && body.validation_success >= (body.minimum_validation_success ?? 0.8)
+      ...(observed.validation_success >= (body.minimum_validation_success ?? 0.8)
         ? [] : ["validation_success is unavailable or below threshold"]),
-      ...(body.affected_scope_mae != null && body.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
+      ...(observed.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
         ? [] : ["affected_scope_mae is unavailable or above threshold"]),
-      ...(body.effort_accuracy != null && body.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
+      ...(observed.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
         ? [] : ["effort_accuracy is unavailable or below threshold"]),
     ];
     const promotionPassed = failures.length === 0;
@@ -600,6 +662,8 @@ const fixtureClient: StackGraphClient = {
         version: body.version,
         case_count: body.case_fingerprints.length,
         corpus_fingerprint: `sha256:${"7".repeat(64)}`,
+        observed_metrics: observed,
+        metrics_source_version: "persisted-review-outcomes/v1",
         promotion_passed: promotionPassed,
         promotion_failures: failures,
         evaluation_fingerprint: `sha256:${"8".repeat(64)}`,
@@ -651,6 +715,78 @@ const fixtureClient: StackGraphClient = {
       )),
     };
     return clone(adminModernizationGovernance);
+  },
+  async getTenantCodePolicies() {
+    await delay();
+    return clone(adminCodePolicies);
+  },
+  async upsertTenantCodeFunction(functionKey, body) {
+    await delay();
+    const now = new Date().toISOString();
+    const existing = adminCodePolicies.functions.find((item) => item.function_key === functionKey);
+    const next = {
+      function_key: functionKey,
+      name: body.name,
+      description: body.description ?? "",
+      domain_key: body.domain_key,
+      source: body.source,
+      status: body.status ?? "ACTIVE",
+      policy: {
+        id: existing?.policy?.id ?? (globalThis.crypto?.randomUUID?.() ?? `policy-${functionKey}`),
+        allowed_technology_ids: body.allowed_technology_ids ?? [],
+        prohibited_technology_ids: body.prohibited_technology_ids ?? [],
+        policy_fingerprint: `sha256:${"3".repeat(64)}`,
+        updated_by: "fixture-admin",
+        updated_at: now,
+      },
+    } satisfies TenantCodePolicyState["functions"][number];
+    adminCodePolicies = {
+      ...adminCodePolicies,
+      functions: existing
+        ? adminCodePolicies.functions.map((item) => item.function_key === functionKey ? next : item)
+        : [...adminCodePolicies.functions, next],
+      policy_set_fingerprint: `sha256:${"4".repeat(64)}`,
+      evaluations: adminCodePolicies.evaluations.map((item) => ({ ...item, status: "STALE" })),
+      summary: {
+        ...adminCodePolicies.summary,
+        governed_functions: existing?.policy ? adminCodePolicies.summary.governed_functions : adminCodePolicies.summary.governed_functions + 1,
+        custom_functions: !existing && body.source === "CUSTOM" ? adminCodePolicies.summary.custom_functions + 1 : adminCodePolicies.summary.custom_functions,
+        stale_repositories: adminCodePolicies.evaluations.length,
+      },
+    };
+    return clone(adminCodePolicies);
+  },
+  async evaluateTenantCodePolicies() {
+    await delay();
+    const now = new Date().toISOString();
+    const prohibited = adminCodePolicies.available_technologies[1];
+    adminCodePolicies = {
+      ...adminCodePolicies,
+      evaluations: prohibited ? [{
+        id: "00000000-0000-4000-8000-000000000c21",
+        repository: { id: "00000000-0000-4000-8000-000000000701", kind: "Repository", name: "billing-api", canonical_key: "github:repo:billing-api" },
+        status: "MISALIGNED",
+        violations: [{
+          rule: "PROHIBITED", function_key: "client-state-management",
+          function_name: "Client state management", technology: prohibited.technology,
+          matched_technology_id: prohibited.technology.id,
+          fact_ids: ["00000000-0000-4000-8000-000000000c31"],
+          message: "Redux is strictly prohibited for Client state management.",
+        }],
+        unclassified_technologies: [],
+        policy_set_fingerprint: adminCodePolicies.policy_set_fingerprint,
+        evidence_fingerprint: `sha256:${"5".repeat(64)}`,
+        evaluated_by: "fixture-admin", evaluated_at: now,
+      }] : [],
+      summary: {
+        ...adminCodePolicies.summary,
+        evaluated_repositories: prohibited ? 1 : 0,
+        compliant_repositories: 0,
+        misaligned_repositories: prohibited ? 1 : 0,
+        stale_repositories: 0,
+      },
+    };
+    return clone(adminCodePolicies);
   },
   async getAIProviderConfiguration() {
     await delay();
@@ -906,6 +1042,8 @@ const liveClient: StackGraphClient = {
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   connectGitHubInstallation: (body) =>
     req("/admin/github/installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  startGitHubInstallationSetup: (body) =>
+    req("/admin/github/installations/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
@@ -926,6 +1064,13 @@ const liveClient: StackGraphClient = {
     req(`/admin/modernization-governance/ecosystems/${encodeURIComponent(ecosystem)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
+  getTenantCodePolicies: () => req("/admin/code-policies"),
+  upsertTenantCodeFunction: (functionKey, body) =>
+    req(`/admin/code-policies/functions/${encodeURIComponent(functionKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  evaluateTenantCodePolicies: () =>
+    req("/admin/code-policies/evaluations", { method: "POST" }),
   getAIProviderConfiguration: () => req("/admin/ai-configuration"),
   updateAIProviderConfiguration: (body) =>
     req("/admin/ai-configuration", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

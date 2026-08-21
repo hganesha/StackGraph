@@ -1415,31 +1415,6 @@
       "CalibrationCorpusPublishRequest": {
         "additionalProperties": false,
         "properties": {
-          "affected_scope_mae": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Affected Scope Mae"
-          },
-          "candidate_precision": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Candidate Precision"
-          },
           "case_fingerprints": {
             "items": {
               "type": "string"
@@ -1453,19 +1428,6 @@
             "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
             "title": "Corpus Key",
             "type": "string"
-          },
-          "effort_accuracy": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Effort Accuracy"
           },
           "maximum_affected_scope_mae": {
             "default": 0.25,
@@ -1506,32 +1468,6 @@
             "minimum": 0.0,
             "title": "Minimum Validation Success",
             "type": "number"
-          },
-          "recommendation_acceptance": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommendation Acceptance"
-          },
-          "validation_success": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Validation Success"
           },
           "version": {
             "minLength": 1,
@@ -1576,6 +1512,13 @@
             "title": "Id",
             "type": "string"
           },
+          "metrics_source_version": {
+            "title": "Metrics Source Version",
+            "type": "string"
+          },
+          "observed_metrics": {
+            "$ref": "#/components/schemas/CalibrationObservedMetrics"
+          },
           "promotion_failures": {
             "items": {
               "type": "string"
@@ -1598,12 +1541,93 @@
           "version",
           "case_count",
           "corpus_fingerprint",
+          "observed_metrics",
+          "metrics_source_version",
           "promotion_passed",
           "promotion_failures",
           "evaluation_fingerprint",
           "evaluated_at"
         ],
         "title": "CalibrationCorpusSummary",
+        "type": "object"
+      },
+      "CalibrationObservedMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_scope_mae": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Scope Mae"
+          },
+          "candidate_precision": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Precision"
+          },
+          "effort_accuracy": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort Accuracy"
+          },
+          "recommendation_acceptance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Acceptance"
+          },
+          "reviewed_cases": {
+            "minimum": 0.0,
+            "title": "Reviewed Cases",
+            "type": "integer"
+          },
+          "validation_success": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Success"
+          }
+        },
+        "required": [
+          "reviewed_cases"
+        ],
+        "title": "CalibrationObservedMetrics",
         "type": "object"
       },
       "CapabilityDefinitionModel": {
@@ -2037,6 +2061,110 @@
           "label"
         ],
         "title": "Citation",
+        "type": "object"
+      },
+      "CodePolicyTechnologySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "category_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Key"
+          },
+          "classification": {
+            "enum": [
+              "CURATED",
+              "CATALOG_MATCH",
+              "UNCLASSIFIED"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "detected_repository_count": {
+            "minimum": 0.0,
+            "title": "Detected Repository Count",
+            "type": "integer"
+          },
+          "domain_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Key"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "classification",
+          "detected_repository_count"
+        ],
+        "title": "CodePolicyTechnologySummary",
+        "type": "object"
+      },
+      "CodePolicyViolation": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "function_key": {
+            "title": "Function Key",
+            "type": "string"
+          },
+          "function_name": {
+            "title": "Function Name",
+            "type": "string"
+          },
+          "matched_technology_id": {
+            "format": "uuid",
+            "title": "Matched Technology Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "rule": {
+            "enum": [
+              "PROHIBITED",
+              "NOT_ALLOWED"
+            ],
+            "title": "Rule",
+            "type": "string"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "rule",
+          "function_key",
+          "function_name",
+          "technology",
+          "matched_technology_id",
+          "fact_ids",
+          "message"
+        ],
+        "title": "CodePolicyViolation",
         "type": "object"
       },
       "Connector": {
@@ -2945,6 +3073,40 @@
           "pilot_manual_binding_acknowledged"
         ],
         "title": "GitHubInstallationConnectRequest",
+        "type": "object"
+      },
+      "GitHubInstallationSetupRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "return_to": {
+            "default": "/admin",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Return To",
+            "type": "string"
+          }
+        },
+        "title": "GitHubInstallationSetupRequest",
+        "type": "object"
+      },
+      "GitHubInstallationSetupResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "setup_url": {
+            "title": "Setup Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_url",
+          "expires_at"
+        ],
+        "title": "GitHubInstallationSetupResponse",
         "type": "object"
       },
       "GitHubRepositoryConnectRequest": {
@@ -5627,6 +5789,73 @@
         "title": "RepositoryCapabilityIntelligence",
         "type": "object"
       },
+      "RepositoryCodePolicyEvaluation": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "evaluated_by": {
+            "title": "Evaluated By",
+            "type": "string"
+          },
+          "evidence_fingerprint": {
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_set_fingerprint": {
+            "title": "Policy Set Fingerprint",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "status": {
+            "enum": [
+              "COMPLIANT",
+              "MISALIGNED",
+              "UNASSESSED",
+              "STALE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unclassified_technologies": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Unclassified Technologies",
+            "type": "array"
+          },
+          "violations": {
+            "items": {
+              "$ref": "#/components/schemas/CodePolicyViolation"
+            },
+            "title": "Violations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "repository",
+          "status",
+          "violations",
+          "unclassified_technologies",
+          "policy_set_fingerprint",
+          "evidence_fingerprint",
+          "evaluated_by",
+          "evaluated_at"
+        ],
+        "title": "RepositoryCodePolicyEvaluation",
+        "type": "object"
+      },
       "RepositoryDetail": {
         "additionalProperties": false,
         "properties": {
@@ -6956,6 +7185,274 @@
         "title": "TechnologyEstateHierarchyNode",
         "type": "object"
       },
+      "TenantCodeFunctionPolicySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Allowed Technology Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_fingerprint": {
+            "title": "Policy Fingerprint",
+            "type": "string"
+          },
+          "prohibited_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Prohibited Technology Ids",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "allowed_technology_ids",
+          "prohibited_technology_ids",
+          "policy_fingerprint",
+          "updated_by",
+          "updated_at"
+        ],
+        "title": "TenantCodeFunctionPolicySummary",
+        "type": "object"
+      },
+      "TenantCodeFunctionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "domain_key": {
+            "title": "Domain Key",
+            "type": "string"
+          },
+          "function_key": {
+            "title": "Function Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenantCodeFunctionPolicySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "enum": [
+              "PRIMARY",
+              "CUSTOM"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "function_key",
+          "name",
+          "description",
+          "domain_key",
+          "source",
+          "status"
+        ],
+        "title": "TenantCodeFunctionSummary",
+        "type": "object"
+      },
+      "TenantCodeFunctionUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Allowed Technology Ids",
+            "type": "array"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Description",
+            "type": "string"
+          },
+          "domain_key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Domain Key",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "prohibited_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Prohibited Technology Ids",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "PRIMARY",
+              "CUSTOM"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "default": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "domain_key"
+        ],
+        "title": "TenantCodeFunctionUpsertRequest",
+        "type": "object"
+      },
+      "TenantCodePolicyState": {
+        "additionalProperties": false,
+        "properties": {
+          "available_technologies": {
+            "items": {
+              "$ref": "#/components/schemas/CodePolicyTechnologySummary"
+            },
+            "title": "Available Technologies",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/RepositoryCodePolicyEvaluation"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          },
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/TenantCodeFunctionSummary"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "policy_set_fingerprint": {
+            "title": "Policy Set Fingerprint",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TenantCodePolicySummary"
+          },
+          "technology_catalog_truncated": {
+            "default": false,
+            "title": "Technology Catalog Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "policy_set_fingerprint",
+          "functions",
+          "available_technologies",
+          "evaluations",
+          "summary"
+        ],
+        "title": "TenantCodePolicyState",
+        "type": "object"
+      },
+      "TenantCodePolicySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "compliant_repositories": {
+            "minimum": 0.0,
+            "title": "Compliant Repositories",
+            "type": "integer"
+          },
+          "custom_functions": {
+            "minimum": 0.0,
+            "title": "Custom Functions",
+            "type": "integer"
+          },
+          "evaluated_repositories": {
+            "minimum": 0.0,
+            "title": "Evaluated Repositories",
+            "type": "integer"
+          },
+          "governed_functions": {
+            "minimum": 0.0,
+            "title": "Governed Functions",
+            "type": "integer"
+          },
+          "misaligned_repositories": {
+            "minimum": 0.0,
+            "title": "Misaligned Repositories",
+            "type": "integer"
+          },
+          "stale_repositories": {
+            "minimum": 0.0,
+            "title": "Stale Repositories",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "governed_functions",
+          "custom_functions",
+          "evaluated_repositories",
+          "compliant_repositories",
+          "misaligned_repositories",
+          "stale_repositories"
+        ],
+        "title": "TenantCodePolicySummary",
+        "type": "object"
+      },
       "TenantMember": {
         "additionalProperties": false,
         "properties": {
@@ -7194,6 +7691,100 @@
         ]
       }
     },
+    "/admin/code-policies": {
+      "get": {
+        "operationId": "getTenantCodePolicies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCodePolicyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tenant Code Policies",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/code-policies/evaluations": {
+      "post": {
+        "operationId": "evaluateTenantCodePolicies",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCodePolicyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Evaluate Tenant Code Policies",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/code-policies/functions/{function_key}": {
+      "put": {
+        "operationId": "upsertTenantCodeFunction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "function_key",
+            "required": true,
+            "schema": {
+              "title": "Function Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCodeFunctionUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantCodePolicyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upsert Tenant Code Function",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/connectors": {
       "get": {
         "operationId": "listConnectors",
@@ -7384,6 +7975,127 @@
           }
         },
         "summary": "Connect Github Installation",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/github/installations/setup": {
+      "post": {
+        "operationId": "startGitHubInstallationSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubInstallationSetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubInstallationSetupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Github Installation Setup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/github/installations/setup/callback": {
+      "get": {
+        "operationId": "completeGitHubInstallationSetup",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 16,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[1-9][0-9]{0,19}$",
+              "title": "Installation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "setup_action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(install|update)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Setup Action"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Github Installation Setup",
         "tags": [
           "admin"
         ]

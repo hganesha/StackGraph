@@ -12,9 +12,13 @@ MinIO, Prometheus, Alertmanager, and Grafana remain on the internal Compose netw
    callback `https://<domain>/api/v1/auth/callback`.
 3. Configure the IdP tenant claim as a StackGraph tenant UUID and map groups using
    `STACKGRAPH_OIDC_GROUP_CAPABILITIES_JSON`.
-4. Configure the GitHub App webhook as `https://<domain>/webhooks/github`.
-5. Run `make production-config`, then `make production-up`.
-6. For automated releases, pre-authorize the deployment host to pull the private GHCR images and
+4. Configure the GitHub App webhook as `https://<domain>/webhooks/github`. Enable user authorization during
+   installation and set the GitHub App OAuth callback URL to
+   `https://<domain>/api/v1/admin/github/installations/setup/callback`.
+5. Set the GitHub App slug, App/client IDs, client secret, private key, and exact callback URI in the deployment
+   secret boundary. Start with manual binding enabled only for the named pilot; turn it off after the hosted trace.
+6. Run `make production-config`, then `make production-up`.
+7. For automated releases, pre-authorize the deployment host to pull the private GHCR images and
    configure `STACKGRAPH_DEPLOY_SSH_KEY`, `STACKGRAPH_DEPLOY_KNOWN_HOSTS`, `STACKGRAPH_DEPLOY_HOST`,
    and `STACKGRAPH_DEPLOY_USER` in the protected `pilot` GitHub environment. The known-hosts value
    must be pinned from an independently verified host key; the workflow does not trust `ssh-keyscan`.

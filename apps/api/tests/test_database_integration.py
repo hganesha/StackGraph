@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -32,6 +33,221 @@ pytestmark = pytest.mark.skipif(
     "STACKGRAPH_TEST_DATABASE_URL" not in os.environ,
     reason="STACKGRAPH_TEST_DATABASE_URL is required for database integration tests",
 )
+
+
+class DatabaseStubGitHubAppSetupClient:
+    enabled = True
+
+    def __init__(self) -> None:
+        self.state = ""
+
+    def installation_url(self, state: str) -> str:
+        self.state = state
+        return f"https://github.com/apps/stackgraph/installations/new?state={state}"
+
+    async def verify_installation(self, *, code: str, installation_id: str):
+        assert code == "database-oauth-code"
+        return SimpleNamespace(
+            installation_id=installation_id,
+            account_login="acme-hosted",
+            account_id=84,
+            target_type="Organization",
+            permissions=("contents:read", "metadata:read"),
+        )
+
+
+def test_tenant_code_policies_evaluate_primary_and_custom_functions() -> None:
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    tenant_id = "00000000-0000-4000-8000-00000000c001"
+    repository_id = "00000000-0000-4000-8000-00000000c002"
+    custom_technology_id = "00000000-0000-4000-8000-00000000c003"
+    other_tenant_id = "00000000-0000-4000-8000-00000000c004"
+
+    def configure_tenant(connection) -> None:
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+
+    with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
+        configure_tenant(connection)
+        connection.execute(
+            "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'code-policy-test','Code policy test')",
+            (tenant_id,),
+        )
+        catalog = connection.execute(
+            """
+            SELECT id,canonical_key FROM entity
+            WHERE canonical_key IN ('stackgraph:technology:zustand','stackgraph:technology:redux-toolkit')
+            """
+        ).fetchall()
+        catalog_ids = {row["canonical_key"]: row["id"] for row in catalog}
+        assert set(catalog_ids) == {
+            "stackgraph:technology:zustand", "stackgraph:technology:redux-toolkit",
+        }
+        source_id = connection.execute(
+            """
+            INSERT INTO source_system(tenant_id,source_key,kind)
+            VALUES (%s,'code-policy-test','OTHER') RETURNING id
+            """,
+            (tenant_id,),
+        ).fetchone()["id"]
+        artifact_id = connection.execute(
+            """
+            INSERT INTO source_artifact(
+              tenant_id,source_system_id,external_key,artifact_type,name,
+              source_revision,content_hash,observed_at
+            ) VALUES (%s,%s,'code-policy-test','TEST','package.json','revision-1',%s,now())
+            RETURNING id
+            """,
+            (tenant_id, source_id, "sha256:" + "a" * 64),
+        ).fetchone()["id"]
+        target_id = connection.execute(
+            """
+            INSERT INTO ingest_target(tenant_id,source_system_id,target_kind,target_key)
+            VALUES (%s,%s,'REPOSITORY','github:repo:code-policy-test') RETURNING id
+            """,
+            (tenant_id, source_id),
+        ).fetchone()["id"]
+        run_id = connection.execute(
+            """
+            INSERT INTO ingest_run(
+              tenant_id,ingest_target_id,trigger_kind,status,completeness,completed_at
+            ) VALUES (%s,%s,'MANUAL','SUCCEEDED','COMPLETE',now()) RETURNING id
+            """,
+            (tenant_id, target_id),
+        ).fetchone()["id"]
+        snapshot_id = connection.execute(
+            """
+            INSERT INTO source_snapshot(
+              tenant_id,ingest_run_id,ingest_target_id,source_revision,extractor_key,
+              extractor_version,completeness,status,observed_at,published_at
+            ) VALUES (%s,%s,%s,'revision-1','code-policy-test','1.0.0','COMPLETE','PUBLISHED',now(),now())
+            RETURNING id
+            """,
+            (tenant_id, run_id, target_id),
+        ).fetchone()["id"]
+        connection.execute(
+            """
+            INSERT INTO entity(id,tenant_id,namespace,entity_type,canonical_key,name,properties)
+            VALUES
+              (%s,%s,'ENTERPRISE','Repository','github:repo:code-policy-test','Policy repository','{}'),
+              (%s,%s,'TECHNOLOGY','Technology','tenant:technology:legacy-ui-runtime','Legacy UI runtime','{}')
+            """,
+            (repository_id, tenant_id, custom_technology_id, tenant_id),
+        )
+        for index, technology_id in enumerate([
+            catalog_ids["stackgraph:technology:redux-toolkit"], custom_technology_id,
+        ], start=1):
+            fact_id = connection.execute(
+                """
+                INSERT INTO fact_assertion(
+                  tenant_id,source_snapshot_id,subject_entity_id,predicate,object_entity_id,
+                  assertion_class,confidence,logical_key,idempotency_key,source_revision,
+                  extractor_key,extractor_version,observed_at
+                ) VALUES (%s,%s,%s,'DEPENDS_ON',%s,'DECLARED',1,%s,%s,'revision-1','code-policy-test','1.0.0',now())
+                RETURNING id
+                """,
+                (
+                    tenant_id, snapshot_id, repository_id, technology_id,
+                    "sha256:" + str(index) * 64, "sha256:" + str(index + 2) * 64,
+                ),
+            ).fetchone()["id"]
+            connection.execute(
+                """
+                INSERT INTO evidence(
+                  tenant_id,fact_assertion_id,source_artifact_id,evidence_type,locator,observed_at
+                ) VALUES (%s,%s,%s,'TEST',%s::jsonb,now())
+                """,
+                (tenant_id, fact_id, artifact_id, '{"path":"package.json"}'),
+            )
+    with psycopg.connect(admin_database_url) as connection:
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", (other_tenant_id,))
+        connection.execute(
+            "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'code-policy-other','Code policy other')",
+            (other_tenant_id,),
+        )
+
+    try:
+        async def exercise():
+            app = create_app(settings=Settings(
+                environment="test", database_url=database_url,
+                default_tenant_id=tenant_id, development_actor_key="code-policy-admin",
+            ))
+            async with app.router.lifespan_context(app):
+                async with AsyncClient(
+                    transport=ASGITransport(app=app, raise_app_exceptions=False),
+                    base_url="http://testserver",
+                ) as client:
+                    initial = await client.get("/admin/code-policies")
+                    primary = await client.put(
+                        "/admin/code-policies/functions/client-state-management",
+                        json={
+                            "source": "PRIMARY", "name": "Client state management",
+                            "domain_key": "frontend",
+                            "allowed_technology_ids": [str(catalog_ids["stackgraph:technology:zustand"])],
+                            "prohibited_technology_ids": [str(catalog_ids["stackgraph:technology:redux-toolkit"])],
+                        },
+                    )
+                    custom = await client.put(
+                        "/admin/code-policies/functions/tenant-ui-runtime",
+                        json={
+                            "source": "CUSTOM", "name": "Tenant UI runtime",
+                            "description": "Tenant-specific UI execution layer.", "domain_key": "frontend",
+                            "allowed_technology_ids": [],
+                            "prohibited_technology_ids": [custom_technology_id],
+                        },
+                    )
+                    evaluated = await client.post("/admin/code-policies/evaluations")
+                    stale = await client.put(
+                        "/admin/code-policies/functions/client-state-management",
+                        json={
+                            "source": "PRIMARY", "name": "Client state management",
+                            "domain_key": "frontend", "allowed_technology_ids": [],
+                            "prohibited_technology_ids": [str(catalog_ids["stackgraph:technology:redux-toolkit"])],
+                        },
+                    )
+                    return initial, primary, custom, evaluated, stale
+
+        initial, primary, custom, evaluated, stale = asyncio.run(exercise())
+        assert initial.status_code == 200
+        assert any(item["function_key"] == "client-state-management" for item in initial.json()["functions"])
+        assert primary.status_code == 200
+        assert custom.status_code == 200
+        body = evaluated.json()
+        assert evaluated.status_code == 200, body
+        assert body["summary"]["custom_functions"] == 1
+        assert body["summary"]["misaligned_repositories"] == 1
+        result = body["evaluations"][0]
+        assert result["status"] == "MISALIGNED"
+        assert {item["function_key"] for item in result["violations"]} == {
+            "client-state-management", "tenant-ui-runtime",
+        }
+        assert all(item["fact_ids"] for item in result["violations"])
+        assert stale.status_code == 200
+        assert stale.json()["evaluations"][0]["status"] == "STALE"
+        with psycopg.connect(database_url) as connection:
+            connection.execute("SELECT set_config('app.tenant_id', %s, true)", (other_tenant_id,))
+            assert connection.execute("SELECT count(*) FROM tenant_code_policy").fetchone()[0] == 0
+            assert connection.execute(
+                "SELECT count(*) FROM repository_code_policy_evaluation"
+            ).fetchone()[0] == 0
+    finally:
+        with psycopg.connect(admin_database_url) as connection:
+            configure_tenant(connection)
+            connection.execute("DELETE FROM repository_code_policy_evaluation WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant_code_policy WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant_code_function WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM fact_assertion WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM entity WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_artifact WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM ingest_run WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM admin_audit_log WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
+        with psycopg.connect(admin_database_url) as connection:
+            connection.execute("SELECT set_config('app.tenant_id', %s, true)", (other_tenant_id,))
+            connection.execute("DELETE FROM tenant WHERE id=%s", (other_tenant_id,))
 
 
 async def exercise_read_models() -> None:
@@ -547,6 +763,8 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                 default_tenant_id=tenant_id,
                 development_actor_key="admin-integration",
             ))
+            hosted_github = DatabaseStubGitHubAppSetupClient()
+            app.state.github_app_client = hosted_github
             async with app.router.lifespan_context(app):
                 async with AsyncClient(
                     transport=ASGITransport(app=app, raise_app_exceptions=False),
@@ -574,6 +792,30 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                             "pilot_manual_binding_acknowledged": True,
                             "display_name": "Acme GitHub App",
                         },
+                    )
+                    hosted_setup = await client.post(
+                        "/admin/github/installations/setup",
+                        json={"return_to": "/admin?section=connections"},
+                    )
+                    hosted_installation = await client.get(
+                        "/admin/github/installations/setup/callback",
+                        params={
+                            "code": "database-oauth-code",
+                            "state": hosted_github.state,
+                            "installation_id": "900000000000000002",
+                            "setup_action": "install",
+                        },
+                        follow_redirects=False,
+                    )
+                    hosted_replay = await client.get(
+                        "/admin/github/installations/setup/callback",
+                        params={
+                            "code": "database-oauth-code",
+                            "state": hosted_github.state,
+                            "installation_id": "900000000000000002",
+                            "setup_action": "install",
+                        },
+                        follow_redirects=False,
                     )
                     with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
                         configure_tenant(connection)
@@ -642,13 +884,15 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         json={"minimum_repositories": 1, "minimum_dependency_share": 0.01},
                     )
                     return (
-                        member, members, connector, repository, installation, policy,
+                        member, members, connector, repository, installation,
+                        hosted_setup, hosted_installation, hosted_replay, policy,
                         rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
                         tenant_ai, ai_removed, governance, ecosystem,
                     )
 
         (
-            member, members, connector, repository, installation, policy, rescan_a,
+            member, members, connector, repository, installation,
+            hosted_setup, hosted_installation, hosted_replay, policy, rescan_a,
             rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
             governance, ecosystem,
         ) = asyncio.run(exercise())
@@ -663,6 +907,13 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert installation.json()["external_account_key"] == (
             "github:installation:900000000000000001"
         )
+        assert hosted_setup.status_code == 201
+        assert hosted_installation.status_code == 303
+        assert hosted_installation.headers["location"].endswith(
+            "github=connected&installation_id=900000000000000002"
+        )
+        assert hosted_replay.status_code == 409
+        assert hosted_replay.json()["code"] == "GITHUB_SETUP_STATE_REPLAYED"
         assert policy.status_code == 200 and policy.json()["cadence"] == "HOURLY"
         assert rescan_a.status_code == 201
         assert rescan_b.status_code == 200  # idempotent replay
@@ -718,6 +969,14 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             ).fetchone()
             assert target[0] == "github:repo-name:acme/billing"
             assert target[1]["direct_repository"] is True
+            hosted = connection.execute(
+                """
+                SELECT metadata FROM connector
+                WHERE tenant_id=%s AND external_account_key='github:installation:900000000000000002'
+                """,
+                (tenant_id,),
+            ).fetchone()
+            assert hosted[0]["binding_mode"] == "HOSTED_SETUP"
             assert target[2] == "MANUAL"
             # A continuously running discovery worker may claim this synthetic run.
             assert target[3] in {"PENDING", "RUNNING", "FAILED"}
@@ -748,6 +1007,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
             connection.execute("DELETE FROM ecosystem_admission WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM github_installation_setup WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM intelligence_job WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
             connection.execute(

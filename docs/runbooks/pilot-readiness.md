@@ -13,13 +13,16 @@ Passing the first decision never substitutes for the second.
 
 - Deploy the API, PostgreSQL/AGE, discovery workers, deps.dev/OSV workers, projection worker, and intelligence
   worker from the checked-in Compose topology or its production equivalent.
-- Configure HTTPS for the GitHub webhook and App setup/callback endpoints.
+- Configure HTTPS for the GitHub webhook and App OAuth callback endpoints.
 - Configure `GITHUB_APP_ID` and the App private key through the deployment secret broker. Do not create a PAT.
 - Configure the evidence bucket with versioning, Object Lock/retention, encryption, and the deployment's recovery
   and authorized-deletion roles.
 - Bind an authenticated StackGraph tenant to the GitHub installation and select at least 100 repositories that
   represent the languages, deployment models, sizes, and criticality tiers expected in the pilot.
 - Route the operational signals in `docs/operations-slo.md` to their named owners.
+- Establish the pilot tenant's initial function-level technology boundaries using
+  [tenant code-policy governance](tenant-code-policies.md), then archive the evidence-backed
+  repository evaluation and owner dispositions for every reported misalignment.
 
 GitHub carries an opaque `state` value through its installation URL, but its setup URL's `installation_id` is
 not trustworthy by itself. The hosted flow must bind state to the authenticated tenant and verify installation
