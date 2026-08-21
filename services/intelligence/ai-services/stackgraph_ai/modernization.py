@@ -12,7 +12,7 @@ from stackgraph_ai.models import canonical_json, sha256_key
 
 
 ANALYZER_KEY = "repository-modernization-intelligence"
-ANALYZER_VERSION = "2.0.0"
+ANALYZER_VERSION = "2.0.1"
 
 
 @dataclass(frozen=True, slots=True)

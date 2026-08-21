@@ -38,6 +38,9 @@ from stackgraph_ai.modernization import (
 from stackgraph_ai.service_heartbeat import record_service_heartbeat
 
 
+MIN_STRUCTURAL_DUPLICATE_LINES = 6
+
+
 @dataclass(frozen=True, slots=True)
 class ModernizationResult:
     repository_id: str
@@ -470,7 +473,10 @@ def _structural_groups(
         grouped.setdefault(unit.structural_fingerprint, []).append(unit)
     values: list[tuple[CodeUnitEvidence, ...]] = []
     for fingerprint in sorted(grouped):
-        group = tuple(grouped[fingerprint])
+        group = tuple(
+            unit for unit in grouped[fingerprint]
+            if unit.vendored or unit.line_end - unit.line_start + 1 >= MIN_STRUCTURAL_DUPLICATE_LINES
+        )
         if len(group) < 2 or not any(unit.repository_id == repository_id for unit in group):
             continue
         common_tokens = set(group[0].semantic_tokens)
