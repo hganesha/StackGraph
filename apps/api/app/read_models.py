@@ -88,6 +88,8 @@ from app.models import (
     RankedItem,
     RecommendationSummary,
     RepositoryCapabilityIntelligence,
+    RepositoryDetail,
+    RepositoryProfile,
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
     Score,
@@ -263,6 +265,10 @@ def _taxonomy_name(key: str) -> str:
 
 def _string_list(value: object) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
+
+
+def _dedupe_summaries(values: list[EntitySummary]) -> list[EntitySummary]:
+    return list({value.id: value for value in values}.values())
 
 
 def _integer(value: object) -> int | None:
@@ -871,6 +877,103 @@ class ReadModelStore(AdminReadModelsMixin):
             assessments=assessments,
             recommendations=recommendations,
             freshness=_freshness(application.get("observed_at")),
+        )
+
+    async def repository_detail(
+        self,
+        repository_id: UUID,
+        *,
+        tenant_id: UUID | None,
+    ) -> RepositoryDetail:
+        repository = await self._get_entity(
+            repository_id, tenant_id, namespace="ENTERPRISE", entity_type="Repository",
+        )
+        profile_row = await self.database.fetch_one(
+            """
+            SELECT fact.id,fact.object_value,fact.confidence,fact.source_revision,
+                   fact.observed_at,source.source_key
+            FROM current_fact fact
+            JOIN source_snapshot snapshot ON snapshot.id=fact.source_snapshot_id
+            JOIN ingest_target target ON target.id=snapshot.ingest_target_id
+            JOIN source_system source ON source.id=target.source_system_id
+            WHERE fact.subject_entity_id=%s AND fact.predicate='HAS_PROPERTY'
+              AND fact.object_value->>'record_kind'='repository_profile'
+            ORDER BY fact.observed_at DESC,fact.id DESC LIMIT 1
+            """,
+            (repository_id,),
+            tenant_id=tenant_id,
+        )
+        profile = None
+        repository_summary = _entity(repository)
+        if profile_row is not None and isinstance(profile_row.get("object_value"), dict):
+            value = profile_row["object_value"]
+            purpose = value.get("purpose") if isinstance(value.get("purpose"), str) else None
+            purpose_source = value.get("purpose_source")
+            source_path = (
+                purpose_source.get("path")
+                if isinstance(purpose_source, dict) and isinstance(purpose_source.get("path"), str)
+                else None
+            )
+            confidence = _number(profile_row.get("confidence"), 0.5)
+            citation = Citation(
+                fact_id=profile_row["id"],
+                label=(f"Repository profile · {source_path}" if source_path else "Repository profile evidence"),
+                href=f"/api/v1/facts/{profile_row['id']}/evidence",
+            )
+            profile = RepositoryProfile(
+                purpose=purpose,
+                purpose_source=source_path,
+                descriptions=_string_list(value.get("descriptions")),
+                languages=_string_list(value.get("languages")),
+                components=_string_list(value.get("components")),
+                key_files=_string_list(value.get("key_files")),
+                operational_signals=_string_list(value.get("operational_signals")),
+                limitations=_string_list(value.get("limitations")),
+                source_revision=profile_row["source_revision"],
+                confidence=confidence,
+                confidence_label=_confidence_label(confidence),
+                citations=[citation],
+            )
+            if purpose:
+                repository_summary = repository_summary.model_copy(update={"summary": purpose})
+        related = await self.database.fetch_all(
+            """
+            SELECT entity.*,relationship.relationship_type,
+                   coalesce(entity.last_seen_at,entity.updated_at,entity.created_at) observed_at
+            FROM current_relationship relationship
+            JOIN entity ON entity.id=CASE
+              WHEN relationship.source_entity_id=%s THEN relationship.target_entity_id
+              ELSE relationship.source_entity_id END
+            WHERE relationship.source_entity_id=%s OR relationship.target_entity_id=%s
+            ORDER BY entity.namespace,entity.entity_type,entity.name,entity.id
+            """,
+            (repository_id, repository_id, repository_id),
+            tenant_id=tenant_id,
+        )
+        applications = [
+            _entity(row) for row in related
+            if row["namespace"] == "ENTERPRISE" and row["entity_type"] == "Application"
+            and row["relationship_type"] in {"IMPLEMENTED_BY", "IMPLEMENTS", "CONTAINS"}
+        ]
+        technologies = [
+            _entity(row) for row in related
+            if row["namespace"] in {"TECHNOLOGY", "OSS"}
+            and row["relationship_type"] in {"DEPENDS_ON", "USES", "RUNS_ON", "BUILT_ON", "HAS_VERSION"}
+        ]
+        deployments = [
+            _entity(row) for row in related
+            if row["namespace"] == "DEPLOYMENT"
+            and row["relationship_type"] in {"DEPLOYED_AS", "RUNS_ON", "USES", "LOCATED_IN"}
+        ]
+        observed_at = profile_row.get("observed_at") if profile_row else repository.get("observed_at")
+        source_key = profile_row.get("source_key") if profile_row else None
+        return RepositoryDetail(
+            repository=repository_summary,
+            profile=profile,
+            applications=_dedupe_summaries(applications),
+            technologies=_dedupe_summaries(technologies),
+            deployments=_dedupe_summaries(deployments),
+            freshness=_freshness(observed_at, source_key),
         )
 
     async def technology_estate_hierarchy(

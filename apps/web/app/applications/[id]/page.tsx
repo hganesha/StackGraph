@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
@@ -136,7 +137,13 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
               <h2 id="repositories-heading">Repositories</h2>
               {data.repositories.length > 0 ? (
                 <ul className={`${styles.entityList} sg-mono`}>
-                  {data.repositories.map((repository) => <li key={repository.id}>{repository.name}</li>)}
+                  {data.repositories.map((repository) => (
+                    <li key={repository.id}>
+                      <Link className={styles.entityLink} href={`/repositories/${repository.id}`}>
+                        {repository.name}
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               ) : <EmptyPanel>No repositories are linked yet.</EmptyPanel>}
             </section>

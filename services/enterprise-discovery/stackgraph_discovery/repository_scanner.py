@@ -20,7 +20,7 @@ from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.3.0"
+SCANNER_VERSION = "1.4.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -54,6 +54,12 @@ JS_ARROW_FUNCTION = re.compile(
 )
 IDENTIFIER_PART = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)|[0-9]+")
 SHA256_CONTENT_HASH = re.compile(r"^sha256:[a-f0-9]{64}$")
+README_SUFFIXES = {"", ".md", ".markdown", ".mdown", ".rst", ".txt"}
+LANGUAGE_LABELS = {
+    ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
+    ".ts": "TypeScript", ".tsx": "TypeScript", ".mts": "TypeScript", ".cts": "TypeScript",
+    ".py": "Python",
+}
 
 
 def canonical_json(value: object) -> str:
@@ -238,7 +244,8 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies.extend(_scan_python(contents, diagnostics))
     dependencies = _dedupe_dependencies(dependencies)
     runtime = _runtime_observations(contents, diagnostics)
-    inventory_facts = _application_boundary_facts(scan_input, contents)
+    inventory_facts = _repository_profile_facts(scan_input, contents)
+    inventory_facts.extend(_application_boundary_facts(scan_input, contents))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
     pass_a_completed = time.monotonic()
 
@@ -1497,6 +1504,279 @@ def _repository_ref(scan_input: ScanInput) -> dict[str, str]:
         "key": scan_input.repository_key,
         "name": scan_input.repository_name,
     }
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryProfileSource:
+    kind: str
+    value: str
+    path: str
+    locator: Mapping[str, Any]
+
+
+def _repository_profile_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+) -> list[dict[str, Any]]:
+    """Describe repository intent from bounded, revision-pinned source evidence.
+
+    README prose and manifest descriptions are declared evidence. Languages, components,
+    and operational signals are deterministic inventory only; they are never used to invent
+    a purpose when the repository does not state one.
+    """
+    if not contents:
+        return []
+    description_sources = _repository_description_sources(contents)
+    purpose_source = description_sources[0] if description_sources else None
+    languages = sorted({
+        label
+        for path in contents
+        if (label := LANGUAGE_LABELS.get(PurePosixPath(path).suffix.lower())) is not None
+    })
+    components = sorted({
+        _component_label(path)
+        for path in contents
+        if PurePosixPath(path).name in {
+            "package.json", "pyproject.toml", "requirements.txt", "Pipfile",
+        }
+    })
+    operational_signals = _repository_operational_signals(contents)
+    key_files = _repository_key_files(contents)
+    evidence_sources = list(description_sources[:8])
+    evidenced_paths = {source.path for source in evidence_sources}
+    for path in key_files:
+        if path in evidenced_paths or len(evidence_sources) >= 12:
+            continue
+        evidence_sources.append(RepositoryProfileSource(
+            kind="REPOSITORY_FILE", value=path, path=path, locator={"path": path},
+        ))
+        evidenced_paths.add(path)
+    if not evidence_sources:
+        path = min(contents, key=lambda value: (len(PurePosixPath(value).parts), value))
+        evidence_sources.append(RepositoryProfileSource(
+            kind="REPOSITORY_FILE", value=path, path=path, locator={"path": path},
+        ))
+
+    purpose = purpose_source.value if purpose_source else None
+    profile: dict[str, Any] = {
+        "record_kind": "repository_profile",
+        "schema_version": "1.0.0",
+        "descriptions": [source.value for source in description_sources],
+        "languages": languages,
+        "components": components,
+        "key_files": key_files,
+        "operational_signals": operational_signals,
+        "limitations": [
+            "purpose is reported only when README or manifest text states it",
+            "documentation may be stale or describe only part of a monorepo",
+            "language and operational signals reflect only files admitted by scanner bounds",
+        ],
+    }
+    if purpose:
+        profile["purpose"] = purpose
+        profile["purpose_source"] = {
+            "kind": purpose_source.kind,
+            "path": purpose_source.path,
+        }
+    evidence = [
+        _evidence_dict(Evidence(
+            path=source.path,
+            evidence_type="REPOSITORY_PROFILE_SOURCE",
+            content_hash=content_hash(contents[source.path]),
+            locator=source.locator,
+            excerpt_hash=sha256_key(source.value),
+            metadata={"profile_source_kind": source.kind},
+        ), scan_input)
+        for source in evidence_sources
+    ]
+    identity = {
+        "tenant": scan_input.tenant_key,
+        "repository": scan_input.repository_key,
+        "record_kind": profile["record_kind"],
+        "source_revision": scan_input.source_revision,
+        "extractor": SCANNER_VERSION,
+    }
+    confidence = 0.95 if purpose_source and purpose_source.kind == "README" else 0.9 if purpose_source else 0.65
+    return [{
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key(identity),
+        "tenant_key": scan_input.tenant_key,
+        "subject": _repository_ref(scan_input),
+        "predicate": "HAS_PROPERTY",
+        "object_value": profile,
+        "assertion_class": "DECLARED" if purpose_source else "INFERRED",
+        "confidence": confidence,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": {"profile_schema_version": "1.0.0"},
+        "evidence": evidence,
+    }]
+
+
+def _repository_description_sources(
+    contents: Mapping[str, bytes],
+) -> tuple[RepositoryProfileSource, ...]:
+    values: list[RepositoryProfileSource] = []
+    readmes = sorted(
+        (path for path in contents if _is_readme(path)),
+        key=lambda path: (len(PurePosixPath(path).parts), path.lower(), path),
+    )
+    for path in readmes:
+        extracted = _readme_lead(contents[path])
+        if extracted is not None:
+            value, line_start, line_end = extracted
+            values.append(RepositoryProfileSource(
+                kind="README", value=value, path=path,
+                locator={"path": path, "line_start": line_start, "line_end": line_end},
+            ))
+    manifests = sorted(
+        (path for path in contents if PurePosixPath(path).name in {"package.json", "pyproject.toml"}),
+        key=lambda path: (len(PurePosixPath(path).parts), path),
+    )
+    for path in manifests:
+        name = PurePosixPath(path).name
+        try:
+            if name == "package.json":
+                document = json.loads(contents[path])
+                description = document.get("description") if isinstance(document, Mapping) else None
+                pointer = "/description"
+            else:
+                document = tomllib.loads(contents[path].decode("utf-8"))
+                project = document.get("project") if isinstance(document, Mapping) else None
+                tool = document.get("tool") if isinstance(document, Mapping) else None
+                poetry = tool.get("poetry") if isinstance(tool, Mapping) else None
+                if isinstance(project, Mapping) and project.get("description"):
+                    description = project.get("description")
+                    pointer = "/project/description"
+                else:
+                    description = poetry.get("description") if isinstance(poetry, Mapping) else None
+                    pointer = "/tool/poetry/description"
+        except (UnicodeDecodeError, json.JSONDecodeError, tomllib.TOMLDecodeError):
+            continue
+        if isinstance(description, str) and (cleaned := _clean_profile_text(description)):
+            values.append(RepositoryProfileSource(
+                kind="MANIFEST_DESCRIPTION", value=cleaned, path=path,
+                locator={"path": path, "json_pointer": pointer},
+            ))
+    deduped: list[RepositoryProfileSource] = []
+    seen: set[str] = set()
+    for source in values:
+        key = source.value.casefold()
+        if key not in seen:
+            deduped.append(source)
+            seen.add(key)
+    return tuple(deduped)
+
+
+def _is_readme(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    lower = pure_path.name.lower()
+    return (
+        (lower == "readme" or lower.startswith("readme."))
+        and pure_path.suffix.lower() in README_SUFFIXES
+    )
+
+
+def _readme_lead(content: bytes) -> tuple[str, int, int] | None:
+    text = content.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    paragraphs: list[tuple[str, int, int]] = []
+    current: list[str] = []
+    current_start = 1
+    in_fence = False
+    for index, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            if current:
+                paragraphs.append((" ".join(current), current_start, index - 1))
+                current = []
+            continue
+        if in_fence or not stripped:
+            if current:
+                paragraphs.append((" ".join(current), current_start, index - 1))
+                current = []
+            continue
+        if stripped.startswith("#") or re.fullmatch(r"[-=]{3,}", stripped):
+            continue
+        if not current:
+            current_start = index
+        current.append(stripped)
+    if current:
+        paragraphs.append((" ".join(current), current_start, len(lines)))
+    fallback: tuple[str, int, int] | None = None
+    for paragraph, start, end in paragraphs:
+        cleaned = _clean_profile_text(paragraph)
+        if not cleaned or _readme_boilerplate(cleaned):
+            continue
+        candidate = (cleaned, start, end)
+        if fallback is None:
+            fallback = candidate
+        if len(cleaned) >= 40:
+            return candidate
+    return fallback
+
+
+def _clean_profile_text(value: str) -> str:
+    cleaned = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", value)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    cleaned = re.sub(r"[`*_~]", "", cleaned)
+    cleaned = re.sub(r"^(?:>|[-+*]|\d+[.)])\s*", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > 600:
+        shortened = cleaned[:600].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        cleaned = f"{shortened}…"
+    return cleaned
+
+
+def _readme_boilerplate(value: str) -> bool:
+    lowered = value.casefold()
+    return (
+        not re.search(r"[a-z]{3}", lowered)
+        or lowered.startswith(("table of contents", "license", "contributing", "installation"))
+        or "shields.io" in lowered
+    )
+
+
+def _component_label(path: str) -> str:
+    parent = str(PurePosixPath(path).parent)
+    return "Repository root" if parent == "." else parent
+
+
+def _repository_operational_signals(contents: Mapping[str, bytes]) -> list[str]:
+    signals: set[str] = set()
+    for path in contents:
+        name = PurePosixPath(path).name.lower()
+        suffix = PurePosixPath(path).suffix.lower()
+        parts = {part.lower() for part in PurePosixPath(path).parts}
+        if name == "dockerfile" or name.startswith("dockerfile."):
+            signals.add("Container build")
+        if name in {"compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml"}:
+            signals.add("Compose deployment")
+        if suffix == ".tf":
+            signals.add("Terraform infrastructure")
+        if suffix in {".yaml", ".yml"} and parts & {"k8s", "kubernetes"}:
+            signals.add("Kubernetes deployment")
+        if ".github" in parts and "workflows" in parts:
+            signals.add("GitHub Actions")
+        if name == "makefile":
+            signals.add("Make build automation")
+    return sorted(signals)
+
+
+def _repository_key_files(contents: Mapping[str, bytes]) -> list[str]:
+    values = [
+        path for path in contents
+        if _is_readme(path)
+        or PurePosixPath(path).name in {
+            "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Dockerfile",
+            "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml", "Makefile",
+        }
+        or PurePosixPath(path).suffix.lower() == ".tf"
+    ]
+    return sorted(values, key=lambda path: (len(PurePosixPath(path).parts), path))[:24]
 
 
 def _application_boundary_facts(

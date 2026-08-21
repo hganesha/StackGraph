@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient, sanitizeOrigin } from "@stackgraph/shared";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
@@ -145,7 +146,7 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
             <ul className={styles.chipList}>
               {data.internal_usage.repositories.map((r) => (
                 <li key={r.id} className={`${styles.chip} sg-mono`}>
-                  {r.name}
+                  <Link href={`/repositories/${r.id}`}>{r.name}</Link>
                 </li>
               ))}
             </ul>

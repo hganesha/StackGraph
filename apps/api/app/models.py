@@ -240,6 +240,31 @@ class ApplicationDetail(ContractModel):
     freshness: Freshness
 
 
+class RepositoryProfile(ContractModel):
+    purpose: str | None = None
+    purpose_source: str | None = None
+    descriptions: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    components: list[str] = Field(default_factory=list)
+    key_files: list[str] = Field(default_factory=list)
+    operational_signals: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    source_revision: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class RepositoryDetail(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    profile: RepositoryProfile | None = None
+    applications: list[EntitySummary]
+    technologies: list[EntitySummary]
+    deployments: list[EntitySummary]
+    freshness: Freshness
+
+
 class InternalUsage(ContractModel):
     repository_count: int = Field(ge=0)
     application_count: int = Field(ge=0)

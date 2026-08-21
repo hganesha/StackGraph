@@ -205,6 +205,18 @@
   border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
 }
 
+.entityLink,
+.repositoryName a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.entityLink:hover,
+.repositoryName a:hover {
+  color: var(--sg-color-domain-enterprise-500);
+  text-decoration: underline;
+}
+
 .emptyPanel {
   padding: var(--sg-space-4) 0;
   border-block: var(--sg-border-hairline) solid var(--sg-surface-border);

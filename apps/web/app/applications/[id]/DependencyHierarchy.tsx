@@ -139,7 +139,9 @@ export function ApplicationDependencyHierarchy({
               <header className={styles.repositoryHead}>
                 <div>
                   <span className={styles.repositoryLabel}>Repository</span>
-                  <h3 className={`${styles.repositoryName} sg-mono`}>{hierarchy.repository.name}</h3>
+                  <h3 className={`${styles.repositoryName} sg-mono`}>
+                    <Link href={`/repositories/${hierarchy.repository.id}`}>{hierarchy.repository.name}</Link>
+                  </h3>
                 </div>
                 <span className={styles.domainCount}>
                   {hierarchy.components.length} {hierarchy.components.length === 1 ? "component" : "components"}
