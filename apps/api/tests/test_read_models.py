@@ -16,6 +16,8 @@ from app.read_models import (
     _decode_cursor,
     _encode_cursor,
     _group_application_technologies,
+    _resolve_technology_catalog_entry,
+    _technology_catalog_index,
     _technology_catalog_profiles,
 )
 
@@ -53,15 +55,16 @@ class EstateDatabaseStub:
                 },
                 {
                     "id": UUID("00000000-0000-4000-8000-000000000220"),
-                    "namespace": "ENTERPRISE",
-                    "entity_type": "Application",
-                    "name": "Catalog API",
+                    "namespace": "TECHNOLOGY",
+                    "entity_type": "PackageVersion",
+                    "name": "transitive-library@2.0.0",
                     "properties": {},
                     "observed_at": NOW,
                     "priority_score": Decimal("70"),
                     "priority_confidence": Decimal("0.75"),
                     "priority_method": "priority-v1",
                     "viability_score": None,
+                    "dependency_tier": 2,
                 },
             ]
         raise AssertionError(f"unexpected query: {query}")
@@ -293,6 +296,63 @@ def test_technology_catalog_profile_combines_oss_metadata_and_curated_classifica
     assert {citation.fact_id for citation in profile.citations} == {
         metadata_fact_id, classification_fact_id,
     }
+
+
+def test_catalog_resolution_supports_package_families_and_prefers_exact_aliases() -> None:
+    family_id = UUID("00000000-0000-4000-8000-000000000220")
+    specific_id = UUID("00000000-0000-4000-8000-000000000221")
+    package_id = UUID("00000000-0000-4000-8000-000000000222")
+    other_family_id = UUID("00000000-0000-4000-8000-000000000223")
+    catalog_rows = [
+        {
+            "id": family_id,
+            "entity_type": "Technology",
+            "name": "Babel helpers",
+            "properties": {"catalog_lookup_keys": ["@babel/helper-*"]},
+        },
+        {
+            "id": specific_id,
+            "entity_type": "Technology",
+            "name": "Babel compilation targets",
+            "properties": {"catalog_lookup_keys": ["@babel/helper-compilation-targets"]},
+        },
+        {
+            "id": other_family_id,
+            "entity_type": "Technology",
+            "name": "typescript-eslint",
+            "properties": {
+                "catalog_lookup_keys": ["@typescript-eslint/*"],
+                "aliases": ["@typescript-eslint/*"],
+            },
+        },
+    ]
+    catalog_by_id, catalog_by_key = _technology_catalog_index(catalog_rows)
+
+    specific, direct = _resolve_technology_catalog_entry(
+        {
+            "id": package_id,
+            "entity_type": "PackageVersion",
+            "name": "@babel/helper-compilation-targets",
+            "properties": {"package_name": "@babel/helper-compilation-targets"},
+        },
+        catalog_by_id,
+        catalog_by_key,
+    )
+    assert specific and specific["row"]["id"] == specific_id
+    assert direct is False
+
+    family, direct = _resolve_technology_catalog_entry(
+        {
+            "id": package_id,
+            "entity_type": "PackageVersion",
+            "name": "@babel/helper-module-imports",
+            "properties": {"package_name": "@babel/helper-module-imports"},
+        },
+        catalog_by_id,
+        catalog_by_key,
+    )
+    assert family and family["row"]["id"] == family_id
+    assert direct is False
 
 
 def test_application_dependency_hierarchy_uses_declared_roots_and_breaks_cycles() -> None:
@@ -716,6 +776,18 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert "relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "e.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+    assert "dependency_tier" in estate_queries
+
+
+def test_estate_summary_exposes_transitive_technology_tier() -> None:
+    result = asyncio.run(ReadModelStore(EstateDatabaseStub()).estate_summary(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        cursor=None,
+        limit=2,
+    ))
+
+    technology = next(item for item in result.ranked_items if item.domain == "TECHNOLOGY")
+    assert technology.dependency_tier == 2
 
 
 def test_modernization_portfolio_reads_phase3_recommendations_and_shared_footprint() -> None:

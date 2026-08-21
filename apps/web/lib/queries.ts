@@ -1,10 +1,29 @@
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { stackGraphClient, type EstateSummary, type Namespace } from "@stackgraph/shared";
 
 export function useEstateSummary() {
   return useQuery({
     queryKey: ["estate", "summary"],
     queryFn: () => stackGraphClient.getEstateSummary(),
+  });
+}
+
+export function useInfiniteEstateSummary(
+  domains: Namespace[] = [],
+  options?: { enabled?: boolean },
+) {
+  return useInfiniteQuery({
+    queryKey: ["estate", "summary", "infinite", "domains", ...domains],
+    queryFn: ({ pageParam }) => stackGraphClient.getEstateSummary({
+      cursor: pageParam ?? undefined,
+      limit: 50,
+      domains,
+    }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.page_info?.has_next_page
+      ? lastPage.page_info.next_cursor ?? undefined
+      : undefined,
+    enabled: options?.enabled ?? true,
   });
 }
 

@@ -5541,6 +5541,19 @@
             ],
             "title": "Citations"
           },
+          "dependency_tier": {
+            "anyOf": [
+              {
+                "maximum": 2.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Tier"
+          },
           "domain": {
             "enum": [
               "BUSINESS",

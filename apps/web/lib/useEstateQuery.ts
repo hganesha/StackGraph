@@ -59,9 +59,9 @@ export function useEstateQuery(): {
     (lensKey: string) => {
       const lens = LENSES[lensKey];
       if (!lens) return;
-      write({ ...DEFAULT_QUERY, ...lens.apply, q: query.q, lens: lensKey });
+      write({ ...DEFAULT_QUERY, ...lens.apply, lens: lensKey });
     },
-    [write, query.q],
+    [write],
   );
 
   const reset = useCallback(() => write(DEFAULT_QUERY), [write]);

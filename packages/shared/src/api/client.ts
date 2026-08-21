@@ -300,8 +300,15 @@ const fixtureClient: StackGraphClient = {
         params.domains?.includes(item.domain),
       );
     }
-    if (params?.limit) summary.ranked_items = summary.ranked_items.slice(0, params.limit);
-    summary.page_info = { has_next_page: false };
+    const start = Number.parseInt(params?.cursor ?? "0", 10) || 0;
+    const limit = params?.limit ?? summary.ranked_items.length;
+    const allItems = summary.ranked_items;
+    const end = Math.min(start + limit, allItems.length);
+    summary.ranked_items = allItems.slice(start, end);
+    summary.page_info = {
+      has_next_page: end < allItems.length,
+      next_cursor: end < allItems.length ? String(end) : null,
+    };
     return summary;
   },
   async getApplication() {

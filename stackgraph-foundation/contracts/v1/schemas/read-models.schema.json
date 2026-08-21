@@ -35,6 +35,7 @@
         "priority": {"$ref": "#/$defs/score"},
         "viability": {"$ref": "#/$defs/score"},
         "summary": {"type": "string"},
+        "dependency_tier": {"type": "integer", "minimum": 1, "maximum": 2},
         "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
         "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}}
       },

@@ -907,6 +907,7 @@ export interface ProviderQuota {
 
 export interface RankedItem {
   citations?: Array<Citation> | null;
+  dependency_tier?: number | null;
   domain: "BUSINESS" | "ENTERPRISE" | "TECHNOLOGY" | "OSS" | "DEPLOYMENT" | "INTELLIGENCE";
   freshness: Freshness;
   id: string;

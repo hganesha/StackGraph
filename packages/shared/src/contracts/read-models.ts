@@ -66,6 +66,8 @@ export interface RankedItem {
   priority: Score;
   viability?: Score;
   summary?: string;
+  /** Technology estate tier: 1 is direct; 2 is transitive through another library. */
+  dependency_tier?: 1 | 2;
   freshness: Freshness;
   citations?: Citation[];
 }
