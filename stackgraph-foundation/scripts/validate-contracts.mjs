@@ -22,6 +22,7 @@ const cases = [
   ["contracts/v1/fixtures/scanner-result.partial.json", "https://stackgraph.dev/contracts/v1/schemas/scanner-result.schema.json"],
   ["contracts/v1/fixtures/raw-observation.json", "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json"],
   ["contracts/v1/fixtures/raw-observation.npm-registry.json", "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json"],
+  ["contracts/v1/fixtures/raw-observation.pypi-registry.json", "https://stackgraph.dev/contracts/v1/schemas/raw-observation.schema.json"],
   ["contracts/v1/fixtures/runtime-observation.json", "https://stackgraph.dev/contracts/v1/schemas/runtime-observation.schema.json"],
   ["contracts/v1/fixtures/npm-resolution.private.json", "https://stackgraph.dev/contracts/v1/schemas/npm-resolution.schema.json#/$defs/dependencyProperties"],
   ["contracts/v1/fixtures/estate-summary.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/estateSummary"],
@@ -37,6 +38,9 @@ const cases = [
   ["contracts/v1/fixtures/capability-taxonomy.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/capabilityTaxonomy"],
   ["contracts/v1/fixtures/repository-capabilities.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryCapabilityIntelligence"],
   ["contracts/v1/fixtures/repository-modernization-intelligence.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/repositoryModernizationIntelligence"],
+  ["contracts/v1/fixtures/capability-footprints.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/capabilityFootprintList"],
+  ["contracts/v1/fixtures/modernization-scenario.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/modernizationScenario"],
+  ["contracts/v1/fixtures/modernization-governance.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/modernizationGovernanceState"],
   ["contracts/v1/fixtures/phase3-intelligence-metrics.json", "https://stackgraph.dev/contracts/v1/schemas/read-models.schema.json#/$defs/phase3IntelligenceMetrics"]
 ];
 

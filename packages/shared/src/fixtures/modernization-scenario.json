@@ -1,0 +1,18 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-21T14:00:00Z",
+  "budget_points": 13,
+  "used_points": 8,
+  "total_score": 76.4,
+  "items": [{
+    "recommendation_id": "00000000-0000-4000-8000-000000000911",
+    "repository": {"id": "00000000-0000-4000-8000-000000000912", "kind": "Repository", "name": "billing-service", "canonical_key": "github:repo:billing"},
+    "title": "Consolidate billing HTTP clients",
+    "action": "CONSOLIDATE",
+    "score": 76.4,
+    "score_components": {"business": 0.8, "viability_gap": 0.7, "entropy": 0.946395, "reuse": 0.867194, "confidence": 0.9, "effort_penalty": 0.235294},
+    "effort_points": 8,
+    "selected": true,
+    "policy_version": "modernization.portfolio/1.0.0"
+  }]
+}

@@ -716,3 +716,55 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert "relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "e.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+
+
+def test_modernization_portfolio_reads_phase3_recommendations_and_shared_footprint() -> None:
+    recommendation_id = UUID("00000000-0000-4000-8000-000000000951")
+    repository_id = UUID("00000000-0000-4000-8000-000000000952")
+    fact_id = UUID("00000000-0000-4000-8000-000000000953")
+
+    class PortfolioDatabaseStub:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            self.queries.append(query)
+            assert "modernization_portfolio_policy" in query
+            return None
+
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            self.queries.append(query)
+            assert "FROM modernization_recommendation recommendation" in query
+            assert "LEFT JOIN capability_footprint footprint" in query
+            assert "FROM recommendation r" not in query
+            return [{
+                "id": recommendation_id,
+                "title": "Consolidate HTTP clients",
+                "rationale": "One approved implementation reduces duplicate maintenance.",
+                "action": "CONSOLIDATE",
+                "recommendation_confidence": Decimal("0.90"),
+                "supporting_fact_ids": [fact_id],
+                "created_at": NOW,
+                "updated_at": NOW,
+                "candidate_confidence": Decimal("0.92"),
+                "capability_definition_id": UUID("00000000-0000-4000-8000-000000000954"),
+                "repository_entity_id": repository_id,
+                "repository_name": "Billing API",
+                "repository_key": "github:repo:billing",
+                "effort_points": 8,
+                "selected_option_score": Decimal("0.80"),
+                "application_count": 5,
+                "repository_count": 8,
+                "technology_counts": {"node": 4, "python": 4},
+            }]
+
+    database = PortfolioDatabaseStub()
+    result = asyncio.run(ReadModelStore(database).modernization(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        cursor=None,
+        limit=10,
+    ))
+
+    assert [item.id for item in result.opportunities] == [recommendation_id]
+    assert result.opportunities[0].priority.method_version == "modernization-portfolio/v1-unconfigured"
+    assert result.opportunities[0].citations[0].fact_id == fact_id

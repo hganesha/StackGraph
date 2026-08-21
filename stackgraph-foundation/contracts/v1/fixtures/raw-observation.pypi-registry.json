@@ -1,0 +1,38 @@
+{
+  "observation_contract_version": "1.0.0",
+  "idempotency_key": "sha256:abababababababababababababababababababababababababababababababab",
+  "tenant_key": null,
+  "source": {
+    "key": "pypi-public",
+    "kind": "PACKAGE_REGISTRY",
+    "adapter_version": "1.0.0",
+    "schema_version": "pypi-json-v1"
+  },
+  "target_key": "registry:pypi-public:pkg:pypi/httpx@0.27.2",
+  "source_revision": "etag:pypi-httpx-example-1",
+  "observed_at": "2026-08-21T14:06:00Z",
+  "request": {
+    "uri": "https://pypi.org/pypi/httpx/0.27.2/json",
+    "etag": "pypi-httpx-example-1"
+  },
+  "content": {
+    "hash": "sha256:cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "media_type": "application/json",
+    "size_bytes": 282,
+    "inline": {
+      "info": {
+        "name": "httpx",
+        "version": "0.27.2",
+        "license": "BSD-3-Clause",
+        "requires_python": ">=3.8",
+        "requires_dist": ["anyio", "certifi"]
+      },
+      "urls": [{
+        "packagetype": "sdist",
+        "url": "https://files.pythonhosted.org/httpx-0.27.2.tar.gz",
+        "digests": {"sha256": "example"},
+        "yanked": false
+      }]
+    }
+  }
+}

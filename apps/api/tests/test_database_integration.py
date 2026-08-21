@@ -571,6 +571,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         "/admin/github/installations",
                         json={
                             "installation_id": "900000000000000001",
+                            "pilot_manual_binding_acknowledged": True,
                             "display_name": "Acme GitHub App",
                         },
                     )

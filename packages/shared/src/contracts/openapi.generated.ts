@@ -246,12 +246,57 @@ export interface BusinessMapSummary {
   view_mode: "value-chain" | "organization";
 }
 
+export interface CalibrationCorpusPublishRequest {
+  affected_scope_mae?: number | null;
+  candidate_precision?: number | null;
+  case_fingerprints: Array<string>;
+  corpus_key?: string;
+  effort_accuracy?: number | null;
+  maximum_affected_scope_mae?: number;
+  minimum_candidate_precision?: number;
+  minimum_effort_accuracy?: number;
+  minimum_recommendation_acceptance?: number;
+  minimum_reviewed_cases?: number;
+  minimum_validation_success?: number;
+  recommendation_acceptance?: number | null;
+  validation_success?: number | null;
+  version: string;
+}
+
+export interface CalibrationCorpusSummary {
+  case_count: number;
+  corpus_fingerprint: string;
+  corpus_key: string;
+  evaluated_at: string;
+  evaluation_fingerprint: string;
+  id: string;
+  promotion_failures: Array<string>;
+  promotion_passed: boolean;
+  version: string;
+}
+
 export interface CapabilityDefinitionModel {
   aliases?: Array<string>;
   description: string;
   key: string;
   name: string;
   parent_key?: string | null;
+}
+
+export interface CapabilityFootprintList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  footprints: Array<CapabilityFootprintModel>;
+}
+
+export interface CapabilityFootprintModel {
+  application_count: number;
+  capability: EntitySummary;
+  repository_count: number;
+  reuse_signal: number;
+  technology_count: number;
+  technology_counts: Record<string, number>;
+  technology_entropy: number;
 }
 
 export interface CapabilityInferenceReviewRequest {
@@ -430,6 +475,7 @@ export interface Freshness {
 export interface GitHubInstallationConnectRequest {
   display_name?: string | null;
   installation_id: string;
+  pilot_manual_binding_acknowledged: true;
 }
 
 export interface GitHubRepositoryConnectRequest {
@@ -501,6 +547,36 @@ export interface IdentityReviewResult {
   version: number;
 }
 
+export interface InternalCatalogComponentSummary {
+  catalog_fingerprint: string;
+  component_key: string;
+  governed_at?: string | null;
+  governed_by?: string | null;
+  id: string;
+  name: string;
+  owner?: string | null;
+  review_state: "UNREVIEWED" | "APPROVED" | "REJECTED";
+  status: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  supporting_fact_ids: Array<string>;
+  version: string;
+}
+
+export interface InternalCatalogComponentUpsertRequest {
+  api_symbols?: Array<string>;
+  behavior_claims?: Array<Record<string, unknown>>;
+  capability_definition_id: string;
+  component_entity_id: string;
+  decision: "APPROVE" | "REJECT";
+  license?: string | null;
+  owner: string;
+  policy_tags?: Array<string>;
+  runtime_constraints?: Record<string, string>;
+  security_status?: "CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN";
+  status?: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  supporting_fact_ids: Array<string>;
+  version: string;
+}
+
 export interface InternalUsage {
   application_count: number;
   repositories?: Array<EntitySummary> | null;
@@ -552,6 +628,13 @@ export interface ModernizationCandidateReviewResult {
   review_state: "CONFIRMED" | "REJECTED";
   reviewed_at: string;
   version: number;
+}
+
+export interface ModernizationGovernanceState {
+  active_calibration?: CalibrationCorpusSummary | null;
+  active_policy?: ModernizationPolicySummary | null;
+  contract_version?: "1.0.0";
+  internal_components: Array<InternalCatalogComponentSummary>;
 }
 
 export interface ModernizationImpactModel {
@@ -610,6 +693,31 @@ export interface ModernizationOptionModel {
   validation_gaps: Array<string>;
 }
 
+export interface ModernizationPolicyPublishRequest {
+  allowed_licenses?: Array<string>;
+  allowed_security_statuses?: Array<"CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN">;
+  denied_option_keys?: Array<string>;
+  policy_key?: string;
+  required_policy_tags?: Array<string>;
+  runtime_versions?: Record<string, string>;
+  version: string;
+}
+
+export interface ModernizationPolicySummary {
+  activated_at: string;
+  activated_by: string;
+  allowed_licenses: Array<string>;
+  allowed_security_statuses: Array<string>;
+  configuration_fingerprint: string;
+  denied_option_keys: Array<string>;
+  id: string;
+  policy_key: string;
+  required_policy_tags: Array<string>;
+  runtime_versions: Record<string, string>;
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+  version: string;
+}
+
 export interface ModernizationRecommendationModel {
   action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
   affected_call_sites: number;
@@ -646,6 +754,32 @@ export interface ModernizationRecommendationReviewResult {
   review_state: "ACCEPTED" | "REJECTED" | "DISMISSED";
   reviewed_at: string;
   version: number;
+}
+
+export interface ModernizationScenarioItem {
+  action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
+  effort_points: number;
+  policy_version: string;
+  recommendation_id: string;
+  repository: EntitySummary;
+  score: number;
+  score_components: Record<string, number>;
+  selected: boolean;
+  title: string;
+}
+
+export interface ModernizationScenarioRequest {
+  budget_points: number;
+  excluded_recommendation_ids?: Array<string>;
+}
+
+export interface ModernizationScenarioResult {
+  as_of: string;
+  budget_points: number;
+  contract_version?: "1.0.0";
+  items: Array<ModernizationScenarioItem>;
+  total_score: number;
+  used_points: number;
 }
 
 export interface ModernizationValidationOutcomeRequest {

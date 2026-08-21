@@ -19,6 +19,7 @@ from psycopg.types.json import Jsonb
 
 from stackgraph_ai.capability_worker import analyze_repository
 from stackgraph_ai.errors import ProviderRequestError
+from stackgraph_ai.governance import governance_fingerprint
 from stackgraph_ai.modernization import (
     ANALYZER_KEY,
     ANALYZER_VERSION,
@@ -71,11 +72,12 @@ def enqueue_reanalysis(
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         policy = _load_policy(connection, tenant_id)
         internal_components = _load_internal_components(connection, tenant_id)
-        configuration_fingerprint = "sha256:" + hashlib.sha256(json.dumps({
-            "analyzer": f"{ANALYZER_KEY}/{ANALYZER_VERSION}",
-            "capabilities": capability_hash.hexdigest(),
-            "alternatives": catalog.content_hash,
-            "policy": {
+        configuration_fingerprint = governance_fingerprint(
+            analyzer_key=ANALYZER_KEY,
+            analyzer_version=ANALYZER_VERSION,
+            taxonomy_hash="sha256:" + capability_hash.hexdigest(),
+            alternatives_hash=catalog.content_hash,
+            policy={
                 "id": str(policy.id) if policy.id else None,
                 "key": policy.key,
                 "version": policy.version,
@@ -85,7 +87,7 @@ def enqueue_reanalysis(
                 "allowed_security_statuses": sorted(policy.allowed_security_statuses),
                 "required_policy_tags": sorted(policy.required_policy_tags),
             },
-            "internal_components": [{
+            internal_components=[{
                 "id": str(component.id),
                 "entity_id": str(component.entity_id),
                 "capability_definition_id": str(component.capability_definition_id),
@@ -102,7 +104,7 @@ def enqueue_reanalysis(
                     str(value) for value in component.supporting_fact_ids
                 ),
             } for component in internal_components],
-        }, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        )
         snapshot = connection.execute(
             """
             SELECT snapshot.*
@@ -399,6 +401,7 @@ def _load_internal_components(
         FROM modernization_internal_component component
         JOIN entity ON entity.id=component.component_entity_id
         WHERE component.tenant_id=%s
+          AND component.review_state='APPROVED' AND component.status='APPROVED'
         ORDER BY component.component_key,component.version
         """,
         (tenant_id,),

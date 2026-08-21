@@ -1,0 +1,19 @@
+{
+  "contract_version": "1.0.0",
+  "active_policy": {
+    "id": "00000000-0000-4000-8000-000000000921",
+    "policy_key": "modernization.default",
+    "version": "1.0.0",
+    "status": "ACTIVE",
+    "runtime_versions": {"node": "20", "python": "3.12"},
+    "allowed_licenses": ["MIT", "Apache-2.0", "BSD-3-Clause"],
+    "denied_option_keys": [],
+    "allowed_security_statuses": ["CLEAR"],
+    "required_policy_tags": ["supported"],
+    "configuration_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "activated_by": "pilot-admin",
+    "activated_at": "2026-08-21T14:00:00Z"
+  },
+  "internal_components": [],
+  "active_calibration": null
+}

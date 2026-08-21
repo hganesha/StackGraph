@@ -18,7 +18,12 @@
   color: var(--sg-text-secondary);
 }
 .hero {
-  max-inline-size: 320px;
+  inline-size: 100%;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sg-space-3);
 }
 .investigative {
   padding: var(--sg-space-3) var(--sg-space-4);
@@ -29,6 +34,76 @@
 }
 .investigative strong {
   margin-inline-end: var(--sg-space-1);
+}
+.scenario {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr);
+  gap: var(--sg-space-4);
+  padding: var(--sg-space-5);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+}
+.scenario h2 {
+  font-size: var(--sg-type-h2-size);
+  font-weight: 500;
+}
+.scenario p,
+.selectionList small,
+.selectionScore small {
+  color: var(--sg-text-secondary);
+}
+.budgetControl {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: var(--sg-space-3);
+  font-weight: 500;
+}
+.budgetControl input {
+  accent-color: var(--sg-color-domain-intelligence-500);
+}
+.budgetControl output,
+.selectionScore {
+  font-family: var(--sg-font-evidence);
+  font-variant-numeric: tabular-nums;
+}
+.selectionList {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-2);
+  list-style: none;
+}
+.selectionList button {
+  inline-size: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3);
+  text-align: start;
+  color: inherit;
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  cursor: pointer;
+}
+.selectionList button:hover {
+  border-color: var(--sg-surface-border-strong);
+}
+.selectionList button > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+}
+.selectionScore {
+  align-items: flex-end;
+  font-size: var(--sg-type-h3-size);
+}
+.scenarioError,
+.scenarioEmpty {
+  grid-column: 1 / -1;
 }
 .heroSkeleton {
   display: flex;
@@ -61,4 +136,17 @@
 .emptyBody {
   color: var(--sg-text-secondary);
   max-inline-size: 52ch;
+}
+
+@media (max-width: 760px) {
+  .metrics,
+  .scenario,
+  .selectionList {
+    grid-template-columns: 1fr;
+  }
+  .selectionList,
+  .scenarioError,
+  .scenarioEmpty {
+    grid-column: auto;
+  }
 }

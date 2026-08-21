@@ -651,6 +651,141 @@ class Phase3IntelligenceMetrics(ContractModel):
     model_latency_ms_p95: float | None = Field(default=None, ge=0)
 
 
+class ModernizationPolicyPublishRequest(ContractModel):
+    policy_key: str = Field(default="modernization.default", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    version: str = Field(min_length=1)
+    runtime_versions: dict[str, str] = Field(default_factory=dict)
+    allowed_licenses: list[str] = Field(default_factory=list)
+    denied_option_keys: list[str] = Field(default_factory=list)
+    allowed_security_statuses: list[Literal["CLEAR", "WARN", "BLOCKED", "UNKNOWN"]] = Field(
+        default_factory=lambda: ["CLEAR", "UNKNOWN"]
+    )
+    required_policy_tags: list[str] = Field(default_factory=list)
+
+
+class ModernizationPolicySummary(ContractModel):
+    id: UUID
+    policy_key: str
+    version: str
+    status: Literal["DRAFT", "ACTIVE", "RETIRED"]
+    runtime_versions: dict[str, str]
+    allowed_licenses: list[str]
+    denied_option_keys: list[str]
+    allowed_security_statuses: list[str]
+    required_policy_tags: list[str]
+    configuration_fingerprint: str
+    activated_by: str
+    activated_at: datetime
+
+
+class InternalCatalogComponentUpsertRequest(ContractModel):
+    component_entity_id: UUID
+    capability_definition_id: UUID
+    version: str = Field(min_length=1)
+    status: Literal["APPROVED", "DEPRECATED", "BLOCKED"] = "APPROVED"
+    api_symbols: list[str] = Field(default_factory=list)
+    runtime_constraints: dict[str, str] = Field(default_factory=dict)
+    behavior_claims: list[dict[str, Any]] = Field(default_factory=list)
+    license: str | None = None
+    security_status: Literal["CLEAR", "WARN", "BLOCKED", "UNKNOWN"] = "UNKNOWN"
+    policy_tags: list[str] = Field(default_factory=list)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    owner: str = Field(min_length=1)
+    decision: Literal["APPROVE", "REJECT"]
+
+
+class InternalCatalogComponentSummary(ContractModel):
+    id: UUID
+    component_key: str
+    version: str
+    name: str
+    status: Literal["APPROVED", "DEPRECATED", "BLOCKED"]
+    review_state: Literal["UNREVIEWED", "APPROVED", "REJECTED"]
+    owner: str | None = None
+    catalog_fingerprint: str
+    supporting_fact_ids: list[UUID]
+    governed_by: str | None = None
+    governed_at: datetime | None = None
+
+
+class CalibrationCorpusPublishRequest(ContractModel):
+    corpus_key: str = Field(default="modernization.pilot", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    version: str = Field(min_length=1)
+    case_fingerprints: list[str] = Field(min_length=1)
+    candidate_precision: float | None = Field(default=None, ge=0, le=1)
+    recommendation_acceptance: float | None = Field(default=None, ge=0, le=1)
+    validation_success: float | None = Field(default=None, ge=0, le=1)
+    affected_scope_mae: float | None = Field(default=None, ge=0)
+    effort_accuracy: float | None = Field(default=None, ge=0, le=1)
+    minimum_candidate_precision: float = Field(default=0.8, ge=0, le=1)
+    minimum_recommendation_acceptance: float = Field(default=0.5, ge=0, le=1)
+    minimum_validation_success: float = Field(default=0.8, ge=0, le=1)
+    maximum_affected_scope_mae: float = Field(default=0.25, ge=0)
+    minimum_effort_accuracy: float = Field(default=0.7, ge=0, le=1)
+    minimum_reviewed_cases: int = Field(default=20, ge=1)
+
+
+class CalibrationCorpusSummary(ContractModel):
+    id: UUID
+    corpus_key: str
+    version: str
+    case_count: int = Field(ge=0)
+    corpus_fingerprint: str
+    promotion_passed: bool
+    promotion_failures: list[str]
+    evaluation_fingerprint: str
+    evaluated_at: datetime
+
+
+class ModernizationGovernanceState(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    active_policy: ModernizationPolicySummary | None = None
+    internal_components: list[InternalCatalogComponentSummary]
+    active_calibration: CalibrationCorpusSummary | None = None
+
+
+class CapabilityFootprintModel(ContractModel):
+    capability: EntitySummary
+    application_count: int = Field(ge=0)
+    repository_count: int = Field(ge=0)
+    technology_count: int = Field(ge=0)
+    technology_counts: dict[str, int]
+    technology_entropy: float = Field(ge=0, le=1)
+    reuse_signal: float = Field(ge=0, le=1)
+
+
+class CapabilityFootprintList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    footprints: list[CapabilityFootprintModel]
+
+
+class ModernizationScenarioRequest(ContractModel):
+    budget_points: int = Field(ge=0, le=100000)
+    excluded_recommendation_ids: list[UUID] = Field(default_factory=list)
+
+
+class ModernizationScenarioItem(ContractModel):
+    recommendation_id: UUID
+    repository: EntitySummary
+    title: str
+    action: Literal["CONSOLIDATE", "REPLACE", "UPGRADE", "REFACTOR", "INVESTIGATE"]
+    score: float = Field(ge=0, le=100)
+    score_components: dict[str, float]
+    effort_points: int = Field(ge=0)
+    selected: bool
+    policy_version: str
+
+
+class ModernizationScenarioResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    budget_points: int = Field(ge=0)
+    used_points: int = Field(ge=0)
+    total_score: float = Field(ge=0)
+    items: list[ModernizationScenarioItem]
+
+
 # --- Business Map -----------------------------------------------------------
 # The contract mirrors the workspace's client state (kebab view modes, string keys as ids)
 # so the UI serializes with a thin adapter and no reducer changes. The store maps these
@@ -945,6 +1080,12 @@ class GitHubInstallationConnectRequest(ContractModel):
         pattern=r"^[1-9][0-9]{0,19}$",
     )
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    pilot_manual_binding_acknowledged: Literal[True] = Field(
+        description=(
+            "Confirms that an operator verified the installation belongs to this pilot tenant; "
+            "hosted setup callback binding remains required for general availability."
+        )
+    )
 
 
 class ConnectorUpdateRequest(ContractModel):

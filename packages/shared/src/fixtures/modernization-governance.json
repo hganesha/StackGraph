@@ -1,0 +1,11 @@
+{
+  "contract_version": "1.0.0",
+  "active_policy": {
+    "policy_key": "modernization.default",
+    "version": "1.0.0",
+    "status": "ACTIVE",
+    "configuration_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "internal_components": [],
+  "active_calibration": null
+}

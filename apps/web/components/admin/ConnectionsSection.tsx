@@ -30,6 +30,7 @@ export function ConnectionsSection() {
   const [repository, setRepository] = useState("");
   const [installationId, setInstallationId] = useState("");
   const [installationName, setInstallationName] = useState("");
+  const [manualBindingAcknowledged, setManualBindingAcknowledged] = useState(false);
   const [connectionMode, setConnectionMode] = useState<"installation" | "repository">("installation");
   const [connectedRepository, setConnectedRepository] = useState<string | null>(null);
   const connectors = useQuery({
@@ -54,12 +55,14 @@ export function ConnectionsSection() {
   const connectInstallation = useMutation({
     mutationFn: () => stackGraphClient.connectGitHubInstallation({
       installation_id: installationId.trim(),
+      pilot_manual_binding_acknowledged: true,
       ...(installationName.trim() ? { display_name: installationName.trim() } : {}),
     }),
     onSuccess: async (connector) => {
       setConnectedRepository(connector.display_name);
       setInstallationId("");
       setInstallationName("");
+      setManualBindingAcknowledged(false);
       setShowForm(false);
       await queryClient.invalidateQueries({ queryKey: ["admin"] });
     },
@@ -151,6 +154,18 @@ export function ConnectionsSection() {
                   autoComplete="off"
                 />
               </label>
+              <label className={styles.field}>
+                <span className={styles.label}>Pilot verification</span>
+                <span className={styles.help}>
+                  <input
+                    type="checkbox"
+                    checked={manualBindingAcknowledged}
+                    onChange={(event) => setManualBindingAcknowledged(event.target.checked)}
+                    required
+                  />{" "}
+                  I verified that this installation belongs to the current pilot workspace. Hosted GitHub setup remains required for general availability.
+                </span>
+              </label>
             </>
           ) : (
             <label className={styles.field}>
@@ -220,7 +235,9 @@ export function ConnectionsSection() {
             type="submit"
             className={styles.primary}
             disabled={connectionPending || (
-              connectionMode === "installation" ? !installationId.trim() : !repositoryAvailable
+              connectionMode === "installation"
+                ? !installationId.trim() || !manualBindingAcknowledged
+                : !repositoryAvailable
             )}
           >
             {connectionPending ? "Connecting…" : "Connect and queue first scan"}
