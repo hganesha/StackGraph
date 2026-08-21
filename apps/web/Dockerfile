@@ -44,6 +44,8 @@ WORKDIR /app
 
 COPY --from=builder --chown=stackgraph:stackgraph /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=stackgraph:stackgraph /app/apps/web/.next/static ./apps/web/.next/static
+# Next's standalone output does not include public/, so copy it explicitly.
+COPY --from=builder --chown=stackgraph:stackgraph /app/apps/web/public ./apps/web/public
 
 USER stackgraph
 
