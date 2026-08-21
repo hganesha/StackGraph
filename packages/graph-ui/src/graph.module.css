@@ -1,5 +1,13 @@
 .canvasWrap {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  block-size: 100%;
+  min-block-size: 0;
+}
+.canvasWrap :global(.react-flow) {
+  flex: 1 1 0;
   inline-size: 100%;
   block-size: 100%;
   min-block-size: 0;
@@ -68,8 +76,13 @@
 }
 
 /* ---- edges ---- */
+.edgeRegular :global(.react-flow__edge-path),
+.edgeBridge :global(.react-flow__edge-path),
 .edgePossible :global(.react-flow__edge-path) {
-  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+.edgePossible :global(.react-flow__edge-path) {
+  stroke-dasharray: 6 5;
 }
 /* Confirmed bridge pulse — only when its selection is active (plan §4). */
 .edgeBridgeActive :global(.react-flow__edge-path) {

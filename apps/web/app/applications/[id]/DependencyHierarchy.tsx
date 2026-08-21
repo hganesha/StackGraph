@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { IconChevronRight } from "@tabler/icons-react";
 import type {
   ApplicationComponentDependencyHierarchy,
   ApplicationRepositoryDependencyHierarchy,
@@ -85,8 +86,15 @@ function DependencyTree({
   return (
     <details className={styles.componentHierarchy}>
       <summary className={styles.componentSummary}>
-        <span className="sg-mono">{component.component_path}</span>
-        <span>{component.dependencies.length} dependencies</span>
+        <span className={styles.componentIdentity}>
+          <IconChevronRight className={styles.componentChevron} size={16} stroke={1.75} aria-hidden="true" />
+          <span className="sg-mono">
+            {component.component_path === "." ? "Repository root" : component.component_path}
+          </span>
+        </span>
+        <span>
+          {component.dependencies.length} {component.dependencies.length === 1 ? "dependency" : "dependencies"}
+        </span>
       </summary>
       <div className={styles.dependencyTree}>
         {renderLevel(ROOT_DEPENDENCY, 0)}
@@ -101,9 +109,11 @@ function DependencyTree({
 export function ApplicationDependencyHierarchy({
   hierarchies,
   technologyGroups,
+  embedded = false,
 }: {
   hierarchies: ApplicationRepositoryDependencyHierarchy[];
   technologyGroups: ApplicationTechnologyGroup[];
+  embedded?: boolean;
 }) {
   const classifications = useMemo(() => {
     const result = new Map<string, string[]>();
@@ -120,12 +130,8 @@ export function ApplicationDependencyHierarchy({
     return result;
   }, [technologyGroups]);
 
-  return (
-    <section className={styles.dependencySection} aria-label="Dependency hierarchy">
-      <div className={styles.subsectionHeading}>
-        <h2 className={styles.subsectionTitle}>Dependency hierarchy</h2>
-        <p>Manifest roots expand into their resolved transitive dependencies.</p>
-      </div>
+  const content = (
+    <>
       {hierarchies.length > 0 ? (
         <div className={styles.dependencyHierarchies}>
           {hierarchies.map((hierarchy) => (
@@ -135,7 +141,9 @@ export function ApplicationDependencyHierarchy({
                   <span className={styles.repositoryLabel}>Repository</span>
                   <h3 className={`${styles.repositoryName} sg-mono`}>{hierarchy.repository.name}</h3>
                 </div>
-                <span className={styles.domainCount}>{hierarchy.components.length} components</span>
+                <span className={styles.domainCount}>
+                  {hierarchy.components.length} {hierarchy.components.length === 1 ? "component" : "components"}
+                </span>
               </header>
               <div className={styles.componentList}>
                 {hierarchy.components.map((component) => (
@@ -154,6 +162,18 @@ export function ApplicationDependencyHierarchy({
           No manifest-declared dependency roots have been linked to this application&apos;s repositories yet.
         </p>
       )}
+    </>
+  );
+
+  if (embedded) return <div className={styles.dependencyEmbedded}>{content}</div>;
+
+  return (
+    <section className={styles.dependencySection} aria-label="Dependency hierarchy">
+      <div className={styles.subsectionHeading}>
+        <h2 className={styles.subsectionTitle}>Dependency hierarchy</h2>
+        <p>Manifest roots expand into their resolved transitive dependencies.</p>
+      </div>
+      {content}
     </section>
   );
 }

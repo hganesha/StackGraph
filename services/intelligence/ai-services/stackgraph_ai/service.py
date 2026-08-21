@@ -22,6 +22,30 @@ from stackgraph_ai.models import (
 from stackgraph_ai.registry import ModelRouteRegistry, ProviderRegistry
 
 
+def _schema_validation_summary(
+    error: ValidationError,
+    output: Mapping[str, Any] | list[Any],
+    schema: Mapping[str, Any],
+) -> str:
+    path = "$" + "".join(
+        f"[{item}]" if isinstance(item, int) else f".{item}"
+        for item in error.absolute_path
+    )
+    details = [f"path={path}", f"rule={error.validator}"]
+    if isinstance(output, Mapping):
+        properties = schema.get("properties")
+        expected = set(properties) if isinstance(properties, Mapping) else set()
+        required = schema.get("required")
+        required_fields = set(required) if isinstance(required, list) else set()
+        missing = sorted(required_fields - set(output))
+        unexpected = sorted(set(output) - expected) if expected else []
+        if missing:
+            details.append(f"missing={','.join(missing)}")
+        if unexpected:
+            details.append(f"unexpected={','.join(unexpected)}")
+    return "; ".join(details)
+
+
 class AIService:
     """Coordinates prompt resolution and provider execution.
 
@@ -133,8 +157,16 @@ class AIService:
                     Draft202012Validator.check_schema(request.output_schema)
                     Draft202012Validator(request.output_schema).validate(response.structured_output)
                 except (SchemaError, ValidationError) as error:
+                    summary = (
+                        _schema_validation_summary(
+                            error, response.structured_output, request.output_schema,
+                        )
+                        if isinstance(error, ValidationError)
+                        else "prompt schema is invalid"
+                    )
                     raise ProviderResponseError(
-                        f"{response.provider} output did not satisfy prompt schema {prompt.key!r}"
+                        f"{response.provider} output did not satisfy prompt schema "
+                        f"{prompt.key!r} ({summary})"
                     ) from error
         except Exception as error:
             if self.invocation_recorder is not None and invocation_id is not None:

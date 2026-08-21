@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -630,6 +631,7 @@ class GraphReadMetrics:
     unavailable_fallbacks: int = 0
     parity_fallbacks: int = 0
     discovery_limit_fallbacks: int = 0
+    timeout_fallbacks: int = 0
 
 
 class AgeParityError(RuntimeError):
@@ -643,11 +645,13 @@ class ReadModelStore(AdminReadModelsMixin):
         *,
         graph_read_mode: str = "sql",
         graph_discovery_limit: int = 5000,
+        graph_age_timeout_seconds: float = 3.0,
         credential_encryption_key: str = "stackgraph-local-development-credential-key",
     ) -> None:
         self.database = database
         self.graph_read_mode = graph_read_mode
         self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
+        self.graph_age_timeout_seconds = graph_age_timeout_seconds
         self.graph_read_metrics = GraphReadMetrics()
         self.credential_encryption_key = credential_encryption_key
 
@@ -1254,16 +1258,17 @@ class ReadModelStore(AdminReadModelsMixin):
                             },
                         )
                     else:
-                        graph = await self._try_age_graph_neighborhood(
-                            center_id,
-                            tenant_id=tenant_id,
-                            depth=depth,
-                            real_node_limit=real_node_limit,
-                            predicates=predicates,
-                            namespaces=namespaces,
-                            min_confidence=min_confidence,
-                            highlight_to=highlight_to,
-                        )
+                        async with asyncio.timeout(self.graph_age_timeout_seconds):
+                            graph = await self._try_age_graph_neighborhood(
+                                center_id,
+                                tenant_id=tenant_id,
+                                depth=depth,
+                                real_node_limit=real_node_limit,
+                                predicates=predicates,
+                                namespaces=namespaces,
+                                min_confidence=min_confidence,
+                                highlight_to=highlight_to,
+                            )
                         if graph is not None:
                             self.graph_read_metrics.age_reads += 1
                             return graph
@@ -1283,6 +1288,12 @@ class ReadModelStore(AdminReadModelsMixin):
                         return graph
             except APIError:
                 raise
+            except TimeoutError:
+                self.graph_read_metrics.timeout_fallbacks += 1
+                logger.warning(
+                    "graph read falling back to SQL because AGE exceeded its time budget",
+                    extra={"timeout_seconds": self.graph_age_timeout_seconds},
+                )
             except AgeParityError as error:
                 self.graph_read_metrics.parity_fallbacks += 1
                 logger.warning(

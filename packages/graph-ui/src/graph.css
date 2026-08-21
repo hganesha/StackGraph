@@ -23,7 +23,22 @@
   fill: var(--sg-text-secondary);
 }
 .react-flow__edge-text {
-  fill: var(--sg-text-muted);
+  fill: var(--sg-text-secondary);
+}
+.react-flow__edge-textbg {
+  fill: var(--sg-surface-card);
+}
+/* React Flow renders each edge in an overflow-visible SVG with a zero-size
+   viewport. Chromium can cull those SVGs when the graph origin is off-screen,
+   even though the path itself intersects the canvas. Give the edge layer the
+   finite Dagre bounds supplied by GraphCanvas so connections remain paintable. */
+.react-flow .react-flow__edges {
+  width: var(--sg-graph-paint-width);
+  height: var(--sg-graph-paint-height);
+}
+.react-flow .react-flow__edges > svg:not(.react-flow__marker) {
+  min-width: 100%;
+  min-height: 100%;
 }
 .react-flow__attribution {
   display: none;

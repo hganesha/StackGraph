@@ -77,6 +77,18 @@ class UnavailableGraphDatabaseStub(GraphDatabaseStub):
         return await super().fetch_one(query, params, tenant_id=tenant_id)
 
 
+class SlowAgeGraphDatabaseStub(GraphDatabaseStub):
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "pending_events" in query:
+            return {"pending_events": 0, "oldest_pending_seconds": None}
+        return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        if "age_entity_properties AS MATERIALIZED" in query:
+            await asyncio.sleep(0.05)
+        return await super().fetch_all(query, params, tenant_id=tenant_id)
+
+
 async def aggregate_graph():
     store = ReadModelStore(GraphDatabaseStub())
     return await store.graph_neighborhood(
@@ -129,4 +141,20 @@ def test_auto_mode_falls_back_to_sql_when_age_is_unavailable() -> None:
     assert graph.truncated
     assert store.graph_read_metrics.age_reads == 0
     assert store.graph_read_metrics.unavailable_fallbacks == 1
+    assert store.graph_read_metrics.sql_reads == 1
+
+
+def test_auto_mode_falls_back_to_sql_when_age_exceeds_time_budget() -> None:
+    store = ReadModelStore(
+        SlowAgeGraphDatabaseStub(),
+        graph_read_mode="auto",
+        graph_age_timeout_seconds=0.001,
+    )
+    graph = asyncio.run(store.graph_neighborhood(
+        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+    ))
+
+    assert graph.truncated
+    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.timeout_fallbacks == 1
     assert store.graph_read_metrics.sql_reads == 1

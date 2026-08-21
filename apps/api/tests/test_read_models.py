@@ -87,6 +87,28 @@ class AIConfigurationDatabaseStub:
         raise AssertionError(f"unexpected query: {query}")
 
 
+class ServiceStatusDatabaseStub:
+    def __init__(self) -> None:
+        self.workload_query = ""
+        self.workload_params: tuple[UUID, ...] = ()
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        if "FROM service_heartbeat" in query:
+            return [{
+                "service_key": "intelligence",
+                "status": "RUNNING",
+                "last_heartbeat_at": datetime.now(UTC),
+            }]
+        if "FROM tenant_service_control" in query:
+            return []
+        raise AssertionError(f"unexpected query: {query}")
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        self.workload_query = query
+        self.workload_params = params
+        return {"intelligence_failed": 5}
+
+
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.8499) == "MEDIUM"
     assert _confidence_label(0.85) == "HIGH"
@@ -596,6 +618,22 @@ def test_openrouter_connection_test_rejects_invalid_structured_completion() -> N
 
     assert raised.value.code == "AI_STRUCTURED_OUTPUT_FAILED"
     assert database.updates[-1][1][0] == "FAILED"
+
+
+def test_service_status_scopes_intelligence_workload_to_active_configuration() -> None:
+    database = ServiceStatusDatabaseStub()
+    result = asyncio.run(ReadModelStore(database).service_status(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    intelligence = next(service for service in result.services if service.key == "intelligence")
+    assert intelligence.failed == 5
+    assert intelligence.state == "DEGRADED"
+    assert "WITH intelligence_scope AS" in database.workload_query
+    assert database.workload_query.count(
+        "configuration_fingerprint=scope.fingerprint"
+    ) == 4
+    assert len(database.workload_params) == 25
 
 
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:

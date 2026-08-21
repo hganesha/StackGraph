@@ -58,10 +58,10 @@ class FakeAI:
         del args, kwargs
         prompt = PromptDefinition(
             key="capability.inference",
-            version="1.1.0",
+            version="1.3.0",
             status="ACTIVE",
             messages=(PromptMessageTemplate(role="system", content="Classify."),),
-            metadata={"policy_version": "capability-inference/v1.1"},
+            metadata={"policy_version": "capability-inference/v1.3"},
         )
         return PromptInvocation(
             prompt=prompt,
@@ -117,10 +117,9 @@ class CapabilityTests(unittest.TestCase):
         subject = usage(12, "mystery-client")
         fact_id = str(subject.supporting_fact_ids[0])
         output = {
-            "capabilityKey": "http-client",
+            "capability": "http-client",
             "confidence": 0.8,
-            "supportingEvidenceRefs": [fact_id],
-            "counterEvidenceRefs": [],
+            "evidence_refs": [fact_id],
             "rationale": "The supplied symbol evidence indicates HTTP use.",
         }
         proposal = asyncio.run(infer_with_ai(
@@ -129,7 +128,13 @@ class CapabilityTests(unittest.TestCase):
         self.assertEqual(proposal.assertion_class, "INFERRED")
         self.assertEqual(proposal.model_provider, "fake")
 
-        output["supportingEvidenceRefs"] = ["00000000-0000-4000-9000-999999999999"]
+        output["evidence_refs"] = []
+        proposal = asyncio.run(infer_with_ai(
+            FakeAI(output), self.taxonomy, subject, tenant_id=TENANT_ID,
+        ))
+        self.assertEqual(proposal.supporting_fact_ids, subject.supporting_fact_ids)
+
+        output["evidence_refs"] = ["00000000-0000-4000-9000-999999999999"]
         with self.assertRaisesRegex(ValueError, "unsupported evidence"):
             asyncio.run(infer_with_ai(
                 FakeAI(output), self.taxonomy, subject, tenant_id=TENANT_ID,

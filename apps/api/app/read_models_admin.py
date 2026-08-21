@@ -1674,6 +1674,18 @@ class AdminReadModelsMixin:
         )
         workload = await self.database.fetch_one(
             """
+            WITH intelligence_scope AS (
+              SELECT coalesce(
+                max(tenant_ai_configuration_fingerprint(
+                  provider,model,credential_secret_id
+                )) FILTER (
+                  WHERE enabled AND model<>'' AND credential_secret_id IS NOT NULL
+                ),
+                'snapshot-v1'
+              ) fingerprint
+              FROM tenant_ai_configuration
+              WHERE tenant_id=%s
+            )
             SELECT
               (SELECT count(*) FROM connector_account
                WHERE tenant_id=%s AND external_account_key LIKE 'github:%%' AND status='ACTIVE') github_configured,
@@ -1698,18 +1710,28 @@ class AdminReadModelsMixin:
               (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND leased_by IS NOT NULL AND processed_at IS NULL) projection_running,
               (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND last_error IS NOT NULL AND processed_at IS NULL) projection_failed,
               (SELECT max(coalesce(processed_at,created_at)) FROM projection_outbox WHERE tenant_id=%s) projection_last,
-              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='PENDING') intelligence_pending,
-              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='RUNNING') intelligence_running,
-              (SELECT count(*) FROM intelligence_job failed
-               WHERE failed.tenant_id=%s AND failed.status='FAILED'
+              (SELECT count(*) FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s AND job.configuration_fingerprint=scope.fingerprint
+                 AND job.status='PENDING') intelligence_pending,
+              (SELECT count(*) FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s AND job.configuration_fingerprint=scope.fingerprint
+                 AND job.status='RUNNING') intelligence_running,
+              (SELECT count(*) FROM intelligence_job failed, intelligence_scope scope
+               WHERE failed.tenant_id=%s
+                 AND failed.configuration_fingerprint=scope.fingerprint
+                 AND failed.status='FAILED'
                  AND NOT EXISTS (
                    SELECT 1 FROM intelligence_job recovered
                    WHERE recovered.tenant_id=failed.tenant_id
                      AND recovered.repository_entity_id=failed.repository_entity_id
+                     AND recovered.configuration_fingerprint=failed.configuration_fingerprint
                      AND recovered.status='SUCCEEDED'
                      AND recovered.completed_at>failed.updated_at
                  )) intelligence_failed,
-              (SELECT max(coalesce(completed_at,started_at,created_at)) FROM intelligence_job WHERE tenant_id=%s) intelligence_last,
+              (SELECT max(coalesce(job.completed_at,job.started_at,job.created_at))
+               FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s
+                 AND job.configuration_fingerprint=scope.fingerprint) intelligence_last,
               (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
                JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='PENDING') depsdev_pending,
@@ -1737,7 +1759,7 @@ class AdminReadModelsMixin:
                JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='osv.dev') osv_last
             """,
-            tuple([tenant_id] * 24),
+            tuple([tenant_id] * 25),
             tenant_id=tenant_id,
         ) or {}
         now = datetime.now(UTC)

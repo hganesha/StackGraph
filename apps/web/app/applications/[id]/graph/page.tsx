@@ -4,7 +4,7 @@ import { use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { GraphLens } from "@/app/technologies/[id]/graph/GraphLens";
-import { ApplicationDependencyHierarchy } from "../DependencyHierarchy";
+import { ApplicationViewSwitch } from "../ApplicationViewSwitch";
 import styles from "../application.module.css";
 
 export default function ApplicationGraphLensPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,13 +22,8 @@ export default function ApplicationGraphLensPage({ params }: { params: Promise<{
         collectionHref="/applications"
         collectionLabel="Applications"
         depth={2}
+        headerAction={<ApplicationViewSwitch applicationId={id} active="graph" />}
       />
-      {data ? (
-        <ApplicationDependencyHierarchy
-          hierarchies={data.dependency_hierarchies ?? []}
-          technologyGroups={data.technology_groups}
-        />
-      ) : null}
     </div>
   );
 }

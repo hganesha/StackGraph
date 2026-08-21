@@ -11,6 +11,43 @@
   justify-content: space-between;
   gap: var(--sg-space-4);
 }
+.headActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-3);
+}
+.viewSwitch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 2px;
+  padding: 2px;
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.viewSwitch button {
+  min-block-size: 28px;
+  padding-inline: var(--sg-space-3);
+  color: var(--sg-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--sg-radius-control) - 2px);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--sg-type-small-size);
+}
+.viewSwitch button:hover:not(:disabled) {
+  color: var(--sg-text-primary);
+}
+.viewSwitch button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.viewSwitch .activeView {
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-card);
+  box-shadow: inset 0 0 0 var(--sg-border-hairline) var(--sg-surface-border-strong);
+}
 .title {
   font-size: var(--sg-type-h1-size);
   font-weight: 500;
@@ -59,14 +96,48 @@
   align-items: start;
 }
 .treePanel,
+.graphPanel,
 .inspector {
   background: var(--sg-surface-card);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-card);
 }
-.treePanel {
+.treePanel,
+.graphPanel {
   min-inline-size: 0;
   overflow: hidden;
+}
+.graphPanel {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 560px;
+}
+.graphCanvas {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 500px;
+  background: var(--sg-surface-base);
+}
+.graphCanvas > * {
+  flex: 1;
+  min-inline-size: 0;
+}
+.graphEmpty {
+  display: flex;
+  block-size: 100%;
+  min-block-size: 500px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sg-space-2);
+  padding: var(--sg-space-4);
+  color: var(--sg-text-secondary);
+  text-align: center;
+}
+.graphEmpty h3 {
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-h3-size);
 }
 .panelHead {
   display: flex;
@@ -322,14 +393,53 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.detailLink {
+.detailLink,
+.graphLink {
   color: var(--sg-color-domain-enterprise-700);
   font-weight: 500;
 }
+.graphLink {
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
 .detailLink:hover,
+.graphLink:hover,
 .applicationLink:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.connectionSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  padding-block-start: var(--sg-space-2);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.connectionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.connectionItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding: var(--sg-space-2);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+}
+.connectionPredicate {
+  color: var(--sg-text-muted);
+  font-size: 11px;
 }
 .applicationSection {
   display: flex;
@@ -416,6 +526,10 @@
   .panelHead,
   .branchRow,
   .searchResult {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .headActions {
     align-items: flex-start;
     flex-direction: column;
   }

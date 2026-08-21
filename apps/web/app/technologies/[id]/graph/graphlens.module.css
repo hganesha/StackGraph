@@ -33,6 +33,9 @@
   font-size: var(--sg-type-small-size);
 }
 .close {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-1);
   padding: var(--sg-space-2) var(--sg-space-3);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-control);

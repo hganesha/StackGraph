@@ -13,6 +13,28 @@ from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 
 
+def _embedded_structured_values(text: str) -> list[Mapping[str, Any] | list[Any]]:
+    decoder = json.JSONDecoder()
+    values: list[Mapping[str, Any] | list[Any]] = []
+    index = 0
+    while index < len(text):
+        starts = [position for token in ("{", "[") if (position := text.find(token, index)) >= 0]
+        if not starts:
+            break
+        start = min(starts)
+        try:
+            decoded, consumed = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            index = start + 1
+            continue
+        if isinstance(decoded, (Mapping, list)):
+            values.append(decoded)
+            index = start + consumed
+        else:
+            index = start + 1
+    return values
+
+
 def provider_error_code(status_code: int) -> tuple[str, bool]:
     if status_code in {401, 403}:
         return "AUTH_FAILURE", False
@@ -89,17 +111,26 @@ def parse_structured_text(text: str | None, *, provider: str) -> Mapping[str, An
         decoded = json.loads(stripped)
     except json.JSONDecodeError as direct_error:
         fenced = _JSON_FENCE.findall(stripped)
-        if len(fenced) != 1:
+        if len(fenced) > 1:
             raise ProviderResponseError(
                 f"{provider} returned malformed structured output "
-                "(expected one JSON object or one fenced JSON block)"
+                "(expected exactly one JSON payload)"
             ) from direct_error
-        try:
-            decoded = json.loads(fenced[0].strip())
-        except json.JSONDecodeError as fenced_error:
-            raise ProviderResponseError(
-                f"{provider} returned malformed JSON inside its structured-output fence"
-            ) from fenced_error
+        if fenced:
+            try:
+                decoded = json.loads(fenced[0].strip())
+            except json.JSONDecodeError as fenced_error:
+                raise ProviderResponseError(
+                    f"{provider} returned malformed JSON inside its structured-output fence"
+                ) from fenced_error
+        else:
+            embedded = _embedded_structured_values(stripped)
+            if len(embedded) != 1:
+                raise ProviderResponseError(
+                    f"{provider} returned malformed structured output "
+                    "(expected exactly one JSON payload)"
+                ) from direct_error
+            decoded = embedded[0]
     if not isinstance(decoded, (Mapping, list)):
         raise ProviderResponseError(f"{provider} structured output must be an object or array")
     return decoded
