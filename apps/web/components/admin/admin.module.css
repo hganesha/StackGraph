@@ -486,12 +486,218 @@
   color: var(--sg-text-secondary);
 }
 
+/* modernization governance */
+.governanceCard,
+.ecosystemCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-4);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.governanceCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+}
+.eyebrow {
+  display: block;
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cardTitle {
+  margin: 2px 0 0;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.statusGood,
+.statusBad,
+.statusMuted {
+  flex: 0 0 auto;
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  font-size: var(--sg-type-small-size);
+}
+.statusGood {
+  color: var(--sg-color-domain-oss-800);
+  background: var(--sg-color-domain-oss-100);
+}
+.statusBad {
+  color: var(--sg-color-signal-danger-700);
+  background: var(--sg-color-signal-danger-50);
+}
+.statusMuted {
+  color: var(--sg-text-secondary);
+  background: var(--sg-surface-sunken);
+}
+.fingerprint {
+  margin: 0;
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.governanceForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding-block-start: var(--sg-space-3);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.fieldGrid,
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-3);
+}
+.metricGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.textarea {
+  min-block-size: 84px;
+  resize: vertical;
+  padding: var(--sg-space-2) var(--sg-space-3);
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  font: inherit;
+}
+.textarea:focus-visible {
+  border-color: var(--sg-color-domain-enterprise-500);
+  outline: none;
+}
+.codeTextarea {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+}
+.checkGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.checkLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.selectCompact {
+  padding: var(--sg-space-2) var(--sg-space-3);
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.governanceList,
+.reasonList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.governanceList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+}
+.governanceListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+}
+.governanceListItem div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.governanceListItem strong {
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+}
+.governanceListItem div span,
+.reasonList {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.reasonList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.reasonList li::before {
+  content: "— ";
+}
+.ecosystemGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-3);
+}
+.ecosystemCard {
+  background: var(--sg-surface-sunken);
+}
+.admissionMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-2);
+  margin: 0;
+}
+.admissionMetrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admissionMetrics dt {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.admissionMetrics dd {
+  margin: 0;
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+}
+.thresholdRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-2);
+  margin-block-start: auto;
+}
+.inputSmall {
+  inline-size: 100%;
+  padding: 6px var(--sg-space-2);
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  font: inherit;
+}
+
 @media (max-width: 768px) {
   .select,
   .input {
     max-inline-size: 100%;
   }
   .serviceGrid {
+    grid-template-columns: 1fr;
+  }
+  .fieldGrid,
+  .metricGrid,
+  .ecosystemGrid {
     grid-template-columns: 1fr;
   }
 }

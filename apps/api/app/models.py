@@ -737,11 +737,37 @@ class CalibrationCorpusSummary(ContractModel):
     evaluated_at: datetime
 
 
+EcosystemName = Literal["PYPI", "MAVEN", "CARGO", "NUGET"]
+
+
+class EcosystemAdmissionEvaluateRequest(ContractModel):
+    minimum_repositories: int = Field(default=10, ge=1, le=100_000)
+    minimum_dependency_share: float = Field(default=0.02, ge=0, le=1)
+
+
+class EcosystemAdmissionSummary(ContractModel):
+    ecosystem: EcosystemName
+    sequence: int = Field(ge=1, le=4)
+    status: Literal["NOT_EVALUATED", "PROPOSED", "ADMITTED", "RETIRED", "STALE"]
+    observed_repositories: int = Field(ge=0)
+    observed_dependency_share: float = Field(ge=0, le=1)
+    minimum_repositories: int = Field(ge=1)
+    minimum_dependency_share: float = Field(ge=0, le=1)
+    predecessor_admitted: bool
+    metadata_parity: bool
+    calibration_gate_passed: bool
+    reasons: list[str]
+    decision_fingerprint: str
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+
 class ModernizationGovernanceState(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     active_policy: ModernizationPolicySummary | None = None
     internal_components: list[InternalCatalogComponentSummary]
     active_calibration: CalibrationCorpusSummary | None = None
+    ecosystem_admissions: list[EcosystemAdmissionSummary]
 
 
 class CapabilityFootprintModel(ContractModel):

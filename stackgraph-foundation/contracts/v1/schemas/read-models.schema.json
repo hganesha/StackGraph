@@ -883,12 +883,41 @@
     },
     "modernizationGovernanceState": {
       "type": "object",
-      "required": ["contract_version", "internal_components"],
+      "required": ["contract_version", "internal_components", "ecosystem_admissions"],
       "properties": {
         "contract_version": {"const": "1.0.0"},
         "active_policy": {"type": ["object", "null"]},
         "internal_components": {"type": "array", "items": {"type": "object"}},
-        "active_calibration": {"type": ["object", "null"]}
+        "active_calibration": {"type": ["object", "null"]},
+        "ecosystem_admissions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "ecosystem", "sequence", "status", "observed_repositories",
+              "observed_dependency_share", "minimum_repositories",
+              "minimum_dependency_share", "predecessor_admitted", "metadata_parity",
+              "calibration_gate_passed", "reasons", "decision_fingerprint"
+            ],
+            "properties": {
+              "ecosystem": {"enum": ["PYPI", "MAVEN", "CARGO", "NUGET"]},
+              "sequence": {"type": "integer", "minimum": 1, "maximum": 4},
+              "status": {"enum": ["NOT_EVALUATED", "PROPOSED", "ADMITTED", "RETIRED", "STALE"]},
+              "observed_repositories": {"type": "integer", "minimum": 0},
+              "observed_dependency_share": {"type": "number", "minimum": 0, "maximum": 1},
+              "minimum_repositories": {"type": "integer", "minimum": 1},
+              "minimum_dependency_share": {"type": "number", "minimum": 0, "maximum": 1},
+              "predecessor_admitted": {"type": "boolean"},
+              "metadata_parity": {"type": "boolean"},
+              "calibration_gate_passed": {"type": "boolean"},
+              "reasons": {"type": "array", "items": {"type": "string"}},
+              "decision_fingerprint": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "decided_by": {"type": ["string", "null"]},
+              "decided_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/timestamp"}, {"type": "null"}]}
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     },

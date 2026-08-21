@@ -49,6 +49,8 @@ from app.models import (
     ModernizationPolicyPublishRequest,
     InternalCatalogComponentUpsertRequest,
     CalibrationCorpusPublishRequest,
+    EcosystemAdmissionEvaluateRequest,
+    EcosystemName,
     SessionInfo,
     TechnologyEstateHierarchy,
     TechnologyDetail,
@@ -146,6 +148,10 @@ class ReadModelsProtocol(Protocol):
     ) -> ModernizationGovernanceState: ...
     async def publish_calibration_corpus(
         self, request: CalibrationCorpusPublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState: ...
+    async def evaluate_ecosystem_admission(
+        self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> ModernizationGovernanceState: ...
     async def list_business_maps(
@@ -855,6 +861,21 @@ async def publish_calibration_corpus(
     _require(principal, "admin")
     return await _store(request).publish_calibration_corpus(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/modernization-governance/ecosystems/{ecosystem}",
+    response_model=ModernizationGovernanceState, response_model_exclude_none=True,
+    operation_id="evaluateEcosystemAdmission", tags=["admin"],
+)
+async def evaluate_ecosystem_admission(
+    ecosystem: EcosystemName, body: EcosystemAdmissionEvaluateRequest, request: Request,
+) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).evaluate_ecosystem_admission(
+        ecosystem, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

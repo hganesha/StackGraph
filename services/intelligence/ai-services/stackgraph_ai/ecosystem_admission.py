@@ -12,6 +12,7 @@ from stackgraph_ai.governance import EcosystemDemand, evaluate_ecosystem_admissi
 
 ECOSYSTEM_SEQUENCE = {"PYPI": 1, "MAVEN": 2, "CARGO": 3, "NUGET": 4}
 PURL_TYPE = {"PYPI": "pypi", "MAVEN": "maven", "CARGO": "cargo", "NUGET": "nuget"}
+METADATA_PARITY = {"PYPI": True, "MAVEN": False, "CARGO": False, "NUGET": False}
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +30,6 @@ def evaluate_and_record(
     *,
     tenant_id: UUID,
     ecosystem: str,
-    metadata_parity: bool,
     actor_key: str,
     minimum_repositories: int = 10,
     minimum_dependency_share: float = 0.02,
@@ -41,15 +41,22 @@ def evaluate_and_record(
     with psycopg.connect(database_url, row_factory=dict_row) as connection:
         demand = connection.execute(
             """
-            SELECT count(DISTINCT usage.repository_entity_id)
+            SELECT count(DISTINCT fact.subject_entity_id)
                      FILTER (WHERE package.canonical_key LIKE %s) observed_repositories,
                    count(*) FILTER (WHERE package.canonical_key LIKE %s)::numeric
                      /nullif(count(*),0) observed_dependency_share
             FROM dependency_usage_summary usage
-            JOIN entity package ON package.id=usage.dependency_entity_id
-            WHERE usage.tenant_id=%s AND (usage.referenced OR usage.runtime_observed='OBSERVED')
+            JOIN fact_assertion fact ON fact.id=usage.dependency_fact_assertion_id
+            JOIN source_snapshot snapshot ON snapshot.id=fact.source_snapshot_id
+            JOIN entity package ON package.id=fact.object_entity_id
+            WHERE usage.tenant_id=%s AND fact.tenant_id=%s
+              AND fact.system_to IS NULL AND snapshot.status='PUBLISHED'
+              AND (usage.referenced OR usage.runtime_observed='OBSERVED')
             """,
-            (f"pkg:{PURL_TYPE[normalized]}/%", f"pkg:{PURL_TYPE[normalized]}/%", tenant_id),
+            (
+                f"pkg:{PURL_TYPE[normalized]}/%", f"pkg:{PURL_TYPE[normalized]}/%",
+                tenant_id, tenant_id,
+            ),
         ).fetchone()
         predecessor_admitted = True
         if sequence > 1:
@@ -74,7 +81,7 @@ def evaluate_and_record(
                 ecosystem=normalized,
                 observed_repositories=observed_repositories,
                 observed_dependency_share=observed_dependency_share,
-                metadata_parity=metadata_parity,
+                metadata_parity=METADATA_PARITY[normalized],
                 calibration_gate_passed=calibration_gate_passed,
             ),
             predecessor_admitted=predecessor_admitted,
@@ -103,7 +110,7 @@ def evaluate_and_record(
                 "ADMITTED" if decision.admitted else "PROPOSED",
                 observed_repositories, observed_dependency_share,
                 minimum_repositories, minimum_dependency_share,
-                metadata_parity, calibration_gate_passed,
+                METADATA_PARITY[normalized], calibration_gate_passed,
                 decision.fingerprint, list(decision.reasons), actor_key,
             ),
         )
@@ -122,13 +129,11 @@ def main() -> None:
     parser.add_argument("--database-url", required=True)
     parser.add_argument("--tenant-id", required=True, type=UUID)
     parser.add_argument("--ecosystem", required=True, choices=tuple(ECOSYSTEM_SEQUENCE))
-    parser.add_argument("--metadata-parity", action="store_true")
     parser.add_argument("--actor-key", required=True)
     arguments = parser.parse_args()
     result = evaluate_and_record(
         arguments.database_url, tenant_id=arguments.tenant_id,
-        ecosystem=arguments.ecosystem, metadata_parity=arguments.metadata_parity,
-        actor_key=arguments.actor_key,
+        ecosystem=arguments.ecosystem, actor_key=arguments.actor_key,
     )
     print(result)
 

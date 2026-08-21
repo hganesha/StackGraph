@@ -636,15 +636,21 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         encryption_key="stackgraph-local-development-credential-key",
                     )
                     ai_removed = await client.delete("/admin/ai-configuration/key")
+                    governance = await client.get("/admin/modernization-governance")
+                    ecosystem = await client.put(
+                        "/admin/modernization-governance/ecosystems/PYPI",
+                        json={"minimum_repositories": 1, "minimum_dependency_share": 0.01},
+                    )
                     return (
                         member, members, connector, repository, installation, policy,
                         rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
-                        tenant_ai, ai_removed,
+                        tenant_ai, ai_removed, governance, ecosystem,
                     )
 
         (
             member, members, connector, repository, installation, policy, rescan_a,
             rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
+            governance, ecosystem,
         ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
@@ -679,6 +685,16 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert tenant_ai.openrouter_api_key == "integration-secret-5678"
         assert ai_removed.json()["key_configured"] is False
         assert ai_removed.json()["enrichment_status"] == "DISABLED"
+        assert governance.status_code == 200
+        assert [item["ecosystem"] for item in governance.json()["ecosystem_admissions"]] == [
+            "PYPI", "MAVEN", "CARGO", "NUGET",
+        ]
+        assert governance.json()["ecosystem_admissions"][0]["observed_repositories"] == 0
+        assert ecosystem.status_code == 200
+        assert ecosystem.json()["ecosystem_admissions"][0]["status"] == "PROPOSED"
+        assert "calibration promotion gate has not passed" in (
+            ecosystem.json()["ecosystem_admissions"][0]["reasons"]
+        )
 
         with psycopg.connect(database_url) as connection:
             configure_tenant(connection)
@@ -731,6 +747,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
+            connection.execute("DELETE FROM ecosystem_admission WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM intelligence_job WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
             connection.execute(

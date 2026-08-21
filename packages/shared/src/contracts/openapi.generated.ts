@@ -420,6 +420,28 @@ export interface DuplicateCapabilityReviewResult {
   version: number;
 }
 
+export interface EcosystemAdmissionEvaluateRequest {
+  minimum_dependency_share?: number;
+  minimum_repositories?: number;
+}
+
+export interface EcosystemAdmissionSummary {
+  calibration_gate_passed: boolean;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  decision_fingerprint: string;
+  ecosystem: "PYPI" | "MAVEN" | "CARGO" | "NUGET";
+  metadata_parity: boolean;
+  minimum_dependency_share: number;
+  minimum_repositories: number;
+  observed_dependency_share: number;
+  observed_repositories: number;
+  predecessor_admitted: boolean;
+  reasons: Array<string>;
+  sequence: number;
+  status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
+}
+
 export interface EntitySummary {
   canonical_key?: string | null;
   id: string;
@@ -634,6 +656,7 @@ export interface ModernizationGovernanceState {
   active_calibration?: CalibrationCorpusSummary | null;
   active_policy?: ModernizationPolicySummary | null;
   contract_version?: "1.0.0";
+  ecosystem_admissions: Array<EcosystemAdmissionSummary>;
   internal_components: Array<InternalCatalogComponentSummary>;
 }
 

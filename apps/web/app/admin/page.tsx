@@ -5,6 +5,7 @@ import { useCan } from "@/lib/session";
 import { ConnectionsSection } from "@/components/admin/ConnectionsSection";
 import { ScanSection } from "@/components/admin/ScanSection";
 import { IntelligenceSection } from "@/components/admin/IntelligenceSection";
+import { GovernanceSection } from "@/components/admin/GovernanceSection";
 import { MembersSection } from "@/components/admin/MembersSection";
 import { ServicesSection } from "@/components/admin/ServicesSection";
 import styles from "@/components/admin/admin.module.css";
@@ -13,6 +14,7 @@ const TABS = [
   { key: "connections", label: "Connections" },
   { key: "scan", label: "Scan & Refresh" },
   { key: "intelligence", label: "Intelligence / AI" },
+  { key: "governance", label: "Modernization" },
   { key: "services", label: "Services" },
   { key: "members", label: "Members & Roles" },
 ] as const;
@@ -37,7 +39,7 @@ export default function AdminPage() {
       <header className={styles.head}>
         <h1 className={styles.title}>Admin</h1>
         <p className={styles.subtitle}>
-          Workspace policy — connections, refresh, the AI provider, and roles. Every change here is audited.
+          Workspace policy — connections, refresh, AI, modernization governance, and roles. Every change here is audited.
         </p>
       </header>
 
@@ -59,6 +61,7 @@ export default function AdminPage() {
         {tab === "connections" ? <ConnectionsSection /> : null}
         {tab === "scan" ? <ScanSection /> : null}
         {tab === "intelligence" ? <IntelligenceSection /> : null}
+        {tab === "governance" ? <GovernanceSection /> : null}
         {tab === "services" ? <ServicesSection /> : null}
         {tab === "members" ? <MembersSection /> : null}
       </div>

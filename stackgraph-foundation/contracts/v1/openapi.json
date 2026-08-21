@@ -2460,6 +2460,143 @@
         "title": "DuplicateCapabilityReviewResult",
         "type": "object"
       },
+      "EcosystemAdmissionEvaluateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_dependency_share": {
+            "default": 0.02,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Dependency Share",
+            "type": "number"
+          },
+          "minimum_repositories": {
+            "default": 10,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          }
+        },
+        "title": "EcosystemAdmissionEvaluateRequest",
+        "type": "object"
+      },
+      "EcosystemAdmissionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_gate_passed": {
+            "title": "Calibration Gate Passed",
+            "type": "boolean"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_fingerprint": {
+            "title": "Decision Fingerprint",
+            "type": "string"
+          },
+          "ecosystem": {
+            "enum": [
+              "PYPI",
+              "MAVEN",
+              "CARGO",
+              "NUGET"
+            ],
+            "title": "Ecosystem",
+            "type": "string"
+          },
+          "metadata_parity": {
+            "title": "Metadata Parity",
+            "type": "boolean"
+          },
+          "minimum_dependency_share": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Dependency Share",
+            "type": "number"
+          },
+          "minimum_repositories": {
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          },
+          "observed_dependency_share": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Observed Dependency Share",
+            "type": "number"
+          },
+          "observed_repositories": {
+            "minimum": 0.0,
+            "title": "Observed Repositories",
+            "type": "integer"
+          },
+          "predecessor_admitted": {
+            "title": "Predecessor Admitted",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sequence": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "NOT_EVALUATED",
+              "PROPOSED",
+              "ADMITTED",
+              "RETIRED",
+              "STALE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ecosystem",
+          "sequence",
+          "status",
+          "observed_repositories",
+          "observed_dependency_share",
+          "minimum_repositories",
+          "minimum_dependency_share",
+          "predecessor_admitted",
+          "metadata_parity",
+          "calibration_gate_passed",
+          "reasons",
+          "decision_fingerprint"
+        ],
+        "title": "EcosystemAdmissionSummary",
+        "type": "object"
+      },
       "EntitySummary": {
         "additionalProperties": false,
         "properties": {
@@ -3788,6 +3925,13 @@
             "title": "Contract Version",
             "type": "string"
           },
+          "ecosystem_admissions": {
+            "items": {
+              "$ref": "#/components/schemas/EcosystemAdmissionSummary"
+            },
+            "title": "Ecosystem Admissions",
+            "type": "array"
+          },
           "internal_components": {
             "items": {
               "$ref": "#/components/schemas/InternalCatalogComponentSummary"
@@ -3797,7 +3941,8 @@
           }
         },
         "required": [
-          "internal_components"
+          "internal_components",
+          "ecosystem_admissions"
         ],
         "title": "ModernizationGovernanceState",
         "type": "object"
@@ -7517,6 +7662,64 @@
           }
         },
         "summary": "Publish Calibration Corpus",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance/ecosystems/{ecosystem}": {
+      "put": {
+        "operationId": "evaluateEcosystemAdmission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ecosystem",
+            "required": true,
+            "schema": {
+              "enum": [
+                "PYPI",
+                "MAVEN",
+                "CARGO",
+                "NUGET"
+              ],
+              "title": "Ecosystem",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EcosystemAdmissionEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Ecosystem Admission",
         "tags": [
           "admin"
         ]

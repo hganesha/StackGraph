@@ -39,6 +39,8 @@ from app.models import (
     ModernizationValidationOutcomeResult,
     ModernizationScenarioRequest,
     ModernizationScenarioResult,
+    ModernizationGovernanceState,
+    EcosystemAdmissionSummary,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
     RepositoryDetail,
@@ -404,6 +406,38 @@ class StubReadModels:
         return Connector(
             id=connector_id, provider="GITHUB_APP", display_name="conn", external_account_key="",
             scopes=[], status="REVOKED", created_at=NOW, updated_at=NOW,
+        )
+
+    async def get_modernization_governance(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ModernizationGovernanceState(
+            internal_components=[],
+            ecosystem_admissions=[EcosystemAdmissionSummary(
+                ecosystem="PYPI", sequence=1, status="NOT_EVALUATED",
+                observed_repositories=18, observed_dependency_share=0.14,
+                minimum_repositories=10, minimum_dependency_share=0.02,
+                predecessor_admitted=True, metadata_parity=True,
+                calibration_gate_passed=False,
+                reasons=["calibration promotion gate has not passed"],
+                decision_fingerprint="sha256:" + "1" * 64,
+            )],
+        )
+
+    async def evaluate_ecosystem_admission(self, ecosystem, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ModernizationGovernanceState(
+            internal_components=[],
+            ecosystem_admissions=[EcosystemAdmissionSummary(
+                ecosystem=ecosystem, sequence=1, status="ADMITTED",
+                observed_repositories=18, observed_dependency_share=0.14,
+                minimum_repositories=request.minimum_repositories,
+                minimum_dependency_share=request.minimum_dependency_share,
+                predecessor_admitted=True, metadata_parity=True,
+                calibration_gate_passed=True, reasons=[],
+                decision_fingerprint="sha256:" + "2" * 64,
+                decided_by=actor_key, decided_at=NOW,
+            )],
         )
 
     async def get_ai_provider_configuration(self, *, tenant_id):
@@ -972,6 +1006,11 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
         ("GET", "/api/v1/admin/github/repositories/available", None),
+        ("GET", "/api/v1/admin/modernization-governance", None),
+        (
+            "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
+            {"minimum_repositories": 10, "minimum_dependency_share": 0.02},
+        ),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
         (
             "POST", "/api/v1/admin/github/installations",
@@ -1007,6 +1046,32 @@ def test_invite_member_creates_and_forwards_actor() -> None:
     body = response.json()
     assert body["actor_key"] == "dana@acme.example"
     assert body["role"] == "review"
+    assert store.last_actor_key == "operator"
+
+
+def test_modernization_governance_exposes_measured_ecosystem_demand() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/modernization-governance",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["ecosystem_admissions"][0]["ecosystem"] == "PYPI"
+    assert response.json()["ecosystem_admissions"][0]["observed_repositories"] == 18
+    assert store.last_tenant_id == TENANT
+
+
+def test_ecosystem_admission_evaluation_forwards_thresholds_and_actor() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"minimum_repositories": 12, "minimum_dependency_share": 0.05},
+    ))
+    assert response.status_code == 200
+    admission = response.json()["ecosystem_admissions"][0]
+    assert admission["status"] == "ADMITTED"
+    assert admission["minimum_repositories"] == 12
     assert store.last_actor_key == "operator"
 
 

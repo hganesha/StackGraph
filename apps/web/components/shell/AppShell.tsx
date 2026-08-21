@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const fullBleed = pathname.startsWith("/business-map");
+  const fullBleed = pathname?.startsWith("/business-map") ?? false;
 
   // Close the drawer on route change and when returning to desktop width.
   useEffect(() => setNavOpen(false), [pathname]);
