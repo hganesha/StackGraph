@@ -1355,6 +1355,46 @@
   overflow: hidden;
 }
 
+.controlHelp {
+  margin: -4px 0 12px;
+  color: var(--sg-text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.criticalityControl {
+  display: grid;
+  gap: 8px;
+}
+
+.criticalityControl > span:first-child {
+  color: var(--sg-text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.criticalityControl input[type="range"] {
+  inline-size: 100%;
+  accent-color: var(--sg-accent);
+}
+
+.criticalityControl input[type="range"]:disabled {
+  opacity: 0.72;
+}
+
+.criticalityScale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--sg-text-tertiary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.criticalityScale i {
+  font-style: normal;
+}
+
 .maturityOptions button {
   display: grid;
   grid-template-columns: 26px 1fr 18px;

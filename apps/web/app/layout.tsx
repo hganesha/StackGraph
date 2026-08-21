@@ -27,18 +27,20 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Set theme before paint to avoid a flash (plan §1.3 calm). */}
+        <Script
+          id="stackgraph-theme-init"
+          nonce={nonce}
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: themeInitScript }}
+        />
+      </head>
       <body>
         <Providers>
           <AppShell>{children}</AppShell>
         </Providers>
       </body>
-      {/* Set theme before paint to avoid a flash (plan §1.3 calm). */}
-      <Script
-        id="stackgraph-theme-init"
-        nonce={nonce}
-        strategy="beforeInteractive"
-        dangerouslySetInnerHTML={{ __html: themeInitScript }}
-      />
     </html>
   );
 }

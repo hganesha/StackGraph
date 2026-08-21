@@ -318,6 +318,73 @@ export interface ModernizationList {
   page_info: PageInfo;
 }
 
+export type InsightSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+export type InsightKind =
+  | "VULNERABLE_DIRECT_DEPENDENCY"
+  | "VULNERABLE_TRANSITIVE_DEPENDENCY"
+  | "DEPRECATED_DEPENDENCY"
+  | "UNUSED_DIRECT_DEPENDENCY"
+  | "VERSION_FRAGMENTATION"
+  | "CAPABILITY_DIVERSITY";
+
+export interface InsightImpactStages {
+  present: number;
+  referenced: number;
+  statically_reachable: number;
+  runtime_observed: number;
+  deployed: number;
+  production?: number | null;
+  externally_exposed?: number | null;
+  business_critical?: number | null;
+}
+
+export interface DeterministicInsightRecommendation {
+  action: "UPGRADE" | "REMOVE" | "CONSOLIDATE" | "REPLACE" | "INVESTIGATE";
+  title: string;
+  rationale: string;
+  target?: EntitySummary | null;
+  estimated_effort: Effort;
+}
+
+export interface DeterministicInsight {
+  id: UUID;
+  rule_key: string;
+  rule_version: string;
+  kind: InsightKind;
+  severity: InsightSeverity;
+  title: string;
+  summary: string;
+  priority_score: number;
+  evidence_coverage: number;
+  subject: EntitySummary;
+  affected_repository_count: number;
+  affected_application_count: number;
+  affected_deployment_count: number;
+  affected_repositories: EntitySummary[];
+  scope_entity_ids: UUID[];
+  stages: InsightImpactStages;
+  supporting_fact_ids: UUID[];
+  missing_inputs: string[];
+  recommendation?: DeterministicInsightRecommendation | null;
+  input_fingerprint: string;
+  detected_at: Timestamp;
+}
+
+export interface DeterministicInsightList {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  summary: {
+    total: number;
+    critical: number;
+    high: number;
+    affected_repositories: number;
+    runtime_observed: number;
+    deployed: number;
+  };
+  insights: DeterministicInsight[];
+  page_info: PageInfo;
+}
+
 export interface CapabilityFootprint {
   capability: EntitySummary;
   application_count: number;
@@ -423,6 +490,41 @@ export interface AskResponse {
   result_kind: AskResultKind;
   rows?: Array<Record<string, unknown>>;
   graph_highlight?: GraphNeighborhood;
+}
+
+export type EnterpriseInsightCategory =
+  | "ENTERPRISE_RISK"
+  | "TECHNOLOGY_RATIONALIZATION"
+  | "PORTFOLIO_DECISIONS";
+
+export type EnterpriseInsightStatus =
+  | "ACTION_REQUIRED"
+  | "WATCH"
+  | "HEALTHY"
+  | "WAITING_FOR_DATA";
+
+export interface EnterpriseInsightReport {
+  key: string;
+  title: string;
+  category: EnterpriseInsightCategory;
+  question: string;
+  metric_value: string;
+  metric_label: string;
+  status: EnterpriseInsightStatus;
+  answerable: boolean;
+  confidence?: number | null;
+  evidence_count: number;
+  summary: string;
+  response: AskResponse;
+}
+
+export interface EnterpriseInsightReportList {
+  contract_version: "1.0.0";
+  method_version: string;
+  evaluated_at: Timestamp;
+  answerable_reports: number;
+  total_reports: number;
+  reports: EnterpriseInsightReport[];
 }
 
 export interface IdentityReviewRequest {
@@ -724,6 +826,7 @@ export interface BusinessMapCapabilityNode {
   tags: string[];
   kpis: string[];
   owner?: string | null;
+  criticality: MaturityLevel;
 }
 
 export interface BusinessMapProcessNode {
@@ -1057,6 +1160,20 @@ export interface InternalCatalogComponentSummary {
   governed_at?: string | null;
 }
 
+export interface InternalCatalogCandidateSummary {
+  candidate_id: UUID;
+  component_entity_id: UUID;
+  component_key: string;
+  name: string;
+  repository_name: string;
+  capability_definition_id: UUID;
+  capability: string;
+  confidence: number;
+  affected_call_sites: number;
+  affected_files: number;
+  supporting_fact_ids: UUID[];
+}
+
 export interface CalibrationCorpusSummary {
   id: UUID;
   corpus_key: string;
@@ -1099,8 +1216,45 @@ export interface ModernizationGovernanceState {
   contract_version: "1.0.0";
   active_policy?: ModernizationPolicySummary | null;
   internal_components: InternalCatalogComponentSummary[];
+  internal_component_candidates?: InternalCatalogCandidateSummary[];
   active_calibration?: CalibrationCorpusSummary | null;
   ecosystem_admissions: EcosystemAdmissionSummary[];
+}
+
+export interface DeterministicInsightRuleUpdateRequest {
+  enabled: boolean;
+  severity: InsightSeverity;
+  minimum_repositories?: number;
+  configuration?: Record<string, unknown>;
+  expected_version?: number;
+}
+
+export interface DeterministicInsightRuleSummary {
+  rule_key: string;
+  name: string;
+  description: string;
+  phase: 1 | 2 | 3;
+  readiness: "ACTIVE" | "NEEDS_DATA";
+  enabled: boolean;
+  severity: InsightSeverity;
+  minimum_repositories: number;
+  configuration: Record<string, unknown>;
+  version: number;
+  finding_count: number;
+  missing_inputs: string[];
+  updated_by?: string | null;
+  updated_at?: Timestamp | null;
+}
+
+export interface DeterministicInsightGovernanceState {
+  contract_version: "1.0.0";
+  method_version: string;
+  rules: DeterministicInsightRuleSummary[];
+  active_rule_count: number;
+  needs_data_rule_count: number;
+  finding_count: number;
+  evidence_coverage: number;
+  last_evaluated_at: Timestamp;
 }
 
 // --- Tenant code-policy governance --------------------------------------

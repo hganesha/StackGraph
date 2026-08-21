@@ -22,6 +22,62 @@
   grid-template-columns: repeat(3, 1fr);
   gap: var(--sg-space-4);
 }
+.insightReadiness {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sg-space-6);
+  padding: var(--sg-space-4);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-200);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-color-domain-intelligence-50);
+}
+.insightReadiness h2 {
+  margin-block-start: var(--sg-space-1);
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.insightReadiness p {
+  margin-block-start: var(--sg-space-1);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.insightEyebrow {
+  color: var(--sg-color-domain-intelligence-700);
+  font-family: var(--sg-font-evidence);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.insightScore {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+.insightScore strong {
+  font-size: 22px;
+  font-weight: 500;
+}
+.insightScore span {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.insightReadiness > a {
+  padding: var(--sg-space-2) var(--sg-space-3);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-300);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-color-domain-intelligence-800);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.insightReadiness > a:hover {
+  background: var(--sg-color-domain-intelligence-100);
+}
 .cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -109,15 +165,201 @@
 .distVal {
   color: var(--sg-text-primary);
 }
-.pending {
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-4);
+}
+.cardNote,
+.emptyState,
+.operationError {
+  margin-block-start: var(--sg-space-1);
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-muted);
   line-height: var(--sg-type-body-line);
 }
+.adminLink {
+  color: var(--sg-color-domain-intelligence-700);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.operationLoading {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sg-space-3);
+}
+.operationError,
+.jobError {
+  color: var(--sg-color-signal-danger-700);
+}
+.operationSummary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sg-space-2);
+}
+.operationSummary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sg-space-3);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-sunken);
+}
+.operationSummary span {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.operationSummary strong {
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.operationCols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sg-space-5);
+}
+.operationCols h3 {
+  margin-block-end: var(--sg-space-2);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+.serviceList,
+.jobList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.serviceList li,
+.jobList li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  padding-block: var(--sg-space-2);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.serviceList li:last-child,
+.jobList li:last-child {
+  border-block-end: 0;
+}
+.serviceList li > div,
+.jobList li > div {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.serviceList strong,
+.jobList strong {
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+.serviceList li > div > span,
+.jobList li > div > span,
+.serviceList small,
+.jobList small {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.operationStatus {
+  flex: none;
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.operationRUNNING,
+.operationSUCCEEDED,
+.operationIDLE {
+  background: var(--sg-color-signal-success-100, var(--sg-color-domain-oss-50));
+  color: var(--sg-color-signal-success-700, var(--sg-color-domain-oss-800));
+}
+.operationWAITING,
+.operationPENDING,
+.operationSTOPPING {
+  background: var(--sg-color-signal-warning-100, var(--sg-color-domain-business-50));
+  color: var(--sg-color-signal-warning-700, var(--sg-color-domain-business-800));
+}
+.operationDEGRADED,
+.operationFAILED,
+.operationOFFLINE {
+  background: var(--sg-color-signal-danger-100);
+  color: var(--sg-color-signal-danger-700);
+}
+.quotaStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2);
+  padding-block-start: var(--sg-space-3);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.quotaStrip > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  color: var(--sg-text-muted);
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+}
+.quotaStrip strong {
+  color: var(--sg-text-secondary);
+  font-weight: 500;
+}
+.quotaStrip em {
+  font-style: normal;
+  text-transform: uppercase;
+}
+.quotaOK {
+  color: var(--sg-color-signal-success-700, var(--sg-color-domain-oss-800));
+}
+.quotaTHROTTLED {
+  color: var(--sg-color-signal-warning-700, var(--sg-color-domain-business-800));
+}
+.quotaEXHAUSTED {
+  color: var(--sg-color-signal-danger-700);
+}
 
 @media (max-width: 768px) {
   .tiles,
-  .cols {
+  .cols,
+  .operationCols,
+  .operationLoading {
     grid-template-columns: 1fr;
+  }
+
+  .operationSummary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .insightReadiness {
+    grid-template-columns: 1fr;
+  }
+
+  .insightScore {
+    align-items: flex-start;
+  }
+
+  .insightReadiness > a {
+    justify-self: start;
+  }
+
+  .cardHead {
+    flex-direction: column;
   }
 }

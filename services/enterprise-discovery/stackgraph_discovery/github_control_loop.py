@@ -582,16 +582,18 @@ def _promote_direct_repository(
 ) -> ClaimedRun:
     if result.snapshot is None and result.canonical_key != claimed.target_key:
         raise ValueError("an unchanged direct repository cannot change target identity")
-    default_branch = (
-        result.snapshot.default_branch
-        if result.snapshot is not None
-        else _required_policy_string(claimed.refresh_policy, "default_branch")
-    )
     policy = {
         **claimed.refresh_policy,
         "repository_id": result.repository_id,
-        "default_branch": default_branch,
+        "default_branch": result.default_branch,
+        "full_name": result.full_name,
+        "visibility": result.visibility.upper(),
+        "archived": result.archived,
     }
+    # Direct-repository connections start with only owner/name because the admin
+    # API must not trust client-supplied repository metadata. The repository API
+    # response is authoritative and is available even when the commit is unchanged,
+    # so lifecycle changes remain observable without a source-code revision.
     with psycopg.connect(database_url) as connection:
         updated = connection.execute(
             """

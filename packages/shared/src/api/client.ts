@@ -12,6 +12,7 @@ import type {
   RepositoryDetail,
   AskRequest,
   AskResponse,
+  EnterpriseInsightReportList,
   EstateSummary,
   EvidenceDetail,
   GraphNeighborhood,
@@ -30,6 +31,9 @@ import type {
   ModernizationValidationOutcomeResult,
   Phase3IntelligenceMetrics,
   ModernizationList,
+  DeterministicInsightList,
+  DeterministicInsightGovernanceState,
+  DeterministicInsightRuleUpdateRequest,
   CapabilityFootprintList,
   ModernizationScenarioRequest,
   ModernizationScenarioResult,
@@ -102,6 +106,8 @@ import technologyEstateHierarchy from "../fixtures/technology-estate-hierarchy.j
 import capabilityFootprints from "../fixtures/capability-footprints.json";
 import modernizationScenario from "../fixtures/modernization-scenario.json";
 import modernizationGovernance from "../fixtures/modernization-governance.json";
+import deterministicInsights from "../fixtures/deterministic-insights.json";
+import deterministicInsightGovernance from "../fixtures/deterministic-insight-governance.json";
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -116,6 +122,12 @@ export interface StackGraphClient {
   getTechnology(id: string): Promise<TechnologyDetail>;
   getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
+  listDeterministicInsights(params?: {
+    scopeEntityId?: string;
+    ruleKey?: string;
+    limit?: number;
+  }): Promise<DeterministicInsightList>;
+  listEnterpriseInsightReports(): Promise<EnterpriseInsightReportList>;
   listCapabilityFootprints(): Promise<CapabilityFootprintList>;
   optimizeModernizationScenario(body: ModernizationScenarioRequest): Promise<ModernizationScenarioResult>;
   ask(body: AskRequest): Promise<AskResponse>;
@@ -157,6 +169,8 @@ export interface StackGraphClient {
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getModernizationGovernance(): Promise<ModernizationGovernanceState>;
+  getDeterministicInsightGovernance(): Promise<DeterministicInsightGovernanceState>;
+  updateDeterministicInsightRule(ruleKey: string, body: DeterministicInsightRuleUpdateRequest): Promise<DeterministicInsightGovernanceState>;
   publishModernizationPolicy(body: ModernizationPolicyPublishRequest): Promise<ModernizationGovernanceState>;
   governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
   publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
@@ -204,6 +218,9 @@ let adminAIConfiguration: AIProviderConfiguration = {
 };
 let adminModernizationGovernance = clone(
   modernizationGovernance as ModernizationGovernanceState,
+);
+let adminDeterministicInsightGovernance = clone(
+  deterministicInsightGovernance as DeterministicInsightGovernanceState,
 );
 let adminCodePolicies: TenantCodePolicyState = {
   contract_version: "1.0.0",
@@ -331,6 +348,58 @@ const fixtureClient: StackGraphClient = {
     await delay();
     return modernizationList as ModernizationList;
   },
+  async listDeterministicInsights(params) {
+    await delay();
+    const result = clone(deterministicInsights as DeterministicInsightList);
+    if (params?.ruleKey) result.insights = result.insights.filter((item) => item.rule_key === params.ruleKey);
+    if (params?.scopeEntityId) {
+      result.insights = result.insights.filter((item) =>
+        item.subject.id === params.scopeEntityId
+        || item.scope_entity_ids.includes(params.scopeEntityId!)
+        || item.affected_repositories.some((repository) => repository.id === params.scopeEntityId),
+      );
+    }
+    result.insights = result.insights.slice(0, params?.limit ?? 100);
+    result.summary = {
+      total: result.insights.length,
+      critical: result.insights.filter((item) => item.severity === "CRITICAL").length,
+      high: result.insights.filter((item) => item.severity === "HIGH").length,
+      affected_repositories: new Set(result.insights.flatMap((item) => item.affected_repositories.map((repository) => repository.id))).size,
+      runtime_observed: result.insights.reduce((total, item) => total + item.stages.runtime_observed, 0),
+      deployed: result.insights.reduce((total, item) => total + item.stages.deployed, 0),
+    };
+    return result;
+  },
+  async listEnterpriseInsightReports() {
+    await delay();
+    const evaluatedAt = new Date().toISOString();
+    const definitions = [
+      ["systemic_dependency_risk", "Systemic dependency risk", "ENTERPRISE_RISK", "87", "highest risk score", "ACTION_REQUIRED"],
+      ["reachable_vulnerabilities", "Reachable Tier-1 vulnerabilities", "ENTERPRISE_RISK", "3", "reachable impact paths", "ACTION_REQUIRED"],
+      ["package_business_blast_radius", "Package blast radius · next", "ENTERPRISE_RISK", "4", "enterprise impact groups", "WATCH"],
+      ["duplicate_capability_implementations", "Duplicated capabilities", "TECHNOLOGY_RATIONALIZATION", "6", "duplicated capabilities", "WATCH"],
+      ["technology_diversity", "Unnecessary technology diversity", "TECHNOLOGY_RATIONALIZATION", "2", "diverse package categories", "WATCH"],
+      ["modernization_blockers", "Modernization blockers", "TECHNOLOGY_RATIONALIZATION", "5", "unsupported blockers", "ACTION_REQUIRED"],
+      ["custom_to_internal_platform", "Internal platform replacements", "TECHNOLOGY_RATIONALIZATION", "—", "replacement candidates", "WAITING_FOR_DATA"],
+      ["internal_library_standards", "Enterprise library standards", "PORTFOLIO_DECISIONS", "—", "standard candidates", "WAITING_FOR_DATA"],
+      ["application_retirement_consolidation", "Retirement & consolidation", "PORTFOLIO_DECISIONS", "—", "portfolio candidates", "WAITING_FOR_DATA"],
+      ["standardization_initiatives", "Standardization payoff", "PORTFOLIO_DECISIONS", "72.50", "highest payoff score", "ACTION_REQUIRED"],
+    ] as const;
+    return {
+      contract_version: "1.0.0", method_version: "enterprise-insights/v1",
+      evaluated_at: evaluatedAt, answerable_reports: 7, total_reports: 10,
+      reports: definitions.map(([key, title, category, metricValue, metricLabel, status]) => ({
+        key, title, category, question: title, metric_value: metricValue,
+        metric_label: metricLabel, status, answerable: status !== "WAITING_FOR_DATA",
+        confidence: status === "WAITING_FOR_DATA" ? null : 0.86,
+        evidence_count: status === "WAITING_FOR_DATA" ? 0 : 12,
+        summary: status === "WAITING_FOR_DATA"
+          ? "Additional governed data is required before this report can make a defensible recommendation."
+          : "This deterministic report is ready to inspect with ranked evidence and citations.",
+        response: clone(askResponse as AskResponse),
+      })),
+    };
+  },
   async listCapabilityFootprints() {
     await delay();
     return capabilityFootprints as CapabilityFootprintList;
@@ -390,6 +459,30 @@ const fixtureClient: StackGraphClient = {
   async getPhase3IntelligenceMetrics() {
     await delay();
     return phase3Metrics as Phase3IntelligenceMetrics;
+  },
+  async getDeterministicInsightGovernance() {
+    await delay();
+    return clone(adminDeterministicInsightGovernance);
+  },
+  async updateDeterministicInsightRule(ruleKey, body) {
+    await delay();
+    adminDeterministicInsightGovernance = {
+      ...adminDeterministicInsightGovernance,
+      rules: adminDeterministicInsightGovernance.rules.map((rule) => rule.rule_key === ruleKey ? {
+        ...rule,
+        enabled: body.enabled,
+        severity: body.severity,
+        minimum_repositories: body.minimum_repositories ?? rule.minimum_repositories,
+        configuration: body.configuration ?? rule.configuration,
+        version: rule.version + 1,
+        updated_by: "fixture-admin",
+        updated_at: new Date().toISOString(),
+      } : rule),
+    };
+    adminDeterministicInsightGovernance.active_rule_count = adminDeterministicInsightGovernance.rules.filter(
+      (rule) => rule.enabled && rule.readiness === "ACTIVE",
+    ).length;
+    return clone(adminDeterministicInsightGovernance);
   },
   async listBusinessMaps() {
     await delay();
@@ -975,6 +1068,14 @@ const liveClient: StackGraphClient = {
   getTechnology: (id) => req(`/technologies/${id}`),
   getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),
+  listDeterministicInsights: (params) => {
+    const query = new URLSearchParams();
+    if (params?.scopeEntityId) query.set("scope_entity_id", params.scopeEntityId);
+    if (params?.ruleKey) query.set("rule_key", params.ruleKey);
+    if (params?.limit) query.set("limit", String(params.limit));
+    return req(`/insights/deterministic${query.size ? `?${query.toString()}` : ""}`);
+  },
+  listEnterpriseInsightReports: () => req("/insights/reports"),
   listCapabilityFootprints: () => req("/capabilities/footprints"),
   optimizeModernizationScenario: (body) =>
     req("/modernization/scenarios", {
@@ -1055,6 +1156,11 @@ const liveClient: StackGraphClient = {
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
   getModernizationGovernance: () => req("/admin/modernization-governance"),
+  getDeterministicInsightGovernance: () => req("/admin/deterministic-insight-governance"),
+  updateDeterministicInsightRule: (ruleKey, body) =>
+    req(`/admin/deterministic-insight-governance/rules/${encodeURIComponent(ruleKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   publishModernizationPolicy: (body) =>
     req("/admin/modernization-governance/policy", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

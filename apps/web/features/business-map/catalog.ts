@@ -9,6 +9,7 @@ export interface Capability {
   tags?: string[];
   kpis?: string[];
   owner?: string;
+  criticality?: MaturityLevel;
 }
 
 export interface Process {

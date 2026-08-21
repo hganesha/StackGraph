@@ -24,6 +24,16 @@ QUERY_KINDS = (
     "unsupported_runtimes",
     "viability",
     "modernization",
+    "systemic_dependency_risk",
+    "reachable_vulnerabilities",
+    "duplicate_capability_implementations",
+    "modernization_blockers",
+    "package_business_blast_radius",
+    "technology_diversity",
+    "internal_library_standards",
+    "custom_to_internal_platform",
+    "application_retirement_consolidation",
+    "standardization_initiatives",
 )
 
 ESTATE_QUERY_TOOL = ToolDefinition(
@@ -192,6 +202,16 @@ class AIAskOrchestrator:
             "unsupported_runtimes": "unsupported runtime",
             "viability": "why viability score",
             "modernization": "modernization recommendations",
+            "systemic_dependency_risk": "systemic dependency risk top 20",
+            "reachable_vulnerabilities": "reachable vulnerabilities in code-declared production Tier-1 applications",
+            "duplicate_capability_implementations": "independently implemented same capability",
+            "modernization_blockers": "unsupported dependency modernization blockers",
+            "package_business_blast_radius": "package business capability blast radius",
+            "technology_diversity": "package category unnecessary technology diversity",
+            "internal_library_standards": "internal libraries enterprise standards",
+            "custom_to_internal_platform": "custom implementations replace with existing internal platforms",
+            "application_retirement_consolidation": "application retirement consolidation candidates",
+            "standardization_initiatives": "top 10 engineering standardization initiatives enterprise payoff",
         }
         return AskRequest(
             question=f"{prefixes[query_kind]}: {request.question}",

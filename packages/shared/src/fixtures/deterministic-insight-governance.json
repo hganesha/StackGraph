@@ -1,0 +1,20 @@
+{
+  "contract_version": "1.0.0",
+  "method_version": "deterministic-insights/v1",
+  "active_rule_count": 8,
+  "needs_data_rule_count": 1,
+  "finding_count": 4,
+  "evidence_coverage": 0.6667,
+  "last_evaluated_at": "2026-08-21T15:00:00Z",
+  "rules": [
+    {"rule_key":"dependency.vulnerable-direct","name":"Direct vulnerability","description":"Resolved direct package versions with a current OSV affected-by relationship.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"CRITICAL","minimum_repositories":1,"configuration":{},"version":0,"finding_count":1,"missing_inputs":[]},
+    {"rule_key":"dependency.vulnerable-transitive","name":"Transitive vulnerability","description":"Vulnerable versions reached through the resolved transitive dependency graph.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"HIGH","minimum_repositories":1,"configuration":{},"version":0,"finding_count":0,"missing_inputs":[]},
+    {"rule_key":"dependency.deprecated","name":"Deprecated dependency","description":"Resolved versions explicitly marked deprecated by registry metadata.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"HIGH","minimum_repositories":1,"configuration":{},"version":0,"finding_count":1,"missing_inputs":[]},
+    {"rule_key":"dependency.unused-direct","name":"Unused direct dependency","description":"Direct dependencies without an observed static reference or runtime event.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"MEDIUM","minimum_repositories":1,"configuration":{},"version":0,"finding_count":1,"missing_inputs":[]},
+    {"rule_key":"dependency.version-fragmentation","name":"Version fragmentation","description":"Multiple resolved versions of the same package across the estate.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"MEDIUM","minimum_repositories":2,"configuration":{},"version":0,"finding_count":1,"missing_inputs":[]},
+    {"rule_key":"capability.technology-diversity","name":"Capability diversity","description":"Multiple curated technologies serving the same code capability.","phase":1,"readiness":"ACTIVE","enabled":true,"severity":"MEDIUM","minimum_repositories":2,"configuration":{},"version":0,"finding_count":0,"missing_inputs":[]},
+    {"rule_key":"deployment.external-exposure","name":"External exposure","description":"Repository and infrastructure-as-code declarations for production and public entry points.","phase":2,"readiness":"ACTIVE","enabled":true,"severity":"HIGH","minimum_repositories":1,"configuration":{},"version":0,"finding_count":0,"missing_inputs":[]},
+    {"rule_key":"business.critical-impact","name":"Business-critical impact","description":"Findings affecting applications mapped to high-criticality capabilities in the Business Map.","phase":2,"readiness":"ACTIVE","enabled":true,"severity":"CRITICAL","minimum_repositories":1,"configuration":{"criticality_threshold":4},"version":0,"finding_count":0,"missing_inputs":[]},
+    {"rule_key":"architecture.drift","name":"Architecture drift","description":"Technology patterns that diverge from governed golden stacks for capability-map peers.","phase":2,"readiness":"NEEDS_DATA","enabled":false,"severity":"MEDIUM","minimum_repositories":1,"configuration":{},"version":0,"finding_count":0,"missing_inputs":["Approved golden-stack baselines"]}
+  ]
+}

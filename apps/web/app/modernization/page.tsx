@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { RankedTable, Skeleton } from "@stackgraph/design-system";
 import { stackGraphClient } from "@stackgraph/shared";
 import { useModernization } from "@/lib/queries";
+import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { presentRecommendationSummary, presentRecommendationTitle } from "@/lib/modernizationPresentation";
 import styles from "./modernization.module.css";
 
@@ -137,6 +138,13 @@ export default function ModernizationPage() {
           <p className={styles.scenarioEmpty}>{scenario.isLoading ? "Optimizing scenario…" : "Increase the budget to select an opportunity."}</p>
         )}
       </section>
+
+      <DeterministicInsightsPanel
+        title="Current evidence findings"
+        description="Portfolio-wide dependency, reachability, runtime, and deployment findings derived from current graph facts. Priority is calculated independently from evidence coverage."
+        limit={50}
+        showFilters
+      />
 
       <section className={styles.opportunities} aria-labelledby="opportunities-title">
         <div className={styles.opportunityHeader}>

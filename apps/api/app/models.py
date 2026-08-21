@@ -303,6 +303,77 @@ class ModernizationList(ContractModel):
     page_info: PageInfo
 
 
+InsightSeverity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+InsightKind = Literal[
+    "VULNERABLE_DIRECT_DEPENDENCY",
+    "VULNERABLE_TRANSITIVE_DEPENDENCY",
+    "DEPRECATED_DEPENDENCY",
+    "UNUSED_DIRECT_DEPENDENCY",
+    "VERSION_FRAGMENTATION",
+    "CAPABILITY_DIVERSITY",
+]
+
+
+class InsightImpactStages(ContractModel):
+    present: int = Field(ge=0)
+    referenced: int = Field(ge=0)
+    statically_reachable: int = Field(ge=0)
+    runtime_observed: int = Field(ge=0)
+    deployed: int = Field(ge=0)
+    production: int | None = Field(default=None, ge=0)
+    externally_exposed: int | None = Field(default=None, ge=0)
+    business_critical: int | None = Field(default=None, ge=0)
+
+
+class DeterministicInsightRecommendation(ContractModel):
+    action: Literal["UPGRADE", "REMOVE", "CONSOLIDATE", "REPLACE", "INVESTIGATE"]
+    title: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    target: EntitySummary | None = None
+    estimated_effort: Literal["LOW", "MEDIUM", "HIGH", "UNKNOWN"]
+
+
+class DeterministicInsight(ContractModel):
+    id: UUID
+    rule_key: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    kind: InsightKind
+    severity: InsightSeverity
+    title: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    priority_score: float = Field(ge=0, le=100)
+    evidence_coverage: float = Field(ge=0, le=1)
+    subject: EntitySummary
+    affected_repository_count: int = Field(ge=0)
+    affected_application_count: int = Field(ge=0)
+    affected_deployment_count: int = Field(ge=0)
+    affected_repositories: list[EntitySummary]
+    scope_entity_ids: list[UUID]
+    stages: InsightImpactStages
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    missing_inputs: list[str]
+    recommendation: DeterministicInsightRecommendation | None = None
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    detected_at: datetime
+
+
+class DeterministicInsightSummary(ContractModel):
+    total: int = Field(ge=0)
+    critical: int = Field(ge=0)
+    high: int = Field(ge=0)
+    affected_repositories: int = Field(ge=0)
+    runtime_observed: int = Field(ge=0)
+    deployed: int = Field(ge=0)
+
+
+class DeterministicInsightList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    summary: DeterministicInsightSummary
+    insights: list[DeterministicInsight]
+    page_info: PageInfo
+
+
 class GraphNode(ContractModel):
     id: UUID
     namespace: Namespace
@@ -367,6 +438,38 @@ class AskResponse(ContractModel):
     result_kind: Literal["ANSWER", "TABLE", "GRAPH", "UNSUPPORTED"]
     rows: list[dict[str, Any]] | None = None
     graph_highlight: GraphNeighborhood | None = None
+
+
+EnterpriseInsightCategory = Literal[
+    "ENTERPRISE_RISK", "TECHNOLOGY_RATIONALIZATION", "PORTFOLIO_DECISIONS",
+]
+EnterpriseInsightStatus = Literal[
+    "ACTION_REQUIRED", "WATCH", "HEALTHY", "WAITING_FOR_DATA",
+]
+
+
+class EnterpriseInsightReport(ContractModel):
+    key: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    category: EnterpriseInsightCategory
+    question: str = Field(min_length=1)
+    metric_value: str = Field(min_length=1)
+    metric_label: str = Field(min_length=1)
+    status: EnterpriseInsightStatus
+    answerable: bool
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    evidence_count: int = Field(ge=0)
+    summary: str = Field(min_length=1)
+    response: AskResponse
+
+
+class EnterpriseInsightReportList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    method_version: str = Field(min_length=1)
+    evaluated_at: datetime
+    answerable_reports: int = Field(ge=0)
+    total_reports: int = Field(ge=1)
+    reports: list[EnterpriseInsightReport] = Field(min_length=1)
 
 
 class IdentityReviewRequest(ContractModel):
@@ -710,6 +813,20 @@ class InternalCatalogComponentSummary(ContractModel):
     governed_at: datetime | None = None
 
 
+class InternalCatalogCandidateSummary(ContractModel):
+    candidate_id: UUID
+    component_entity_id: UUID
+    component_key: str
+    name: str
+    repository_name: str
+    capability_definition_id: UUID
+    capability: str
+    confidence: float = Field(ge=0, le=1)
+    affected_call_sites: int = Field(ge=0)
+    affected_files: int = Field(ge=0)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+
+
 class CalibrationCorpusPublishRequest(ContractModel):
     corpus_key: str = Field(default="modernization.pilot", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
     version: str = Field(min_length=1)
@@ -774,8 +891,45 @@ class ModernizationGovernanceState(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     active_policy: ModernizationPolicySummary | None = None
     internal_components: list[InternalCatalogComponentSummary]
+    internal_component_candidates: list[InternalCatalogCandidateSummary] = Field(default_factory=list)
     active_calibration: CalibrationCorpusSummary | None = None
     ecosystem_admissions: list[EcosystemAdmissionSummary]
+
+
+class DeterministicInsightRuleUpdateRequest(ContractModel):
+    enabled: bool
+    severity: InsightSeverity
+    minimum_repositories: int = Field(default=1, ge=1, le=100_000)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+    expected_version: int = Field(default=0, ge=0)
+
+
+class DeterministicInsightRuleSummary(ContractModel):
+    rule_key: str
+    name: str
+    description: str
+    phase: Literal[1, 2, 3]
+    readiness: Literal["ACTIVE", "NEEDS_DATA"]
+    enabled: bool
+    severity: InsightSeverity
+    minimum_repositories: int = Field(ge=1)
+    configuration: dict[str, Any]
+    version: int = Field(ge=0)
+    finding_count: int = Field(ge=0)
+    missing_inputs: list[str]
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class DeterministicInsightGovernanceState(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    method_version: str
+    rules: list[DeterministicInsightRuleSummary]
+    active_rule_count: int = Field(ge=0)
+    needs_data_rule_count: int = Field(ge=0)
+    finding_count: int = Field(ge=0)
+    evidence_coverage: float = Field(ge=0, le=1)
+    last_evaluated_at: datetime
 
 
 # --- Tenant code-policy governance ---------------------------------------
@@ -938,6 +1092,7 @@ class BusinessMapCapabilityNode(ContractModel):
     tags: list[str] = Field(default_factory=list)
     kpis: list[str] = Field(default_factory=list)
     owner: str | None = None
+    criticality: MaturityLevel = 3
 
 
 class BusinessMapProcessNode(ContractModel):

@@ -125,6 +125,7 @@ export interface BusinessMapApplicationAssignment {
 }
 
 export interface BusinessMapCapabilityNode {
+  criticality?: 1 | 2 | 3 | 4 | 5;
   description?: string;
   id: string;
   kpis?: Array<string>;
@@ -415,6 +416,91 @@ export interface Coverage {
   repositories_total: number;
 }
 
+export interface DeterministicInsight {
+  affected_application_count: number;
+  affected_deployment_count: number;
+  affected_repositories: Array<EntitySummary>;
+  affected_repository_count: number;
+  detected_at: string;
+  evidence_coverage: number;
+  id: string;
+  input_fingerprint: string;
+  kind: "VULNERABLE_DIRECT_DEPENDENCY" | "VULNERABLE_TRANSITIVE_DEPENDENCY" | "DEPRECATED_DEPENDENCY" | "UNUSED_DIRECT_DEPENDENCY" | "VERSION_FRAGMENTATION" | "CAPABILITY_DIVERSITY";
+  missing_inputs: Array<string>;
+  priority_score: number;
+  recommendation?: DeterministicInsightRecommendation | null;
+  rule_key: string;
+  rule_version: string;
+  scope_entity_ids: Array<string>;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  stages: InsightImpactStages;
+  subject: EntitySummary;
+  summary: string;
+  supporting_fact_ids: Array<string>;
+  title: string;
+}
+
+export interface DeterministicInsightGovernanceState {
+  active_rule_count: number;
+  contract_version?: "1.0.0";
+  evidence_coverage: number;
+  finding_count: number;
+  last_evaluated_at: string;
+  method_version: string;
+  needs_data_rule_count: number;
+  rules: Array<DeterministicInsightRuleSummary>;
+}
+
+export interface DeterministicInsightList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  insights: Array<DeterministicInsight>;
+  page_info: PageInfo;
+  summary: DeterministicInsightSummary;
+}
+
+export interface DeterministicInsightRecommendation {
+  action: "UPGRADE" | "REMOVE" | "CONSOLIDATE" | "REPLACE" | "INVESTIGATE";
+  estimated_effort: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  rationale: string;
+  target?: EntitySummary | null;
+  title: string;
+}
+
+export interface DeterministicInsightRuleSummary {
+  configuration: Record<string, unknown>;
+  description: string;
+  enabled: boolean;
+  finding_count: number;
+  minimum_repositories: number;
+  missing_inputs: Array<string>;
+  name: string;
+  phase: 1 | 2 | 3;
+  readiness: "ACTIVE" | "NEEDS_DATA";
+  rule_key: string;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+  updated_at?: string | null;
+  updated_by?: string | null;
+  version: number;
+}
+
+export interface DeterministicInsightRuleUpdateRequest {
+  configuration?: Record<string, unknown>;
+  enabled: boolean;
+  expected_version?: number;
+  minimum_repositories?: number;
+  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+}
+
+export interface DeterministicInsightSummary {
+  affected_repositories: number;
+  critical: number;
+  deployed: number;
+  high: number;
+  runtime_observed: number;
+  total: number;
+}
+
 export interface DuplicateCapabilityCandidateSummary {
   capability: CapabilityDefinitionModel;
   capability_inference_ids: Array<string>;
@@ -464,6 +550,30 @@ export interface EcosystemAdmissionSummary {
   reasons: Array<string>;
   sequence: number;
   status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
+}
+
+export interface EnterpriseInsightReport {
+  answerable: boolean;
+  category: "ENTERPRISE_RISK" | "TECHNOLOGY_RATIONALIZATION" | "PORTFOLIO_DECISIONS";
+  confidence?: number | null;
+  evidence_count: number;
+  key: string;
+  metric_label: string;
+  metric_value: string;
+  question: string;
+  response: AskResponse;
+  status: "ACTION_REQUIRED" | "WATCH" | "HEALTHY" | "WAITING_FOR_DATA";
+  summary: string;
+  title: string;
+}
+
+export interface EnterpriseInsightReportList {
+  answerable_reports: number;
+  contract_version?: "1.0.0";
+  evaluated_at: string;
+  method_version: string;
+  reports: Array<EnterpriseInsightReport>;
+  total_reports: number;
 }
 
 export interface EntitySummary {
@@ -602,6 +712,31 @@ export interface IdentityReviewResult {
   version: number;
 }
 
+export interface InsightImpactStages {
+  business_critical?: number | null;
+  deployed: number;
+  externally_exposed?: number | null;
+  present: number;
+  production?: number | null;
+  referenced: number;
+  runtime_observed: number;
+  statically_reachable: number;
+}
+
+export interface InternalCatalogCandidateSummary {
+  affected_call_sites: number;
+  affected_files: number;
+  candidate_id: string;
+  capability: string;
+  capability_definition_id: string;
+  component_entity_id: string;
+  component_key: string;
+  confidence: number;
+  name: string;
+  repository_name: string;
+  supporting_fact_ids: Array<string>;
+}
+
 export interface InternalCatalogComponentSummary {
   catalog_fingerprint: string;
   component_key: string;
@@ -690,6 +825,7 @@ export interface ModernizationGovernanceState {
   active_policy?: ModernizationPolicySummary | null;
   contract_version?: "1.0.0";
   ecosystem_admissions: Array<EcosystemAdmissionSummary>;
+  internal_component_candidates?: Array<InternalCatalogCandidateSummary>;
   internal_components: Array<InternalCatalogComponentSummary>;
 }
 

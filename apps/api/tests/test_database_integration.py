@@ -265,6 +265,8 @@ async def exercise_read_models() -> None:
         )
         modernization = await store.modernization(tenant_id=None, cursor=None, limit=10)
         answer = await store.ask(AskRequest(question="How many items are in the estate?"), tenant_id=None)
+        insight_reports = await store.enterprise_insight_reports(tenant_id=None)
+        enterprise_answers = [report.response for report in insight_reports.reports]
 
         assert summary.contract_version == "1.0.0"
         assert summary.counts.applications >= 0
@@ -274,6 +276,16 @@ async def exercise_read_models() -> None:
         assert technology_summary.ranked_items == []
         assert modernization.contract_version == "1.0.0"
         assert answer.result_kind == "TABLE"
+        assert insight_reports.total_reports == 10
+        assert insight_reports.answerable_reports <= insight_reports.total_reports
+        assert all(item.contract_version == "1.0.0" for item in enterprise_answers)
+        answers_by_key = {report.key: report.response for report in insight_reports.reports}
+        assert answers_by_key["package_business_blast_radius"].result_kind in {"TABLE", "UNSUPPORTED"}
+        assert all(
+            response.result_kind == "TABLE"
+            for key, response in answers_by_key.items()
+            if key != "package_business_blast_radius"
+        )
 
         entity_row = await database.fetch_one(
             "SELECT id FROM entity WHERE namespace='TECHNOLOGY' AND entity_type='Technology' ORDER BY name LIMIT 1"

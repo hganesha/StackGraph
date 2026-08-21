@@ -255,6 +255,10 @@ class AcquisitionResult:
     status: str
     repository_id: str
     canonical_key: str
+    full_name: str
+    visibility: str
+    archived: bool
+    default_branch: str
     source_revision: str
     snapshot: RepositorySnapshot | None
     output_path: Path | None
@@ -343,6 +347,12 @@ class GitHubRepositoryAcquirer:
                 status="UNCHANGED",
                 repository_id=repository_id,
                 canonical_key=canonical_key,
+                full_name=full_name,
+                visibility=str(repo_data.get(
+                    "visibility", "private" if repo_data.get("private") else "public",
+                )),
+                archived=bool(repo_data.get("archived", False)),
+                default_branch=default_branch,
                 source_revision=source_revision,
                 snapshot=None,
                 output_path=None,
@@ -490,6 +500,10 @@ class GitHubRepositoryAcquirer:
             status="CHANGED",
             repository_id=repository_id,
             canonical_key=canonical_key,
+            full_name=full_name,
+            visibility=snapshot.visibility,
+            archived=snapshot.archived,
+            default_branch=snapshot.default_branch,
             source_revision=source_revision,
             snapshot=snapshot,
             output_path=output_path,

@@ -31,6 +31,10 @@ from app.models import (
     CapabilityFootprintList,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
+    DeterministicInsightList,
+    DeterministicInsightGovernanceState,
+    DeterministicInsightRuleUpdateRequest,
+    EnterpriseInsightReportList,
     EstateSummary,
     EvidenceDetail,
     GraphNeighborhood,
@@ -98,6 +102,13 @@ class ReadModelsProtocol(Protocol):
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
     async def technology_estate_hierarchy(self, *, tenant_id: UUID | None) -> TechnologyEstateHierarchy: ...
     async def modernization(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> ModernizationList: ...
+    async def deterministic_insights(
+        self, *, tenant_id: UUID | None, scope_entity_id: UUID | None,
+        rule_key: str | None, limit: int,
+    ) -> DeterministicInsightList: ...
+    async def enterprise_insight_reports(
+        self, *, tenant_id: UUID | None,
+    ) -> EnterpriseInsightReportList: ...
     async def capability_footprints(self, *, tenant_id: UUID | None) -> CapabilityFootprintList: ...
     async def modernization_scenario(
         self, request: ModernizationScenarioRequest, *, tenant_id: UUID | None,
@@ -147,6 +158,13 @@ class ReadModelsProtocol(Protocol):
     async def get_modernization_governance(
         self, *, tenant_id: UUID | None,
     ) -> ModernizationGovernanceState: ...
+    async def get_deterministic_insight_governance(
+        self, *, tenant_id: UUID | None,
+    ) -> DeterministicInsightGovernanceState: ...
+    async def update_deterministic_insight_rule(
+        self, rule_key: str, request: DeterministicInsightRuleUpdateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> DeterministicInsightGovernanceState: ...
     async def publish_modernization_policy(
         self, request: ModernizationPolicyPublishRequest,
         *, tenant_id: UUID | None, actor_key: str,
@@ -372,6 +390,26 @@ async def list_modernization(
 
 
 @router.get(
+    "/insights/deterministic", response_model=DeterministicInsightList,
+    response_model_exclude_none=True, operation_id="listDeterministicInsights",
+    tags=["intelligence"],
+)
+async def list_deterministic_insights(
+    request: Request,
+    scope_entity_id: UUID | None = Query(default=None),
+    rule_key: str | None = Query(default=None, min_length=3, max_length=128),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> DeterministicInsightList:
+    principal = await _principal(request)
+    return await _store(request).deterministic_insights(
+        tenant_id=principal.tenant_id,
+        scope_entity_id=scope_entity_id,
+        rule_key=rule_key,
+        limit=limit,
+    )
+
+
+@router.get(
     "/capabilities/footprints", response_model=CapabilityFootprintList,
     response_model_exclude_none=True, operation_id="listCapabilityFootprints",
     tags=["intelligence"],
@@ -400,6 +438,16 @@ async def optimize_modernization_scenario(
 async def ask_estate(body: AskRequest, request: Request) -> AskResponse:
     principal = await _principal(request)
     return await _ask_service(request).ask(body, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/insights/reports", response_model=EnterpriseInsightReportList,
+    response_model_exclude_none=True, operation_id="listEnterpriseInsightReports",
+    tags=["intelligence"],
+)
+async def list_enterprise_insight_reports(request: Request) -> EnterpriseInsightReportList:
+    principal = await _principal(request)
+    return await _store(request).enterprise_insight_reports(tenant_id=principal.tenant_id)
 
 
 @router.get(
@@ -917,6 +965,37 @@ async def remove_connector(id: UUID, request: Request) -> Connector:
 
 
 # --- Admin: modernization governance ------------------------------------
+
+@router.get(
+    "/admin/deterministic-insight-governance",
+    response_model=DeterministicInsightGovernanceState,
+    response_model_exclude_none=True, operation_id="getDeterministicInsightGovernance",
+    tags=["admin"],
+)
+async def get_deterministic_insight_governance(
+    request: Request,
+) -> DeterministicInsightGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_deterministic_insight_governance(
+        tenant_id=principal.tenant_id,
+    )
+
+
+@router.put(
+    "/admin/deterministic-insight-governance/rules/{rule_key}",
+    response_model=DeterministicInsightGovernanceState,
+    response_model_exclude_none=True, operation_id="updateDeterministicInsightRule",
+    tags=["admin"],
+)
+async def update_deterministic_insight_rule(
+    rule_key: str, body: DeterministicInsightRuleUpdateRequest, request: Request,
+) -> DeterministicInsightGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_deterministic_insight_rule(
+        rule_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
 
 @router.get(
     "/admin/modernization-governance", response_model=ModernizationGovernanceState,

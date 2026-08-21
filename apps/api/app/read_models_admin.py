@@ -27,6 +27,8 @@ from stackgraph_ai.models import ModelMessage, ModelRequest
 from stackgraph_ai.providers import AnthropicAdapter, OpenAIAdapter, OpenRouterAdapter
 
 from app.errors import APIError
+from app.deterministic_insights import METHOD_VERSION as DETERMINISTIC_METHOD_VERSION
+from app.deterministic_insights import RULE_CATALOG, list_deterministic_insights
 from app.models import (
     AIProviderConfiguration,
     AIProviderConfigurationUpdateRequest,
@@ -43,10 +45,14 @@ from app.models import (
     MemberInviteRequest,
     MemberUpdateRequest,
     ModernizationGovernanceState,
+    DeterministicInsightGovernanceState,
+    DeterministicInsightRuleSummary,
+    DeterministicInsightRuleUpdateRequest,
     ModernizationPolicyPublishRequest,
     ModernizationPolicySummary,
     InternalCatalogComponentUpsertRequest,
     InternalCatalogComponentSummary,
+    InternalCatalogCandidateSummary,
     CalibrationCorpusPublishRequest,
     CalibrationCorpusSummary,
     CalibrationObservedMetrics,
@@ -1128,6 +1134,132 @@ class AdminReadModelsMixin:
             created_at=row["created_at"], updated_at=row["updated_at"],
         )
 
+    # --- Admin: deterministic insight governance -------------------------
+
+    async def get_deterministic_insight_governance(
+        self, *, tenant_id: UUID | None,
+    ) -> DeterministicInsightGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read insight governance.")
+        stored = await self.database.fetch_all(
+            "SELECT * FROM deterministic_insight_rule_policy ORDER BY rule_key",
+            tenant_id=tenant_id,
+        )
+        policies = {row["rule_key"]: row for row in stored}
+        findings = await list_deterministic_insights(
+            self.database, tenant_id=tenant_id, limit=500,
+        )
+        finding_counts: dict[str, int] = defaultdict(int)
+        for finding in findings.insights:
+            finding_counts[finding.rule_key] += 1
+            if (finding.stages.production or 0) > 0 or (finding.stages.externally_exposed or 0) > 0:
+                finding_counts["deployment.external-exposure"] += 1
+            if (finding.stages.business_critical or 0) > 0:
+                finding_counts["business.critical-impact"] += 1
+        rules = []
+        for definition in RULE_CATALOG:
+            policy = policies.get(definition["key"])
+            rules.append(DeterministicInsightRuleSummary(
+                rule_key=definition["key"], name=definition["name"],
+                description=definition["description"], phase=definition["phase"],
+                readiness=definition["readiness"],
+                enabled=bool(policy["enabled"] if policy else definition["readiness"] == "ACTIVE"),
+                severity=policy["severity"] if policy else definition["severity"],
+                minimum_repositories=int(policy["minimum_repositories"] if policy else 1),
+                configuration=dict(policy["configuration"] if policy else {}),
+                version=int(policy["version"] if policy else 0),
+                finding_count=finding_counts[definition["key"]],
+                missing_inputs=list(definition["missing"]),
+                updated_by=policy.get("updated_by") if policy else None,
+                updated_at=policy.get("updated_at") if policy else None,
+            ))
+        coverage = (
+            sum(item.evidence_coverage for item in findings.insights) / len(findings.insights)
+            if findings.insights else 0.0
+        )
+        return DeterministicInsightGovernanceState(
+            method_version=DETERMINISTIC_METHOD_VERSION,
+            rules=rules,
+            active_rule_count=sum(rule.enabled and rule.readiness == "ACTIVE" for rule in rules),
+            needs_data_rule_count=sum(rule.readiness == "NEEDS_DATA" for rule in rules),
+            finding_count=findings.summary.total,
+            evidence_coverage=coverage,
+            last_evaluated_at=findings.as_of,
+        )
+
+    async def update_deterministic_insight_rule(
+        self, rule_key: str, request: DeterministicInsightRuleUpdateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> DeterministicInsightGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to govern insight rules.")
+        definition = next((item for item in RULE_CATALOG if item["key"] == rule_key), None)
+        if definition is None:
+            raise APIError(404, "INSIGHT_RULE_NOT_FOUND", "The deterministic insight rule was not found.")
+        if request.enabled and definition["readiness"] == "NEEDS_DATA":
+            raise APIError(
+                422, "INSIGHT_RULE_INPUTS_MISSING",
+                "This rule cannot be enabled until its authoritative inputs are available.",
+                {"missing_inputs": list(definition["missing"])},
+            )
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM deterministic_insight_rule_policy WHERE rule_key=%s FOR UPDATE",
+                (rule_key,),
+            )
+            existing = await cursor.fetchone()
+            current_version = int(existing["version"]) if existing else 0
+            if request.expected_version != current_version:
+                raise APIError(
+                    409, "INSIGHT_RULE_VERSION_CONFLICT",
+                    "The rule policy changed. Reload the current governance state and try again.",
+                    {"current_version": current_version},
+                )
+            resulting_version = current_version + 1
+            if existing:
+                await connection.execute(
+                    """
+                    UPDATE deterministic_insight_rule_policy
+                    SET enabled=%s,severity=%s,minimum_repositories=%s,configuration=%s::jsonb,
+                        version=%s,updated_by=%s,updated_at=now()
+                    WHERE id=%s
+                    """,
+                    (request.enabled, request.severity, request.minimum_repositories,
+                     json.dumps(request.configuration), resulting_version, actor_key, existing["id"]),
+                )
+                policy_id = existing["id"]
+            else:
+                insert = await connection.execute(
+                    """
+                    INSERT INTO deterministic_insight_rule_policy(
+                      tenant_id,rule_key,enabled,severity,minimum_repositories,
+                      configuration,version,updated_by
+                    ) VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s,%s) RETURNING id
+                    """,
+                    (tenant_id, rule_key, request.enabled, request.severity,
+                     request.minimum_repositories, json.dumps(request.configuration),
+                     resulting_version, actor_key),
+                )
+                policy_id = (await insert.fetchone())["id"]
+            await connection.execute(
+                """
+                INSERT INTO deterministic_insight_rule_policy_revision(
+                  tenant_id,rule_policy_id,prior_version,resulting_version,enabled,severity,
+                  minimum_repositories,configuration,actor_key
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+                """,
+                (tenant_id, policy_id, current_version, resulting_version, request.enabled,
+                 request.severity, request.minimum_repositories,
+                 json.dumps(request.configuration), actor_key),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="deterministic_insight_rule.update",
+                target_kind="deterministic_insight_rule", target_id=rule_key,
+                detail={"version": resulting_version, "enabled": request.enabled},
+            )
+        return await self.get_deterministic_insight_governance(tenant_id=tenant_id)
+
     # --- Admin: modernization governance ---------------------------------
 
     async def get_modernization_governance(
@@ -1709,6 +1841,46 @@ class AdminReadModelsMixin:
         )
         components = await cursor.fetchall()
         cursor = await connection.execute(
+            """
+            SELECT DISTINCT ON (option.canonical_key)
+                   candidate.id candidate_id,option.target_entity_id component_entity_id,
+                   option.canonical_key component_key,option.name,
+                   repository.name repository_name,
+                   candidate.capability_definition_id,capability.name capability,
+                   candidate.confidence,
+                   coalesce(impact.affected_call_sites,0)::integer affected_call_sites,
+                   coalesce(impact.affected_files,0)::integer affected_files,
+                   ARRAY(
+                     SELECT DISTINCT fact_id
+                     FROM unnest(candidate.supporting_fact_ids || option.supporting_fact_ids) fact_id
+                     ORDER BY fact_id
+                   ) supporting_fact_ids
+            FROM modernization_candidate candidate
+            JOIN modernization_option option
+              ON option.modernization_candidate_id=candidate.id
+             AND option.option_kind='INTERNAL' AND option.target_entity_id IS NOT NULL
+            JOIN entity repository ON repository.id=option.target_entity_id
+              AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+            JOIN capability_definition capability
+              ON capability.id=candidate.capability_definition_id
+            LEFT JOIN modernization_impact impact
+              ON impact.modernization_candidate_id=candidate.id
+            WHERE candidate.stale_at IS NULL AND candidate.review_state<>'REJECTED'
+              AND option.name !~* '^(test_|main$)'
+              AND option.canonical_key NOT LIKE '%%:tests/%%'
+              AND option.canonical_key NOT LIKE '%%/__tests__/%%'
+              AND NOT EXISTS (
+                SELECT 1 FROM modernization_internal_component component
+                WHERE component.component_entity_id=option.target_entity_id
+                  AND component.capability_definition_id=candidate.capability_definition_id
+                  AND component.review_state='APPROVED'
+              )
+            ORDER BY option.canonical_key,candidate.confidence DESC,option.score DESC,candidate.id
+            LIMIT 50
+            """
+        )
+        component_candidates = await cursor.fetchall()
+        cursor = await connection.execute(
             "SELECT * FROM modernization_calibration_corpus WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1"
         )
         calibration = await cursor.fetchone()
@@ -1739,6 +1911,17 @@ class AdminReadModelsMixin:
                 supporting_fact_ids=list(row["supporting_fact_ids"]),
                 governed_by=row["governed_by"], governed_at=row["governed_at"],
             ) for row in components],
+            internal_component_candidates=[InternalCatalogCandidateSummary(
+                candidate_id=row["candidate_id"],
+                component_entity_id=row["component_entity_id"],
+                component_key=row["component_key"], name=row["name"],
+                repository_name=row["repository_name"],
+                capability_definition_id=row["capability_definition_id"],
+                capability=row["capability"], confidence=_number(row["confidence"]),
+                affected_call_sites=row["affected_call_sites"],
+                affected_files=row["affected_files"],
+                supporting_fact_ids=list(row["supporting_fact_ids"]),
+            ) for row in component_candidates],
             active_calibration=CalibrationCorpusSummary(
                 id=calibration["id"], corpus_key=calibration["corpus_key"],
                 version=calibration["version"], case_count=calibration["case_count"],

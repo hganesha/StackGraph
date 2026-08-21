@@ -55,6 +55,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Keep page-title baselines consistent across feature-owned CSS modules. */
+h1 {
+  line-height: var(--sg-type-h1-line);
+}
+
 /* Data-dense but never cramped: monospace anywhere a raw fact is shown. */
 .sg-mono {
   font-family: var(--sg-font-evidence);

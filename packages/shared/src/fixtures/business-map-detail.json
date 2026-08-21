@@ -31,7 +31,7 @@
             "name": "Planning",
             "description": "",
             "capabilities": [
-              { "id": "strategy.roadmap", "name": "Roadmapping", "description": "Portfolio roadmap", "tags": ["planning"], "kpis": ["cycle time"], "owner": null }
+              { "id": "strategy.roadmap", "name": "Roadmapping", "description": "Portfolio roadmap", "tags": ["planning"], "kpis": ["cycle time"], "owner": null, "criticality": 4 }
             ]
           }
         ]

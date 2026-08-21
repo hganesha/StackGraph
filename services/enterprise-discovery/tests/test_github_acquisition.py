@@ -235,6 +235,9 @@ class GitHubAcquisitionTests(unittest.TestCase):
 
         self.assertEqual(result.status, "UNCHANGED")
         self.assertIsNone(result.snapshot)
+        self.assertEqual(result.full_name, "acme/widgets")
+        self.assertEqual(result.default_branch, "main")
+        self.assertIs(result.archived, False)
         self.assertEqual(result.rate_limit_limit, 5000)
         self.assertEqual(result.rate_limit_remaining, 4998)
         self.assertEqual(len(transport.requests), 2)
