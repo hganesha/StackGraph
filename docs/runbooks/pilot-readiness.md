@@ -20,6 +20,9 @@ Passing the first decision never substitutes for the second.
 - Bind an authenticated StackGraph tenant to the GitHub installation and select at least 100 repositories that
   represent the languages, deployment models, sizes, and criticality tiers expected in the pilot.
 - Route the operational signals in `docs/operations-slo.md` to their named owners.
+- Establish the pilot tenant's initial function-level technology boundaries using
+  [tenant code-policy governance](tenant-code-policies.md), then archive the evidence-backed
+  repository evaluation and owner dispositions for every reported misalignment.
 
 GitHub carries an opaque `state` value through its installation URL, but its setup URL's `installation_id` is
 not trustworthy by itself. The hosted flow must bind state to the authenticated tenant and verify installation

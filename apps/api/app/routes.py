@@ -56,6 +56,8 @@ from app.models import (
     CalibrationCorpusPublishRequest,
     EcosystemAdmissionEvaluateRequest,
     EcosystemName,
+    TenantCodeFunctionUpsertRequest,
+    TenantCodePolicyState,
     SessionInfo,
     TechnologyEstateHierarchy,
     TechnologyDetail,
@@ -161,6 +163,16 @@ class ReadModelsProtocol(Protocol):
         self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> ModernizationGovernanceState: ...
+    async def get_tenant_code_policies(
+        self, *, tenant_id: UUID | None,
+    ) -> TenantCodePolicyState: ...
+    async def upsert_tenant_code_function(
+        self, function_key: str, request: TenantCodeFunctionUpsertRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState: ...
+    async def evaluate_tenant_code_policies(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState: ...
     async def list_business_maps(
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
     ) -> BusinessMapList: ...
@@ -971,6 +983,44 @@ async def evaluate_ecosystem_admission(
     _require(principal, "admin")
     return await _store(request).evaluate_ecosystem_admission(
         ecosystem, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: tenant code policies ----------------------------------------
+
+@router.get(
+    "/admin/code-policies", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="getTenantCodePolicies", tags=["admin"],
+)
+async def get_tenant_code_policies(request: Request) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_tenant_code_policies(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/code-policies/functions/{function_key}", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="upsertTenantCodeFunction", tags=["admin"],
+)
+async def upsert_tenant_code_function(
+    function_key: str, body: TenantCodeFunctionUpsertRequest, request: Request,
+) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).upsert_tenant_code_function(
+        function_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/admin/code-policies/evaluations", response_model=TenantCodePolicyState,
+    response_model_exclude_none=True, operation_id="evaluateTenantCodePolicies", tags=["admin"],
+)
+async def evaluate_tenant_code_policies(request: Request) -> TenantCodePolicyState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).evaluate_tenant_code_policies(
+        tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

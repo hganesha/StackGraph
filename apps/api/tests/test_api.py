@@ -42,6 +42,9 @@ from app.models import (
     ModernizationScenarioResult,
     ModernizationGovernanceState,
     EcosystemAdmissionSummary,
+    TenantCodeFunctionSummary,
+    TenantCodePolicyState,
+    TenantCodePolicySummary,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
     RepositoryDetail,
@@ -474,6 +477,37 @@ class StubReadModels:
                 decided_by=actor_key, decided_at=NOW,
             )],
         )
+
+    def _code_policy_state(self):
+        return TenantCodePolicyState(
+            policy_set_fingerprint="sha256:" + "3" * 64,
+            functions=[TenantCodeFunctionSummary(
+                function_key="client-state-management", name="Client state management",
+                description="Manage UI-local state.", domain_key="frontend",
+                source="PRIMARY", status="ACTIVE",
+            )],
+            available_technologies=[], evaluations=[],
+            summary=TenantCodePolicySummary(
+                governed_functions=0, custom_functions=0, evaluated_repositories=0,
+                compliant_repositories=0, misaligned_repositories=0, stale_repositories=0,
+            ),
+        )
+
+    async def get_tenant_code_policies(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return self._code_policy_state()
+
+    async def upsert_tenant_code_function(self, function_key, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        self.last_code_function_key = function_key
+        self.last_code_function_request = request
+        return self._code_policy_state()
+
+    async def evaluate_tenant_code_policies(self, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._code_policy_state()
 
     async def get_ai_provider_configuration(self, *, tenant_id):
         self.last_tenant_id = tenant_id
@@ -1046,6 +1080,16 @@ def test_admin_routes_require_admin_capability() -> None:
             "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
             {"minimum_repositories": 10, "minimum_dependency_share": 0.02},
         ),
+        ("GET", "/api/v1/admin/code-policies", None),
+        (
+            "PUT", "/api/v1/admin/code-policies/functions/client-state-management",
+            {
+                "source": "PRIMARY", "name": "Client state management",
+                "domain_key": "frontend", "allowed_technology_ids": [],
+                "prohibited_technology_ids": [],
+            },
+        ),
+        ("POST", "/api/v1/admin/code-policies/evaluations", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
         (
             "POST", "/api/v1/admin/github/installations",
@@ -1108,6 +1152,36 @@ def test_ecosystem_admission_evaluation_forwards_thresholds_and_actor() -> None:
     admission = response.json()["ecosystem_admissions"][0]
     assert admission["status"] == "ADMITTED"
     assert admission["minimum_repositories"] == 12
+    assert store.last_actor_key == "operator"
+
+
+def test_tenant_code_policy_routes_forward_tenant_and_actor() -> None:
+    app, store = _signed_app()
+    admin = _token(SECRET, ["admin"], TENANT)
+    read = asyncio.run(request(
+        app, "GET", "/api/v1/admin/code-policies",
+        headers={"Authorization": f"Bearer {admin}"},
+    ))
+    saved = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/code-policies/functions/client-state-management",
+        headers={"Authorization": f"Bearer {admin}"},
+        json={
+            "source": "PRIMARY", "name": "Client state management",
+            "description": "Ignored in favor of the primary definition.",
+            "domain_key": "frontend",
+            "allowed_technology_ids": [], "prohibited_technology_ids": [],
+        },
+    ))
+    evaluated = asyncio.run(request(
+        app, "POST", "/api/v1/admin/code-policies/evaluations",
+        headers={"Authorization": f"Bearer {admin}"},
+    ))
+    assert read.status_code == 200
+    assert saved.status_code == 200
+    assert evaluated.status_code == 200
+    assert saved.json()["functions"][0]["source"] == "PRIMARY"
+    assert store.last_code_function_key == "client-state-management"
+    assert store.last_tenant_id == TENANT
     assert store.last_actor_key == "operator"
 
 

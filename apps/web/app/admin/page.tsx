@@ -6,6 +6,7 @@ import { ConnectionsSection } from "@/components/admin/ConnectionsSection";
 import { ScanSection } from "@/components/admin/ScanSection";
 import { IntelligenceSection } from "@/components/admin/IntelligenceSection";
 import { GovernanceSection } from "@/components/admin/GovernanceSection";
+import { CodePoliciesSection } from "@/components/admin/CodePoliciesSection";
 import { MembersSection } from "@/components/admin/MembersSection";
 import { ServicesSection } from "@/components/admin/ServicesSection";
 import styles from "@/components/admin/admin.module.css";
@@ -15,6 +16,7 @@ const TABS = [
   { key: "scan", label: "Scan & Refresh" },
   { key: "intelligence", label: "Intelligence / AI" },
   { key: "governance", label: "Modernization" },
+  { key: "code-policies", label: "Code Policies" },
   { key: "services", label: "Services" },
   { key: "members", label: "Members & Roles" },
 ] as const;
@@ -62,6 +64,7 @@ export default function AdminPage() {
         {tab === "scan" ? <ScanSection /> : null}
         {tab === "intelligence" ? <IntelligenceSection /> : null}
         {tab === "governance" ? <GovernanceSection /> : null}
+        {tab === "code-policies" ? <CodePoliciesSection /> : null}
         {tab === "services" ? <ServicesSection /> : null}
         {tab === "members" ? <MembersSection /> : null}
       </div>

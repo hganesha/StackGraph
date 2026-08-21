@@ -1101,6 +1101,89 @@ export interface ModernizationGovernanceState {
   ecosystem_admissions: EcosystemAdmissionSummary[];
 }
 
+// --- Tenant code-policy governance --------------------------------------
+
+export type CodeFunctionSource = "PRIMARY" | "CUSTOM";
+export type CodeFunctionStatus = "ACTIVE" | "RETIRED";
+
+export interface CodePolicyTechnologySummary {
+  technology: EntitySummary;
+  classification: TechnologyClassification;
+  domain_key?: string | null;
+  category_key?: string | null;
+  detected_repository_count: number;
+}
+
+export interface TenantCodeFunctionPolicySummary {
+  id: UUID;
+  allowed_technology_ids: UUID[];
+  prohibited_technology_ids: UUID[];
+  policy_fingerprint: string;
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface TenantCodeFunctionSummary {
+  function_key: string;
+  name: string;
+  description: string;
+  domain_key: string;
+  source: CodeFunctionSource;
+  status: CodeFunctionStatus;
+  policy?: TenantCodeFunctionPolicySummary | null;
+}
+
+export interface TenantCodeFunctionUpsertRequest {
+  source: CodeFunctionSource;
+  name: string;
+  description?: string;
+  domain_key: string;
+  status?: CodeFunctionStatus;
+  allowed_technology_ids?: UUID[];
+  prohibited_technology_ids?: UUID[];
+}
+
+export interface CodePolicyViolation {
+  rule: "PROHIBITED" | "NOT_ALLOWED";
+  function_key: string;
+  function_name: string;
+  technology: EntitySummary;
+  matched_technology_id: UUID;
+  fact_ids: UUID[];
+  message: string;
+}
+
+export interface RepositoryCodePolicyEvaluation {
+  id: UUID;
+  repository: EntitySummary;
+  status: "COMPLIANT" | "MISALIGNED" | "UNASSESSED" | "STALE";
+  violations: CodePolicyViolation[];
+  unclassified_technologies: EntitySummary[];
+  policy_set_fingerprint: string;
+  evidence_fingerprint: string;
+  evaluated_by: string;
+  evaluated_at: string;
+}
+
+export interface TenantCodePolicySummary {
+  governed_functions: number;
+  custom_functions: number;
+  evaluated_repositories: number;
+  compliant_repositories: number;
+  misaligned_repositories: number;
+  stale_repositories: number;
+}
+
+export interface TenantCodePolicyState {
+  contract_version: "1.0.0";
+  policy_set_fingerprint: string;
+  functions: TenantCodeFunctionSummary[];
+  available_technologies: CodePolicyTechnologySummary[];
+  technology_catalog_truncated: boolean;
+  evaluations: RepositoryCodePolicyEvaluation[];
+  summary: TenantCodePolicySummary;
+}
+
 // --- Admin: AI provider configuration -----------------------------------
 
 export type AIProvider = "openrouter" | "openai" | "anthropic";

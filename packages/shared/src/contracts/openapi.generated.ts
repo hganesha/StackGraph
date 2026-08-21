@@ -358,6 +358,24 @@ export interface Citation {
   label: string;
 }
 
+export interface CodePolicyTechnologySummary {
+  category_key?: string | null;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  detected_repository_count: number;
+  domain_key?: string | null;
+  technology: EntitySummary;
+}
+
+export interface CodePolicyViolation {
+  fact_ids: Array<string>;
+  function_key: string;
+  function_name: string;
+  matched_technology_id: string;
+  message: string;
+  rule: "PROHIBITED" | "NOT_ALLOWED";
+  technology: EntitySummary;
+}
+
 export interface Connector {
   created_at: string;
   display_name: string;
@@ -922,6 +940,18 @@ export interface RepositoryCapabilityIntelligence {
   taxonomy_version?: string | null;
 }
 
+export interface RepositoryCodePolicyEvaluation {
+  evaluated_at: string;
+  evaluated_by: string;
+  evidence_fingerprint: string;
+  id: string;
+  policy_set_fingerprint: string;
+  repository: EntitySummary;
+  status: "COMPLIANT" | "MISALIGNED" | "UNASSESSED" | "STALE";
+  unclassified_technologies: Array<EntitySummary>;
+  violations: Array<CodePolicyViolation>;
+}
+
 export interface RepositoryDetail {
   applications: Array<EntitySummary>;
   contract_version?: "1.0.0";
@@ -1123,6 +1153,54 @@ export interface TechnologyEstateHierarchyNode {
   parent_technology_id?: string | null;
   relationship: string;
   technology: EntitySummary;
+}
+
+export interface TenantCodeFunctionPolicySummary {
+  allowed_technology_ids: Array<string>;
+  id: string;
+  policy_fingerprint: string;
+  prohibited_technology_ids: Array<string>;
+  updated_at: string;
+  updated_by: string;
+}
+
+export interface TenantCodeFunctionSummary {
+  description: string;
+  domain_key: string;
+  function_key: string;
+  name: string;
+  policy?: TenantCodeFunctionPolicySummary | null;
+  source: "PRIMARY" | "CUSTOM";
+  status: "ACTIVE" | "RETIRED";
+}
+
+export interface TenantCodeFunctionUpsertRequest {
+  allowed_technology_ids?: Array<string>;
+  description?: string;
+  domain_key: string;
+  name: string;
+  prohibited_technology_ids?: Array<string>;
+  source: "PRIMARY" | "CUSTOM";
+  status?: "ACTIVE" | "RETIRED";
+}
+
+export interface TenantCodePolicyState {
+  available_technologies: Array<CodePolicyTechnologySummary>;
+  contract_version?: "1.0.0";
+  evaluations: Array<RepositoryCodePolicyEvaluation>;
+  functions: Array<TenantCodeFunctionSummary>;
+  policy_set_fingerprint: string;
+  summary: TenantCodePolicySummary;
+  technology_catalog_truncated?: boolean;
+}
+
+export interface TenantCodePolicySummary {
+  compliant_repositories: number;
+  custom_functions: number;
+  evaluated_repositories: number;
+  governed_functions: number;
+  misaligned_repositories: number;
+  stale_repositories: number;
 }
 
 export interface TenantMember {

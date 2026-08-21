@@ -4,6 +4,8 @@ import base64
 import hashlib
 import json
 import os
+import re
+from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -51,6 +53,15 @@ from app.models import (
     EcosystemAdmissionEvaluateRequest,
     EcosystemAdmissionSummary,
     EcosystemName,
+    CodePolicyTechnologySummary,
+    CodePolicyViolation,
+    EntitySummary,
+    RepositoryCodePolicyEvaluation,
+    TenantCodeFunctionPolicySummary,
+    TenantCodeFunctionSummary,
+    TenantCodeFunctionUpsertRequest,
+    TenantCodePolicyState,
+    TenantCodePolicySummary,
     PageInfo,
     ProviderQuota,
     RescanJob,
@@ -1792,6 +1803,561 @@ class AdminReadModelsMixin:
             ON CONFLICT DO NOTHING
             """,
             (tenant_id, configuration_fingerprint, tenant_id),
+        )
+
+    # --- Admin: tenant code policies ------------------------------------
+
+    async def get_tenant_code_policies(
+        self, *, tenant_id: UUID | None,
+    ) -> TenantCodePolicyState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read code policies.")
+        async with self.database.session(tenant_id) as connection:
+            return await self._tenant_code_policy_state(connection)
+
+    async def upsert_tenant_code_function(
+        self, function_key: str, request: TenantCodeFunctionUpsertRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update code policies.")
+        normalized_key = function_key.strip().lower()
+        if re.fullmatch(r"[a-z][a-z0-9.-]{1,127}", normalized_key) is None:
+            raise APIError(422, "INVALID_CODE_FUNCTION_KEY", "The code function key is invalid.")
+        allowed_ids = sorted(set(request.allowed_technology_ids), key=str)
+        prohibited_ids = sorted(set(request.prohibited_technology_ids), key=str)
+        if set(allowed_ids) & set(prohibited_ids):
+            raise APIError(
+                422, "CODE_POLICY_TECHNOLOGY_CONFLICT",
+                "A technology cannot be both allowed and prohibited for the same function.",
+            )
+
+        async with self.database.session(tenant_id) as connection:
+            primary_cursor = await connection.execute(
+                """
+                SELECT id,name,properties FROM entity
+                WHERE tenant_id IS NULL AND namespace='TECHNOLOGY' AND entity_type='Capability'
+                  AND coalesce(properties->>'capability_key',replace(canonical_key,'stackgraph:capability:',''))=%s
+                LIMIT 1
+                """,
+                (normalized_key,),
+            )
+            primary = await primary_cursor.fetchone()
+            custom_cursor = await connection.execute(
+                "SELECT * FROM tenant_code_function WHERE function_key=%s",
+                (normalized_key,),
+            )
+            custom = await custom_cursor.fetchone()
+
+            if request.source == "PRIMARY":
+                if primary is None:
+                    raise APIError(
+                        422, "PRIMARY_CODE_FUNCTION_NOT_FOUND",
+                        "The requested primary StackGraph function does not exist.",
+                    )
+                if request.status != "ACTIVE":
+                    raise APIError(
+                        422, "PRIMARY_CODE_FUNCTION_IMMUTABLE",
+                        "Primary StackGraph functions cannot be retired by a tenant.",
+                    )
+                if custom is not None:
+                    raise APIError(
+                        409, "CODE_FUNCTION_SOURCE_CONFLICT",
+                        "A custom function already uses this primary function key.",
+                    )
+                function_name = str(primary["name"])
+                primary_properties = primary.get("properties") if isinstance(primary.get("properties"), dict) else {}
+                function_description = str(primary_properties.get("definition") or "")
+                domain_key = str(primary_properties.get("domain_id") or request.domain_key)
+            else:
+                if primary is not None:
+                    raise APIError(
+                        409, "CUSTOM_CODE_FUNCTION_SHADOWS_PRIMARY",
+                        "Custom functions cannot replace a primary StackGraph function key.",
+                    )
+                function_name = request.name.strip()
+                function_description = request.description.strip()
+                domain_key = request.domain_key
+                await connection.execute(
+                    """
+                    INSERT INTO tenant_code_function(
+                      tenant_id,function_key,name,description,domain_key,status,created_by,updated_by
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(tenant_id,function_key) DO UPDATE SET
+                      name=EXCLUDED.name,description=EXCLUDED.description,
+                      domain_key=EXCLUDED.domain_key,status=EXCLUDED.status,
+                      updated_by=EXCLUDED.updated_by,updated_at=now()
+                    """,
+                    (
+                        tenant_id, normalized_key, function_name, function_description,
+                        domain_key, request.status, actor_key, actor_key,
+                    ),
+                )
+
+            requested_technology_ids = allowed_ids + prohibited_ids
+            if requested_technology_ids:
+                technology_cursor = await connection.execute(
+                    """
+                    SELECT id FROM entity
+                    WHERE id=ANY(%s::uuid[]) AND namespace IN ('TECHNOLOGY','OSS')
+                    """,
+                    (requested_technology_ids,),
+                )
+                found = {row["id"] for row in await technology_cursor.fetchall()}
+                missing = [str(item) for item in requested_technology_ids if item not in found]
+                if missing:
+                    raise APIError(
+                        422, "CODE_POLICY_TECHNOLOGY_NOT_FOUND",
+                        "Every policy technology must be visible to the tenant.",
+                        {"technology_ids": missing},
+                    )
+
+            policy_payload = {
+                "version": "tenant-code-policy/v1",
+                "function_key": normalized_key,
+                "function_source": request.source,
+                "function": {
+                    "name": function_name,
+                    "description": function_description,
+                    "domain_key": domain_key,
+                    "status": request.status,
+                },
+                "allowed_technology_ids": [str(item) for item in allowed_ids],
+                "prohibited_technology_ids": [str(item) for item in prohibited_ids],
+            }
+            policy_fingerprint = sha256_fingerprint(policy_payload)
+            await connection.execute(
+                """
+                INSERT INTO tenant_code_policy(
+                  tenant_id,function_key,function_source,allowed_technology_ids,
+                  prohibited_technology_ids,policy_fingerprint,updated_by
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,function_key) DO UPDATE SET
+                  function_source=EXCLUDED.function_source,
+                  allowed_technology_ids=EXCLUDED.allowed_technology_ids,
+                  prohibited_technology_ids=EXCLUDED.prohibited_technology_ids,
+                  policy_fingerprint=EXCLUDED.policy_fingerprint,
+                  updated_by=EXCLUDED.updated_by,updated_at=now()
+                """,
+                (
+                    tenant_id, normalized_key, request.source, allowed_ids,
+                    prohibited_ids, policy_fingerprint, actor_key,
+                ),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="code_policy.upsert", target_kind="tenant_code_policy",
+                target_id=normalized_key,
+                detail={
+                    "source": request.source,
+                    "status": request.status,
+                    "allowed_technology_count": len(allowed_ids),
+                    "prohibited_technology_count": len(prohibited_ids),
+                    "policy_fingerprint": policy_fingerprint,
+                },
+            )
+            return await self._tenant_code_policy_state(connection)
+
+    async def evaluate_tenant_code_policies(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> TenantCodePolicyState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to evaluate code policies.")
+        async with self.database.session(tenant_id) as connection:
+            definitions = await self._code_policy_definitions(connection)
+            policy_set_fingerprint = self._code_policy_set_fingerprint(definitions)
+            active_policies = {
+                key: value for key, value in definitions.items()
+                if value["status"] == "ACTIVE" and value.get("policy") is not None
+            }
+            repository_cursor = await connection.execute(
+                """
+                SELECT * FROM entity
+                WHERE tenant_id=%s AND namespace='ENTERPRISE' AND entity_type='Repository'
+                ORDER BY name,id
+                """,
+                (tenant_id,),
+            )
+            repositories = await repository_cursor.fetchall()
+            usage_cursor = await connection.execute(
+                """
+                SELECT repository.id repository_id,fact.id fact_id,technology.*
+                FROM entity repository
+                JOIN current_fact fact
+                  ON fact.subject_entity_id=repository.id
+                 AND fact.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+                JOIN entity technology ON technology.id=fact.object_entity_id
+                WHERE repository.tenant_id=%s
+                  AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+                  AND technology.namespace IN ('TECHNOLOGY','OSS')
+                ORDER BY repository.id,technology.name,technology.id,fact.id
+                """,
+                (tenant_id,),
+            )
+            usage_rows = await usage_cursor.fetchall()
+            catalog_rows = await self._code_policy_catalog_rows(connection)
+            from app.read_models import _resolve_technology_catalog_entry, _technology_catalog_index
+            catalog_by_id, catalog_by_key = _technology_catalog_index(catalog_rows)
+            usage_by_repository: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
+            for row in usage_rows:
+                usage_by_repository[UUID(str(row["repository_id"]))].append(row)
+
+            status_counts = {"COMPLIANT": 0, "MISALIGNED": 0, "UNASSESSED": 0}
+            for repository in repositories:
+                repository_id = UUID(str(repository["id"]))
+                violations: dict[tuple[str, str, UUID], dict[str, Any]] = {}
+                unclassified: dict[UUID, EntitySummary] = {}
+                evidence_manifest: list[dict[str, Any]] = []
+                for usage in usage_by_repository.get(repository_id, []):
+                    actual_id = UUID(str(usage["id"]))
+                    resolved, _direct = _resolve_technology_catalog_entry(
+                        usage, catalog_by_id, catalog_by_key,
+                    )
+                    resolved_id = UUID(str(resolved["row"]["id"])) if resolved else actual_id
+                    candidate_ids = {actual_id, resolved_id}
+                    function_keys = {
+                        str(item.get("capability_key") or "").strip()
+                        for item in (resolved["capabilities"] if resolved else [])
+                        if str(item.get("capability_key") or "").strip()
+                    }
+                    for function_key, definition in active_policies.items():
+                        if definition["source"] != "CUSTOM":
+                            continue
+                        policy = definition["policy"]
+                        governed_ids = set(policy["allowed_technology_ids"]) | set(policy["prohibited_technology_ids"])
+                        if candidate_ids & governed_ids:
+                            function_keys.add(function_key)
+                    if not function_keys:
+                        unclassified[actual_id] = self._code_policy_entity_summary(usage)
+
+                    evidence_manifest.append({
+                        "fact_id": str(usage["fact_id"]),
+                        "technology_id": str(actual_id),
+                        "matched_technology_id": str(resolved_id),
+                        "function_keys": sorted(function_keys),
+                    })
+                    for function_key in sorted(function_keys):
+                        definition = active_policies.get(function_key)
+                        if definition is None:
+                            continue
+                        policy = definition["policy"]
+                        prohibited = set(policy["prohibited_technology_ids"])
+                        allowed = set(policy["allowed_technology_ids"])
+                        rule = None
+                        if candidate_ids & prohibited:
+                            rule = "PROHIBITED"
+                        elif allowed and not candidate_ids & allowed:
+                            rule = "NOT_ALLOWED"
+                        if rule is None:
+                            continue
+                        key = (rule, function_key, actual_id)
+                        violation = violations.setdefault(key, {
+                            "rule": rule,
+                            "function_key": function_key,
+                            "function_name": definition["name"],
+                            "technology": self._code_policy_entity_summary(usage).model_dump(mode="json"),
+                            "matched_technology_id": str(resolved_id),
+                            "fact_ids": [],
+                            "message": (
+                                f"{usage['name']} is strictly prohibited for {definition['name']}."
+                                if rule == "PROHIBITED"
+                                else f"{usage['name']} is not in the allowlist for {definition['name']}."
+                            ),
+                        })
+                        fact_id = str(usage["fact_id"])
+                        if fact_id not in violation["fact_ids"]:
+                            violation["fact_ids"].append(fact_id)
+
+                evidence_manifest.sort(key=lambda item: (
+                    item["technology_id"], item["fact_id"], item["matched_technology_id"],
+                ))
+                evidence_fingerprint = sha256_fingerprint({
+                    "version": "repository-code-policy-evidence/v1",
+                    "repository_id": str(repository_id),
+                    "usage": evidence_manifest,
+                })
+                if not active_policies or not evidence_manifest:
+                    status = "UNASSESSED"
+                else:
+                    status = "MISALIGNED" if violations else "COMPLIANT"
+                status_counts[status] += 1
+                details = {
+                    "violations": sorted(
+                        violations.values(),
+                        key=lambda item: (item["function_name"].lower(), item["technology"]["name"].lower(), item["rule"]),
+                    ),
+                    "unclassified_technologies": [
+                        value.model_dump(mode="json") for _key, value in sorted(
+                            unclassified.items(), key=lambda item: (item[1].name.lower(), str(item[0])),
+                        )
+                    ],
+                    "evidence_fact_ids": sorted({item["fact_id"] for item in evidence_manifest}),
+                }
+                await connection.execute(
+                    """
+                    INSERT INTO repository_code_policy_evaluation(
+                      tenant_id,repository_entity_id,policy_set_fingerprint,evidence_fingerprint,
+                      status,violation_count,unclassified_count,details,evaluated_by
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s)
+                    ON CONFLICT(tenant_id,repository_entity_id,policy_set_fingerprint,evidence_fingerprint)
+                    DO UPDATE SET status=EXCLUDED.status,violation_count=EXCLUDED.violation_count,
+                      unclassified_count=EXCLUDED.unclassified_count,details=EXCLUDED.details,
+                      evaluated_by=EXCLUDED.evaluated_by,evaluated_at=now()
+                    """,
+                    (
+                        tenant_id, repository_id, policy_set_fingerprint, evidence_fingerprint,
+                        status, len(violations), len(unclassified), json.dumps(details), actor_key,
+                    ),
+                )
+
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="code_policy.evaluate", target_kind="repository_code_policy_evaluation",
+                target_id="estate",
+                detail={
+                    "policy_set_fingerprint": policy_set_fingerprint,
+                    "repository_count": len(repositories),
+                    "status_counts": status_counts,
+                },
+            )
+            return await self._tenant_code_policy_state(connection)
+
+    async def _tenant_code_policy_state(self, connection: Any) -> TenantCodePolicyState:
+        definitions = await self._code_policy_definitions(connection)
+        policy_set_fingerprint = self._code_policy_set_fingerprint(definitions)
+        technology_rows = await self._code_policy_available_technologies(connection)
+        catalog_rows = await self._code_policy_catalog_rows(connection)
+        from app.read_models import _resolve_technology_catalog_entry, _technology_catalog_index
+        catalog_by_id, catalog_by_key = _technology_catalog_index(catalog_rows)
+        technology_catalog_truncated = len(technology_rows) > 2000
+        available_technologies: list[CodePolicyTechnologySummary] = []
+        for row in technology_rows[:2000]:
+            resolved, direct = _resolve_technology_catalog_entry(row, catalog_by_id, catalog_by_key)
+            properties = resolved["row"].get("properties", {}) if resolved else {}
+            classification = "UNCLASSIFIED"
+            if resolved is not None:
+                classification = "CURATED" if direct else "CATALOG_MATCH"
+            available_technologies.append(CodePolicyTechnologySummary(
+                technology=self._code_policy_entity_summary(row),
+                classification=classification,
+                domain_key=str(properties.get("domain_id")) if properties.get("domain_id") else None,
+                category_key=str(properties.get("category_id")) if properties.get("category_id") else None,
+                detected_repository_count=int(row.get("detected_repository_count") or 0),
+            ))
+
+        evaluation_cursor = await connection.execute(
+            """
+            SELECT DISTINCT ON (evaluation.repository_entity_id)
+                   evaluation.*,repository.name repository_name,
+                   repository.canonical_key repository_canonical_key,
+                   repository.properties repository_properties
+            FROM repository_code_policy_evaluation evaluation
+            JOIN entity repository ON repository.id=evaluation.repository_entity_id
+            ORDER BY evaluation.repository_entity_id,evaluation.evaluated_at DESC,evaluation.id DESC
+            """
+        )
+        current_evidence_cursor = await connection.execute(
+            """
+            SELECT repository.id repository_id,array_agg(fact.id ORDER BY fact.id) fact_ids
+            FROM entity repository
+            LEFT JOIN current_fact fact
+              ON fact.subject_entity_id=repository.id
+             AND fact.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+             AND fact.object_entity_id IN (
+               SELECT id FROM entity WHERE namespace IN ('TECHNOLOGY','OSS')
+             )
+            WHERE repository.tenant_id=stackgraph_current_tenant_id()
+              AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+            GROUP BY repository.id
+            """
+        )
+        current_evidence = {
+            row["repository_id"]: {str(item) for item in (row["fact_ids"] or []) if item is not None}
+            for row in await current_evidence_cursor.fetchall()
+        }
+        evaluations: list[RepositoryCodePolicyEvaluation] = []
+        for row in await evaluation_cursor.fetchall():
+            details = row["details"] if isinstance(row.get("details"), dict) else {}
+            evidence_changed = current_evidence.get(row["repository_entity_id"], set()) != set(
+                details.get("evidence_fact_ids", [])
+            )
+            evaluations.append(RepositoryCodePolicyEvaluation(
+                id=row["id"],
+                repository=EntitySummary(
+                    id=row["repository_entity_id"], kind="Repository", name=row["repository_name"],
+                    canonical_key=row["repository_canonical_key"],
+                    summary=(row["repository_properties"] or {}).get("purpose")
+                    if isinstance(row.get("repository_properties"), dict) else None,
+                ),
+                status=(
+                    row["status"]
+                    if row["policy_set_fingerprint"] == policy_set_fingerprint and not evidence_changed
+                    else "STALE"
+                ),
+                violations=[CodePolicyViolation(**item) for item in details.get("violations", [])],
+                unclassified_technologies=[
+                    EntitySummary(**item) for item in details.get("unclassified_technologies", [])
+                ],
+                policy_set_fingerprint=row["policy_set_fingerprint"],
+                evidence_fingerprint=row["evidence_fingerprint"],
+                evaluated_by=row["evaluated_by"], evaluated_at=row["evaluated_at"],
+            ))
+        evaluations.sort(key=lambda item: (item.repository.name.lower(), str(item.repository.id)))
+
+        function_summaries = [
+            TenantCodeFunctionSummary(
+                function_key=key, name=value["name"], description=value["description"],
+                domain_key=value["domain_key"], source=value["source"], status=value["status"],
+                policy=(TenantCodeFunctionPolicySummary(
+                    id=value["policy"]["id"],
+                    allowed_technology_ids=list(value["policy"]["allowed_technology_ids"]),
+                    prohibited_technology_ids=list(value["policy"]["prohibited_technology_ids"]),
+                    policy_fingerprint=value["policy"]["policy_fingerprint"],
+                    updated_by=value["policy"]["updated_by"],
+                    updated_at=value["policy"]["updated_at"],
+                ) if value.get("policy") else None),
+            )
+            for key, value in definitions.items()
+        ]
+        function_summaries.sort(key=lambda item: (
+            0 if item.source == "PRIMARY" else 1, item.domain_key, item.name.lower(), item.function_key,
+        ))
+        return TenantCodePolicyState(
+            policy_set_fingerprint=policy_set_fingerprint,
+            functions=function_summaries,
+            available_technologies=available_technologies,
+            technology_catalog_truncated=technology_catalog_truncated,
+            evaluations=evaluations,
+            summary=TenantCodePolicySummary(
+                governed_functions=sum(
+                    1 for item in function_summaries if item.status == "ACTIVE" and item.policy is not None
+                ),
+                custom_functions=sum(
+                    1 for item in function_summaries if item.source == "CUSTOM" and item.status == "ACTIVE"
+                ),
+                evaluated_repositories=sum(item.status != "STALE" for item in evaluations),
+                compliant_repositories=sum(item.status == "COMPLIANT" for item in evaluations),
+                misaligned_repositories=sum(item.status == "MISALIGNED" for item in evaluations),
+                stale_repositories=sum(item.status == "STALE" for item in evaluations),
+            ),
+        )
+
+    async def _code_policy_definitions(self, connection: Any) -> dict[str, dict[str, Any]]:
+        primary_cursor = await connection.execute(
+            """
+            SELECT coalesce(properties->>'capability_key',replace(canonical_key,'stackgraph:capability:','')) function_key,
+                   name,coalesce(properties->>'definition','') description,
+                   coalesce(properties->>'domain_id','unclassified') domain_key
+            FROM entity
+            WHERE tenant_id IS NULL AND namespace='TECHNOLOGY' AND entity_type='Capability'
+            ORDER BY domain_key,name,id
+            """
+        )
+        definitions = {
+            row["function_key"]: {
+                "name": row["name"], "description": row["description"],
+                "domain_key": row["domain_key"], "source": "PRIMARY", "status": "ACTIVE",
+            }
+            for row in await primary_cursor.fetchall()
+        }
+        custom_cursor = await connection.execute(
+            "SELECT * FROM tenant_code_function ORDER BY domain_key,name,id"
+        )
+        for row in await custom_cursor.fetchall():
+            definitions[row["function_key"]] = {
+                "name": row["name"], "description": row["description"],
+                "domain_key": row["domain_key"], "source": "CUSTOM", "status": row["status"],
+            }
+        policy_cursor = await connection.execute(
+            "SELECT * FROM tenant_code_policy ORDER BY function_key"
+        )
+        for row in await policy_cursor.fetchall():
+            if row["function_key"] in definitions:
+                definitions[row["function_key"]]["policy"] = row
+        return definitions
+
+    @staticmethod
+    def _code_policy_set_fingerprint(definitions: dict[str, dict[str, Any]]) -> str:
+        active = []
+        for function_key, definition in definitions.items():
+            policy = definition.get("policy")
+            if definition["status"] != "ACTIVE" or policy is None:
+                continue
+            active.append({
+                "function_key": function_key,
+                "source": definition["source"],
+                "name": definition["name"],
+                "description": definition["description"],
+                "domain_key": definition["domain_key"],
+                "policy_fingerprint": policy["policy_fingerprint"],
+            })
+        active.sort(key=lambda item: item["function_key"])
+        return sha256_fingerprint({"version": "tenant-code-policy-set/v1", "functions": active})
+
+    async def _code_policy_catalog_rows(self, connection: Any) -> list[dict[str, Any]]:
+        cursor = await connection.execute(
+            """
+            SELECT technology.*,capability.id capability_id,
+                   coalesce(capability.properties->>'capability_key',replace(capability.canonical_key,'stackgraph:capability:','')) capability_key,
+                   capability.name capability_name,
+                   capability.properties->>'definition' capability_summary,
+                   provides.id classification_fact_id,
+                   provides.confidence classification_confidence
+            FROM entity technology
+            LEFT JOIN fact_assertion provides
+              ON provides.subject_entity_id=technology.id
+             AND provides.predicate='PROVIDES' AND provides.system_to IS NULL
+            LEFT JOIN entity capability
+              ON capability.id=provides.object_entity_id AND capability.entity_type='Capability'
+            WHERE technology.tenant_id IS NULL
+              AND technology.namespace='TECHNOLOGY' AND technology.entity_type='Technology'
+              AND technology.properties ? 'domain_id'
+            ORDER BY technology.name,capability.name,technology.id,capability.id
+            """
+        )
+        return list(await cursor.fetchall())
+
+    async def _code_policy_available_technologies(self, connection: Any) -> list[dict[str, Any]]:
+        cursor = await connection.execute(
+            """
+            WITH governed AS (
+              SELECT DISTINCT unnest(allowed_technology_ids || prohibited_technology_ids) id
+              FROM tenant_code_policy
+            ), detected AS (
+              SELECT technology.id,count(DISTINCT repository.id)::integer detected_repository_count
+              FROM entity repository
+              JOIN current_fact fact
+                ON fact.subject_entity_id=repository.id
+               AND fact.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+              JOIN entity technology ON technology.id=fact.object_entity_id
+              WHERE repository.tenant_id=stackgraph_current_tenant_id()
+                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+                AND technology.namespace IN ('TECHNOLOGY','OSS')
+              GROUP BY technology.id
+            )
+            SELECT entity.*,coalesce(detected.detected_repository_count,0) detected_repository_count
+            FROM entity
+            LEFT JOIN detected ON detected.id=entity.id
+            LEFT JOIN governed ON governed.id=entity.id
+            WHERE governed.id IS NOT NULL OR detected.id IS NOT NULL OR (
+              entity.tenant_id IS NULL AND entity.namespace='TECHNOLOGY'
+              AND entity.entity_type='Technology' AND entity.properties ? 'domain_id'
+            )
+            ORDER BY (governed.id IS NOT NULL) DESC,
+                     coalesce(detected.detected_repository_count,0) DESC,entity.name,entity.id
+            LIMIT 2001
+            """
+        )
+        return list(await cursor.fetchall())
+
+    @staticmethod
+    def _code_policy_entity_summary(row: dict[str, Any]) -> EntitySummary:
+        properties = row.get("properties") if isinstance(row.get("properties"), dict) else {}
+        summary = properties.get("purpose") or properties.get("summary")
+        return EntitySummary(
+            id=row["id"], kind=row["entity_type"], name=row["name"],
+            canonical_key=row.get("canonical_key"),
+            summary=str(summary) if isinstance(summary, str) and summary.strip() else None,
         )
 
     # --- Admin: AI provider configuration --------------------------------

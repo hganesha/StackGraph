@@ -777,6 +777,97 @@ class ModernizationGovernanceState(ContractModel):
     ecosystem_admissions: list[EcosystemAdmissionSummary]
 
 
+# --- Tenant code-policy governance ---------------------------------------
+
+CodeFunctionSource = Literal["PRIMARY", "CUSTOM"]
+CodeFunctionStatus = Literal["ACTIVE", "RETIRED"]
+
+
+class CodePolicyTechnologySummary(ContractModel):
+    technology: EntitySummary
+    classification: TechnologyClassification
+    domain_key: str | None = None
+    category_key: str | None = None
+    detected_repository_count: int = Field(ge=0)
+
+
+class TenantCodeFunctionPolicySummary(ContractModel):
+    id: UUID
+    allowed_technology_ids: list[UUID]
+    prohibited_technology_ids: list[UUID]
+    policy_fingerprint: str
+    updated_by: str
+    updated_at: datetime
+
+
+class TenantCodeFunctionSummary(ContractModel):
+    function_key: str
+    name: str
+    description: str
+    domain_key: str
+    source: CodeFunctionSource
+    status: CodeFunctionStatus
+    policy: TenantCodeFunctionPolicySummary | None = None
+
+
+class TenantCodeFunctionUpsertRequest(ContractModel):
+    source: CodeFunctionSource
+    name: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=4000)
+    domain_key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    status: CodeFunctionStatus = "ACTIVE"
+    allowed_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    prohibited_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+
+    @model_validator(mode="after")
+    def technology_decisions_do_not_overlap(self) -> TenantCodeFunctionUpsertRequest:
+        overlap = set(self.allowed_technology_ids) & set(self.prohibited_technology_ids)
+        if overlap:
+            raise ValueError("a technology cannot be both allowed and prohibited")
+        return self
+
+
+class CodePolicyViolation(ContractModel):
+    rule: Literal["PROHIBITED", "NOT_ALLOWED"]
+    function_key: str
+    function_name: str
+    technology: EntitySummary
+    matched_technology_id: UUID
+    fact_ids: list[UUID] = Field(min_length=1)
+    message: str
+
+
+class RepositoryCodePolicyEvaluation(ContractModel):
+    id: UUID
+    repository: EntitySummary
+    status: Literal["COMPLIANT", "MISALIGNED", "UNASSESSED", "STALE"]
+    violations: list[CodePolicyViolation]
+    unclassified_technologies: list[EntitySummary]
+    policy_set_fingerprint: str
+    evidence_fingerprint: str
+    evaluated_by: str
+    evaluated_at: datetime
+
+
+class TenantCodePolicySummary(ContractModel):
+    governed_functions: int = Field(ge=0)
+    custom_functions: int = Field(ge=0)
+    evaluated_repositories: int = Field(ge=0)
+    compliant_repositories: int = Field(ge=0)
+    misaligned_repositories: int = Field(ge=0)
+    stale_repositories: int = Field(ge=0)
+
+
+class TenantCodePolicyState(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    policy_set_fingerprint: str
+    functions: list[TenantCodeFunctionSummary]
+    available_technologies: list[CodePolicyTechnologySummary]
+    technology_catalog_truncated: bool = False
+    evaluations: list[RepositoryCodePolicyEvaluation]
+    summary: TenantCodePolicySummary
+
+
 class CapabilityFootprintModel(ContractModel):
     capability: EntitySummary
     application_count: int = Field(ge=0)
