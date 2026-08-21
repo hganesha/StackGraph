@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { RecommendationFocus } from "./RecommendationFocus";
 import styles from "./repository.module.css";
 
 function EntityLinks({
@@ -36,8 +37,15 @@ function TagList({ values }: { values: string[] }) {
   );
 }
 
-export default function RepositoryPage({ params }: { params: Promise<{ id: string }> }) {
+export default function RepositoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ recommendation?: string }>;
+}) {
   const { id } = use(params);
+  const { recommendation } = use(searchParams);
   const openEvidence = useEvidenceStore((state) => state.open);
   const { data, isLoading } = useQuery({
     queryKey: ["repository", id],
@@ -53,6 +61,10 @@ export default function RepositoryPage({ params }: { params: Promise<{ id: strin
         <Skeleton height={260} width="100%" />
       </div>
     );
+  }
+
+  if (recommendation) {
+    return <RecommendationFocus recommendationId={recommendation} repository={data} />;
   }
 
   const { profile } = data;

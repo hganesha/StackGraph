@@ -160,6 +160,7 @@ class ModernizationTests(unittest.TestCase):
         self.assertEqual(analysis.impact.covered_call_sites, 1)
         self.assertIn("src/token_test.py", analysis.impact.affected_test_files)
         self.assertEqual(analysis.recommendation.action, "REFACTOR")
+        self.assertEqual(analysis.recommendation.title, "Review duplicate code")
 
     def test_native_replacement_requires_eligible_alternative_before_replace(self) -> None:
         repository = UUID("00000000-0000-4000-8000-000000000020")

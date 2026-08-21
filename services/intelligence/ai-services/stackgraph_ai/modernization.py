@@ -505,10 +505,15 @@ def analyze_structural_duplication(
         "selected_option": selected.canonical_key,
         "policy": f"{active_policy.key}/{active_policy.version}",
     })
-    label = capability_name or "implementation"
+    label = (capability_name or "").strip()
+    recommendation_title = (
+        f"Review duplicate {label} code"
+        if label and label.lower() != "implementation"
+        else "Review duplicate code"
+    )
     recommendation = ModernizationRecommendation(
         action="REFACTOR", objective="INTERNAL_CONSOLIDATION",
-        title=f"Review duplicated {label} implementations",
+        title=recommendation_title,
         rationale=(
             f"{len(ordered)} code units share a structural fingerprint across "
             f"{len({unit.repository_id for unit in ordered})} repositories. "
