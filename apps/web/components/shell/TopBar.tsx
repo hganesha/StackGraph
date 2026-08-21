@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useTheme } from "@stackgraph/design-system";
 import { config } from "@stackgraph/shared";
@@ -35,7 +36,7 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
         {navOpen ? "✕" : "☰"}
       </button>
       <div className={styles.brand}>
-        <span className={styles.mark} aria-hidden="true" />
+        <Image className={styles.mark} src="/icon.svg" width={18} height={18} alt="" aria-hidden="true" />
         <span className={styles.name}>StackGraph</span>
       </div>
 

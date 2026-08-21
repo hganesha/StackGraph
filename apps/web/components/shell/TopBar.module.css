@@ -31,13 +31,8 @@
 .mark {
   inline-size: 18px;
   block-size: 18px;
-  border-radius: 3px;
-  background: linear-gradient(
-    160deg,
-    var(--sg-color-domain-business-500) 0%,
-    var(--sg-color-domain-enterprise-500) 50%,
-    var(--sg-color-domain-oss-500) 100%
-  );
+  display: block;
+  flex-shrink: 0;
 }
 .name {
   font-weight: 600;
