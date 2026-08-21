@@ -29,9 +29,9 @@
   flex-shrink: 0;
 }
 .mark {
-  inline-size: 22px;
-  block-size: 22px;
-  background: url("/icon.svg") no-repeat center / contain;
+  inline-size: 20px;
+  block-size: 20px;
+  background: url("/brand-mark.svg") no-repeat center / contain;
   flex-shrink: 0;
 }
 .name {
