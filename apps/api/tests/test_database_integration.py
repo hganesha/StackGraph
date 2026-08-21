@@ -71,6 +71,24 @@ async def exercise_read_models() -> None:
             assert graph.center_id == entity_row["id"]
             assert len(graph.nodes) <= 10
 
+        package_row = await database.fetch_one(
+            """
+            SELECT pri.entity_id id
+            FROM package_registry_identity pri
+            JOIN entity e ON e.id=pri.entity_id
+            WHERE e.namespace='TECHNOLOGY'
+            ORDER BY pri.last_seen_at DESC NULLS LAST,pri.id
+            LIMIT 1
+            """
+        )
+        if package_row:
+            package_detail = await store.technology_detail(package_row["id"], tenant_id=None)
+            logical_sources = [
+                (source.registry_key, source.origin.lower().rstrip("/"))
+                for source in package_detail.registry_sources or []
+            ]
+            assert len(logical_sources) == len(set(logical_sources))
+
         connected_entity = await database.fetch_one(
             """
             SELECT r.source_entity_id id
@@ -330,6 +348,7 @@ def test_golden_billing_vertical_slice() -> None:
                     "estateSummary": await client.get("/estate/summary"),
                     "applicationDetail": await client.get(f"/applications/{APPLICATION_ID}"),
                     "technologyDetail": await client.get(f"/technologies/{PACKAGE_ID}"),
+                    "technologyHierarchy": await client.get("/technologies/hierarchy"),
                     "modernizationList": await client.get("/modernization"),
                     "graphNeighborhood": await client.get(
                         "/graph/neighborhood",
@@ -368,7 +387,7 @@ def test_golden_billing_vertical_slice() -> None:
         contract = ContractValidator(Path("/contracts/v1"))
         for definition in (
             "estateSummary", "applicationDetail", "technologyDetail",
-            "modernizationList", "graphNeighborhood", "evidenceDetail",
+            "technologyHierarchy", "modernizationList", "graphNeighborhood", "evidenceDetail",
         ):
             contract.validate_read_model(definition, responses[definition].json())
         for name in ("unsupportedAsk", "viabilityAsk", "dependencyAsk", "indirectAsk"):
@@ -404,6 +423,11 @@ def test_golden_billing_vertical_slice() -> None:
         assert technology["internal_usage"]["repository_count"] == 1
         assert technology["internal_usage"]["application_count"] == 1
         assert {item["id"] for item in technology["projects"]} == {OSS_PROJECT_ID}
+
+        hierarchy_node = responses["technologyHierarchy"].json()["nodes"][0]
+        assert hierarchy_node["technology"]["id"] == PACKAGE_ID
+        assert hierarchy_node["direct"] is True
+        assert hierarchy_node["dependent_applications"][0]["id"] == APPLICATION_ID
 
         graph = responses["graphNeighborhood"].json()
         assert graph["highlighted_path"] == [PACKAGE_ID, REPOSITORY_ID, APPLICATION_ID]

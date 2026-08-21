@@ -30,6 +30,7 @@ import type {
   Phase3IntelligenceMetrics,
   ModernizationList,
   TechnologyDetail,
+  TechnologyEstateHierarchy,
   BusinessMapList,
   BusinessMapDetail,
   BusinessMapSummary,
@@ -82,6 +83,7 @@ import repositoryCapabilities from "../fixtures/repository-capabilities.json";
 import repositoryModernization from "../fixtures/repository-modernization-intelligence.json";
 import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
 import businessMapDetail from "../fixtures/business-map-detail.json";
+import technologyEstateHierarchy from "../fixtures/technology-estate-hierarchy.json";
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -93,6 +95,7 @@ export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
   getTechnology(id: string): Promise<TechnologyDetail>;
+  getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
   ask(body: AskRequest): Promise<AskResponse>;
   getGraphNeighborhood(centerId: string, depth?: number): Promise<GraphNeighborhood>;
@@ -236,6 +239,10 @@ const fixtureClient: StackGraphClient = {
   async getTechnology() {
     await delay();
     return technologyDetail as TechnologyDetail;
+  },
+  async getTechnologyEstateHierarchy() {
+    await delay();
+    return technologyEstateHierarchy as TechnologyEstateHierarchy;
   },
   async listModernization() {
     await delay();
@@ -656,6 +663,7 @@ const liveClient: StackGraphClient = {
   },
   getApplication: (id) => req(`/applications/${id}`),
   getTechnology: (id) => req(`/technologies/${id}`),
+  getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),
   ask: (body) => req("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getGraphNeighborhood: (centerId, depth = 1) =>

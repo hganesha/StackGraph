@@ -5356,6 +5356,206 @@
         "title": "TaxonomySummary",
         "type": "object"
       },
+      "TechnologyCatalogProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_technology": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxonomySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "classification": {
+            "enum": [
+              "CURATED",
+              "CATALOG_MATCH",
+              "UNCLASSIFIED"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "dependents": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependents"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxonomySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecosystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecosystem"
+          },
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomySummary"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "homepage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage"
+          },
+          "installation_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Command"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "package_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Name"
+          },
+          "package_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Url"
+          },
+          "repository_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Url"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "versions": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versions"
+          },
+          "weekly_downloads": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weekly Downloads"
+          }
+        },
+        "required": [
+          "classification",
+          "citations"
+        ],
+        "title": "TechnologyCatalogProfile",
+        "type": "object"
+      },
       "TechnologyDetail": {
         "additionalProperties": false,
         "properties": {
@@ -5379,6 +5579,16 @@
             },
             "title": "Assessments",
             "type": "array"
+          },
+          "catalog_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnologyCatalogProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "contract_version": {
             "const": "1.0.0",
@@ -5455,6 +5665,126 @@
           "freshness"
         ],
         "title": "TechnologyDetail",
+        "type": "object"
+      },
+      "TechnologyEstateHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TechnologyEstateHierarchyNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "as_of",
+          "nodes"
+        ],
+        "title": "TechnologyEstateHierarchy",
+        "type": "object"
+      },
+      "TechnologyEstateHierarchyNode": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnologyCatalogProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "dependent_applications": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Dependent Applications",
+            "type": "array"
+          },
+          "depth": {
+            "minimum": 1.0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "direct": {
+            "title": "Direct",
+            "type": "boolean"
+          },
+          "parent_technology_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Technology Id"
+          },
+          "relationship": {
+            "minLength": 1,
+            "title": "Relationship",
+            "type": "string"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "depth",
+          "direct",
+          "relationship",
+          "confidence",
+          "confidence_label",
+          "dependent_applications",
+          "citations"
+        ],
+        "title": "TechnologyEstateHierarchyNode",
         "type": "object"
       },
       "TenantMember": {
@@ -7846,6 +8176,27 @@
         "summary": "Get Session",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/technologies/hierarchy": {
+      "get": {
+        "operationId": "getTechnologyEstateHierarchy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnologyEstateHierarchy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Technology Estate Hierarchy",
+        "tags": [
+          "technologies"
         ]
       }
     },

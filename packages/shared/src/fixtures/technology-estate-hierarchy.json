@@ -1,0 +1,73 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-19T14:00:00Z",
+  "nodes": [
+    {
+      "technology": {
+        "id": "00000000-0000-4000-8000-000000000210",
+        "kind": "PackageVersion",
+        "name": "react 19.1.1",
+        "canonical_key": "pkg:npm/react@19.1.1"
+      },
+      "depth": 1,
+      "direct": true,
+      "relationship": "DEPENDS_ON",
+      "confidence": 0.99,
+      "confidence_label": "HIGH",
+      "dependent_applications": [
+        {
+          "id": "00000000-0000-4000-8000-000000000201",
+          "kind": "Application",
+          "name": "Billing API",
+          "canonical_key": "application:billing-api"
+        }
+      ],
+      "catalog_profile": {
+        "summary": "A library for building interactive user interfaces.",
+        "package_name": "react",
+        "ecosystem": "npm",
+        "license": "MIT",
+        "domain": {"key": "frontend", "name": "Frontend"},
+        "category": {"key": "ui-rendering", "name": "UI Rendering"},
+        "functions": [{"key": "ui-rendering", "name": "UI Rendering"}],
+        "classification": "CATALOG_MATCH",
+        "citations": [{"fact_id": "00000000-0000-4000-8000-000000000305", "label": "OSS catalog metadata"}]
+      },
+      "citations": [
+        {
+          "fact_id": "00000000-0000-4000-8000-000000000301",
+          "label": "Declared dependency evidence"
+        }
+      ]
+    },
+    {
+      "technology": {
+        "id": "00000000-0000-4000-8000-000000000204",
+        "kind": "PackageVersion",
+        "name": "axios 1.7.9",
+        "canonical_key": "pkg:npm/axios@1.7.9"
+      },
+      "parent_technology_id": "00000000-0000-4000-8000-000000000210",
+      "depth": 2,
+      "direct": false,
+      "relationship": "DEPENDS_ON",
+      "confidence": 0.97,
+      "confidence_label": "HIGH",
+      "dependent_applications": [
+        {
+          "id": "00000000-0000-4000-8000-000000000201",
+          "kind": "Application",
+          "name": "Billing API",
+          "canonical_key": "application:billing-api"
+        }
+      ],
+      "citations": [
+        {
+          "fact_id": "00000000-0000-4000-8000-000000000302",
+          "label": "Resolved dependency evidence"
+        }
+      ]
+    }
+  ],
+  "truncated": false
+}

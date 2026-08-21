@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -88,6 +89,9 @@ from app.models import (
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
     Score,
+    TechnologyEstateHierarchy,
+    TechnologyEstateHierarchyNode,
+    TechnologyCatalogProfile,
     TechnologyDetail,
     ReviewQueue,
     ReviewQueueItem,
@@ -259,6 +263,15 @@ def _string_list(value: object) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
+def _integer(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _usage_citations(row: dict[str, Any], *extra_fact_ids: UUID | None) -> list[Citation]:
     usage_fact_ids = list(dict.fromkeys(
         UUID(str(value)) for value in _string_list(row.get("usage_fact_ids"))
@@ -296,7 +309,10 @@ def _technology_lookup_keys(row: dict[str, Any]) -> set[str]:
     if isinstance(catalog_metadata, dict):
         package_name = package_name or catalog_metadata.get("package_name")
     if isinstance(package_name, str) and package_name.strip():
-        keys.add(package_name.strip().lower())
+        normalized_package = package_name.strip().lower()
+        keys.add(normalized_package)
+        if "/" in normalized_package:
+            keys.add(normalized_package.rsplit("/", 1)[-1])
     canonical_key = row.get("canonical_key")
     if isinstance(canonical_key, str) and canonical_key.startswith("pkg:npm/"):
         coordinate = canonical_key.removeprefix("pkg:npm/").split("?", 1)[0].split("#", 1)[0]
@@ -306,34 +322,181 @@ def _technology_lookup_keys(row: dict[str, Any]) -> set[str]:
                 keys.add(f"{package_parts[0]}/{package_parts[1].split('@', 1)[0]}".lower())
         else:
             keys.add(coordinate.split("@", 1)[0].lower())
+    if row.get("entity_type") == "Technology":
+        names = [row.get("name"), *_string_list(properties.get("aliases"))]
+        for name in names:
+            if not isinstance(name, str):
+                continue
+            for part in name.split("/"):
+                normalized_name = re.sub(r"\s*\([^)]*\)\s*", " ", part).strip().lower()
+                if normalized_name:
+                    keys.add(normalized_name)
     return keys
+
+
+def _technology_catalog_index(
+    catalog_rows: list[dict[str, Any]],
+) -> tuple[dict[UUID, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    catalog_by_id: dict[UUID, dict[str, Any]] = {}
+    for row in catalog_rows:
+        technology_id = UUID(str(row["id"]))
+        entry = catalog_by_id.setdefault(technology_id, {"row": row, "capabilities": []})
+        if row.get("capability_id") is not None:
+            entry["capabilities"].append(row)
+
+    catalog_by_key: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for technology_id, entry in catalog_by_id.items():
+        for key in _technology_lookup_keys(entry["row"]):
+            if all(UUID(str(candidate["row"]["id"])) != technology_id for candidate in catalog_by_key[key]):
+                catalog_by_key[key].append(entry)
+    return catalog_by_id, catalog_by_key
+
+
+def _resolve_technology_catalog_entry(
+    technology_row: dict[str, Any],
+    catalog_by_id: dict[UUID, dict[str, Any]],
+    catalog_by_key: dict[str, list[dict[str, Any]]],
+) -> tuple[dict[str, Any] | None, bool]:
+    technology_id = UUID(str(technology_row["id"]))
+    direct = catalog_by_id.get(technology_id)
+    matches = {
+        UUID(str(entry["row"]["id"])): entry
+        for key in _technology_lookup_keys(technology_row)
+        for entry in catalog_by_key.get(key, [])
+    }
+    return (direct or (next(iter(matches.values())) if len(matches) == 1 else None), direct is not None)
+
+
+def _technology_catalog_profiles(
+    technology_rows: list[dict[str, Any]],
+    catalog_rows: list[dict[str, Any]],
+    metadata_rows: list[dict[str, Any]],
+) -> dict[UUID, TechnologyCatalogProfile]:
+    catalog_by_id, catalog_by_key = _technology_catalog_index(catalog_rows)
+    metadata_by_id = {
+        UUID(str(row["selected_technology_id"])): row
+        for row in metadata_rows
+    }
+    profiles: dict[UUID, TechnologyCatalogProfile] = {}
+    for technology_row in technology_rows:
+        technology_id = UUID(str(technology_row["id"]))
+        metadata_row = metadata_by_id.get(technology_id)
+        metadata = (
+            metadata_row.get("catalog_properties", {}).get("catalog_metadata", {})
+            if metadata_row and isinstance(metadata_row.get("catalog_properties"), dict)
+            else {}
+        )
+        resolved, direct = _resolve_technology_catalog_entry(
+            technology_row, catalog_by_id, catalog_by_key,
+        )
+        properties = resolved["row"].get("properties", {}) if resolved else {}
+        domain_key = str(properties.get("domain_id") or "")
+        if domain_key not in _CLASSIFIABLE_TECHNOLOGY_DOMAINS:
+            resolved = None
+            direct = False
+            properties = {}
+            domain_key = ""
+        if not metadata and resolved is None:
+            continue
+
+        domain = (
+            TaxonomySummary(
+                key=domain_key,
+                name=str(properties.get("domain_name") or _taxonomy_name(domain_key)),
+            )
+            if resolved else None
+        )
+        category = None
+        if resolved and properties.get("category_id"):
+            category_key = str(properties["category_id"])
+            category = TaxonomySummary(
+                key=category_key,
+                name=str(properties.get("category_name") or _taxonomy_name(category_key)),
+            )
+        functions = []
+        seen_functions: set[str] = set()
+        for capability in resolved["capabilities"] if resolved else []:
+            function_key = str(capability.get("capability_key") or "").strip()
+            if not function_key or function_key in seen_functions:
+                continue
+            seen_functions.add(function_key)
+            functions.append(TaxonomySummary(
+                key=function_key,
+                name=str(capability.get("capability_name") or _taxonomy_name(function_key)),
+                summary=capability.get("capability_summary"),
+            ))
+        citations: list[Citation] = []
+        if metadata_row and metadata_row.get("catalog_fact_id") is not None:
+            fact_id = UUID(str(metadata_row["catalog_fact_id"]))
+            citations.append(Citation(
+                fact_id=fact_id,
+                label="OSS catalog metadata",
+                href=f"/api/v1/facts/{fact_id}/evidence",
+            ))
+        if resolved and resolved["row"].get("catalog_fact_id") is not None:
+            fact_id = UUID(str(resolved["row"]["catalog_fact_id"]))
+            if all(citation.fact_id != fact_id for citation in citations):
+                citations.append(Citation(
+                    fact_id=fact_id,
+                    label="Catalog classification",
+                    href=f"/api/v1/facts/{fact_id}/evidence",
+                ))
+        for capability in resolved["capabilities"] if resolved else []:
+            if capability.get("classification_fact_id") is None:
+                continue
+            fact_id = UUID(str(capability["classification_fact_id"]))
+            if all(citation.fact_id != fact_id for citation in citations):
+                citations.append(Citation(
+                    fact_id=fact_id,
+                    label="Catalog classification",
+                    href=f"/api/v1/facts/{fact_id}/evidence",
+                ))
+        if not citations:
+            continue
+
+        classification = "UNCLASSIFIED"
+        if resolved is not None:
+            classification = "CURATED" if direct else "CATALOG_MATCH"
+        profiles[technology_id] = TechnologyCatalogProfile(
+            summary=(
+                metadata.get("description")
+                or properties.get("purpose")
+                or properties.get("definition")
+            ),
+            package_name=metadata.get("package_name"),
+            ecosystem=metadata.get("ecosystem"),
+            license=metadata.get("license"),
+            homepage=metadata.get("homepage"),
+            repository_url=metadata.get("repository"),
+            package_url=metadata.get("package_url"),
+            latest_version=metadata.get("latest_version"),
+            weekly_downloads=_integer(metadata.get("weekly_downloads")),
+            dependents=_integer(metadata.get("dependents")),
+            versions=_integer(metadata.get("versions")),
+            installation_command=metadata.get("installation_command"),
+            catalog_technology=_entity(resolved["row"]) if resolved else None,
+            domain=domain,
+            category=category,
+            functions=functions,
+            classification=classification,
+            citations=citations,
+        )
+    return profiles
 
 
 def _group_application_technologies(
     technology_rows: list[dict[str, Any]],
     catalog_rows: list[dict[str, Any]],
 ) -> list[ApplicationTechnologyGroup]:
-    catalog_by_id: dict[UUID, dict[str, Any]] = {}
-    catalog_by_key: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in catalog_rows:
-        technology_id = UUID(str(row["id"]))
-        entry = catalog_by_id.setdefault(technology_id, {"row": row, "capabilities": []})
-        if row.get("capability_id") is not None:
-            entry["capabilities"].append(row)
-        for key in _technology_lookup_keys(row):
-            if entry not in catalog_by_key[key]:
-                catalog_by_key[key].append(entry)
+    catalog_by_id, catalog_by_key = _technology_catalog_index(catalog_rows)
 
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for technology_row in technology_rows:
         technology_id = UUID(str(technology_row["id"]))
-        direct = catalog_by_id.get(technology_id)
-        matches = {
-            UUID(str(entry["row"]["id"])): entry
-            for key in _technology_lookup_keys(technology_row)
-            for entry in catalog_by_key.get(key, [])
-        }
-        resolved = direct or (next(iter(matches.values())) if len(matches) == 1 else None)
+        resolved, is_direct_catalog = _resolve_technology_catalog_entry(
+            technology_row, catalog_by_id, catalog_by_key,
+        )
+        direct = resolved if is_direct_catalog else None
         properties = resolved["row"].get("properties", {}) if resolved else {}
         domain_key = str(properties.get("domain_id") or "unclassified")
         if domain_key not in _CLASSIFIABLE_TECHNOLOGY_DOMAINS:
@@ -705,6 +868,226 @@ class ReadModelStore(AdminReadModelsMixin):
             freshness=_freshness(application.get("observed_at")),
         )
 
+    async def technology_estate_hierarchy(
+        self,
+        *,
+        tenant_id: UUID | None,
+    ) -> TechnologyEstateHierarchy:
+        if tenant_id is None:
+            return TechnologyEstateHierarchy(as_of=datetime.now(UTC), nodes=[])
+
+        max_depth = 6
+        max_nodes = 1000
+        membership_rows = await self.database.fetch_all(
+            """
+            SELECT repository.id repository_id,
+                   dependency.predicate relationship_type,
+                   dependency.id fact_assertion_id,
+                   dependency.confidence,
+                   dependency.properties dependency_properties,
+                   technology.*
+            FROM entity repository
+            JOIN fact_assertion dependency
+              ON dependency.subject_entity_id=repository.id
+             AND dependency.system_to IS NULL
+             AND dependency.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON')
+            JOIN entity technology ON technology.id=dependency.object_entity_id
+            WHERE repository.tenant_id=%s
+              AND repository.namespace='ENTERPRISE'
+              AND repository.entity_type='Repository'
+              AND technology.namespace IN ('TECHNOLOGY','OSS')
+              AND technology.entity_type<>'Capability'
+            ORDER BY technology.name,technology.id,
+                     dependency.confidence DESC,dependency.id
+            """,
+            (tenant_id,),
+            tenant_id=tenant_id,
+        )
+        if not membership_rows:
+            return TechnologyEstateHierarchy(as_of=datetime.now(UTC), nodes=[])
+
+        technologies_by_id: dict[UUID, dict[str, Any]] = {}
+        evidence_by_id: dict[UUID, dict[str, Any]] = {}
+        root_evidence: dict[UUID, dict[str, Any]] = {}
+        for row in membership_rows:
+            technology_id = UUID(str(row["id"]))
+            technologies_by_id[technology_id] = row
+            existing = evidence_by_id.get(technology_id)
+            if existing is None or _number(row.get("confidence")) > _number(existing.get("confidence")):
+                evidence_by_id[technology_id] = row
+            properties = (
+                row.get("dependency_properties")
+                if isinstance(row.get("dependency_properties"), dict) else {}
+            )
+            direct_marker = properties.get("direct")
+            is_direct = (
+                str(row["relationship_type"]) != "DEPENDS_ON"
+                or direct_marker is None
+                or direct_marker is True
+                or (isinstance(direct_marker, str) and direct_marker.lower() == "true")
+            )
+            existing_root = root_evidence.get(technology_id)
+            if is_direct and (
+                existing_root is None
+                or _number(row.get("confidence")) > _number(existing_root.get("confidence"))
+            ):
+                root_evidence[technology_id] = row
+
+        technology_ids = list(technologies_by_id)
+        edge_rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT ON (dependency.subject_entity_id,dependency.object_entity_id)
+                   dependency.subject_entity_id source_id,
+                   dependency.object_entity_id target_id,
+                   dependency.predicate relationship_type,
+                   dependency.id fact_assertion_id,
+                   dependency.confidence,
+                   dependency.properties dependency_properties
+            FROM fact_assertion dependency
+            WHERE dependency.predicate='DEPENDS_ON'
+              AND dependency.system_to IS NULL
+              AND dependency.subject_entity_id=ANY(%s::uuid[])
+              AND dependency.object_entity_id=ANY(%s::uuid[])
+            ORDER BY dependency.subject_entity_id,dependency.object_entity_id,
+                     dependency.confidence DESC,dependency.id
+            """,
+            (technology_ids, technology_ids),
+            tenant_id=tenant_id,
+        )
+        application_rows = await self.database.fetch_all(
+            """
+            WITH application_repositories AS (
+              SELECT application.id application_id,repository.id repository_id
+              FROM fact_assertion link
+              JOIN entity application ON application.id=link.subject_entity_id
+              JOIN entity repository ON repository.id=link.object_entity_id
+              WHERE link.system_to IS NULL
+                AND link.predicate IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                AND application.tenant_id=%s
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+                AND repository.entity_type='Repository'
+              UNION
+              SELECT application.id application_id,repository.id repository_id
+              FROM fact_assertion link
+              JOIN entity repository ON repository.id=link.subject_entity_id
+              JOIN entity application ON application.id=link.object_entity_id
+              WHERE link.system_to IS NULL
+                AND link.predicate IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                AND application.tenant_id=%s
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+                AND repository.entity_type='Repository'
+            )
+            SELECT DISTINCT ON (dependency.object_entity_id,application.id)
+                   dependency.object_entity_id technology_id,application.*
+            FROM application_repositories linked
+            JOIN fact_assertion dependency
+              ON dependency.subject_entity_id=linked.repository_id
+             AND dependency.system_to IS NULL
+             AND dependency.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON')
+             AND dependency.object_entity_id=ANY(%s::uuid[])
+            JOIN entity application ON application.id=linked.application_id
+            ORDER BY dependency.object_entity_id,application.id,application.name
+            """,
+            (tenant_id, tenant_id, technology_ids),
+            tenant_id=tenant_id,
+        )
+
+        adjacency: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
+        for row in edge_rows:
+            adjacency[UUID(str(row["source_id"]))].append(row)
+        for edges in adjacency.values():
+            edges.sort(key=lambda row: (
+                str(technologies_by_id[UUID(str(row["target_id"]))]["name"]).lower(),
+                str(row["target_id"]),
+            ))
+
+        applications_by_technology: dict[UUID, list[EntitySummary]] = defaultdict(list)
+        for row in application_rows:
+            applications_by_technology[UUID(str(row["technology_id"]))].append(_entity(row))
+
+        catalog_rows = await self._technology_classification_catalog(tenant_id)
+        metadata_rows = await self._technology_catalog_metadata(technology_ids, tenant_id)
+        catalog_profiles = _technology_catalog_profiles(
+            list(technologies_by_id.values()), catalog_rows, metadata_rows,
+        )
+
+        selected: dict[UUID, tuple[UUID | None, int, bool, dict[str, Any]]] = {}
+        queue: deque[UUID] = deque()
+        truncated = False
+        for technology_id, evidence in sorted(
+            root_evidence.items(),
+            key=lambda item: (
+                str(technologies_by_id[item[0]]["name"]).lower(),
+                str(item[0]),
+            ),
+        ):
+            if len(selected) >= max_nodes:
+                truncated = True
+                break
+            selected[technology_id] = (None, 1, True, evidence)
+            queue.append(technology_id)
+
+        while queue and not truncated:
+            parent_id = queue.popleft()
+            parent_depth = selected[parent_id][1]
+            if parent_depth >= max_depth:
+                continue
+            for edge in adjacency.get(parent_id, []):
+                child_id = UUID(str(edge["target_id"]))
+                if child_id in selected:
+                    continue
+                if len(selected) >= max_nodes:
+                    truncated = True
+                    break
+                selected[child_id] = (parent_id, parent_depth + 1, False, edge)
+                queue.append(child_id)
+
+        if not truncated:
+            for technology_id, technology in sorted(
+                technologies_by_id.items(),
+                key=lambda item: (str(item[1]["name"]).lower(), str(item[0])),
+            ):
+                if technology_id in selected:
+                    continue
+                if len(selected) >= max_nodes:
+                    truncated = True
+                    break
+                selected[technology_id] = (None, 1, False, evidence_by_id[technology_id])
+
+        nodes: list[TechnologyEstateHierarchyNode] = []
+        for technology_id, (parent_id, depth, direct, evidence) in selected.items():
+            fact_id = UUID(str(evidence["fact_assertion_id"]))
+            confidence = _number(evidence.get("confidence"), 0.0)
+            nodes.append(TechnologyEstateHierarchyNode(
+                technology=_entity(technologies_by_id[technology_id]),
+                parent_technology_id=parent_id,
+                depth=depth,
+                direct=direct,
+                relationship=str(evidence["relationship_type"]),
+                confidence=confidence,
+                confidence_label=_confidence_label(confidence),
+                dependent_applications=applications_by_technology.get(technology_id, []),
+                catalog_profile=catalog_profiles.get(technology_id),
+                citations=[Citation(
+                    fact_id=fact_id,
+                    label=(
+                        "Declared dependency evidence"
+                        if direct else (
+                            "Resolved dependency evidence"
+                            if parent_id is not None else "Observed dependency evidence"
+                        )
+                    ),
+                    href=f"/api/v1/facts/{fact_id}/evidence",
+                )],
+            ))
+        return TechnologyEstateHierarchy(
+            as_of=datetime.now(UTC),
+            nodes=nodes,
+            truncated=truncated,
+        )
+
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail:
         technology = await self._get_entity(technology_id, tenant_id, namespace="TECHNOLOGY")
         related = await self._technology_related_entities(technology_id, tenant_id)
@@ -714,16 +1097,28 @@ class ReadModelStore(AdminReadModelsMixin):
         projects = [row for row in related if row["entity_type"] == "OSSProject"]
         alternatives = await self._predicate_entities(technology_id, "ALTERNATIVE_TO", tenant_id)
         migrations = [row for row in related if row["entity_type"] == "MigrationPattern"]
+        catalog_rows = await self._technology_classification_catalog(tenant_id)
+        metadata_rows = await self._technology_catalog_metadata([technology_id], tenant_id)
+        catalog_profile = _technology_catalog_profiles(
+            [technology], catalog_rows, metadata_rows,
+        ).get(technology_id)
         registry_rows = await self.database.fetch_all(
             """
-            SELECT DISTINCT r.registry_key,r.origin_uri,r.visibility,(r.tenant_id IS NOT NULL) tenant_scoped,
-                   coalesce(pri.last_seen_at,e.last_seen_at,e.updated_at) observed_at,ss.source_key
+            SELECT r.registry_key,min(r.origin_uri) origin_uri,
+                   CASE min(CASE r.visibility
+                     WHEN 'PRIVATE' THEN 0 WHEN 'PUBLIC' THEN 1 ELSE 2 END)
+                     WHEN 0 THEN 'PRIVATE' WHEN 1 THEN 'PUBLIC' ELSE 'UNKNOWN'
+                   END visibility,
+                   bool_or(r.tenant_id IS NOT NULL) tenant_scoped,
+                   max(coalesce(pri.last_seen_at,e.last_seen_at,e.updated_at)) observed_at,
+                   min(ss.source_key) source_key
             FROM package_registry_identity pri
             JOIN package_registry r ON r.id=pri.package_registry_id
             JOIN source_system ss ON ss.id=r.source_system_id
             JOIN entity e ON e.id=pri.entity_id
             WHERE pri.entity_id = ANY(%s::uuid[])
-            ORDER BY r.registry_key
+            GROUP BY r.registry_key,regexp_replace(lower(trim(r.origin_uri)),'/+$','')
+            ORDER BY r.registry_key,min(r.origin_uri)
             """,
             ([row["id"] for row in packages] or [technology_id],),
             tenant_id=tenant_id,
@@ -747,6 +1142,7 @@ class ReadModelStore(AdminReadModelsMixin):
             ),
             packages=[_entity(row) for row in self._dedupe_entities(packages)],
             projects=[_entity(row) for row in projects],
+            catalog_profile=catalog_profile,
             registry_sources=registry_sources,
             alternatives=[_entity(row) for row in alternatives],
             migration_patterns=[_entity(row) for row in migrations],
@@ -3378,6 +3774,73 @@ class ReadModelStore(AdminReadModelsMixin):
               AND technology.properties ? 'domain_id'
             ORDER BY technology.name,capability.name,technology.id,capability.id
             """,
+            tenant_id=tenant_id,
+        )
+
+    async def _technology_catalog_metadata(
+        self,
+        technology_ids: list[UUID],
+        tenant_id: UUID | None,
+    ) -> list[dict[str, Any]]:
+        if not technology_ids:
+            return []
+        return await self.database.fetch_all(
+            """
+            WITH selected AS (
+              SELECT unnest(%s::uuid[]) selected_technology_id
+            ), candidates AS (
+              SELECT selected.selected_technology_id,selected.selected_technology_id candidate_id,0 priority
+              FROM selected
+              UNION ALL
+              SELECT selected.selected_technology_id,relationship.object_entity_id,1
+              FROM selected
+              JOIN fact_assertion relationship
+                ON relationship.subject_entity_id=selected.selected_technology_id
+               AND relationship.system_to IS NULL
+               AND relationship.predicate IN ('HAS_VERSION','PUBLISHES','PUBLISHED_BY')
+              WHERE relationship.object_entity_id IS NOT NULL
+              UNION ALL
+              SELECT selected.selected_technology_id,relationship.subject_entity_id,1
+              FROM selected
+              JOIN fact_assertion relationship
+                ON relationship.object_entity_id=selected.selected_technology_id
+               AND relationship.system_to IS NULL
+               AND relationship.predicate IN ('HAS_VERSION','PUBLISHES','PUBLISHED_BY')
+            ), ranked_metadata AS (
+              SELECT candidates.selected_technology_id,entity.*,
+                     row_number() OVER (
+                       PARTITION BY candidates.selected_technology_id
+                       ORDER BY candidates.priority,
+                                CASE entity.entity_type
+                                  WHEN 'Package' THEN 0 WHEN 'OSSProject' THEN 1 ELSE 2 END,
+                                entity.id
+                     ) metadata_rank
+              FROM candidates
+              JOIN entity ON entity.id=candidates.candidate_id
+              WHERE entity.namespace IN ('TECHNOLOGY','OSS')
+                AND entity.properties ? 'catalog_metadata'
+            ), metadata_entities AS (
+              SELECT * FROM ranked_metadata WHERE metadata_rank=1
+            )
+            SELECT metadata.selected_technology_id,
+                   metadata.properties catalog_properties,
+                   catalog_fact.id catalog_fact_id
+            FROM metadata_entities metadata
+            LEFT JOIN LATERAL (
+              SELECT fact.id
+              FROM fact_assertion fact
+              WHERE fact.subject_entity_id=metadata.id
+                AND fact.predicate='HAS_PROPERTY'
+                AND fact.object_value->>'record_kind' IN (
+                  'huggingface_top_npm_package','technology_catalog_entry'
+                )
+                AND fact.system_to IS NULL
+              ORDER BY fact.observed_at DESC,fact.id DESC
+              LIMIT 1
+            ) catalog_fact ON true
+            ORDER BY metadata.selected_technology_id
+            """,
+            (technology_ids,),
             tenant_id=tenant_id,
         )
 

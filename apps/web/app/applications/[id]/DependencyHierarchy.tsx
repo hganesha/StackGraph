@@ -83,7 +83,7 @@ function DependencyTree({
   };
 
   return (
-    <details className={styles.componentHierarchy} open>
+    <details className={styles.componentHierarchy}>
       <summary className={styles.componentSummary}>
         <span className="sg-mono">{component.component_path}</span>
         <span>{component.dependencies.length} dependencies</span>

@@ -42,6 +42,7 @@ from app.models import (
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
     SessionInfo,
+    TechnologyEstateHierarchy,
     TechnologyDetail,
     ReviewQueue,
     ReviewQueueItemType,
@@ -75,6 +76,7 @@ class ReadModelsProtocol(Protocol):
     ) -> EstateSummary: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
+    async def technology_estate_hierarchy(self, *, tenant_id: UUID | None) -> TechnologyEstateHierarchy: ...
     async def modernization(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> ModernizationList: ...
     async def graph_neighborhood(
         self, center_id: UUID, *, tenant_id: UUID | None, depth: int, real_node_limit: int,
@@ -260,6 +262,15 @@ async def get_estate_summary(
 async def get_application(id: UUID, request: Request) -> ApplicationDetail:
     principal = await _principal(request)
     return await _store(request).application_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/technologies/hierarchy", response_model=TechnologyEstateHierarchy,
+    response_model_exclude_none=True, operation_id="getTechnologyEstateHierarchy", tags=["technologies"],
+)
+async def get_technology_estate_hierarchy(request: Request) -> TechnologyEstateHierarchy:
+    principal = await _principal(request)
+    return await _store(request).technology_estate_hierarchy(tenant_id=principal.tenant_id)
 
 
 @router.get(

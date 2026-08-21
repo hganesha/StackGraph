@@ -865,9 +865,31 @@ export interface TaxonomySummary {
   summary?: string | null;
 }
 
+export interface TechnologyCatalogProfile {
+  catalog_technology?: EntitySummary | null;
+  category?: TaxonomySummary | null;
+  citations: Array<Citation>;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  dependents?: number | null;
+  domain?: TaxonomySummary | null;
+  ecosystem?: string | null;
+  functions?: Array<TaxonomySummary>;
+  homepage?: string | null;
+  installation_command?: string | null;
+  latest_version?: string | null;
+  license?: string | null;
+  package_name?: string | null;
+  package_url?: string | null;
+  repository_url?: string | null;
+  summary?: string | null;
+  versions?: number | null;
+  weekly_downloads?: number | null;
+}
+
 export interface TechnologyDetail {
   alternatives?: Array<EntitySummary> | null;
   assessments: Array<AssessmentSummary>;
+  catalog_profile?: TechnologyCatalogProfile | null;
   contract_version?: "1.0.0";
   freshness: Freshness;
   internal_usage: InternalUsage;
@@ -876,6 +898,26 @@ export interface TechnologyDetail {
   projects: Array<EntitySummary>;
   recommendations: Array<RecommendationSummary>;
   registry_sources?: Array<PackageSource> | null;
+  technology: EntitySummary;
+}
+
+export interface TechnologyEstateHierarchy {
+  as_of: string;
+  contract_version?: "1.0.0";
+  nodes: Array<TechnologyEstateHierarchyNode>;
+  truncated?: boolean;
+}
+
+export interface TechnologyEstateHierarchyNode {
+  catalog_profile?: TechnologyCatalogProfile | null;
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependent_applications: Array<EntitySummary>;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
   technology: EntitySummary;
 }
 

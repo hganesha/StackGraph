@@ -347,6 +347,16 @@ def work_jobs(
             ))
         except Exception as error:
             terminal = _fail_job(database_url, job, error)
+            print(json.dumps({
+                "attempt": int(job["attempt"]),
+                "error": str(error)[:500],
+                "error_type": type(error).__name__,
+                "event": "intelligence.job_failed",
+                "job_id": str(job["id"]),
+                "max_attempts": int(job["max_attempts"]),
+                "repository_entity_id": str(job["repository_entity_id"]),
+                "terminal": terminal,
+            }, sort_keys=True), flush=True)
             failed += int(terminal)
             retried += int(not terminal)
         else:

@@ -45,6 +45,7 @@ from app.models import (
     ReviewQueueItem,
     TenantMember,
     TenantMemberList,
+    TechnologyEstateHierarchy,
     Connector,
     ConnectorList,
     GitHubRepositoryOption,
@@ -135,6 +136,10 @@ class StubReadModels:
 
     async def technology_detail(self, technology_id, *, tenant_id):
         raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
+
+    async def technology_estate_hierarchy(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return TechnologyEstateHierarchy(as_of=NOW, nodes=[])
 
     async def modernization(self, *, tenant_id, cursor, limit):
         raise NotImplementedError
@@ -490,6 +495,15 @@ def test_estate_summary_forwards_domain_scope() -> None:
 
     assert response.status_code == 200
     assert store.last_estate_namespaces == ["TECHNOLOGY", "OSS"]
+
+
+def test_technology_hierarchy_is_exposed_before_dynamic_technology_route() -> None:
+    app, store = app_with_stubs()
+    response = asyncio.run(request(app, "GET", "/api/v1/technologies/hierarchy"))
+
+    assert response.status_code == 200
+    assert response.json()["nodes"] == []
+    assert store.last_tenant_id is not None
 
 
 def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:

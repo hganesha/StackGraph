@@ -109,6 +109,27 @@ export interface TaxonomySummary {
 
 export type TechnologyClassification = "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
 
+export interface TechnologyCatalogProfile {
+  summary?: string | null;
+  package_name?: string | null;
+  ecosystem?: string | null;
+  license?: string | null;
+  homepage?: string | null;
+  repository_url?: string | null;
+  package_url?: string | null;
+  latest_version?: string | null;
+  weekly_downloads?: number | null;
+  dependents?: number | null;
+  versions?: number | null;
+  installation_command?: string | null;
+  catalog_technology?: EntitySummary | null;
+  domain?: TaxonomySummary | null;
+  category?: TaxonomySummary | null;
+  functions: TaxonomySummary[];
+  classification: TechnologyClassification;
+  citations: Citation[];
+}
+
 export interface ApplicationTechnologyUsage {
   technology: EntitySummary;
   category?: TaxonomySummary | null;
@@ -151,6 +172,26 @@ export interface ApplicationComponentDependencyHierarchy {
 export interface ApplicationRepositoryDependencyHierarchy {
   repository: EntitySummary;
   components: ApplicationComponentDependencyHierarchy[];
+}
+
+export interface TechnologyEstateHierarchyNode {
+  technology: EntitySummary;
+  parent_technology_id?: UUID | null;
+  depth: number;
+  direct: boolean;
+  relationship: string;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  dependent_applications: EntitySummary[];
+  catalog_profile?: TechnologyCatalogProfile | null;
+  citations: Citation[];
+}
+
+export interface TechnologyEstateHierarchy {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  nodes: TechnologyEstateHierarchyNode[];
+  truncated: boolean;
 }
 
 export interface AssessmentSummary {
@@ -234,6 +275,7 @@ export interface TechnologyDetail {
   };
   packages: EntitySummary[];
   projects: EntitySummary[];
+  catalog_profile?: TechnologyCatalogProfile | null;
   registry_sources?: PackageSource[];
   alternatives?: EntitySummary[];
   migration_patterns?: EntitySummary[];

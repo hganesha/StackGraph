@@ -12,6 +12,9 @@ from uuid import UUID
 
 import httpx
 from psycopg.errors import UniqueViolation
+from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
+from stackgraph_ai.models import ModelMessage, ModelRequest
+from stackgraph_ai.providers import AnthropicAdapter, OpenAIAdapter, OpenRouterAdapter
 
 from app.errors import APIError
 from app.models import (
@@ -65,6 +68,13 @@ _CONTROLLABLE_SERVICES = frozenset({
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
+
+_AI_CONNECTION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"answer": {"type": "string", "const": "ok"}},
+    "required": ["answer"],
+    "additionalProperties": False,
+}
 
 
 def _github_api_base_url() -> str:
@@ -1122,10 +1132,10 @@ class AdminReadModelsMixin:
         url, headers = self._ai_models_request(provider, api_key)
         openrouter_zdr_endpoints: Any = None
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 if provider == "openrouter":
                     authentication = await client.get(
-                        "https://openrouter.ai/api/v1/auth/key", headers=headers,
+                        f"{self._ai_provider_base_url(provider)}/auth/key", headers=headers,
                     )
                     authentication.raise_for_status()
                 response = await client.get(url, headers=headers)
@@ -1133,69 +1143,141 @@ class AdminReadModelsMixin:
                 payload = response.json()
                 if provider == "openrouter":
                     endpoints = await client.get(
-                        "https://openrouter.ai/api/v1/endpoints/zdr", headers=headers,
+                        f"{self._ai_provider_base_url(provider)}/endpoints/zdr", headers=headers,
                     )
                     endpoints.raise_for_status()
                     openrouter_zdr_endpoints = endpoints.json()
-            available_models = self._ai_model_ids(payload)
-            models = available_models[:100]
+                available_models = self._ai_model_ids(payload)
+                models = available_models[:100]
+                if available_models and row["model"] not in available_models:
+                    message = f"The selected model {row['model']!r} is not available to this provider key."
+                    await self._record_ai_connection_test(
+                        tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+                    )
+                    raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
+                if (
+                    provider == "openrouter"
+                    and not self._openrouter_model_supports_intelligence(
+                        openrouter_zdr_endpoints, row["model"],
+                    )
+                ):
+                    required = ", ".join(sorted(_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS))
+                    message = (
+                        f"The selected model {row['model']!r} has no zero-data-retention endpoint "
+                        f"that supports StackGraph's required parameters: {required}."
+                    )
+                    await self._record_ai_connection_test(
+                        tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+                    )
+                    raise APIError(422, "AI_MODEL_INCOMPATIBLE", message)
+
+                adapter = self._ai_provider_adapter(provider, api_key, client)
+                probe = await adapter.complete(ModelRequest(
+                    model=row["model"],
+                    messages=(
+                        ModelMessage(
+                            role="system",
+                            content="Return only the requested structured result.",
+                        ),
+                        ModelMessage(role="user", content="Set answer to ok."),
+                    ),
+                    max_output_tokens=64,
+                    output_schema=_AI_CONNECTION_OUTPUT_SCHEMA,
+                    output_schema_name="stackgraph_connection_test",
+                ))
+                if probe.structured_output != {"answer": "ok"}:
+                    raise ProviderResponseError(
+                        f"{provider} did not satisfy the structured-output probe"
+                    )
+        except APIError:
+            raise
+        except (ProviderRequestError, ProviderResponseError) as error:
+            message = (
+                "Provider authentication and model discovery succeeded, but the selected model "
+                "failed StackGraph's structured-output probe."
+            )
+            await self._record_ai_connection_test(
+                tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+            )
+            raise APIError(422, "AI_STRUCTURED_OUTPUT_FAILED", message) from error
         except (httpx.HTTPError, ValueError, TypeError) as error:
             message = "Provider authentication or model discovery failed."
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
+            await self._record_ai_connection_test(
+                tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
             )
             raise APIError(502, "AI_CONNECTION_FAILED", message) from error
-        if available_models and row["model"] not in available_models:
-            message = f"The selected model {row['model']!r} is not available to this provider key."
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
-            )
-            raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
-        if (
-            provider == "openrouter"
-            and not self._openrouter_model_supports_intelligence(
-                openrouter_zdr_endpoints, row["model"],
-            )
-        ):
-            required = ", ".join(sorted(_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS))
-            message = (
-                f"The selected model {row['model']!r} has no zero-data-retention endpoint "
-                f"that supports StackGraph's required parameters: {required}."
-            )
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
-            )
-            raise APIError(422, "AI_MODEL_INCOMPATIBLE", message)
-        await self.database.fetch_one(
-            """
-            UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
-              last_error=NULL,updated_by=%s,updated_at=now() RETURNING tenant_id
-            """,
-            (actor_key,), tenant_id=tenant_id,
+        await self._record_ai_connection_test(
+            tenant_id=tenant_id, actor_key=actor_key, status="SUCCEEDED", error=None,
         )
         return AIProviderConnectionTest(provider=provider, models=models)
+
+    async def _record_ai_connection_test(
+        self,
+        *,
+        tenant_id: UUID,
+        actor_key: str,
+        status: str,
+        error: str | None,
+    ) -> None:
+        await self.database.fetch_one(
+            """
+            UPDATE tenant_ai_configuration SET test_status=%s,tested_at=now(),
+              last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+            """,
+            (status, error, actor_key), tenant_id=tenant_id,
+        )
+
+    @staticmethod
+    def _ai_provider_adapter(
+        provider: str, api_key: str, client: httpx.AsyncClient,
+    ) -> AnthropicAdapter | OpenAIAdapter | OpenRouterAdapter:
+        if provider == "anthropic":
+            return AnthropicAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                client=client,
+            )
+        if provider == "openai":
+            return OpenAIAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                client=client,
+            )
+        if provider == "openrouter":
+            return OpenRouterAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                site_url=os.getenv("OPENROUTER_SITE_URL"),
+                site_name=os.getenv("OPENROUTER_SITE_NAME", "StackGraph"),
+                client=client,
+            )
+        raise ValueError(f"Unsupported AI provider: {provider}")
 
     @staticmethod
     def _ai_models_request(provider: str, api_key: str) -> tuple[str, dict[str, str]]:
         if provider == "anthropic":
             return (
-                "https://api.anthropic.com/v1/models",
+                f"{AdminReadModelsMixin._ai_provider_base_url(provider)}/models",
                 {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
             )
-        base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+        base = AdminReadModelsMixin._ai_provider_base_url(provider)
         return f"{base}/models", {"Authorization": f"Bearer {api_key}"}
+
+    @staticmethod
+    def _ai_provider_base_url(provider: str) -> str:
+        defaults = {
+            "anthropic": "https://api.anthropic.com/v1",
+            "openai": "https://api.openai.com/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
+        }
+        environment_names = {
+            "anthropic": "ANTHROPIC_BASE_URL",
+            "openai": "OPENAI_BASE_URL",
+            "openrouter": "OPENROUTER_BASE_URL",
+        }
+        if provider not in defaults:
+            raise ValueError(f"Unsupported AI provider: {provider}")
+        return os.getenv(environment_names[provider], defaults[provider]).rstrip("/")
 
     @staticmethod
     def _ai_model_ids(payload: Any) -> list[str]:

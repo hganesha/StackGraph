@@ -343,20 +343,16 @@ def _proposal_from_ai(
     output = invocation.response.structured_output
     if not isinstance(output, Mapping):
         raise ValueError("AI capability response is not an object")
-    capability_key = str(output.get("object") or "")
-    if output.get("subject") != usage.subject_key:
-        raise ValueError("AI capability subject does not match the requested subject")
+    capability_key = str(output.get("capabilityKey") or "")
     if capability_key not in taxonomy.capability_by_key:
         raise ValueError("AI capability response references an unknown taxonomy capability")
-    evidence = tuple(UUID(str(item)) for item in output.get("evidenceRefs") or ())
+    evidence = tuple(UUID(str(item)) for item in output.get("supportingEvidenceRefs") or ())
     counters = tuple(UUID(str(item)) for item in output.get("counterEvidenceRefs") or ())
     if not evidence or not set(evidence) <= set(usage.supporting_fact_ids):
         raise ValueError("AI capability response contains unsupported evidence references")
     if not set(counters) <= set(usage.counter_evidence_fact_ids):
         raise ValueError("AI capability response contains unsupported counter-evidence references")
     confidence = float(output["confidence"])
-    if output.get("confidenceBand") != confidence_band(confidence):
-        raise ValueError("AI capability confidence band is inconsistent")
     fingerprint = _analysis_fingerprint(
         taxonomy, usage, capability_key, invocation.input_fingerprint,
     )
@@ -371,7 +367,7 @@ def _proposal_from_ai(
         analysis_fingerprint=fingerprint,
         supporting_fact_ids=evidence,
         counter_evidence_fact_ids=counters,
-        policy_version=str(invocation.prompt.metadata.get("policy_version") or "capability-inference/v1"),
+        policy_version=str(invocation.prompt.metadata.get("policy_version") or "capability-inference/v1.1"),
         model_invocation_id=invocation.invocation_id,
         model_provider=invocation.response.provider,
         model_name=invocation.response.model,
