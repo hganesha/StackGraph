@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -32,6 +33,27 @@ pytestmark = pytest.mark.skipif(
     "STACKGRAPH_TEST_DATABASE_URL" not in os.environ,
     reason="STACKGRAPH_TEST_DATABASE_URL is required for database integration tests",
 )
+
+
+class DatabaseStubGitHubAppSetupClient:
+    enabled = True
+
+    def __init__(self) -> None:
+        self.state = ""
+
+    def installation_url(self, state: str) -> str:
+        self.state = state
+        return f"https://github.com/apps/stackgraph/installations/new?state={state}"
+
+    async def verify_installation(self, *, code: str, installation_id: str):
+        assert code == "database-oauth-code"
+        return SimpleNamespace(
+            installation_id=installation_id,
+            account_login="acme-hosted",
+            account_id=84,
+            target_type="Organization",
+            permissions=("contents:read", "metadata:read"),
+        )
 
 
 async def exercise_read_models() -> None:
@@ -547,6 +569,8 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                 default_tenant_id=tenant_id,
                 development_actor_key="admin-integration",
             ))
+            hosted_github = DatabaseStubGitHubAppSetupClient()
+            app.state.github_app_client = hosted_github
             async with app.router.lifespan_context(app):
                 async with AsyncClient(
                     transport=ASGITransport(app=app, raise_app_exceptions=False),
@@ -574,6 +598,30 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                             "pilot_manual_binding_acknowledged": True,
                             "display_name": "Acme GitHub App",
                         },
+                    )
+                    hosted_setup = await client.post(
+                        "/admin/github/installations/setup",
+                        json={"return_to": "/admin?section=connections"},
+                    )
+                    hosted_installation = await client.get(
+                        "/admin/github/installations/setup/callback",
+                        params={
+                            "code": "database-oauth-code",
+                            "state": hosted_github.state,
+                            "installation_id": "900000000000000002",
+                            "setup_action": "install",
+                        },
+                        follow_redirects=False,
+                    )
+                    hosted_replay = await client.get(
+                        "/admin/github/installations/setup/callback",
+                        params={
+                            "code": "database-oauth-code",
+                            "state": hosted_github.state,
+                            "installation_id": "900000000000000002",
+                            "setup_action": "install",
+                        },
+                        follow_redirects=False,
                     )
                     with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
                         configure_tenant(connection)
@@ -642,13 +690,15 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         json={"minimum_repositories": 1, "minimum_dependency_share": 0.01},
                     )
                     return (
-                        member, members, connector, repository, installation, policy,
+                        member, members, connector, repository, installation,
+                        hosted_setup, hosted_installation, hosted_replay, policy,
                         rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
                         tenant_ai, ai_removed, governance, ecosystem,
                     )
 
         (
-            member, members, connector, repository, installation, policy, rescan_a,
+            member, members, connector, repository, installation,
+            hosted_setup, hosted_installation, hosted_replay, policy, rescan_a,
             rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
             governance, ecosystem,
         ) = asyncio.run(exercise())
@@ -663,6 +713,13 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert installation.json()["external_account_key"] == (
             "github:installation:900000000000000001"
         )
+        assert hosted_setup.status_code == 201
+        assert hosted_installation.status_code == 303
+        assert hosted_installation.headers["location"].endswith(
+            "github=connected&installation_id=900000000000000002"
+        )
+        assert hosted_replay.status_code == 409
+        assert hosted_replay.json()["code"] == "GITHUB_SETUP_STATE_REPLAYED"
         assert policy.status_code == 200 and policy.json()["cadence"] == "HOURLY"
         assert rescan_a.status_code == 201
         assert rescan_b.status_code == 200  # idempotent replay
@@ -718,6 +775,14 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             ).fetchone()
             assert target[0] == "github:repo-name:acme/billing"
             assert target[1]["direct_repository"] is True
+            hosted = connection.execute(
+                """
+                SELECT metadata FROM connector
+                WHERE tenant_id=%s AND external_account_key='github:installation:900000000000000002'
+                """,
+                (tenant_id,),
+            ).fetchone()
+            assert hosted[0]["binding_mode"] == "HOSTED_SETUP"
             assert target[2] == "MANUAL"
             # A continuously running discovery worker may claim this synthetic run.
             assert target[3] in {"PENDING", "RUNNING", "FAILED"}
@@ -748,6 +813,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
             connection.execute("DELETE FROM ecosystem_admission WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM github_installation_setup WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM intelligence_job WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
             connection.execute(

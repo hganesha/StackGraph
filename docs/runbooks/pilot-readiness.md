@@ -13,7 +13,7 @@ Passing the first decision never substitutes for the second.
 
 - Deploy the API, PostgreSQL/AGE, discovery workers, deps.dev/OSV workers, projection worker, and intelligence
   worker from the checked-in Compose topology or its production equivalent.
-- Configure HTTPS for the GitHub webhook and App setup/callback endpoints.
+- Configure HTTPS for the GitHub webhook and App OAuth callback endpoints.
 - Configure `GITHUB_APP_ID` and the App private key through the deployment secret broker. Do not create a PAT.
 - Configure the evidence bucket with versioning, Object Lock/retention, encryption, and the deployment's recovery
   and authorized-deletion roles.

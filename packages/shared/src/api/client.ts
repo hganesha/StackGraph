@@ -60,6 +60,8 @@ import type {
   GitHubRepositoryConnectRequest,
   GitHubRepositoryOptionList,
   GitHubInstallationConnectRequest,
+  GitHubInstallationSetupRequest,
+  GitHubInstallationSetupResponse,
   ConnectorUpdateRequest,
   AIProviderConfiguration,
   AIProviderConfigurationUpdateRequest,
@@ -149,6 +151,7 @@ export interface StackGraphClient {
   listAvailableGitHubRepositories(): Promise<GitHubRepositoryOptionList>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
+  startGitHubInstallationSetup(body: GitHubInstallationSetupRequest): Promise<GitHubInstallationSetupResponse>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getModernizationGovernance(): Promise<ModernizationGovernanceState>;
@@ -506,6 +509,13 @@ const fixtureClient: StackGraphClient = {
       scopes: ["contents:read", "metadata:read"],
     });
   },
+  async startGitHubInstallationSetup() {
+    await delay();
+    return {
+      setup_url: "https://github.com/apps/stackgraph/installations/new?state=fixture-state",
+      expires_at: new Date(Date.now() + 600_000).toISOString(),
+    };
+  },
   async updateConnector(id, body) {
     await delay();
     const connector = adminConnectors.get(id);
@@ -577,18 +587,26 @@ const fixtureClient: StackGraphClient = {
   async publishCalibrationCorpus(body) {
     await delay();
     const minimumReviewedCases = body.minimum_reviewed_cases ?? 20;
+    const observed = {
+      candidate_precision: 0.9,
+      recommendation_acceptance: 0.6,
+      validation_success: 0.9,
+      affected_scope_mae: 0.1,
+      effort_accuracy: 0.8,
+      reviewed_cases: body.case_fingerprints.length,
+    };
     const failures = [
       ...(body.case_fingerprints.length >= minimumReviewedCases
         ? [] : [`reviewed_cases ${body.case_fingerprints.length} < ${minimumReviewedCases}`]),
-      ...(body.candidate_precision != null && body.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
+      ...(observed.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
         ? [] : ["candidate_precision is unavailable or below threshold"]),
-      ...(body.recommendation_acceptance != null && body.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
+      ...(observed.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
         ? [] : ["recommendation_acceptance is unavailable or below threshold"]),
-      ...(body.validation_success != null && body.validation_success >= (body.minimum_validation_success ?? 0.8)
+      ...(observed.validation_success >= (body.minimum_validation_success ?? 0.8)
         ? [] : ["validation_success is unavailable or below threshold"]),
-      ...(body.affected_scope_mae != null && body.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
+      ...(observed.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
         ? [] : ["affected_scope_mae is unavailable or above threshold"]),
-      ...(body.effort_accuracy != null && body.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
+      ...(observed.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
         ? [] : ["effort_accuracy is unavailable or below threshold"]),
     ];
     const promotionPassed = failures.length === 0;
@@ -600,6 +618,8 @@ const fixtureClient: StackGraphClient = {
         version: body.version,
         case_count: body.case_fingerprints.length,
         corpus_fingerprint: `sha256:${"7".repeat(64)}`,
+        observed_metrics: observed,
+        metrics_source_version: "persisted-review-outcomes/v1",
         promotion_passed: promotionPassed,
         promotion_failures: failures,
         evaluation_fingerprint: `sha256:${"8".repeat(64)}`,
@@ -906,6 +926,8 @@ const liveClient: StackGraphClient = {
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   connectGitHubInstallation: (body) =>
     req("/admin/github/installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  startGitHubInstallationSetup: (body) =>
+    req("/admin/github/installations/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),

@@ -1,6 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 import time
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import FastAPI
@@ -389,6 +390,40 @@ class StubReadModels:
             external_account_key=f"github:installation:{request.installation_id}",
             scopes=["contents:read", "metadata:read"], status="CONNECTED",
             created_at=NOW, updated_at=NOW,
+        )
+
+    async def begin_github_installation_setup(
+        self, *, state_hash, return_to, expires_at, tenant_id, actor_key,
+    ):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        self.github_setup_state_hash = state_hash
+        self.github_setup_return_to = return_to
+        self.github_setup_expires_at = expires_at
+
+    async def validate_github_installation_setup(self, *, state_hash, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        assert state_hash == self.github_setup_state_hash
+        return self.github_setup_return_to
+
+    async def complete_hosted_github_installation(
+        self, *, state_hash, installation_id, account_login, account_id, target_type,
+        scopes, tenant_id, actor_key,
+    ):
+        assert state_hash == self.github_setup_state_hash
+        self.hosted_installation = {
+            "installation_id": installation_id,
+            "account_login": account_login,
+            "account_id": account_id,
+            "target_type": target_type,
+            "scopes": scopes,
+        }
+        return Connector(
+            id=UUID("00000000-0000-4000-8000-000000000b04"), provider="GITHUB_APP",
+            display_name=f"{account_login} GitHub installation",
+            external_account_key=f"github:installation:{installation_id}",
+            scopes=scopes, status="CONNECTED", created_at=NOW, updated_at=NOW,
         )
 
     async def update_connector(self, connector_id, request, *, tenant_id, actor_key):
@@ -1016,6 +1051,7 @@ def test_admin_routes_require_admin_capability() -> None:
             "POST", "/api/v1/admin/github/installations",
             {"installation_id": "123456", "pilot_manual_binding_acknowledged": True},
         ),
+        ("POST", "/api/v1/admin/github/installations/setup", {"return_to": "/admin"}),
         ("GET", "/api/v1/admin/ai-configuration", None),
         ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
         ("DELETE", "/api/v1/admin/ai-configuration/key", None),
@@ -1140,6 +1176,88 @@ def test_manual_github_installation_requires_pilot_acknowledgement() -> None:
         json={"installation_id": "12345678", "display_name": "Acme engineering"},
     ))
     assert response.status_code == 422
+
+
+class StubGitHubAppSetupClient:
+    enabled = True
+
+    def __init__(self) -> None:
+        self.state = ""
+
+    def installation_url(self, state: str) -> str:
+        self.state = state
+        return f"https://github.com/apps/stackgraph/installations/new?state={state}"
+
+    async def verify_installation(self, *, code: str, installation_id: str):
+        assert code == "oauth-code"
+        return SimpleNamespace(
+            installation_id=installation_id,
+            account_login="acme",
+            account_id=42,
+            target_type="Organization",
+            permissions=("contents:read", "metadata:read"),
+        )
+
+
+def test_hosted_github_setup_binds_verified_installation_and_redirects() -> None:
+    app, store = _signed_app()
+    github = StubGitHubAppSetupClient()
+    app.state.github_app_client = github
+    authorization = {"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"}
+    started = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/admin/github/installations/setup",
+        headers=authorization,
+        json={"return_to": "/admin?section=connections"},
+    ))
+    assert started.status_code == 201
+    assert started.json()["setup_url"].startswith("https://github.com/apps/stackgraph/")
+    assert github.state
+    assert store.github_setup_state_hash.startswith("sha256:")
+
+    completed = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/admin/github/installations/setup/callback",
+        headers=authorization,
+        params={
+            "code": "oauth-code",
+            "state": github.state,
+            "installation_id": "12345678",
+            "setup_action": "install",
+        },
+        follow_redirects=False,
+    ))
+    assert completed.status_code == 303
+    assert completed.headers["location"] == (
+        "/admin?section=connections&github=connected&installation_id=12345678"
+    )
+    assert store.hosted_installation == {
+        "installation_id": "12345678",
+        "account_login": "acme",
+        "account_id": 42,
+        "target_type": "Organization",
+        "scopes": ["contents:read", "metadata:read"],
+    }
+
+
+def test_manual_github_binding_can_be_disabled_after_hosted_rollout() -> None:
+    app, _ = app_with_stubs(Settings(
+        environment="test",
+        auth_mode="signed_session",
+        auth_session_secret=SECRET,
+        github_manual_binding_enabled=False,
+    ))
+    response = asyncio.run(request(
+        app,
+        "POST",
+        "/api/v1/admin/github/installations",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"installation_id": "12345678", "pilot_manual_binding_acknowledged": True},
+    ))
+    assert response.status_code == 404
+    assert response.json()["code"] == "GITHUB_MANUAL_BINDING_DISABLED"
 
 
 def test_service_status_is_admin_visible() -> None:

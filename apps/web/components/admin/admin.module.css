@@ -557,6 +557,25 @@
 .metricGrid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.metricGrid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sg-space-2);
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-control);
+}
+.metricGrid dt {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.metricGrid dd {
+  margin: 0;
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-evidence);
+}
 .textarea {
   min-block-size: 84px;
   resize: vertical;

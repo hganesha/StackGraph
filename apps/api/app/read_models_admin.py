@@ -47,6 +47,7 @@ from app.models import (
     InternalCatalogComponentSummary,
     CalibrationCorpusPublishRequest,
     CalibrationCorpusSummary,
+    CalibrationObservedMetrics,
     EcosystemAdmissionEvaluateRequest,
     EcosystemAdmissionSummary,
     EcosystemName,
@@ -734,32 +735,175 @@ class AdminReadModelsMixin:
     ) -> Connector:
         if tenant_id is None:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
-        installation_id = request.installation_id
+        async with self.database.session(tenant_id) as connection:
+            row = await self._connect_github_installation(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                installation_id=request.installation_id,
+                display_name=request.display_name,
+                scopes=["contents:read", "metadata:read"],
+                binding_mode="MANUAL_PILOT",
+                audit_detail={
+                    "pilot_manual_binding_acknowledged": request.pilot_manual_binding_acknowledged,
+                },
+            )
+        return self._connector(row)
+
+    async def begin_github_installation_setup(
+        self,
+        *,
+        state_hash: str,
+        return_to: str,
+        expires_at: datetime,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> None:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                """
+                DELETE FROM github_installation_setup
+                WHERE tenant_id=%s AND consumed_at IS NULL AND expires_at<now()
+                """,
+                (tenant_id,),
+            )
+            await connection.execute(
+                """
+                INSERT INTO github_installation_setup(
+                  tenant_id,actor_key,state_hash,return_to,expires_at
+                ) VALUES (%s,%s,%s,%s,%s)
+                """,
+                (tenant_id, actor_key, state_hash, return_to, expires_at),
+            )
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="github_installation.setup_started",
+                target_kind="github_installation_setup",
+                target_id=state_hash,
+                detail={"expires_at": expires_at.isoformat()},
+            )
+
+    async def validate_github_installation_setup(
+        self,
+        *,
+        state_hash: str,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> str:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT actor_key,return_to,expires_at,consumed_at
+                FROM github_installation_setup
+                WHERE state_hash=%s
+                """,
+                (state_hash,),
+            )
+            setup = await cursor.fetchone()
+            self._validate_github_setup_row(setup, actor_key=actor_key)
+            return str(setup["return_to"])
+
+    async def complete_hosted_github_installation(
+        self,
+        *,
+        state_hash: str,
+        installation_id: str,
+        account_login: str,
+        account_id: int,
+        target_type: str,
+        scopes: list[str],
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT actor_key,return_to,expires_at,consumed_at
+                FROM github_installation_setup
+                WHERE state_hash=%s
+                FOR UPDATE
+                """,
+                (state_hash,),
+            )
+            setup = await cursor.fetchone()
+            self._validate_github_setup_row(setup, actor_key=actor_key)
+            await connection.execute(
+                """
+                UPDATE github_installation_setup
+                SET consumed_at=now(),installation_id=%s
+                WHERE state_hash=%s AND consumed_at IS NULL
+                """,
+                (installation_id, state_hash),
+            )
+            row = await self._connect_github_installation(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                installation_id=installation_id,
+                display_name=f"{account_login} GitHub installation",
+                scopes=scopes,
+                binding_mode="HOSTED_SETUP",
+                audit_detail={
+                    "github_account_login": account_login,
+                    "github_account_id": account_id,
+                    "github_target_type": target_type,
+                    "setup_state_hash": state_hash,
+                },
+            )
+        return self._connector(row)
+
+    @staticmethod
+    def _validate_github_setup_row(setup: Any, *, actor_key: str) -> None:
+        if setup is None or setup["actor_key"] != actor_key:
+            raise APIError(401, "GITHUB_SETUP_STATE_INVALID", "The GitHub setup state is invalid.")
+        if setup["consumed_at"] is not None:
+            raise APIError(409, "GITHUB_SETUP_STATE_REPLAYED", "The GitHub setup state has already been used.")
+        if setup["expires_at"] <= datetime.now(UTC):
+            raise APIError(410, "GITHUB_SETUP_STATE_EXPIRED", "The GitHub setup state has expired.")
+
+    async def _connect_github_installation(
+        self,
+        connection: Any,
+        *,
+        tenant_id: UUID,
+        actor_key: str,
+        installation_id: str,
+        display_name: str | None,
+        scopes: list[str],
+        binding_mode: str,
+        audit_detail: dict[str, Any],
+    ) -> Any:
         external_account_key = f"github:installation:{installation_id}"
         credential_reference = f"github-app://installation/{installation_id}"
-        display_name = request.display_name or f"GitHub installation {installation_id}"
-        scopes = ["contents:read", "metadata:read"]
+        normalized_display_name = display_name or f"GitHub installation {installation_id}"
 
-        async with self.database.session(tenant_id) as connection:
-            existing = await connection.execute(
-                "SELECT 1 FROM connector WHERE provider='GITHUB_APP' AND external_account_key=%s",
-                (external_account_key,),
+        existing = await connection.execute(
+            "SELECT 1 FROM connector WHERE provider='GITHUB_APP' AND external_account_key=%s",
+            (external_account_key,),
+        )
+        if await existing.fetchone() is not None:
+            raise APIError(
+                409, "CONNECTOR_EXISTS", "This GitHub App installation is already connected.",
+                {"installation_id": installation_id},
             )
-            if await existing.fetchone() is not None:
-                raise APIError(
-                    409, "CONNECTOR_EXISTS", "This GitHub App installation is already connected.",
-                    {"installation_id": installation_id},
-                )
-            policy_cursor = await connection.execute(
-                "SELECT cadence,enabled FROM scan_policy WHERE tenant_id=%s", (tenant_id,),
-            )
-            policy = await policy_cursor.fetchone()
-            cadence = policy["cadence"] if policy is not None else "DAILY"
-            schedule_enabled = bool(policy["enabled"] if policy is not None else True) and cadence != "MANUAL"
-            cadence_seconds = {
-                "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800, "MANUAL": 86400,
-            }[cadence]
-            source_cursor = await connection.execute(
+        policy_cursor = await connection.execute(
+            "SELECT cadence,enabled FROM scan_policy WHERE tenant_id=%s", (tenant_id,),
+        )
+        policy = await policy_cursor.fetchone()
+        cadence = policy["cadence"] if policy is not None else "DAILY"
+        schedule_enabled = bool(policy["enabled"] if policy is not None else True) and cadence != "MANUAL"
+        cadence_seconds = {
+            "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800, "MANUAL": 86400,
+        }[cadence]
+        source_cursor = await connection.execute(
                 """
                 INSERT INTO source_system(tenant_id,source_key,kind,base_uri,metadata)
                 VALUES (%s,'github-app','GITHUB','https://api.github.com',%s::jsonb)
@@ -769,10 +913,10 @@ class AdminReadModelsMixin:
                 """,
                 (tenant_id, json.dumps({"provider": "github", "authentication": "GITHUB_APP_INSTALLATION"})),
             )
-            source = await source_cursor.fetchone()
-            assert source is not None
-            try:
-                account_cursor = await connection.execute(
+        source = await source_cursor.fetchone()
+        assert source is not None
+        try:
+            account_cursor = await connection.execute(
                     """
                     INSERT INTO connector_account(
                       tenant_id,source_system_id,external_account_key,credential_reference,
@@ -785,16 +929,16 @@ class AdminReadModelsMixin:
                     """,
                     (tenant_id, source["id"], external_account_key, credential_reference, json.dumps(scopes)),
                 )
-            except UniqueViolation as error:
-                if error.diag.constraint_name == "uq_github_installation_tenant":
-                    raise APIError(
-                        409, "GITHUB_INSTALLATION_IN_USE",
-                        "This GitHub App installation is already bound to another workspace.",
-                    ) from error
-                raise
-            account = await account_cursor.fetchone()
-            assert account is not None
-            target_cursor = await connection.execute(
+        except UniqueViolation as error:
+            if error.diag.constraint_name == "uq_github_installation_tenant":
+                raise APIError(
+                    409, "GITHUB_INSTALLATION_IN_USE",
+                    "This GitHub App installation is already bound to another workspace.",
+                ) from error
+            raise
+        account = await account_cursor.fetchone()
+        assert account is not None
+        target_cursor = await connection.execute(
                 """
                 INSERT INTO ingest_target(
                   tenant_id,source_system_id,connector_account_id,target_kind,target_key,
@@ -813,9 +957,9 @@ class AdminReadModelsMixin:
                     }),
                 ),
             )
-            target = await target_cursor.fetchone()
-            assert target is not None
-            connector_cursor = await connection.execute(
+        target = await target_cursor.fetchone()
+        assert target is not None
+        connector_cursor = await connection.execute(
                 """
                 INSERT INTO connector(
                   tenant_id,provider,display_name,external_account_key,credential_reference,
@@ -824,19 +968,19 @@ class AdminReadModelsMixin:
                 RETURNING *
                 """,
                 (
-                    tenant_id, display_name, external_account_key, credential_reference, scopes,
+                    tenant_id, normalized_display_name, external_account_key, credential_reference, scopes,
                     json.dumps({
                         "connection_mode": "GITHUB_APP_INSTALLATION",
-                        "binding_mode": "MANUAL_PILOT",
+                        "binding_mode": binding_mode,
                         "installation_id": installation_id,
                         "ingest_target_id": str(target["id"]),
                     }),
                     actor_key,
                 ),
             )
-            row = await connector_cursor.fetchone()
-            assert row is not None
-            await connection.execute(
+        row = await connector_cursor.fetchone()
+        assert row is not None
+        await connection.execute(
                 """
                 INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
                 SELECT %s,%s,'MANUAL',jsonb_build_object('connector_id',%s::text)
@@ -847,17 +991,17 @@ class AdminReadModelsMixin:
                 """,
                 (tenant_id, target["id"], str(row["id"]), target["id"]),
             )
-            await self._write_admin_audit(
-                connection, tenant_id=tenant_id, actor_key=actor_key,
-                action="github_installation.connect", target_kind="connector", target_id=row["id"],
-                detail={
-                    "installation_id": installation_id,
-                    "ingest_target_id": str(target["id"]),
-                    "binding_mode": "MANUAL_PILOT",
-                    "pilot_manual_binding_acknowledged": request.pilot_manual_binding_acknowledged,
-                },
-            )
-        return self._connector(row)
+        await self._write_admin_audit(
+            connection, tenant_id=tenant_id, actor_key=actor_key,
+            action="github_installation.connect", target_kind="connector", target_id=row["id"],
+            detail={
+                "installation_id": installation_id,
+                "ingest_target_id": str(target["id"]),
+                "binding_mode": binding_mode,
+                **audit_detail,
+            },
+        )
+        return row
 
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
@@ -1148,14 +1292,6 @@ class AdminReadModelsMixin:
         ):
             raise APIError(422, "INVALID_CASE_FINGERPRINT", "Calibration cases require sha256 fingerprints.")
         case_fingerprints = sorted(set(request.case_fingerprints))
-        metrics = CalibrationMetrics(
-            candidate_precision=request.candidate_precision,
-            recommendation_acceptance=request.recommendation_acceptance,
-            validation_success=request.validation_success,
-            affected_scope_mae=request.affected_scope_mae,
-            effort_accuracy=request.effort_accuracy,
-            reviewed_cases=len(case_fingerprints),
-        )
         thresholds = CalibrationThresholds(
             minimum_candidate_precision=request.minimum_candidate_precision,
             minimum_recommendation_acceptance=request.minimum_recommendation_acceptance,
@@ -1164,31 +1300,34 @@ class AdminReadModelsMixin:
             minimum_effort_accuracy=request.minimum_effort_accuracy,
             minimum_reviewed_cases=request.minimum_reviewed_cases,
         )
-        result = evaluate_promotion_gate(metrics, thresholds)
-        corpus_fingerprint = sha256_fingerprint({
-            "corpus_key": request.corpus_key,
-            "version": request.version,
-            "cases": case_fingerprints,
-        })
         async with self.database.session(tenant_id) as connection:
-            case_cursor = await connection.execute(
-                """
-                SELECT analysis_fingerprint FROM modernization_candidate
-                WHERE analysis_fingerprint=ANY(%s::text[]) AND review_state<>'UNREVIEWED'
-                UNION
-                SELECT analysis_fingerprint FROM modernization_recommendation
-                WHERE analysis_fingerprint=ANY(%s::text[]) AND review_state<>'UNREVIEWED'
-                """,
-                (case_fingerprints, case_fingerprints),
+            metrics, case_manifest = await self._derive_calibration_metrics(
+                connection, case_fingerprints,
             )
-            found_cases = {row["analysis_fingerprint"] for row in await case_cursor.fetchall()}
-            missing_cases = sorted(set(case_fingerprints) - found_cases)
-            if missing_cases:
-                raise APIError(
-                    422, "CALIBRATION_CASE_NOT_REVIEWED",
-                    "Calibration cases must reference reviewed candidate or recommendation fingerprints.",
-                    {"case_fingerprints": missing_cases},
-                )
+            result = evaluate_promotion_gate(metrics, thresholds)
+            metrics_source_version = "persisted-review-outcomes/v1"
+            corpus_fingerprint = sha256_fingerprint({
+                "corpus_key": request.corpus_key,
+                "version": request.version,
+                "case_manifest": case_manifest,
+                "metrics_source_version": metrics_source_version,
+            })
+            existing_cursor = await connection.execute(
+                """
+                SELECT corpus_fingerprint FROM modernization_calibration_corpus
+                WHERE corpus_key=%s AND version=%s
+                """,
+                (request.corpus_key, request.version),
+            )
+            existing = await existing_cursor.fetchone()
+            if existing is not None:
+                if existing["corpus_fingerprint"] != corpus_fingerprint:
+                    raise APIError(
+                        409,
+                        "CALIBRATION_VERSION_IMMUTABLE",
+                        "This calibration version already identifies a different evidence manifest.",
+                    )
+                return await self._modernization_governance_state(connection)
             await connection.execute(
                 "UPDATE modernization_calibration_corpus SET status='RETIRED',updated_at=now() WHERE corpus_key=%s AND status='ACTIVE'",
                 (request.corpus_key,),
@@ -1198,17 +1337,9 @@ class AdminReadModelsMixin:
                 INSERT INTO modernization_calibration_corpus(
                   tenant_id,corpus_key,version,status,case_count,case_fingerprints,
                   thresholds,observed_metrics,corpus_fingerprint,promotion_passed,
-                  promotion_failures,evaluation_fingerprint,evaluated_at,created_by
-                ) VALUES (%s,%s,%s,'ACTIVE',%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,now(),%s)
-                ON CONFLICT(tenant_id,corpus_key,version) DO UPDATE SET
-                  status='ACTIVE',case_count=EXCLUDED.case_count,
-                  case_fingerprints=EXCLUDED.case_fingerprints,thresholds=EXCLUDED.thresholds,
-                  observed_metrics=EXCLUDED.observed_metrics,
-                  corpus_fingerprint=EXCLUDED.corpus_fingerprint,
-                  promotion_passed=EXCLUDED.promotion_passed,
-                  promotion_failures=EXCLUDED.promotion_failures,
-                  evaluation_fingerprint=EXCLUDED.evaluation_fingerprint,
-                  evaluated_at=now(),updated_at=now()
+                  promotion_failures,evaluation_fingerprint,evaluated_at,created_by,
+                  case_manifest,metrics_source_version
+                ) VALUES (%s,%s,%s,'ACTIVE',%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,now(),%s,%s::jsonb,%s)
                 RETURNING id
                 """,
                 (
@@ -1217,6 +1348,7 @@ class AdminReadModelsMixin:
                     json.dumps({field: getattr(thresholds, field) for field in thresholds.__dataclass_fields__}),
                     json.dumps({field: getattr(metrics, field) for field in metrics.__dataclass_fields__}),
                     corpus_fingerprint, result.passed, list(result.failures), result.fingerprint, actor_key,
+                    json.dumps(case_manifest), metrics_source_version,
                 ),
             )
             corpus_id = (await cursor.fetchone())["id"]
@@ -1253,6 +1385,139 @@ class AdminReadModelsMixin:
                 detail={"promotion_passed": result.passed, "failures": list(result.failures)},
             )
             return await self._modernization_governance_state(connection)
+
+    async def _derive_calibration_metrics(
+        self,
+        connection: Any,
+        case_fingerprints: list[str],
+    ) -> tuple[CalibrationMetrics, list[dict[str, Any]]]:
+        candidate_cursor = await connection.execute(
+            """
+            SELECT id,analysis_fingerprint,source_revision,input_fingerprint,review_state
+            FROM modernization_candidate
+            WHERE analysis_fingerprint=ANY(%s::text[])
+              AND review_state<>'UNREVIEWED' AND stale_at IS NULL
+            """,
+            (case_fingerprints,),
+        )
+        candidate_rows = await candidate_cursor.fetchall()
+        recommendation_cursor = await connection.execute(
+            """
+            SELECT recommendation.id,recommendation.analysis_fingerprint,
+                   recommendation.source_revision,recommendation.input_fingerprint,
+                   recommendation.review_state,recommendation.affected_call_sites,
+                   recommendation.affected_files,recommendation.estimated_effort,
+                   outcome.id validation_outcome_id,outcome.validation_status,
+                   outcome.actual_call_sites,outcome.actual_files,outcome.actual_effort,
+                   outcome.reported_at
+            FROM modernization_recommendation recommendation
+            LEFT JOIN LATERAL (
+              SELECT validation.* FROM modernization_validation_outcome validation
+              WHERE validation.modernization_recommendation_id=recommendation.id
+              ORDER BY validation.reported_at DESC,validation.id DESC LIMIT 1
+            ) outcome ON true
+            WHERE recommendation.analysis_fingerprint=ANY(%s::text[])
+              AND recommendation.review_state<>'UNREVIEWED'
+              AND recommendation.stale_at IS NULL
+            """,
+            (case_fingerprints,),
+        )
+        recommendation_rows = await recommendation_cursor.fetchall()
+        found = [
+            *(str(row["analysis_fingerprint"]) for row in candidate_rows),
+            *(str(row["analysis_fingerprint"]) for row in recommendation_rows),
+        ]
+        duplicate_fingerprints = sorted({fingerprint for fingerprint in found if found.count(fingerprint) > 1})
+        if duplicate_fingerprints:
+            raise APIError(
+                422,
+                "CALIBRATION_CASE_AMBIGUOUS",
+                "A calibration fingerprint must identify exactly one reviewed analysis.",
+                {"case_fingerprints": duplicate_fingerprints},
+            )
+        missing_cases = sorted(set(case_fingerprints) - set(found))
+        if missing_cases:
+            raise APIError(
+                422,
+                "CALIBRATION_CASE_NOT_REVIEWED",
+                "Calibration cases must reference current reviewed candidate or recommendation fingerprints.",
+                {"case_fingerprints": missing_cases},
+            )
+
+        candidate_precision = (
+            sum(row["review_state"] == "CONFIRMED" for row in candidate_rows) / len(candidate_rows)
+            if candidate_rows else None
+        )
+        recommendation_acceptance = (
+            sum(row["review_state"] == "ACCEPTED" for row in recommendation_rows)
+            / len(recommendation_rows)
+            if recommendation_rows else None
+        )
+        accepted = [row for row in recommendation_rows if row["review_state"] == "ACCEPTED"]
+        validations_complete = bool(accepted) and all(row["validation_outcome_id"] is not None for row in accepted)
+        validation_success = (
+            sum(row["validation_status"] == "SUCCEEDED" for row in accepted) / len(accepted)
+            if validations_complete else None
+        )
+        scope_complete = validations_complete and all(
+            row["actual_call_sites"] is not None and row["actual_files"] is not None
+            for row in accepted
+        )
+        scope_errors: list[float] = []
+        if scope_complete:
+            for row in accepted:
+                call_site_error = abs(row["actual_call_sites"] - row["affected_call_sites"]) / max(
+                    row["actual_call_sites"], 1,
+                )
+                file_error = abs(row["actual_files"] - row["affected_files"]) / max(
+                    row["actual_files"], 1,
+                )
+                scope_errors.append((call_site_error + file_error) / 2)
+        affected_scope_mae = sum(scope_errors) / len(scope_errors) if scope_errors else None
+        effort_complete = validations_complete and all(
+            row["actual_effort"] not in {None, "UNKNOWN"} for row in accepted
+        )
+        effort_accuracy = (
+            sum(row["actual_effort"] == row["estimated_effort"] for row in accepted) / len(accepted)
+            if effort_complete else None
+        )
+
+        manifest: list[dict[str, Any]] = []
+        for row in candidate_rows:
+            manifest.append({
+                "kind": "CANDIDATE",
+                "analysis_fingerprint": row["analysis_fingerprint"],
+                "analysis_id": str(row["id"]),
+                "source_revision": row["source_revision"],
+                "input_fingerprint": row["input_fingerprint"],
+                "review_state": row["review_state"],
+            })
+        for row in recommendation_rows:
+            manifest.append({
+                "kind": "RECOMMENDATION",
+                "analysis_fingerprint": row["analysis_fingerprint"],
+                "analysis_id": str(row["id"]),
+                "source_revision": row["source_revision"],
+                "input_fingerprint": row["input_fingerprint"],
+                "review_state": row["review_state"],
+                "validation": ({
+                    "id": str(row["validation_outcome_id"]),
+                    "status": row["validation_status"],
+                    "actual_call_sites": row["actual_call_sites"],
+                    "actual_files": row["actual_files"],
+                    "actual_effort": row["actual_effort"],
+                    "reported_at": row["reported_at"].isoformat(),
+                } if row["validation_outcome_id"] is not None else None),
+            })
+        manifest.sort(key=lambda item: (item["analysis_fingerprint"], item["kind"]))
+        return CalibrationMetrics(
+            candidate_precision=candidate_precision,
+            recommendation_acceptance=recommendation_acceptance,
+            validation_success=validation_success,
+            affected_scope_mae=affected_scope_mae,
+            effort_accuracy=effort_accuracy,
+            reviewed_cases=len(manifest),
+        ), manifest
 
     async def evaluate_ecosystem_admission(
         self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
@@ -1467,6 +1732,8 @@ class AdminReadModelsMixin:
                 id=calibration["id"], corpus_key=calibration["corpus_key"],
                 version=calibration["version"], case_count=calibration["case_count"],
                 corpus_fingerprint=calibration["corpus_fingerprint"],
+                observed_metrics=CalibrationObservedMetrics(**calibration["observed_metrics"]),
+                metrics_source_version=calibration["metrics_source_version"],
                 promotion_passed=calibration["promotion_passed"],
                 promotion_failures=list(calibration["promotion_failures"]),
                 evaluation_fingerprint=calibration["evaluation_fingerprint"],

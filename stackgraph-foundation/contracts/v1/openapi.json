@@ -1415,31 +1415,6 @@
       "CalibrationCorpusPublishRequest": {
         "additionalProperties": false,
         "properties": {
-          "affected_scope_mae": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Affected Scope Mae"
-          },
-          "candidate_precision": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Candidate Precision"
-          },
           "case_fingerprints": {
             "items": {
               "type": "string"
@@ -1453,19 +1428,6 @@
             "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
             "title": "Corpus Key",
             "type": "string"
-          },
-          "effort_accuracy": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Effort Accuracy"
           },
           "maximum_affected_scope_mae": {
             "default": 0.25,
@@ -1506,32 +1468,6 @@
             "minimum": 0.0,
             "title": "Minimum Validation Success",
             "type": "number"
-          },
-          "recommendation_acceptance": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Recommendation Acceptance"
-          },
-          "validation_success": {
-            "anyOf": [
-              {
-                "maximum": 1.0,
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Validation Success"
           },
           "version": {
             "minLength": 1,
@@ -1576,6 +1512,13 @@
             "title": "Id",
             "type": "string"
           },
+          "metrics_source_version": {
+            "title": "Metrics Source Version",
+            "type": "string"
+          },
+          "observed_metrics": {
+            "$ref": "#/components/schemas/CalibrationObservedMetrics"
+          },
           "promotion_failures": {
             "items": {
               "type": "string"
@@ -1598,12 +1541,93 @@
           "version",
           "case_count",
           "corpus_fingerprint",
+          "observed_metrics",
+          "metrics_source_version",
           "promotion_passed",
           "promotion_failures",
           "evaluation_fingerprint",
           "evaluated_at"
         ],
         "title": "CalibrationCorpusSummary",
+        "type": "object"
+      },
+      "CalibrationObservedMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_scope_mae": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Scope Mae"
+          },
+          "candidate_precision": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Precision"
+          },
+          "effort_accuracy": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort Accuracy"
+          },
+          "recommendation_acceptance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Acceptance"
+          },
+          "reviewed_cases": {
+            "minimum": 0.0,
+            "title": "Reviewed Cases",
+            "type": "integer"
+          },
+          "validation_success": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Success"
+          }
+        },
+        "required": [
+          "reviewed_cases"
+        ],
+        "title": "CalibrationObservedMetrics",
         "type": "object"
       },
       "CapabilityDefinitionModel": {
@@ -2945,6 +2969,40 @@
           "pilot_manual_binding_acknowledged"
         ],
         "title": "GitHubInstallationConnectRequest",
+        "type": "object"
+      },
+      "GitHubInstallationSetupRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "return_to": {
+            "default": "/admin",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Return To",
+            "type": "string"
+          }
+        },
+        "title": "GitHubInstallationSetupRequest",
+        "type": "object"
+      },
+      "GitHubInstallationSetupResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "setup_url": {
+            "title": "Setup Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_url",
+          "expires_at"
+        ],
+        "title": "GitHubInstallationSetupResponse",
         "type": "object"
       },
       "GitHubRepositoryConnectRequest": {
@@ -7384,6 +7442,127 @@
           }
         },
         "summary": "Connect Github Installation",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/github/installations/setup": {
+      "post": {
+        "operationId": "startGitHubInstallationSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GitHubInstallationSetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GitHubInstallationSetupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Github Installation Setup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/github/installations/setup/callback": {
+      "get": {
+        "operationId": "completeGitHubInstallationSetup",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 16,
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[1-9][0-9]{0,19}$",
+              "title": "Installation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "setup_action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(install|update)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Setup Action"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Github Installation Setup",
         "tags": [
           "admin"
         ]

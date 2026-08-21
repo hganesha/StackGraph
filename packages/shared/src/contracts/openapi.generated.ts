@@ -247,19 +247,14 @@ export interface BusinessMapSummary {
 }
 
 export interface CalibrationCorpusPublishRequest {
-  affected_scope_mae?: number | null;
-  candidate_precision?: number | null;
   case_fingerprints: Array<string>;
   corpus_key?: string;
-  effort_accuracy?: number | null;
   maximum_affected_scope_mae?: number;
   minimum_candidate_precision?: number;
   minimum_effort_accuracy?: number;
   minimum_recommendation_acceptance?: number;
   minimum_reviewed_cases?: number;
   minimum_validation_success?: number;
-  recommendation_acceptance?: number | null;
-  validation_success?: number | null;
   version: string;
 }
 
@@ -270,9 +265,20 @@ export interface CalibrationCorpusSummary {
   evaluated_at: string;
   evaluation_fingerprint: string;
   id: string;
+  metrics_source_version: string;
+  observed_metrics: CalibrationObservedMetrics;
   promotion_failures: Array<string>;
   promotion_passed: boolean;
   version: string;
+}
+
+export interface CalibrationObservedMetrics {
+  affected_scope_mae?: number | null;
+  candidate_precision?: number | null;
+  effort_accuracy?: number | null;
+  recommendation_acceptance?: number | null;
+  reviewed_cases: number;
+  validation_success?: number | null;
 }
 
 export interface CapabilityDefinitionModel {
@@ -498,6 +504,15 @@ export interface GitHubInstallationConnectRequest {
   display_name?: string | null;
   installation_id: string;
   pilot_manual_binding_acknowledged: true;
+}
+
+export interface GitHubInstallationSetupRequest {
+  return_to?: string;
+}
+
+export interface GitHubInstallationSetupResponse {
+  expires_at: string;
+  setup_url: string;
 }
 
 export interface GitHubRepositoryConnectRequest {
