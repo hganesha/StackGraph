@@ -14,6 +14,7 @@ import {
   type ModernizationPolicySummary,
 } from "@stackgraph/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { DeterministicRulesEditor } from "./DeterministicRulesEditor";
 import styles from "./admin.module.css";
 
 type SecurityStatus = "CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN";
@@ -351,6 +352,7 @@ function EcosystemAdmissions({ state }: { state: ModernizationGovernanceState })
 }
 
 export function GovernanceSection() {
+  const [view, setView] = useState<"rules" | "eligibility" | "catalog" | "calibration" | "ecosystems">("rules");
   const governance = useQuery({
     queryKey: ["admin", "modernization-governance"],
     queryFn: () => stackGraphClient.getModernizationGovernance(),
@@ -361,13 +363,45 @@ export function GovernanceSection() {
   if (!governance.data) return <p className={styles.empty}>Governance state is unavailable.</p>;
 
   const state = governance.data;
+  const views = [
+    { key: "rules", label: "Insight rules", detail: "Finding logic" },
+    { key: "eligibility", label: "Eligibility", detail: "Ranking policy" },
+    { key: "catalog", label: "Replacements", detail: "Internal catalog" },
+    { key: "calibration", label: "Calibration", detail: "Promotion gate" },
+    { key: "ecosystems", label: "Ecosystems", detail: "Expansion gates" },
+  ] as const;
   return (
     <div className={styles.section}>
-      <p className={styles.sectionNote}>Govern the evidence and policy boundaries used by modernization ranking. Policy and catalog changes are audited and trigger fingerprinted estate reanalysis.</p>
-      <PolicyEditor key={`${state.active_policy?.id ?? "new"}:${state.active_policy?.configuration_fingerprint ?? "none"}`} policy={state.active_policy} />
-      <InternalCatalogEditor state={state} />
-      <CalibrationEditor key={state.active_calibration?.evaluation_fingerprint ?? "new"} state={state} />
-      <EcosystemAdmissions state={state} />
+      <p className={styles.sectionNote}>Govern the evidence and policy boundaries used by modernization ranking. Choose one policy area to review or change; updates remain audited and trigger fingerprinted estate reanalysis.</p>
+      <div className={styles.subtabs} role="tablist" aria-label="Modernization governance areas">
+        {views.map((item) => (
+          <button
+            key={item.key}
+            id={`governance-tab-${item.key}`}
+            className={`${styles.subtab} ${view === item.key ? styles.subtabActive : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={view === item.key}
+            aria-controls={`governance-panel-${item.key}`}
+            onClick={() => setView(item.key)}
+          >
+            <strong>{item.label}</strong>
+            <small>{item.detail}</small>
+          </button>
+        ))}
+      </div>
+      <div
+        id={`governance-panel-${view}`}
+        className={styles.subtabPanel}
+        role="tabpanel"
+        aria-labelledby={`governance-tab-${view}`}
+      >
+        {view === "rules" ? <DeterministicRulesEditor /> : null}
+        {view === "eligibility" ? <PolicyEditor key={`${state.active_policy?.id ?? "new"}:${state.active_policy?.configuration_fingerprint ?? "none"}`} policy={state.active_policy} /> : null}
+        {view === "catalog" ? <InternalCatalogEditor state={state} /> : null}
+        {view === "calibration" ? <CalibrationEditor key={state.active_calibration?.evaluation_fingerprint ?? "new"} state={state} /> : null}
+        {view === "ecosystems" ? <EcosystemAdmissions state={state} /> : null}
+      </div>
     </div>
   );
 }

@@ -30,6 +30,8 @@ import type {
   ModernizationValidationOutcomeResult,
   Phase3IntelligenceMetrics,
   ModernizationList,
+  DeterministicInsightGovernanceState,
+  DeterministicInsightRuleUpdateRequest,
   CapabilityFootprintList,
   ModernizationScenarioRequest,
   ModernizationScenarioResult,
@@ -102,6 +104,7 @@ import technologyEstateHierarchy from "../fixtures/technology-estate-hierarchy.j
 import capabilityFootprints from "../fixtures/capability-footprints.json";
 import modernizationScenario from "../fixtures/modernization-scenario.json";
 import modernizationGovernance from "../fixtures/modernization-governance.json";
+import deterministicInsightGovernance from "../fixtures/deterministic-insight-governance.json";
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -157,6 +160,8 @@ export interface StackGraphClient {
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getModernizationGovernance(): Promise<ModernizationGovernanceState>;
+  getDeterministicInsightGovernance(): Promise<DeterministicInsightGovernanceState>;
+  updateDeterministicInsightRule(ruleKey: string, body: DeterministicInsightRuleUpdateRequest): Promise<DeterministicInsightGovernanceState>;
   publishModernizationPolicy(body: ModernizationPolicyPublishRequest): Promise<ModernizationGovernanceState>;
   governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
   publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
@@ -204,6 +209,9 @@ let adminAIConfiguration: AIProviderConfiguration = {
 };
 let adminModernizationGovernance = clone(
   modernizationGovernance as ModernizationGovernanceState,
+);
+let adminDeterministicInsightGovernance = clone(
+  deterministicInsightGovernance as DeterministicInsightGovernanceState,
 );
 let adminCodePolicies: TenantCodePolicyState = {
   contract_version: "1.0.0",
@@ -390,6 +398,30 @@ const fixtureClient: StackGraphClient = {
   async getPhase3IntelligenceMetrics() {
     await delay();
     return phase3Metrics as Phase3IntelligenceMetrics;
+  },
+  async getDeterministicInsightGovernance() {
+    await delay();
+    return clone(adminDeterministicInsightGovernance);
+  },
+  async updateDeterministicInsightRule(ruleKey, body) {
+    await delay();
+    adminDeterministicInsightGovernance = {
+      ...adminDeterministicInsightGovernance,
+      rules: adminDeterministicInsightGovernance.rules.map((rule) => rule.rule_key === ruleKey ? {
+        ...rule,
+        enabled: body.enabled,
+        severity: body.severity,
+        minimum_repositories: body.minimum_repositories ?? rule.minimum_repositories,
+        configuration: body.configuration ?? rule.configuration,
+        version: rule.version + 1,
+        updated_by: "fixture-admin",
+        updated_at: new Date().toISOString(),
+      } : rule),
+    };
+    adminDeterministicInsightGovernance.active_rule_count = adminDeterministicInsightGovernance.rules.filter(
+      (rule) => rule.enabled && rule.readiness === "ACTIVE",
+    ).length;
+    return clone(adminDeterministicInsightGovernance);
   },
   async listBusinessMaps() {
     await delay();
@@ -1055,6 +1087,11 @@ const liveClient: StackGraphClient = {
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
   getModernizationGovernance: () => req("/admin/modernization-governance"),
+  getDeterministicInsightGovernance: () => req("/admin/deterministic-insight-governance"),
+  updateDeterministicInsightRule: (ruleKey, body) =>
+    req(`/admin/deterministic-insight-governance/rules/${encodeURIComponent(ruleKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   publishModernizationPolicy: (body) =>
     req("/admin/modernization-governance/policy", {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

@@ -108,6 +108,7 @@
     "2": { "$value": "8px",  "$type": "dimension" },
     "3": { "$value": "12px", "$type": "dimension" },
     "4": { "$value": "16px", "$type": "dimension" },
+    "5": { "$value": "20px", "$type": "dimension" },
     "6": { "$value": "24px", "$type": "dimension" },
     "8": { "$value": "32px", "$type": "dimension" },
     "12": { "$value": "48px", "$type": "dimension" },

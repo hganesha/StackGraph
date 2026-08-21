@@ -318,6 +318,8 @@ export interface ModernizationList {
   page_info: PageInfo;
 }
 
+export type InsightSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO";
+
 export interface CapabilityFootprint {
   capability: EntitySummary;
   application_count: number;
@@ -1101,6 +1103,42 @@ export interface ModernizationGovernanceState {
   internal_components: InternalCatalogComponentSummary[];
   active_calibration?: CalibrationCorpusSummary | null;
   ecosystem_admissions: EcosystemAdmissionSummary[];
+}
+
+export interface DeterministicInsightRuleUpdateRequest {
+  enabled: boolean;
+  severity: InsightSeverity;
+  minimum_repositories?: number;
+  configuration?: Record<string, unknown>;
+  expected_version?: number;
+}
+
+export interface DeterministicInsightRuleSummary {
+  rule_key: string;
+  name: string;
+  description: string;
+  phase: 1 | 2 | 3;
+  readiness: "ACTIVE" | "NEEDS_DATA";
+  enabled: boolean;
+  severity: InsightSeverity;
+  minimum_repositories: number;
+  configuration: Record<string, unknown>;
+  version: number;
+  finding_count: number;
+  missing_inputs: string[];
+  updated_by?: string | null;
+  updated_at?: Timestamp | null;
+}
+
+export interface DeterministicInsightGovernanceState {
+  contract_version: "1.0.0";
+  method_version: string;
+  rules: DeterministicInsightRuleSummary[];
+  active_rule_count: number;
+  needs_data_rule_count: number;
+  finding_count: number;
+  evidence_coverage: number;
+  last_evaluated_at: Timestamp;
 }
 
 // --- Tenant code-policy governance --------------------------------------
