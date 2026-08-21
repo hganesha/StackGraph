@@ -363,6 +363,13 @@ class GitHubAcquisitionTests(unittest.TestCase):
         self.assertEqual(manifest_kind("packages/web/pnpm-lock.yaml"), "PNPM_LOCK")
         self.assertEqual(manifest_kind("packages/web/src/index.tsx"), "TYPESCRIPT_SOURCE")
         self.assertEqual(manifest_kind("README.md"), "REPOSITORY_DOCUMENTATION")
+        self.assertEqual(manifest_kind(".env.example"), "CONFIG_TEMPLATE")
+        self.assertEqual(manifest_kind(".env.production.example"), "CONFIG_TEMPLATE")
+        self.assertEqual(manifest_kind("application.yml"), "APPLICATION_CONFIG")
+        self.assertEqual(manifest_kind("compose.production.yaml"), "DEPLOYMENT_CONFIG")
+        self.assertEqual(manifest_kind("docker-compose.dev.yml"), "DEPLOYMENT_CONFIG")
+        self.assertEqual(manifest_kind("Dockerfile.worker"), "DEPLOYMENT_CONFIG")
+        self.assertEqual(manifest_kind("config/database.properties"), "BUILD_OR_DEPLOYMENT_CONFIG")
         self.assertEqual(manifest_kind_or_none("../index.ts"), "UNSAFE_TARGET")
 
         transport = FakeTransport([])

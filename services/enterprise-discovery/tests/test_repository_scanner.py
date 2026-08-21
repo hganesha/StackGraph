@@ -178,6 +178,82 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(profile_fact["object_value"]["languages"], ["Python"])
         self.assertEqual(profile_fact["assertion_class"], "INFERRED")
 
+    def test_database_inference_correlates_psycopg_import_and_sanitized_config(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "requirements.txt").write_text("psycopg[binary]==3.2.9\n")
+            (root / "main.py").write_text(
+                "import os\nimport psycopg\n"
+                "psycopg.connect(os.environ['DATABASE_URL'])\n"
+            )
+            (root / ".env.example").write_text(
+                "DATABASE_URL=postgresql://billing:do-not-emit@example.test/billing\n"
+            )
+
+            result = scan_repository(request(root))
+
+        database = next(
+            fact for fact in result["facts"]
+            if fact["predicate"] == "USES"
+            and fact.get("object_entity", {}).get("type") == "Database"
+            and fact["object_entity"]["name"] == "PostgreSQL"
+        )
+        self.assertEqual(database["assertion_class"], "DECLARED")
+        self.assertGreaterEqual(database["confidence"], 0.96)
+        self.assertEqual(database["properties"]["engine"], "postgresql")
+        self.assertEqual(database["properties"]["package_dependencies"], ["pypi:psycopg"])
+        self.assertIn("DATABASE_URL", database["properties"]["config_keys"])
+        self.assertTrue(database["properties"]["source_referenced"])
+        self.assertIn("URL_SCHEME", database["properties"]["signal_kinds"])
+        serialized = json.dumps(database)
+        self.assertNotIn("do-not-emit", serialized)
+        self.assertNotIn("billing@example.test", serialized)
+
+    def test_compose_and_terraform_emit_normalized_database_and_storage_technologies(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "compose.production.yaml").write_text(
+                "services:\n"
+                "  db:\n    image: postgres:16\n"
+                "  object-store:\n    image: minio/minio:latest\n"
+            )
+            (root / "infra.tf").write_text(
+                'resource "aws_s3_bucket" "documents" {\n  bucket = "documents"\n}\n'
+            )
+
+            result = scan_repository(request(root))
+
+        resources = {
+            (fact["object_entity"]["type"], fact["object_entity"]["name"]): fact
+            for fact in result["facts"]
+            if fact["predicate"] == "USES"
+            and fact.get("object_entity", {}).get("type") in {"Database", "Storage"}
+        }
+        self.assertIn(("Database", "PostgreSQL"), resources)
+        self.assertIn(("Storage", "S3-compatible object storage"), resources)
+        self.assertIn(("Storage", "Amazon S3"), resources)
+        self.assertEqual(
+            resources[("Storage", "Amazon S3")]["properties"]["providers"], ["aws"],
+        )
+        self.assertIn(
+            "TERRAFORM_RESOURCE",
+            resources[("Storage", "Amazon S3")]["properties"]["signal_kinds"],
+        )
+
+    def test_generic_database_key_without_corroboration_does_not_invent_engine(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".env.example").write_text(
+                "DATABASE_URL=replace-me\nPOSTGRES_ERROR=connection-failed\n"
+            )
+
+            result = scan_repository(request(root))
+
+        self.assertFalse(any(
+            fact.get("object_entity", {}).get("type") == "Database"
+            for fact in result["facts"]
+        ))
+
     def test_monorepo_application_boundary_is_explicitly_provisional(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

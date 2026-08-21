@@ -26,10 +26,11 @@ from .github_client import (
 )
 
 
-ADAPTER_VERSION = "github-repository-snapshot/1.1.0"
+ADAPTER_VERSION = "github-repository-snapshot/1.2.0"
 REPOSITORY_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSTALLATION_ID = re.compile(r"^[0-9]+$")
 GIT_OBJECT_ID = re.compile(r"^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$")
+COMPOSE_FILE = re.compile(r"^(?:docker-)?compose(?:\.[a-z0-9_-]+)*\.ya?ml$", re.I)
 
 EXACT_MANIFEST_NAMES = {
     ".npmrc": "NPM_CONFIG",
@@ -44,6 +45,10 @@ EXACT_MANIFEST_NAMES = {
     "uv.lock": "UV_LOCK",
     "Pipfile": "PIPENV_MANIFEST",
     "Pipfile.lock": "PIPENV_LOCK",
+    ".env.example": "CONFIG_TEMPLATE",
+    ".env.sample": "CONFIG_TEMPLATE",
+    "env.example": "CONFIG_TEMPLATE",
+    "env.sample": "CONFIG_TEMPLATE",
     "stackgraph-runtime.json": "RUNTIME_TRACE",
     "Dockerfile": "DEPLOYMENT_CONFIG",
     "docker-compose.yml": "DEPLOYMENT_CONFIG",
@@ -513,6 +518,20 @@ def manifest_kind(path: str) -> str | None:
     if name in EXACT_MANIFEST_NAMES:
         return EXACT_MANIFEST_NAMES[name]
     lower_name = name.lower()
+    if lower_name == "dockerfile" or lower_name.startswith("dockerfile."):
+        return "DEPLOYMENT_CONFIG"
+    if COMPOSE_FILE.fullmatch(lower_name):
+        return "DEPLOYMENT_CONFIG"
+    if (
+        (lower_name.startswith(".env.") or lower_name.startswith("env."))
+        and lower_name.endswith((".example", ".sample", ".template"))
+    ):
+        return "CONFIG_TEMPLATE"
+    if lower_name in {
+        "application.yml", "application.yaml", "application.properties",
+        "appsettings.json", "config.yml", "config.yaml", "config.json", "config.toml",
+    }:
+        return "APPLICATION_CONFIG"
     if (
         (lower_name == "readme" or lower_name.startswith("readme."))
         and pure_path.suffix.lower() in README_SUFFIXES
@@ -530,7 +549,7 @@ def manifest_kind(path: str) -> str | None:
     if pure_path.suffix.lower() == ".tf":
         return "INFRASTRUCTURE_CONFIG"
     lowered_parts = tuple(part.lower() for part in pure_path.parts)
-    if pure_path.suffix.lower() in {".yaml", ".yml", ".toml"} and any(
+    if pure_path.suffix.lower() in {".yaml", ".yml", ".toml", ".json", ".properties"} and any(
         part in {".github", "workflows", "deploy", "deployment", "k8s", "kubernetes", "config"}
         for part in lowered_parts
     ):
@@ -651,6 +670,17 @@ def manifest_kind_or_none(path: str) -> str | None:
             or name.lower() == "readme"
             or name.lower().startswith("readme.")
             or name.lower().startswith("requirements")
+            or name.lower() == "dockerfile"
+            or name.lower().startswith("dockerfile.")
+            or COMPOSE_FILE.fullmatch(name.lower()) is not None
+            or (
+                (name.lower().startswith(".env.") or name.lower().startswith("env."))
+                and name.lower().endswith((".example", ".sample", ".template"))
+            )
+            or name.lower() in {
+                "application.yml", "application.yaml", "application.properties",
+                "appsettings.json", "config.yml", "config.yaml", "config.json", "config.toml",
+            }
             or PurePosixPath(name).suffix.lower() in SOURCE_SUFFIXES
         ):
             return "UNSAFE_TARGET"

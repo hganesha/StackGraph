@@ -40,6 +40,7 @@ The Git repository is a primary sensor; it is not the product.
 - `seed/categories.json` — technology/business/deployment taxonomy.
 - `seed/capabilities.json` — foundational capability ontology.
 - `seed/technologies.json` — hydrated curated technology nodes from the reference landscape.
+- `seed/oss-core.json` — curated package definitions, aliases, package-family patterns, and classification overlays for OSS dependencies.
 - `seed/relationships.json` — initial semantic/capability relationships.
 - `seed/assessments.json` — initial curated lifecycle/trajectory hypotheses.
 - `seed/source-rows.json` — normalized raw reference rows retained for provenance.

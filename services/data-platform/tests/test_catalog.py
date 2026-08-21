@@ -20,10 +20,36 @@ class CatalogTests(unittest.TestCase):
         cls.catalog = load_catalog(Path(os.environ.get("STACKGRAPH_SEED_DIR", "/seed")))
 
     def test_manifest_counts_match_catalog(self) -> None:
-        self.assertEqual(len(self.catalog.technologies), 192)
+        self.assertEqual(len(self.catalog.technologies), 234)
+        self.assertEqual(len(self.catalog.categories), 44)
         self.assertEqual(len(self.catalog.capabilities), 38)
         self.assertEqual(len(self.catalog.relationships), 101)
         self.assertEqual(len(self.catalog.assessments), 6)
+
+    def test_oss_core_categories_and_package_aliases_are_loaded(self) -> None:
+        categories = {item["id"] for item in self.catalog.categories}
+        self.assertTrue({
+            "js-ts-compiler-transpilation",
+            "build-tools-bundlers",
+            "code-quality-linting",
+            "styling-ui",
+            "frontend-framework-routing",
+            "python-data-backend",
+            "filesystem-path-utilities",
+            "data-algorithm-utilities",
+        }.issubset(categories))
+        technologies = {item["id"]: item for item in self.catalog.technologies}
+        self.assertIn("@babel/helper-*", technologies["babel-code-generation-helpers"]["aliases"])
+        self.assertIn("@rolldown/binding-*", technologies["rolldown-rspack-esbuild-swc"]["aliases"])
+        self.assertEqual(
+            technologies["typescript-eslint-toolchain"]["category_id"],
+            "code-quality-linting",
+        )
+        self.assertEqual(technologies["pandas"]["seed_file"], "oss-core.json")
+        self.assertEqual(
+            technologies["react-router"]["seed_file"],
+            "oss-core.json",
+        )
 
     def test_catalog_bundle_hash_is_stable(self) -> None:
         self.assertEqual(self.catalog.bundle_hash, self.catalog.bundle_hash)

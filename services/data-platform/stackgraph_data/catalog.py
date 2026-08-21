@@ -66,14 +66,56 @@ def _load_json(path: Path) -> Any:
         return json.load(handle)
 
 
+def _merge_records(
+    base: list[JsonObject],
+    additions: list[JsonObject],
+    overrides: list[JsonObject],
+    label: str,
+) -> list[JsonObject]:
+    merged = {str(record["id"]): record for record in base}
+    for override in overrides:
+        record_id = str(override["id"])
+        if record_id not in merged:
+            raise ValueError(f"{label} override references unknown id: {record_id}")
+        merged[record_id] = {**merged[record_id], **override}
+    for addition in additions:
+        record_id = str(addition["id"])
+        if record_id in merged:
+            raise ValueError(f"duplicate {label} id: {record_id}")
+        merged[record_id] = addition
+    return list(merged.values())
+
+
 def load_catalog(seed_dir: Path) -> Catalog:
+    oss_core_path = seed_dir / "oss-core.json"
+    oss_core = _load_json(oss_core_path) if oss_core_path.exists() else {}
     catalog = Catalog(
         seed_dir=seed_dir,
         manifest=_load_json(seed_dir / "seed-manifest.json"),
         domains=_load_json(seed_dir / "domains.json"),
-        categories=_load_json(seed_dir / "categories.json"),
+        categories=_merge_records(
+            _load_json(seed_dir / "categories.json"),
+            oss_core.get("categories", []),
+            oss_core.get("category_overrides", []),
+            "category",
+        ),
         capabilities=_load_json(seed_dir / "capabilities.json"),
-        technologies=_load_json(seed_dir / "technologies.json"),
+        technologies=_merge_records(
+            _load_json(seed_dir / "technologies.json"),
+            [
+                {"seed_file": "oss-core.json", **record}
+                for record in oss_core.get("packages", [])
+            ],
+            [
+                {
+                    **record,
+                    "seed_file": "oss-core.json",
+                    "source_line": None,
+                }
+                for record in oss_core.get("technology_overrides", [])
+            ],
+            "technology",
+        ),
         relationships=_load_json(seed_dir / "relationships.json"),
         assessments=_load_json(seed_dir / "assessments.json"),
         source_rows=_load_json(seed_dir / "source-rows.json"),
