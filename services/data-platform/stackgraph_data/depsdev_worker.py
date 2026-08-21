@@ -26,6 +26,7 @@ from stackgraph_data.depsdev import (
     build_fact_specs,
     normalize_bundle,
 )
+from stackgraph_data.service_heartbeat import record_service_heartbeat
 
 
 EXTRACTOR_KEY = "deps-dev-v3"
@@ -1232,6 +1233,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.poll_seconds < 0:
             parser.error("--poll-seconds must not be negative")
         while True:
+            record_service_heartbeat(
+                database_url, "depsdev", instance_id=args.worker_id,
+                metadata={"poll_seconds": args.poll_seconds},
+            )
             result = run_once(
                 database_url,
                 worker_id=args.worker_id,

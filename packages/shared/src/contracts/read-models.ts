@@ -799,6 +799,26 @@ export interface GitHubRepositoryConnectRequest {
   credential_reference?: "env://GITHUB_TOKEN";
 }
 
+export interface GitHubRepositoryOption {
+  full_name: string;
+  visibility: "public" | "private" | "internal";
+  archived: boolean;
+  default_branch?: string | null;
+}
+
+export interface GitHubRepositoryOptionList {
+  contract_version: "1.0.0";
+  token_configured: boolean;
+  repositories: GitHubRepositoryOption[];
+  truncated: boolean;
+}
+
+export interface GitHubInstallationConnectRequest {
+  /** Public GitHub App installation identifier; no credential material crosses the browser. */
+  installation_id: string;
+  display_name?: string;
+}
+
 export interface ConnectorUpdateRequest {
   display_name?: string;
   status?: ConnectorStatus;
@@ -906,4 +926,35 @@ export interface ScanStatus {
   policy: ScanPolicy;
   quotas: ProviderQuota[];
   recent_jobs: RescanJob[];
+}
+
+export type ServiceState = "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE" | "STOPPING" | "STOPPED";
+export type ServiceCategory = "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
+export type ServiceDesiredState = "RUNNING" | "STOPPED";
+
+export interface ServiceStatus {
+  key: string;
+  name: string;
+  category: ServiceCategory;
+  state: ServiceState;
+  desired_state: ServiceDesiredState;
+  controllable: boolean;
+  management_scope: string;
+  detail: string;
+  configured: boolean;
+  pending: number;
+  running: number;
+  failed: number;
+  last_activity_at?: string | null;
+  last_heartbeat_at?: string | null;
+}
+
+export interface ServiceControlRequest {
+  desired_state: ServiceDesiredState;
+}
+
+export interface ServiceStatusList {
+  contract_version: "1.0.0";
+  as_of: string;
+  services: ServiceStatus[];
 }

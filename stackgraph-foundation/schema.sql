@@ -43,6 +43,26 @@ CREATE TABLE connector_account (
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','DISABLED','REVOKED')), created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE NULLS NOT DISTINCT (tenant_id,source_system_id,external_account_key)
 );
+CREATE UNIQUE INDEX uq_github_installation_tenant ON connector_account(external_account_key)
+  WHERE external_account_key LIKE 'github:installation:%';
+CREATE TABLE service_heartbeat (
+  service_key text PRIMARY KEY CHECK(service_key ~ '^[a-z][a-z0-9-]{1,63}$'),
+  instance_id text NOT NULL CHECK(instance_id <> ''),
+  status text NOT NULL DEFAULT 'RUNNING' CHECK(status IN ('RUNNING','DEGRADED','STOPPING')),
+  metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(metadata)='object'),
+  started_at timestamptz NOT NULL DEFAULT now(),
+  last_heartbeat_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE tenant_service_control (
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  service_key text NOT NULL CHECK(service_key IN ('github-webhook','github-control-loop','projection','intelligence')),
+  desired_state text NOT NULL DEFAULT 'RUNNING' CHECK(desired_state IN ('RUNNING','STOPPED')),
+  updated_by text NOT NULL CHECK(updated_by<>''),created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(tenant_id,service_key)
+);
+CREATE FUNCTION stackgraph_tenant_service_running(requested_tenant_id uuid,requested_service_key text) RETURNS boolean LANGUAGE sql STABLE PARALLEL SAFE AS $$
+ SELECT requested_tenant_id IS NULL OR NOT EXISTS(SELECT 1 FROM tenant_service_control control WHERE control.tenant_id=requested_tenant_id AND control.service_key=requested_service_key AND control.desired_state='STOPPED')
+$$;
 CREATE TABLE package_registry (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid REFERENCES tenant(id), source_system_id uuid NOT NULL REFERENCES source_system(id),
   connector_account_id uuid REFERENCES connector_account(id), registry_key text NOT NULL,
@@ -552,6 +572,7 @@ CREATE INDEX idx_rescan_job_tenant ON rescan_job(tenant_id,created_at DESC,id DE
 CREATE INDEX idx_admin_audit_log_tenant ON admin_audit_log(tenant_id,created_at DESC,id DESC);
 CREATE INDEX idx_auth_token_revocation_expiry ON auth_token_revocation(expires_at);
 CREATE INDEX idx_api_rate_limit_window_expiry ON api_rate_limit_window(window_started_at);
+CREATE INDEX idx_service_heartbeat_freshness ON service_heartbeat(last_heartbeat_at DESC);
 CREATE INDEX idx_identity_assertion_review_queue ON identity_assertion(created_at DESC,id DESC) WHERE review_state='POSSIBLE';
 CREATE INDEX idx_capability_inference_review_queue ON capability_inference(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
 CREATE INDEX idx_duplicate_capability_review_queue ON duplicate_capability_candidate(created_at DESC,id DESC) WHERE review_state='UNREVIEWED';
@@ -572,7 +593,7 @@ CREATE INDEX idx_business_map_revision_map ON business_map_revision(tenant_id,bu
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','auth_token_revocation','api_rate_limit_window'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','auth_token_revocation','api_rate_limit_window','tenant_service_control'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END; $$;
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
@@ -592,5 +613,8 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('010_admin_and_review_queue.sql','dd91b5ccda713baed50c26dca094028f472f662dea628de679e49ab6bbac4493'),
  ('011_tenant_ai_provider_configuration.sql','20f0096023b1f959de30e5a81764923392153caef120dd41eb2b85386078818c'),
  ('012_activate_tenant_ai_enrichment.sql','32fcc5401f4e0549c74e3e23997f19ada49b90de421c4ebd394f80ac4193b0b5'),
- ('013_auth_token_revocation.sql','835e327b669036047fbdf882a9abc4a1c2bf6829d838a084d3aa9bbc1c82617b'); -- gitleaks:allow; migration checksum, not a credential
+ ('013_auth_token_revocation.sql','835e327b669036047fbdf882a9abc4a1c2bf6829d838a084d3aa9bbc1c82617b'), -- gitleaks:allow; migration checksum, not a credential
+ ('014_repair_dependency_usage_legacy.sql','1d9becc7e78515554e3872aa5a06b52415360c69c9bfba8b3790f24c3bd26c77'), -- gitleaks:allow; migration checksum, not a credential
+ ('015_service_visibility_and_github_admin.sql','359d26f1effb73467370bc7171e200c8e9586f21395f0a2e24f11fc4d3ed0182'), -- gitleaks:allow; migration checksum, not a credential
+ ('016_tenant_service_controls.sql','210333fcc9859254d39aee913dacb55f593a382f9e506b62c95e6a9b72d93091'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

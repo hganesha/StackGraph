@@ -75,6 +75,30 @@
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-control);
 }
+.modeSwitch {
+  display: flex;
+  gap: var(--sg-space-1);
+  padding: 3px;
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  align-self: flex-start;
+}
+.modeButton {
+  padding: 6px var(--sg-space-3);
+  color: var(--sg-text-secondary);
+  border-radius: calc(var(--sg-radius-control) - 2px);
+  font-size: var(--sg-type-small-size);
+}
+.modeButtonActive {
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-sunken);
+  font-weight: 500;
+}
+.optional {
+  text-transform: none;
+  letter-spacing: normal;
+}
 .error,
 .success,
 .empty {
@@ -275,6 +299,10 @@
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-secondary);
 }
+.connError {
+  color: var(--sg-color-signal-danger-700);
+  font-size: var(--sg-type-small-size);
+}
 .connRight {
   display: flex;
   flex-direction: column;
@@ -310,6 +338,128 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.repositoryPickerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-3);
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+
+/* service visibility */
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-3);
+}
+.serviceCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-4);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.serviceHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--sg-space-2);
+}
+.serviceCategory {
+  display: block;
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.serviceName {
+  margin: 2px 0 0;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.serviceState {
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  font-size: var(--sg-type-small-size);
+  white-space: nowrap;
+}
+.serviceRUNNING {
+  background: var(--sg-color-domain-oss-100);
+  color: var(--sg-color-domain-oss-800);
+}
+.serviceIDLE {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+}
+.serviceWAITING {
+  background: var(--sg-color-domain-enterprise-100);
+  color: var(--sg-color-domain-enterprise-800);
+}
+.serviceDEGRADED,
+.serviceOFFLINE {
+  background: var(--sg-color-signal-danger-50);
+  color: var(--sg-color-signal-danger-700);
+}
+.serviceSTOPPING {
+  background: var(--sg-color-domain-enterprise-100);
+  color: var(--sg-color-domain-enterprise-800);
+}
+.serviceSTOPPED {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-muted);
+}
+.serviceDetail,
+.serviceTime {
+  margin: 0;
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-body-line);
+}
+.serviceTime {
+  color: var(--sg-text-muted);
+}
+.serviceControl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  margin-top: auto;
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.serviceControl button {
+  flex: 0 0 auto;
+}
+.externallyManaged {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.serviceMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+  padding: var(--sg-space-2) 0;
+  border-block: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.serviceMetrics div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.serviceMetrics dt {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.serviceMetrics dd {
+  margin: 0;
+  color: var(--sg-text-primary);
+  font-family: var(--sg-font-evidence);
+}
 
 /* members */
 .roleBadge {
@@ -340,5 +490,8 @@
   .select,
   .input {
     max-inline-size: 100%;
+  }
+  .serviceGrid {
+    grid-template-columns: 1fr;
   }
 }

@@ -4,10 +4,11 @@ app-up:
 	./scripts/start_docker.sh
 
 app-down:
-	docker compose down
+	docker compose --profile pipeline down
 
 app-logs:
-	docker compose logs -f database api web
+	docker compose --profile pipeline logs -f database api web github-webhook github-control-loop \
+		depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 
 PRODUCTION_COMPOSE = docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml --profile pipeline
 

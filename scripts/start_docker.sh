@@ -13,7 +13,7 @@ startup_timeout="${STACKGRAPH_STARTUP_TIMEOUT_SECONDS:-180}"
 
 usage() {
   cat <<'EOF'
-Start the complete local StackGraph application in Docker, including the UI image.
+Start the complete local StackGraph application in Docker, including the UI and continuous pipeline.
 
 Usage: ./scripts/start_docker.sh [options]
 
@@ -21,7 +21,7 @@ Options:
   --env-file PATH  Use an explicit Compose environment file.
   --no-build       Reuse existing images instead of rebuilding them.
   --no-seed        Preserve existing data without loading the reference cohort.
-  --logs           Follow database, API, and UI logs after startup.
+  --logs           Follow application and pipeline logs after startup.
   -h, --help       Show this help.
 
 Environment:
@@ -91,6 +91,7 @@ if [[ -n "$env_file" ]]; then
   fi
   compose+=(--env-file "$env_file")
 fi
+compose+=(--profile pipeline)
 
 show_failure_context() {
   local exit_code=$?
@@ -98,7 +99,7 @@ show_failure_context() {
   echo "StackGraph startup failed. Current container state:" >&2
   "${compose[@]}" ps >&2 || true
   echo >&2
-  echo "Inspect logs with: docker compose logs database api web" >&2
+  echo "Inspect logs with: docker compose --profile pipeline logs database api web github-control-loop" >&2
   exit "$exit_code"
 }
 trap show_failure_context ERR
@@ -107,8 +108,9 @@ echo "Validating the Docker Compose configuration..."
 "${compose[@]}" config --quiet
 
 if [[ "$build_images" == true ]]; then
-  echo "Building database-tool, API, and standalone UI images..."
-  "${compose[@]}" build migrate seed projection api web
+  echo "Building application and continuous pipeline images..."
+  "${compose[@]}" build migrate seed projection api web github-webhook github-control-loop \
+    depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 fi
 
 up_options=(-d --wait --wait-timeout "$startup_timeout")
@@ -130,8 +132,9 @@ fi
 echo "Projecting pending graph changes..."
 "${compose[@]}" run --rm projection
 
-echo "Starting the API and containerized UI..."
-"${compose[@]}" up "${up_options[@]}" api web
+echo "Starting the API, containerized UI, and continuous pipeline..."
+"${compose[@]}" up "${up_options[@]}" api web github-webhook github-control-loop \
+  depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 
 web_binding="$("${compose[@]}" port web 3000)"
 api_binding="$("${compose[@]}" port api 8000)"
@@ -144,10 +147,12 @@ echo "StackGraph is ready."
 echo "  UI:  http://localhost:${web_port}"
 echo "  API: http://localhost:${api_port}"
 echo
-"${compose[@]}" ps database api web
+"${compose[@]}" ps database api web github-webhook github-control-loop \
+  depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 
 if [[ "$follow_logs" == true ]]; then
   echo
   echo "Following logs; Ctrl-C stops log streaming but leaves the app running."
-  "${compose[@]}" logs --follow database api web
+  "${compose[@]}" logs --follow database api web github-webhook github-control-loop \
+    depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 fi

@@ -19,6 +19,10 @@ from .github_webhook import VerifiedGitHubWebhook
 GIT_REVISION = re.compile(r"^[a-f0-9]{40,64}$")
 
 
+class ServiceStoppedError(RuntimeError):
+    """The destination workspace paused GitHub webhook processing."""
+
+
 @dataclass(frozen=True, slots=True)
 class WebhookProcessingResult:
     delivery_id: str
@@ -59,6 +63,12 @@ def process_github_webhook_connection(
     if webhook.installation_id is None:
         raise ValueError("GitHub webhook event cannot be routed without an installation")
     context = _connector_context(connection, webhook.installation_id)
+    running = connection.execute(
+        "SELECT stackgraph_tenant_service_running(%s,'github-webhook') AS running",
+        (context.tenant_id,),
+    ).fetchone()
+    if running is None or not running["running"]:
+        raise ServiceStoppedError("GitHub webhooks are stopped for this workspace")
     stored = evidence_store.put_bytes(
         context.tenant_key,
         webhook.raw_body,

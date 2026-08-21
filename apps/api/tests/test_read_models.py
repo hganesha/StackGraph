@@ -1,8 +1,11 @@
 import asyncio
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import UUID
 
+import httpx
 import pytest
 
 from app.errors import APIError
@@ -60,6 +63,12 @@ class EstateDatabaseStub:
                 },
             ]
         raise AssertionError(f"unexpected query: {query}")
+
+
+class GitHubRepositoryDatabaseStub:
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        assert "target.target_kind='REPOSITORY'" in query
+        return [{"repository_name": "acme/already-connected"}]
 
 
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
@@ -151,6 +160,81 @@ def test_cursor_is_typed_and_rejects_cross_endpoint_reuse() -> None:
     assert raised.value.code == "INVALID_CURSOR"
 
 
+def test_available_github_repositories_filter_connected_estate_repositories() -> None:
+    def github(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer runtime-only-token"
+        assert request.url.params["affiliation"] == "owner,collaborator,organization_member"
+        return httpx.Response(200, json=[
+            {
+                "full_name": "acme/already-connected", "visibility": "private",
+                "archived": False, "default_branch": "main",
+            },
+            {
+                "full_name": "Acme/New-Service", "visibility": "private",
+                "archived": False, "default_branch": "trunk",
+            },
+            {
+                "full_name": "acme/archived-tool", "private": False,
+                "archived": True, "default_branch": "main",
+            },
+        ])
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(github),
+        base_url="https://api.github.test",
+        headers={"Authorization": "Bearer runtime-only-token"},
+    )
+    with patch.dict(os.environ, {
+        "GITHUB_TOKEN": "runtime-only-token",
+        "STACKGRAPH_GITHUB_API_URL": "https://api.github.test",
+    }), patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        result = asyncio.run(ReadModelStore(GitHubRepositoryDatabaseStub()).list_available_github_repositories(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        ))
+
+    assert result.token_configured is True
+    assert result.truncated is False
+    assert [repository.full_name for repository in result.repositories] == [
+        "acme/archived-tool", "Acme/New-Service",
+    ]
+    assert result.repositories[0].visibility == "public"
+    assert result.repositories[0].archived is True
+
+
+def test_available_github_repositories_report_unconfigured_token_without_database_access() -> None:
+    class UnexpectedDatabase:
+        async def fetch_all(self, *args, **kwargs):
+            raise AssertionError("database should not be queried without a token")
+
+    with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
+        result = asyncio.run(ReadModelStore(UnexpectedDatabase()).list_available_github_repositories(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        ))
+
+    assert result.token_configured is False
+    assert result.repositories == []
+
+
+def test_available_github_repositories_sanitize_rejected_token_errors() -> None:
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(
+            401, json={"message": "Bad credentials: runtime-only-token"},
+        )),
+        headers={"Authorization": "Bearer runtime-only-token"},
+    )
+    with patch.dict(os.environ, {
+        "GITHUB_TOKEN": "runtime-only-token",
+        "STACKGRAPH_GITHUB_API_URL": "https://api.github.test",
+    }), patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        with pytest.raises(APIError) as raised:
+            asyncio.run(ReadModelStore(GitHubRepositoryDatabaseStub()).list_available_github_repositories(
+                tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+            ))
+
+    assert raised.value.code == "GITHUB_TOKEN_REJECTED"
+    assert "runtime-only-token" not in raised.value.message
+
+
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:
     database = EstateDatabaseStub()
     result = asyncio.run(ReadModelStore(database).estate_summary(
@@ -170,3 +254,8 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     }
     assert len(database.queries) == 5
     assert all("OFFSET" not in query.upper() for query in database.queries)
+    estate_queries = "\n".join(database.queries[:4])
+    assert "observed_technology" in estate_queries
+    assert "relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+    assert "estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+    assert "e.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries

@@ -16,6 +16,8 @@ from psycopg import Connection, sql
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from .service_heartbeat import record_service_heartbeat
+
 
 NODE_UPSERT_CYPHER = """
 MERGE (entity:Entity {entity_id: $entity_id})
@@ -255,6 +257,7 @@ class ProjectionWorker:
                 FROM projection_outbox
                 WHERE aggregate_type = 'FACT'
                   AND processed_at IS NULL
+                  AND stackgraph_tenant_service_running(tenant_id,'projection')
                   AND available_at <= now()
                   AND (leased_until IS NULL OR leased_until < now())
                 ORDER BY id
@@ -454,6 +457,11 @@ def main() -> None:
     if args.poll_seconds < 0:
         parser.error("--poll-seconds must not be negative")
     while True:
+        if args.poll_seconds > 0:
+            record_service_heartbeat(
+                database_url, "projection",
+                metadata={"poll_seconds": args.poll_seconds, "batch_size": args.batch_size},
+            )
         result = project_database(
             database_url,
             graph_name=args.graph_name,

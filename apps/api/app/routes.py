@@ -53,13 +53,18 @@ from app.models import (
     ConnectorList,
     ConnectorRegisterRequest,
     GitHubRepositoryConnectRequest,
+    GitHubRepositoryOptionList,
     ConnectorUpdateRequest,
+    GitHubInstallationConnectRequest,
     ScanPolicy,
     ScanPolicyUpdateRequest,
     RescanRequest,
     RescanJob,
     RescanJobList,
     ScanStatus,
+    ServiceControlRequest,
+    ServiceStatus,
+    ServiceStatusList,
 )
 
 
@@ -152,6 +157,12 @@ class ReadModelsProtocol(Protocol):
     async def connect_github_repository(
         self, request: GitHubRepositoryConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
+    async def list_available_github_repositories(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubRepositoryOptionList: ...
+    async def connect_github_installation(
+        self, request: GitHubInstallationConnectRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> Connector: ...
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
@@ -182,6 +193,11 @@ class ReadModelsProtocol(Protocol):
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
     ) -> RescanJobList: ...
     async def scan_status(self, *, tenant_id: UUID | None) -> ScanStatus: ...
+    async def service_status(self, *, tenant_id: UUID | None) -> ServiceStatusList: ...
+    async def update_service_control(
+        self, service_key: str, request: ServiceControlRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ServiceStatus: ...
 
 
 class AskServiceProtocol(Protocol):
@@ -667,6 +683,32 @@ async def connect_github_repository(
     )
 
 
+@router.get(
+    "/admin/github/repositories/available", response_model=GitHubRepositoryOptionList,
+    response_model_exclude_none=True, operation_id="listAvailableGitHubRepositories", tags=["admin"],
+)
+async def list_available_github_repositories(request: Request) -> GitHubRepositoryOptionList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_available_github_repositories(
+        tenant_id=principal.tenant_id,
+    )
+
+
+@router.post(
+    "/admin/github/installations", response_model=Connector, status_code=201,
+    response_model_exclude_none=True, operation_id="connectGitHubInstallation", tags=["admin"],
+)
+async def connect_github_installation(
+    body: GitHubInstallationConnectRequest, request: Request,
+) -> Connector:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).connect_github_installation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
 @router.put(
     "/admin/connectors/{id}", response_model=Connector,
     response_model_exclude_none=True, operation_id="updateConnector", tags=["admin"],
@@ -773,6 +815,30 @@ async def get_scan_status(request: Request) -> ScanStatus:
     principal = await _principal(request)
     _require(principal, "admin")
     return await _store(request).scan_status(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/admin/services", response_model=ServiceStatusList,
+    response_model_exclude_none=True, operation_id="getServiceStatus", tags=["admin"],
+)
+async def get_service_status(request: Request) -> ServiceStatusList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).service_status(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/services/{service_key}", response_model=ServiceStatus,
+    response_model_exclude_none=True, operation_id="updateServiceControl", tags=["admin"],
+)
+async def update_service_control(
+    service_key: str, body: ServiceControlRequest, request: Request,
+) -> ServiceStatus:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_service_control(
+        service_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
 
 
 @router.post(

@@ -6,12 +6,14 @@ import { ConnectionsSection } from "@/components/admin/ConnectionsSection";
 import { ScanSection } from "@/components/admin/ScanSection";
 import { IntelligenceSection } from "@/components/admin/IntelligenceSection";
 import { MembersSection } from "@/components/admin/MembersSection";
+import { ServicesSection } from "@/components/admin/ServicesSection";
 import styles from "@/components/admin/admin.module.css";
 
 const TABS = [
   { key: "connections", label: "Connections" },
   { key: "scan", label: "Scan & Refresh" },
   { key: "intelligence", label: "Intelligence / AI" },
+  { key: "services", label: "Services" },
   { key: "members", label: "Members & Roles" },
 ] as const;
 
@@ -57,6 +59,7 @@ export default function AdminPage() {
         {tab === "connections" ? <ConnectionsSection /> : null}
         {tab === "scan" ? <ScanSection /> : null}
         {tab === "intelligence" ? <IntelligenceSection /> : null}
+        {tab === "services" ? <ServicesSection /> : null}
         {tab === "members" ? <MembersSection /> : null}
       </div>
     </div>

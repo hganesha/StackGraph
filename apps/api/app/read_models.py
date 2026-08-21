@@ -146,6 +146,32 @@ WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
 )
 """
 
+# Catalog entities are globally visible so they can enrich every tenant's graph.  They only
+# become part of a tenant's estate after tenant-scoped evidence connects them directly to a
+# tenant-owned enterprise entity.  Keeping this boundary in SQL prevents the global OSS
+# catalog from inflating estate counts and lists, even for database roles that bypass RLS.
+_OBSERVED_TECHNOLOGY_CTE = """
+WITH tenant_scope AS (
+  SELECT %s::uuid tenant_id
+), observed_technology AS (
+  SELECT DISTINCT technology.id
+  FROM current_relationship relationship
+  JOIN entity technology
+    ON technology.id IN (relationship.source_entity_id,relationship.target_entity_id)
+   AND technology.namespace IN ('TECHNOLOGY','OSS')
+   AND technology.entity_type<>'Capability'
+  JOIN entity estate_entity
+    ON estate_entity.id=CASE
+      WHEN technology.id=relationship.source_entity_id
+        THEN relationship.target_entity_id
+      ELSE relationship.source_entity_id
+    END
+   AND estate_entity.namespace='ENTERPRISE'
+   AND estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)
+  WHERE relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)
+)
+"""
+
 
 def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
     return float(value) if value is not None else default
@@ -468,14 +494,27 @@ class ReadModelStore(AdminReadModelsMixin):
         except (KeyError, TypeError, ValueError) as error:
             raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
         counts_row = await self.database.fetch_one(
-            """
+            _OBSERVED_TECHNOLOGY_CTE + """
             SELECT
-              count(*) FILTER (WHERE namespace='ENTERPRISE' AND entity_type='Application') AS applications,
-              count(*) FILTER (WHERE namespace='ENTERPRISE' AND entity_type='Repository') AS repositories,
-              count(*) FILTER (WHERE namespace='ENTERPRISE' AND entity_type='Service') AS services,
-              count(*) FILTER (WHERE namespace='TECHNOLOGY' AND entity_type<>'Capability') AS technologies
-            FROM entity
+              count(*) FILTER (
+                WHERE e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+              ) AS applications,
+              count(*) FILTER (
+                WHERE e.namespace='ENTERPRISE' AND e.entity_type='Repository'
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+              ) AS repositories,
+              count(*) FILTER (
+                WHERE e.namespace='ENTERPRISE' AND e.entity_type='Service'
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+              ) AS services,
+              count(*) FILTER (
+                WHERE e.namespace='TECHNOLOGY' AND e.entity_type<>'Capability'
+                  AND e.id IN (SELECT id FROM observed_technology)
+              ) AS technologies
+            FROM entity e
             """,
+            (tenant_id,),
             tenant_id=tenant_id,
         )
         counts_row = counts_row or {}
@@ -487,23 +526,44 @@ class ReadModelStore(AdminReadModelsMixin):
         )
 
         distribution_rows = await self.database.fetch_all(
-            """
-            SELECT 'technology.' || coalesce(properties->>'domain_id', lower(entity_type)) AS key, count(*) AS value
-            FROM entity
-            WHERE namespace='TECHNOLOGY' AND entity_type<>'Capability'
+            _OBSERVED_TECHNOLOGY_CTE + """
+            SELECT 'technology.' || coalesce(e.properties->>'domain_id', lower(e.entity_type)) AS key,
+                   count(*) AS value
+            FROM entity e
+            JOIN observed_technology observed ON observed.id=e.id
+            WHERE e.namespace='TECHNOLOGY' AND e.entity_type<>'Capability'
             GROUP BY 1 ORDER BY 1
             """,
+            (tenant_id,),
             tenant_id=tenant_id,
         )
         coverage_row = await self.database.fetch_one(
             """
+            WITH tenant_scope AS (
+              SELECT %s::uuid tenant_id
+            )
             SELECT
-              count(*) FILTER (WHERE namespace='ENTERPRISE' AND entity_type='Repository') AS repositories_total,
-              count(*) FILTER (WHERE namespace='ENTERPRISE' AND entity_type='Repository' AND last_seen_at IS NOT NULL) AS repositories_scanned,
-              coalesce((SELECT count(DISTINCT e.fact_assertion_id)::numeric / nullif(count(DISTINCT f.id), 0)
-                        FROM current_fact f LEFT JOIN evidence e ON e.fact_assertion_id=f.id), 0) AS evidence_ratio
+              count(*) FILTER (
+                WHERE entity.namespace='ENTERPRISE' AND entity.entity_type='Repository'
+                  AND entity.tenant_id=(SELECT tenant_id FROM tenant_scope)
+              ) AS repositories_total,
+              count(*) FILTER (
+                WHERE entity.namespace='ENTERPRISE' AND entity.entity_type='Repository'
+                  AND entity.tenant_id=(SELECT tenant_id FROM tenant_scope)
+                  AND entity.last_seen_at IS NOT NULL
+              ) AS repositories_scanned,
+              coalesce((
+                SELECT count(DISTINCT evidence.fact_assertion_id)::numeric
+                       / nullif(count(DISTINCT fact.id), 0)
+                FROM current_fact fact
+                LEFT JOIN evidence
+                  ON evidence.fact_assertion_id=fact.id
+                 AND evidence.tenant_id=(SELECT tenant_id FROM tenant_scope)
+                WHERE fact.tenant_id=(SELECT tenant_id FROM tenant_scope)
+              ), 0) AS evidence_ratio
             FROM entity
             """,
+            (tenant_id,),
             tenant_id=tenant_id,
         )
         coverage_row = coverage_row or {}
@@ -514,7 +574,7 @@ class ReadModelStore(AdminReadModelsMixin):
         )
 
         rows = await self.database.fetch_all(
-            """
+            _OBSERVED_TECHNOLOGY_CTE + """
             SELECT e.*, coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at,
                    p.id priority_id,p.score priority_score,p.confidence priority_confidence,p.method_version priority_method,
                    v.score viability_score,v.confidence viability_confidence,v.method_version viability_method
@@ -528,8 +588,10 @@ class ReadModelStore(AdminReadModelsMixin):
               ORDER BY a.valid_from DESC LIMIT 1
             ) v ON true
             WHERE (
-                (e.namespace='ENTERPRISE' AND e.entity_type='Application')
-                OR (e.namespace IN ('TECHNOLOGY','OSS') AND e.entity_type<>'Capability')
+                (e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
+                OR (e.namespace IN ('TECHNOLOGY','OSS') AND e.entity_type<>'Capability'
+                  AND e.id IN (SELECT id FROM observed_technology))
               )
               AND (%s::text[] IS NULL OR e.namespace=ANY(%s::text[]))
               AND (
@@ -541,6 +603,7 @@ class ReadModelStore(AdminReadModelsMixin):
             LIMIT %s
             """,
             (
+                tenant_id,
                 namespaces or None,
                 namespaces or None,
                 cursor_score,

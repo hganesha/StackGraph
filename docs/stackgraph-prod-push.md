@@ -101,7 +101,7 @@ tenant edge case found by the fresh-database matrix.
 | Browser/accessibility matrix | **Pass — 12 across Chromium, Firefox, WebKit, and mobile; 4 live-only checks skipped by design** |
 | Production Compose resolution | **Pass with the `pipeline` profile and example environment** |
 | Production release images | **Pass — all six definitions build; API/web declare non-root production users** |
-| Object storage and deploy migration smoke | **Pass — versioning + 30-day governance lock; migrations 001–013 skipped as current** |
+| Object storage and deploy migration smoke | **Pass — versioning + 30-day governance lock; migrations 001–014 skipped as current** |
 | Workflow YAML and deployment shell syntax | **Pass** |
 | Backup/restore and AGE rebuild | **Pass — `artifacts/recovery/recovery-20260820155559.json`** |
 | Synthetic 100-repository gate | **Pass — 100 complete, 1,000 facts, 200 findings, 100% evidence, zero failures** |
@@ -116,9 +116,10 @@ tenant edge case found by the fresh-database matrix.
    archive provider latency, UI latency, and reviewer-value evidence with the report.
 4. Complete keyboard/screen-reader sessions, penetration and dependency review, privacy/retention approval,
    and confirm that `make production-alert-test` reaches the named human owner.
-5. Preserve and recreate the long-lived local developer database whose historical migration 005 checksum
-   differs from the current canonical file. Fresh databases and the migration ledger are green; do not
-   rewrite the old volume's ledger.
+
+The former long-lived developer database migration-005 blocker is resolved: the known checksum is accepted
+only after structural verification, and migration 014 repairs its legacy global package-analysis uniqueness
+rule without rewriting the old ledger. Unknown checksum drift still fails closed.
 
 None of these items can be honestly completed from a repository-only session. They are the remaining
 deployment acceptance checklist; there is no unimplemented production-push recommendation hidden behind

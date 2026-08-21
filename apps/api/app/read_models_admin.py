@@ -3,12 +3,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
+from psycopg.errors import UniqueViolation
 
 from app.errors import APIError
 from app.models import (
@@ -20,7 +23,10 @@ from app.models import (
     ConnectorList,
     ConnectorRegisterRequest,
     ConnectorUpdateRequest,
+    GitHubInstallationConnectRequest,
     GitHubRepositoryConnectRequest,
+    GitHubRepositoryOption,
+    GitHubRepositoryOptionList,
     MemberInviteRequest,
     MemberUpdateRequest,
     PageInfo,
@@ -34,6 +40,9 @@ from app.models import (
     ScanPolicy,
     ScanPolicyUpdateRequest,
     ScanStatus,
+    ServiceControlRequest,
+    ServiceStatus,
+    ServiceStatusList,
     TenantMember,
     TenantMemberList,
 )
@@ -50,6 +59,26 @@ _REVIEW_PATHS: dict[str, str] = {
 _RAW_SECRET_MARKERS: tuple[str, ...] = (
     "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xox", "-----BEGIN", "AKIA",
 )
+
+_CONTROLLABLE_SERVICES = frozenset({
+    "github-webhook", "github-control-loop", "projection", "intelligence",
+})
+
+
+def _github_api_base_url() -> str:
+    base_url = os.getenv("STACKGRAPH_GITHUB_API_URL", "https://api.github.com").rstrip("/")
+    parsed = urlsplit(base_url)
+    is_local = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    allow_insecure_local = os.getenv("STACKGRAPH_GITHUB_ALLOW_INSECURE_LOCALHOST") == "true"
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise ValueError("GitHub API URL cannot contain credentials, a query, or a fragment")
+    if parsed.scheme != "https" and not (
+        parsed.scheme == "http" and is_local and allow_insecure_local
+    ):
+        raise ValueError("GitHub API URL must use HTTPS")
+    if not parsed.hostname:
+        raise ValueError("GitHub API URL must include a host")
+    return base_url
 
 
 def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
@@ -335,7 +364,24 @@ class AdminReadModelsMixin:
         if tenant_id is None:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list connectors.")
         rows = await self.database.fetch_all(
-            "SELECT * FROM connector ORDER BY updated_at DESC, id DESC", tenant_id=tenant_id,
+            """
+            SELECT connector.*,
+                   coalesce(connector.last_synced_at,target.last_success_at) effective_last_synced_at,
+                   coalesce(connector.last_error,latest_run.error_detail->>'message') effective_last_error
+            FROM connector
+            LEFT JOIN ingest_target target
+              ON target.id::text=connector.metadata->>'ingest_target_id'
+            LEFT JOIN LATERAL (
+              SELECT run.error_detail
+              FROM ingest_run run
+              WHERE run.ingest_target_id=target.id AND run.status='FAILED'
+                AND (target.last_success_at IS NULL OR run.completed_at>target.last_success_at)
+              ORDER BY run.completed_at DESC NULLS LAST,run.created_at DESC,run.id DESC
+              LIMIT 1
+            ) latest_run ON true
+            ORDER BY connector.updated_at DESC,connector.id DESC
+            """,
+            tenant_id=tenant_id,
         )
         return ConnectorList(connectors=[self._connector(row) for row in rows])
 
@@ -530,6 +576,242 @@ class AdminReadModelsMixin:
             )
         return self._connector(row)
 
+    async def list_available_github_repositories(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubRepositoryOptionList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list GitHub repositories.")
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if not token:
+            return GitHubRepositoryOptionList(token_configured=False, repositories=[])
+
+        existing_rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT lower(repository_name) repository_name
+            FROM (
+              SELECT replace(connector.external_account_key,'github:repository:','') repository_name
+              FROM connector
+              WHERE connector.tenant_id=%s AND connector.provider='GITHUB_APP'
+                AND connector.status='CONNECTED'
+                AND connector.external_account_key LIKE 'github:repository:%%'
+              UNION ALL
+              SELECT target.refresh_policy->>'full_name' repository_name
+              FROM ingest_target target
+              JOIN source_system source ON source.id=target.source_system_id
+              WHERE target.tenant_id=%s AND source.source_key='github-app'
+                AND target.target_kind='REPOSITORY' AND target.enabled
+            ) connected
+            WHERE nullif(repository_name,'') IS NOT NULL
+            """,
+            (tenant_id, tenant_id),
+            tenant_id=tenant_id,
+        )
+        existing = {row["repository_name"] for row in existing_rows}
+        repositories: dict[str, GitHubRepositoryOption] = {}
+        truncated = False
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "StackGraph-admin/1.0",
+            "X-GitHub-Api-Version": "2026-03-10",
+        }
+        try:
+            base_url = _github_api_base_url()
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=20.0,
+                follow_redirects=False,
+            ) as client:
+                for page in range(1, 101):
+                    response = await client.get(
+                        f"{base_url}/user/repos",
+                        params={
+                            "affiliation": "owner,collaborator,organization_member",
+                            "sort": "full_name",
+                            "direction": "asc",
+                            "per_page": "100",
+                            "page": str(page),
+                        },
+                    )
+                    if response.status_code in {401, 403}:
+                        raise APIError(
+                            502,
+                            "GITHUB_TOKEN_REJECTED",
+                            "GitHub rejected the configured token or its repository-list request.",
+                        )
+                    response.raise_for_status()
+                    payload = response.json()
+                    if not isinstance(payload, list):
+                        raise ValueError("GitHub repository response is not a list")
+                    for item in payload:
+                        if not isinstance(item, dict) or not isinstance(item.get("full_name"), str):
+                            continue
+                        full_name = item["full_name"]
+                        normalized_name = full_name.lower()
+                        if normalized_name in existing or normalized_name in repositories:
+                            continue
+                        raw_visibility = item.get("visibility")
+                        visibility = (
+                            raw_visibility
+                            if raw_visibility in {"public", "private", "internal"}
+                            else "private" if item.get("private") is True else "public"
+                        )
+                        default_branch = item.get("default_branch")
+                        repositories[normalized_name] = GitHubRepositoryOption(
+                            full_name=full_name,
+                            visibility=visibility,
+                            archived=item.get("archived") is True,
+                            default_branch=(
+                                default_branch[:255] if isinstance(default_branch, str) else None
+                            ),
+                        )
+                    if len(payload) < 100:
+                        break
+                else:
+                    truncated = True
+        except APIError:
+            raise
+        except (httpx.HTTPError, ValueError) as error:
+            raise APIError(
+                502,
+                "GITHUB_REPOSITORY_DISCOVERY_FAILED",
+                "GitHub repositories could not be loaded from the configured token.",
+            ) from error
+
+        return GitHubRepositoryOptionList(
+            token_configured=True,
+            repositories=sorted(repositories.values(), key=lambda repository: repository.full_name.lower()),
+            truncated=truncated,
+        )
+
+    async def connect_github_installation(
+        self,
+        request: GitHubInstallationConnectRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> Connector:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
+        installation_id = request.installation_id
+        external_account_key = f"github:installation:{installation_id}"
+        credential_reference = f"github-app://installation/{installation_id}"
+        display_name = request.display_name or f"GitHub installation {installation_id}"
+        scopes = ["contents:read", "metadata:read"]
+
+        async with self.database.session(tenant_id) as connection:
+            existing = await connection.execute(
+                "SELECT 1 FROM connector WHERE provider='GITHUB_APP' AND external_account_key=%s",
+                (external_account_key,),
+            )
+            if await existing.fetchone() is not None:
+                raise APIError(
+                    409, "CONNECTOR_EXISTS", "This GitHub App installation is already connected.",
+                    {"installation_id": installation_id},
+                )
+            policy_cursor = await connection.execute(
+                "SELECT cadence,enabled FROM scan_policy WHERE tenant_id=%s", (tenant_id,),
+            )
+            policy = await policy_cursor.fetchone()
+            cadence = policy["cadence"] if policy is not None else "DAILY"
+            schedule_enabled = bool(policy["enabled"] if policy is not None else True) and cadence != "MANUAL"
+            cadence_seconds = {
+                "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800, "MANUAL": 86400,
+            }[cadence]
+            source_cursor = await connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri,metadata)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com',%s::jsonb)
+                ON CONFLICT(tenant_id,source_key) DO UPDATE
+                  SET base_uri=EXCLUDED.base_uri,metadata=source_system.metadata || EXCLUDED.metadata
+                RETURNING id
+                """,
+                (tenant_id, json.dumps({"provider": "github", "authentication": "GITHUB_APP_INSTALLATION"})),
+            )
+            source = await source_cursor.fetchone()
+            assert source is not None
+            try:
+                account_cursor = await connection.execute(
+                    """
+                    INSERT INTO connector_account(
+                      tenant_id,source_system_id,external_account_key,credential_reference,
+                      permissions,status
+                    ) VALUES (%s,%s,%s,%s,%s::jsonb,'ACTIVE')
+                    ON CONFLICT(tenant_id,source_system_id,external_account_key) DO UPDATE
+                      SET credential_reference=EXCLUDED.credential_reference,
+                          permissions=EXCLUDED.permissions,status='ACTIVE',updated_at=now()
+                    RETURNING id
+                    """,
+                    (tenant_id, source["id"], external_account_key, credential_reference, json.dumps(scopes)),
+                )
+            except UniqueViolation as error:
+                if error.diag.constraint_name == "uq_github_installation_tenant":
+                    raise APIError(
+                        409, "GITHUB_INSTALLATION_IN_USE",
+                        "This GitHub App installation is already bound to another workspace.",
+                    ) from error
+                raise
+            account = await account_cursor.fetchone()
+            assert account is not None
+            target_cursor = await connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,enabled,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'GITHUB_INSTALLATION',%s,'HOT',true,%s::jsonb,now())
+                ON CONFLICT(tenant_id,source_system_id,target_kind,target_key) DO UPDATE
+                  SET connector_account_id=EXCLUDED.connector_account_id,enabled=true,
+                      refresh_policy=EXCLUDED.refresh_policy,next_due_at=now(),updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id, source["id"], account["id"], external_account_key,
+                    json.dumps({
+                        "provider": "github", "installation_id": installation_id,
+                        "cadence_seconds": cadence_seconds, "schedule_enabled": schedule_enabled,
+                    }),
+                ),
+            )
+            target = await target_cursor.fetchone()
+            assert target is not None
+            connector_cursor = await connection.execute(
+                """
+                INSERT INTO connector(
+                  tenant_id,provider,display_name,external_account_key,credential_reference,
+                  scopes,metadata,created_by
+                ) VALUES (%s,'GITHUB_APP',%s,%s,%s,%s,%s::jsonb,%s)
+                RETURNING *
+                """,
+                (
+                    tenant_id, display_name, external_account_key, credential_reference, scopes,
+                    json.dumps({
+                        "connection_mode": "GITHUB_APP_INSTALLATION",
+                        "installation_id": installation_id,
+                        "ingest_target_id": str(target["id"]),
+                    }),
+                    actor_key,
+                ),
+            )
+            row = await connector_cursor.fetchone()
+            assert row is not None
+            await connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,stats)
+                SELECT %s,%s,'MANUAL',jsonb_build_object('connector_id',%s::text)
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM ingest_run
+                  WHERE ingest_target_id=%s AND status IN ('PENDING','RUNNING')
+                )
+                """,
+                (tenant_id, target["id"], str(row["id"]), target["id"]),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="github_installation.connect", target_kind="connector", target_id=row["id"],
+                detail={"installation_id": installation_id, "ingest_target_id": str(target["id"])},
+            )
+        return self._connector(row)
+
     async def update_connector(
         self, connector_id: UUID, request: ConnectorUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector:
@@ -595,14 +877,25 @@ class AdminReadModelsMixin:
                     (target_id,),
                 )
                 await connection.execute(
-                    "UPDATE ingest_target SET enabled=false,next_due_at=NULL,updated_at=now() WHERE id=%s",
+                    """
+                    UPDATE ingest_target target
+                    SET enabled=false,next_due_at=NULL,updated_at=now()
+                    FROM ingest_target root
+                    WHERE root.id=%s AND (
+                      target.id=root.id OR target.connector_account_id=root.connector_account_id
+                    )
+                    """,
                     (target_id,),
                 )
                 await connection.execute(
                     """
                     UPDATE ingest_run SET status='CANCELLED',completed_at=now(),
                       lease_owner=NULL,lease_expires_at=NULL
-                    WHERE ingest_target_id=%s AND status='PENDING'
+                    WHERE ingest_target_id IN (
+                      SELECT target.id FROM ingest_target target
+                      JOIN ingest_target root ON root.id=%s
+                      WHERE target.id=root.id OR target.connector_account_id=root.connector_account_id
+                    ) AND status='PENDING'
                     """,
                     (target_id,),
                 )
@@ -627,7 +920,9 @@ class AdminReadModelsMixin:
         return Connector(
             id=row["id"], provider=row["provider"], display_name=row["display_name"],
             external_account_key=row["external_account_key"], scopes=list(row["scopes"]),
-            status=row["status"], last_synced_at=row["last_synced_at"], last_error=row["last_error"],
+            status=row["status"],
+            last_synced_at=row.get("effective_last_synced_at", row.get("last_synced_at")),
+            last_error=row.get("effective_last_error", row.get("last_error")),
             created_at=row["created_at"], updated_at=row["updated_at"],
         )
 
@@ -1018,8 +1313,10 @@ class AdminReadModelsMixin:
                     END,
                     updated_at=now()
                 FROM connector admin_connector
+                JOIN ingest_target root
+                  ON admin_connector.metadata->>'ingest_target_id'=root.id::text
                 WHERE admin_connector.tenant_id=%s
-                  AND admin_connector.metadata->>'ingest_target_id'=target.id::text
+                  AND (target.id=root.id OR target.connector_account_id=root.connector_account_id)
                 """,
                 (cadence_seconds, schedule_enabled, schedule_enabled, tenant_id),
             )
@@ -1063,15 +1360,16 @@ class AdminReadModelsMixin:
             targets_cursor = await connection.execute(
                 """
                 SELECT target.id
-                FROM ingest_target target
-                JOIN connector admin_connector
-                  ON admin_connector.tenant_id=target.tenant_id
-                 AND admin_connector.metadata->>'ingest_target_id'=target.id::text
-                WHERE target.enabled
+                FROM connector admin_connector
+                JOIN ingest_target root
+                  ON admin_connector.metadata->>'ingest_target_id'=root.id::text
+                JOIN ingest_target target
+                  ON target.id=root.id OR target.connector_account_id=root.connector_account_id
+                WHERE admin_connector.tenant_id=%s AND target.enabled
                   AND (%s::uuid IS NULL OR admin_connector.id=%s)
                 FOR UPDATE OF target
                 """,
-                (request.connector_id, request.connector_id),
+                (tenant_id, request.connector_id, request.connector_id),
             )
             targets = list(await targets_cursor.fetchall())
             queued = 0
@@ -1205,6 +1503,227 @@ class AdminReadModelsMixin:
             ],
             recent_jobs=[self._rescan_job(row) for row in job_rows],
         )
+
+    async def service_status(self, *, tenant_id: UUID | None) -> ServiceStatusList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read service status.")
+        heartbeat_rows = await self.database.fetch_all(
+            "SELECT service_key,status,last_heartbeat_at FROM service_heartbeat",
+            tenant_id=tenant_id,
+        )
+        control_rows = await self.database.fetch_all(
+            "SELECT service_key,desired_state FROM tenant_service_control",
+            tenant_id=tenant_id,
+        )
+        workload = await self.database.fetch_one(
+            """
+            SELECT
+              (SELECT count(*) FROM connector_account
+               WHERE tenant_id=%s AND external_account_key LIKE 'github:%%' AND status='ACTIVE') github_configured,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='github-app' AND run.status='PENDING') github_pending,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='github-app' AND run.status='RUNNING') github_running,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='github-app' AND run.status='FAILED'
+                 AND (target.last_success_at IS NULL OR run.completed_at>target.last_success_at)) github_failed,
+              (SELECT max(coalesce(run.completed_at,run.started_at,run.created_at)) FROM ingest_run run
+               JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='github-app') github_last,
+              (SELECT count(*) FROM webhook_delivery WHERE tenant_id=%s AND status='PROCESSING') webhook_running,
+              (SELECT count(*) FROM webhook_delivery WHERE tenant_id=%s AND status='FAILED') webhook_failed,
+              (SELECT max(coalesce(processed_at,received_at)) FROM webhook_delivery WHERE tenant_id=%s) webhook_last,
+              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND processed_at IS NULL) projection_pending,
+              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND leased_by IS NOT NULL AND processed_at IS NULL) projection_running,
+              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND last_error IS NOT NULL AND processed_at IS NULL) projection_failed,
+              (SELECT max(coalesce(processed_at,created_at)) FROM projection_outbox WHERE tenant_id=%s) projection_last,
+              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='PENDING') intelligence_pending,
+              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='RUNNING') intelligence_running,
+              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='FAILED') intelligence_failed,
+              (SELECT max(coalesce(completed_at,started_at,created_at)) FROM intelligence_job WHERE tenant_id=%s) intelligence_last,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='PENDING') depsdev_pending,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='RUNNING') depsdev_running,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='FAILED'
+                 AND (target.last_success_at IS NULL OR run.completed_at>target.last_success_at)) depsdev_failed,
+              (SELECT max(coalesce(run.completed_at,run.started_at,run.created_at)) FROM ingest_run run
+               JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='deps.dev') depsdev_last,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='osv.dev' AND run.status='PENDING') osv_pending,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='osv.dev' AND run.status='RUNNING') osv_running,
+              (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
+               JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='osv.dev' AND run.status='FAILED'
+                 AND (target.last_success_at IS NULL OR run.completed_at>target.last_success_at)) osv_failed,
+              (SELECT max(coalesce(run.completed_at,run.started_at,run.created_at)) FROM ingest_run run
+               JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
+               WHERE run.tenant_id=%s AND source.source_key='osv.dev') osv_last
+            """,
+            tuple([tenant_id] * 24),
+            tenant_id=tenant_id,
+        ) or {}
+        now = datetime.now(UTC)
+        heartbeats = {row["service_key"]: row for row in heartbeat_rows}
+        desired_states = {row["service_key"]: row["desired_state"] for row in control_rows}
+
+        def service(
+            key: str, name: str, category: str, *, configured: bool = True,
+            pending: int = 0, running: int = 0, failed: int = 0,
+            last_activity_at: datetime | None = None,
+            controllable: bool = False,
+            management_scope: str = "Externally managed",
+        ) -> ServiceStatus:
+            heartbeat = heartbeats.get(key)
+            heartbeat_at = heartbeat.get("last_heartbeat_at") if heartbeat else None
+            online = bool(
+                heartbeat_at is not None
+                and (now - heartbeat_at).total_seconds() <= 45
+                and heartbeat.get("status") == "RUNNING"
+            )
+            desired_state = desired_states.get(key, "RUNNING")
+            if controllable and desired_state == "STOPPED" and running:
+                state = "STOPPING"
+                detail = f"Stop requested; {running} in-flight item{'s' if running != 1 else ''} may finish."
+            elif controllable and desired_state == "STOPPED":
+                state = "STOPPED"
+                detail = "Stopped for this workspace; durable queued work is preserved."
+            elif failed:
+                state = "DEGRADED"
+                detail = f"{failed} failed item{'s' if failed != 1 else ''} need attention."
+            elif running:
+                state = "RUNNING"
+                detail = f"Processing {running} item{'s' if running != 1 else ''}."
+            elif not online:
+                state = "OFFLINE"
+                detail = "No recent worker heartbeat."
+            elif pending:
+                state = "WAITING"
+                detail = f"{pending} item{'s' if pending != 1 else ''} queued."
+            elif not configured:
+                state = "IDLE"
+                detail = "Worker is online; no tenant connection or work is configured."
+            else:
+                state = "IDLE"
+                detail = "Worker is online and the durable queue is clear."
+            return ServiceStatus(
+                key=key, name=name, category=category, state=state, detail=detail,
+                desired_state=desired_state, controllable=controllable,
+                management_scope=management_scope,
+                configured=configured, pending=pending, running=running, failed=failed,
+                last_activity_at=last_activity_at, last_heartbeat_at=heartbeat_at,
+            )
+
+        github_configured = int(workload.get("github_configured") or 0) > 0
+        services = [
+            ServiceStatus(
+                key="web", name="Web UI", category="CORE", state="RUNNING",
+                detail="This Admin page is running.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
+            ),
+            ServiceStatus(
+                key="api", name="API", category="CORE", state="RUNNING",
+                detail="The authenticated Admin API is responding.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
+            ),
+            ServiceStatus(
+                key="database", name="PostgreSQL / AGE", category="CORE", state="RUNNING",
+                detail="Operational state and graph storage are reachable.", management_scope="Docker / deployment platform",
+                last_activity_at=now, last_heartbeat_at=now,
+            ),
+            service(
+                "github-webhook", "GitHub webhooks", "INGESTION", configured=github_configured,
+                running=int(workload.get("webhook_running") or 0),
+                failed=int(workload.get("webhook_failed") or 0),
+                last_activity_at=workload.get("webhook_last"),
+                controllable=True, management_scope="This workspace",
+            ),
+            service(
+                "github-control-loop", "GitHub discovery", "INGESTION", configured=github_configured,
+                pending=int(workload.get("github_pending") or 0),
+                running=int(workload.get("github_running") or 0),
+                failed=int(workload.get("github_failed") or 0),
+                last_activity_at=workload.get("github_last"),
+                controllable=True, management_scope="This workspace",
+            ),
+            service(
+                "depsdev", "deps.dev enrichment", "ENRICHMENT",
+                pending=int(workload.get("depsdev_pending") or 0),
+                running=int(workload.get("depsdev_running") or 0),
+                failed=int(workload.get("depsdev_failed") or 0),
+                last_activity_at=workload.get("depsdev_last"),
+                management_scope="Shared OSS catalog pipeline",
+            ),
+            service(
+                "osv", "OSV vulnerability enrichment", "ENRICHMENT",
+                pending=int(workload.get("osv_pending") or 0),
+                running=int(workload.get("osv_running") or 0),
+                failed=int(workload.get("osv_failed") or 0),
+                last_activity_at=workload.get("osv_last"),
+                management_scope="Shared OSS catalog pipeline",
+            ),
+            service(
+                "projection", "Graph projection", "GRAPH",
+                pending=int(workload.get("projection_pending") or 0),
+                running=int(workload.get("projection_running") or 0),
+                failed=int(workload.get("projection_failed") or 0),
+                last_activity_at=workload.get("projection_last"),
+                controllable=True, management_scope="This workspace",
+            ),
+            service(
+                "intelligence", "Modernization intelligence", "INTELLIGENCE",
+                pending=int(workload.get("intelligence_pending") or 0),
+                running=int(workload.get("intelligence_running") or 0),
+                failed=int(workload.get("intelligence_failed") or 0),
+                last_activity_at=workload.get("intelligence_last"),
+                controllable=True, management_scope="This workspace",
+            ),
+        ]
+        return ServiceStatusList(as_of=now, services=services)
+
+    async def update_service_control(
+        self, service_key: str, request: ServiceControlRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ServiceStatus:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to control a service.")
+        if service_key not in _CONTROLLABLE_SERVICES:
+            raise APIError(
+                409, "SERVICE_EXTERNALLY_MANAGED",
+                "This service cannot be controlled from the workspace Admin UI.",
+            )
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                """
+                INSERT INTO tenant_service_control(
+                  tenant_id,service_key,desired_state,updated_by
+                ) VALUES (%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,service_key) DO UPDATE SET
+                  desired_state=EXCLUDED.desired_state,
+                  updated_by=EXCLUDED.updated_by,
+                  updated_at=now()
+                """,
+                (tenant_id, service_key, request.desired_state, actor_key),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="service.control", target_kind="service", target_id=service_key,
+                detail={"desired_state": request.desired_state},
+            )
+        statuses = await self.service_status(tenant_id=tenant_id)
+        return next(service for service in statuses.services if service.key == service_key)
 
     async def _write_admin_audit(
         self, connection: Any, *, tenant_id: UUID, actor_key: str, action: str,

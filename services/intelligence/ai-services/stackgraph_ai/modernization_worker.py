@@ -33,6 +33,7 @@ from stackgraph_ai.modernization import (
     analyze_native_replacement,
     analyze_structural_duplication,
 )
+from stackgraph_ai.service_heartbeat import record_service_heartbeat
 
 
 @dataclass(frozen=True, slots=True)
@@ -888,6 +889,7 @@ def _claim_job(database_url: str, worker_id: str) -> Mapping[str, Any] | None:
             WHERE id=(
               SELECT id FROM intelligence_job
               WHERE status='PENDING' AND available_at<=now()
+                AND stackgraph_tenant_service_running(tenant_id,'intelligence')
                 AND (leased_until IS NULL OR leased_until<now())
               ORDER BY available_at,created_at,id
               FOR UPDATE SKIP LOCKED LIMIT 1
@@ -995,6 +997,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.poll_seconds < 0:
         raise SystemExit("--poll-seconds must not be negative")
     while True:
+        record_service_heartbeat(
+            database_url, "intelligence", instance_id=args.worker_id,
+            metadata={"poll_seconds": args.poll_seconds, "max_jobs": max(1, args.max_jobs)},
+        )
         result = work_jobs(
             database_url,
             capability_catalog_dir=args.capability_catalog_dir,

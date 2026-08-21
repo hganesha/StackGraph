@@ -47,6 +47,8 @@ import type {
   Connector,
   ConnectorRegisterRequest,
   GitHubRepositoryConnectRequest,
+  GitHubRepositoryOptionList,
+  GitHubInstallationConnectRequest,
   ConnectorUpdateRequest,
   AIProviderConfiguration,
   AIProviderConfigurationUpdateRequest,
@@ -54,6 +56,9 @@ import type {
   ScanPolicy,
   ScanPolicyUpdateRequest,
   ScanStatus,
+  ServiceStatusList,
+  ServiceStatus,
+  ServiceControlRequest,
   RescanRequest,
   RescanJob,
   RescanJobList,
@@ -121,7 +126,9 @@ export interface StackGraphClient {
   removeMember(id: string): Promise<TenantMember>;
   listConnectors(): Promise<ConnectorList>;
   registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
+  listAvailableGitHubRepositories(): Promise<GitHubRepositoryOptionList>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
+  connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
@@ -131,6 +138,8 @@ export interface StackGraphClient {
   getScanPolicy(): Promise<ScanPolicy>;
   updateScanPolicy(body: ScanPolicyUpdateRequest): Promise<ScanPolicy>;
   getScanStatus(): Promise<ScanStatus>;
+  getServiceStatus(): Promise<ServiceStatusList>;
+  updateServiceControl(serviceKey: string, body: ServiceControlRequest): Promise<ServiceStatus>;
   requestRescan(body: RescanRequest): Promise<RescanJob>;
   listRescans(cursor?: string, limit?: number): Promise<RescanJobList>;
 }
@@ -153,6 +162,7 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const adminMembers = new Map<string, TenantMember>();
 const adminConnectors = new Map<string, Connector>();
 const adminRescans = new Map<string, { idempotencyKey: string; job: RescanJob }>();
+const adminServiceStates = new Map<string, "RUNNING" | "STOPPED">();
 let adminScanPolicy: ScanPolicy = { contract_version: "1.0.0", cadence: "DAILY", enabled: true };
 let adminAIConfiguration: AIProviderConfiguration = {
   contract_version: "1.0.0", provider: "anthropic", model: "", enabled: true,
@@ -425,6 +435,33 @@ const fixtureClient: StackGraphClient = {
       scopes: ["contents:read", "metadata:read"],
     });
   },
+  async listAvailableGitHubRepositories() {
+    await delay();
+    const connected = new Set(
+      [...adminConnectors.values()]
+        .filter((connector) => connector.external_account_key.startsWith("github:repository:"))
+        .map((connector) => connector.external_account_key.slice("github:repository:".length).toLowerCase()),
+    );
+    return {
+      contract_version: "1.0.0",
+      token_configured: true,
+      truncated: false,
+      repositories: [
+        { full_name: "acme/billing", visibility: "private" as const, archived: false, default_branch: "main" },
+        { full_name: "acme/platform", visibility: "private" as const, archived: false, default_branch: "main" },
+        { full_name: "acme/public-design-system", visibility: "public" as const, archived: false, default_branch: "main" },
+      ].filter((repository) => !connected.has(repository.full_name.toLowerCase())),
+    };
+  },
+  async connectGitHubInstallation(body) {
+    return this.registerConnector({
+      provider: "GITHUB_APP",
+      display_name: body.display_name ?? `GitHub installation ${body.installation_id}`,
+      external_account_key: `github:installation:${body.installation_id}`,
+      credential_reference: `github-app://installation/${body.installation_id}`,
+      scopes: ["contents:read", "metadata:read"],
+    });
+  },
   async updateConnector(id, body) {
     await delay();
     const connector = adminConnectors.get(id);
@@ -510,6 +547,43 @@ const fixtureClient: StackGraphClient = {
       ],
       recent_jobs: clone([...adminRescans.values()].map((r) => r.job).slice(-10).reverse()),
     };
+  },
+  async getServiceStatus() {
+    await delay();
+    const now = new Date().toISOString();
+    return {
+      contract_version: "1.0.0", as_of: now,
+      services: [
+        ["web", "Web UI", "CORE"], ["api", "API", "CORE"],
+        ["database", "PostgreSQL / AGE", "CORE"],
+        ["github-webhook", "GitHub webhooks", "INGESTION"],
+        ["github-control-loop", "GitHub discovery", "INGESTION"],
+        ["depsdev", "deps.dev enrichment", "ENRICHMENT"],
+        ["osv", "OSV vulnerability enrichment", "ENRICHMENT"],
+        ["projection", "Graph projection", "GRAPH"],
+        ["intelligence", "Modernization intelligence", "INTELLIGENCE"],
+      ].map(([key, name, category]) => ({
+        key, name, category: category as ServiceStatusList["services"][number]["category"],
+        state: (adminServiceStates.get(key) === "STOPPED" ? "STOPPED" : "IDLE") as ServiceStatus["state"],
+        desired_state: adminServiceStates.get(key) ?? "RUNNING",
+        controllable: ["github-webhook", "github-control-loop", "projection", "intelligence"].includes(key),
+        management_scope: ["github-webhook", "github-control-loop", "projection", "intelligence"].includes(key)
+          ? "This workspace" : category === "CORE" ? "Docker / deployment platform" : "Shared OSS catalog pipeline",
+        detail: adminServiceStates.get(key) === "STOPPED"
+          ? "Stopped for this workspace; durable queued work is preserved."
+          : "Worker is online and the durable queue is clear.",
+        configured: true, pending: 0, running: 0, failed: 0,
+        last_heartbeat_at: now,
+      })),
+    };
+  },
+  async updateServiceControl(serviceKey, body) {
+    await delay();
+    adminServiceStates.set(serviceKey, body.desired_state);
+    const status = await this.getServiceStatus();
+    const service = status.services.find((item) => item.key === serviceKey);
+    if (!service) throw new FixtureApiError(404, { code: "SERVICE_NOT_FOUND" });
+    return service;
   },
   async requestRescan(body) {
     await delay();
@@ -647,8 +721,11 @@ const liveClient: StackGraphClient = {
   listConnectors: () => req("/admin/connectors"),
   registerConnector: (body) =>
     req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  listAvailableGitHubRepositories: () => req("/admin/github/repositories/available"),
   connectGitHubRepository: (body) =>
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  connectGitHubInstallation: (body) =>
+    req("/admin/github/installations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
@@ -661,6 +738,11 @@ const liveClient: StackGraphClient = {
   updateScanPolicy: (body) =>
     req("/admin/scan-policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getScanStatus: () => req("/admin/scan-status"),
+  getServiceStatus: () => req("/admin/services"),
+  updateServiceControl: (serviceKey, body) =>
+    req(`/admin/services/${encodeURIComponent(serviceKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   requestRescan: (body) =>
     req("/admin/rescans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listRescans: (cursor, limit = 50) =>

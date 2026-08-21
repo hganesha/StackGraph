@@ -394,9 +394,28 @@ export interface Freshness {
   status: "FRESH" | "STALE" | "UNKNOWN";
 }
 
+export interface GitHubInstallationConnectRequest {
+  display_name?: string | null;
+  installation_id: string;
+}
+
 export interface GitHubRepositoryConnectRequest {
   credential_reference?: "env://GITHUB_TOKEN";
   repository: string;
+}
+
+export interface GitHubRepositoryOption {
+  archived?: boolean;
+  default_branch?: string | null;
+  full_name: string;
+  visibility: "public" | "private" | "internal";
+}
+
+export interface GitHubRepositoryOptionList {
+  contract_version?: "1.0.0";
+  repositories: Array<GitHubRepositoryOption>;
+  token_configured: boolean;
+  truncated?: boolean;
 }
 
 export interface GraphEdge {
@@ -778,6 +797,33 @@ export interface Score {
   confidence_label: "HIGH" | "MEDIUM" | "LOW";
   method_version: string;
   value: number;
+}
+
+export interface ServiceControlRequest {
+  desired_state: "RUNNING" | "STOPPED";
+}
+
+export interface ServiceStatus {
+  category: "CORE" | "INGESTION" | "ENRICHMENT" | "GRAPH" | "INTELLIGENCE";
+  configured?: boolean;
+  controllable?: boolean;
+  desired_state?: "RUNNING" | "STOPPED";
+  detail?: string;
+  failed?: number;
+  key: string;
+  last_activity_at?: string | null;
+  last_heartbeat_at?: string | null;
+  management_scope?: string;
+  name: string;
+  pending?: number;
+  running?: number;
+  state: "RUNNING" | "IDLE" | "WAITING" | "DEGRADED" | "OFFLINE" | "STOPPING" | "STOPPED";
+}
+
+export interface ServiceStatusList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  services: Array<ServiceStatus>;
 }
 
 export interface SessionInfo {
