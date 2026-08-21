@@ -359,7 +359,7 @@ class CatalogSeeder:
             domain = domains[technology["domain_id"]]
             category = categories[technology["category_id"]]
             locator: dict[str, Any] = {
-                "seed_file": "technologies.json",
+                "seed_file": technology.get("seed_file", "technologies.json"),
                 "record_id": technology["id"],
             }
             if technology.get("source_line") is not None:

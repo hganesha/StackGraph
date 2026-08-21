@@ -1,0 +1,182 @@
+{
+  "source": {
+    "id": "oss-core-package-definitions-2026-08-21",
+    "description": "Curated package definitions supplied for OSS dependency classification.",
+    "reviewed_at": "2026-08-21"
+  },
+  "categories": [
+    {"id": "js-ts-compiler-transpilation", "domain_id": "frontend", "name": "JavaScript / TypeScript compiler & transpilation"},
+    {"id": "build-tools-bundlers", "domain_id": "frontend", "name": "Build tools & bundlers"},
+    {"id": "code-quality-linting", "domain_id": "frontend", "name": "Code quality & linting"},
+    {"id": "styling-ui", "domain_id": "frontend", "name": "Styling & UI"},
+    {"id": "frontend-framework-routing", "domain_id": "frontend", "name": "Frontend framework & routing"},
+    {"id": "python-data-backend", "domain_id": "backend", "name": "Python data & backend ecosystem"},
+    {"id": "filesystem-path-utilities", "domain_id": "backend", "name": "File system, path & general utilities"},
+    {"id": "data-algorithm-utilities", "domain_id": "backend", "name": "Data & algorithm utilities"}
+  ],
+  "technology_overrides": [
+    {
+      "id": "rolldown-rspack-esbuild-swc",
+      "category_id": "build-tools-bundlers",
+      "aliases": ["@rolldown/core", "@rolldown/binding-*"],
+      "purpose": "Rolldown and related Rust/Go bundlers and transpilers; scoped binding packages provide platform-specific native binaries."
+    },
+    {
+      "id": "vite",
+      "category_id": "build-tools-bundlers",
+      "aliases": ["@vitejs/plugin-react"],
+      "purpose": "Frontend build tooling; the React plugin provides Fast Refresh and JSX transformation."
+    },
+    {
+      "id": "biome-eslint-oxlint-prettier",
+      "category_id": "code-quality-linting",
+      "aliases": ["eslint", "@eslint/js", "@eslint/core", "@eslint/config-*"],
+      "purpose": "JavaScript and TypeScript linting, formatting, and flat-config infrastructure."
+    },
+    {
+      "id": "tailwind-css",
+      "category_id": "styling-ui",
+      "aliases": ["tailwindcss"],
+      "purpose": "Utility-first CSS framework that generates styles from class names in application markup."
+    },
+    {
+      "id": "react-router",
+      "category_id": "frontend-framework-routing",
+      "aliases": ["react-router", "react-router-dom"],
+      "purpose": "Declarative routing for React single-page applications, including DOM bindings."
+    },
+    {
+      "id": "opentelemetry",
+      "aliases": ["opentelemetry-api", "opentelemetry-sdk", "opentelemetry-exporter-otlp-proto-grpc"],
+      "purpose": "Vendor-neutral observability APIs, SDKs, and OTLP exporters for traces, metrics, and logs."
+    }
+  ],
+  "packages": [
+    {
+      "id": "babel-compiler-toolchain", "name": "Babel compiler toolchain", "domain_id": "frontend", "category_id": "js-ts-compiler-transpilation", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Parses, traverses, transforms, and generates modern JavaScript, JSX, and TypeScript for backward-compatible targets.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["@babel/core", "@babel/parser", "@babel/traverse", "@babel/generator", "@babel/types"]
+    },
+    {
+      "id": "babel-code-generation-helpers", "name": "Babel code-generation helpers", "domain_id": "frontend", "category_id": "js-ts-compiler-transpilation", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Babel utilities for code templates, generated helpers, imports, and module transformations.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["@babel/template", "@babel/helpers", "@babel/helper-*"]
+    },
+    {
+      "id": "babel-compatibility-data", "name": "Babel compatibility data", "domain_id": "frontend", "category_id": "js-ts-compiler-transpilation", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Determines required JavaScript transformations from configured browser and runtime targets.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["@babel/compat-data", "@babel/helper-compilation-targets"]
+    },
+    {
+      "id": "gensync", "name": "gensync", "domain_id": "frontend", "category_id": "js-ts-compiler-transpilation", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Babel utility for exposing generator-based operations through synchronous and asynchronous interfaces.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["gensync"]
+    },
+    {
+      "id": "postcss-toolchain", "name": "PostCSS toolchain", "domain_id": "frontend", "category_id": "build-tools-bundlers", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "CSS parsing and transformation with plugins for imports, nesting, JavaScript objects, configuration, selectors, and values.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["postcss", "postcss-import", "postcss-js", "postcss-load-config", "postcss-nested", "postcss-selector-parser", "postcss-value-parser"]
+    },
+    {
+      "id": "autoprefixer", "name": "Autoprefixer", "domain_id": "frontend", "category_id": "build-tools-bundlers", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "PostCSS plugin that adds browser vendor prefixes based on compatibility data.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["autoprefixer"]
+    },
+    {
+      "id": "lightning-css", "name": "Lightning CSS", "domain_id": "frontend", "category_id": "build-tools-bundlers", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Rust-based CSS parser, transformer, and minifier with platform-specific native packages.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["lightningcss", "lightningcss-*"]
+    },
+    {
+      "id": "jiti", "name": "jiti", "domain_id": "frontend", "category_id": "build-tools-bundlers", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Runtime TypeScript and ESM loader for Node.js configuration and tooling files.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["jiti"]
+    },
+    {
+      "id": "eslint-community-utilities", "name": "ESLint community utilities", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Utilities for implementing ESLint rules and parsing JavaScript regular expressions.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["@eslint-community/eslint-utils", "@eslint-community/regexpp"]
+    },
+    {
+      "id": "typescript-eslint-toolchain", "name": "typescript-eslint toolchain", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "TypeScript parser, type services, and lint rules for ESLint.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["@typescript-eslint/*"]
+    },
+    {
+      "id": "eslint-react-plugins", "name": "ESLint React plugins", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "ESLint rules that enforce React Hooks semantics and Fast Refresh compatibility.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["eslint-plugin-react-hooks", "eslint-plugin-react-refresh"]
+    },
+    {
+      "id": "eslint-ast-utilities", "name": "ESLint AST utilities", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "JavaScript AST parsing, querying, traversal, recursion, and language utility packages used by ESLint.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["espree", "esquery", "esrecurse", "estraverse", "esutils"]
+    },
+    {
+      "id": "acorn-parser", "name": "Acorn parser", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "JavaScript parser with an extension for JSX syntax.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["acorn", "acorn-jsx"]
+    },
+    {
+      "id": "hermes-parser", "name": "Hermes parser", "domain_id": "frontend", "category_id": "code-quality-linting", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Meta's JavaScript parser and ESTree-compatible AST representation used by React Native and tooling.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["hermes-parser", "hermes-estree"]
+    },
+    {
+      "id": "tailwind-merge", "name": "tailwind-merge", "domain_id": "frontend", "category_id": "styling-ui", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Merges Tailwind CSS class lists while resolving conflicting utilities.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["tailwind-merge"]
+    },
+    {
+      "id": "clsx", "name": "clsx", "domain_id": "frontend", "category_id": "styling-ui", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Conditionally joins CSS class names into a compact string.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["clsx"]
+    },
+    {
+      "id": "cssesc", "name": "cssesc", "domain_id": "frontend", "category_id": "styling-ui", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Escapes strings and identifiers for safe CSS embedding.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["cssesc"]
+    },
+    {
+      "id": "camelcase-css", "name": "camelcase-css", "domain_id": "frontend", "category_id": "styling-ui", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Converts CSS property names to their JavaScript camelCase form.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["camelcase-css"]
+    },
+    {
+      "id": "picocolors", "name": "picocolors", "domain_id": "frontend", "category_id": "styling-ui", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Small terminal string color and style utility used by frontend tooling.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["picocolors"]
+    },
+    {
+      "id": "react-dom", "name": "React DOM", "domain_id": "frontend", "category_id": "frontend-framework-routing", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "React renderer for browser DOM environments.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["react-dom"]
+    },
+    {
+      "id": "react-scheduler", "name": "React scheduler", "domain_id": "frontend", "category_id": "frontend-framework-routing", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Cooperative task scheduler used by React for prioritized and time-sliced updates.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["scheduler"]
+    },
+    {
+      "id": "lucide-react", "name": "Lucide React", "domain_id": "frontend", "category_id": "frontend-framework-routing", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "SVG icon component library for React.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["lucide-react"]
+    },
+    {
+      "id": "pandas", "name": "pandas", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "DataFrame-based data manipulation, analysis, transformation, and tabular I/O.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["pandas"]
+    },
+    {
+      "id": "psycopg2-binary", "name": "psycopg2-binary", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Precompiled Python adapter for PostgreSQL.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["psycopg2-binary", "psycopg2_binary"]
+    },
+    {
+      "id": "streamlit", "name": "Streamlit", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Framework for turning Python data scripts into interactive web applications.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["streamlit"]
+    },
+    {
+      "id": "databricks-sdk", "name": "Databricks SDK", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Python SDK for Databricks APIs including jobs, clusters, and workspace resources.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["databricks-sdk", "databricks_sdk"]
+    },
+    {
+      "id": "databricks-sql-connector", "name": "Databricks SQL Connector", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Python DB-API connector for Databricks SQL warehouses and clusters.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["databricks-sql-connector", "databricks_sql_connector"]
+    },
+    {
+      "id": "httpx", "name": "HTTPX", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Synchronous and asynchronous Python HTTP client with HTTP/2 support.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["httpx"]
+    },
+    {
+      "id": "altair", "name": "Altair", "domain_id": "backend", "category_id": "python-data-backend", "entity_kind": "package", "language_ecosystem": "PyPI", "purpose": "Declarative statistical visualization library that produces Vega-Lite specifications.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["altair"]
+    },
+    {
+      "id": "chokidar-readdirp", "name": "Chokidar / readdirp", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Portable file watching and recursive directory enumeration for Node.js tooling.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["chokidar", "readdirp"]
+    },
+    {
+      "id": "fsevents", "name": "fsevents", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Native macOS file-system event bindings commonly used as an optional watcher dependency.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["fsevents"]
+    },
+    {
+      "id": "glob-pattern-toolchain", "name": "Glob pattern toolchain", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Glob expansion, path matching, brace expansion, range filling, and regular-expression range generation.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["fast-glob", "tinyglobby", "glob-parent", "micromatch", "picomatch", "braces", "fill-range", "to-regex-range"]
+    },
+    {
+      "id": "minimatch", "name": "minimatch", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "File path matching using glob-style patterns.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["minimatch"]
+    },
+    {
+      "id": "node-path-resolution", "name": "Node.js path resolution utilities", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Module and file path resolution plus upward file discovery.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["resolve", "path-parse", "path-exists", "find-up", "locate-path"]
+    },
+    {
+      "id": "cross-platform-process-spawning", "name": "Cross-platform process spawning", "domain_id": "backend", "category_id": "filesystem-path-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Portable child-process spawning, executable discovery, shebang parsing, and PATH lookup.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["cross-spawn", "which", "shebang-command", "shebang-regex", "path-key"]
+    },
+    {
+      "id": "browser-compatibility-data", "name": "Browser compatibility data", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "Browser usage and feature-support datasets used to select compilation and CSS compatibility targets.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["browserslist", "caniuse-lite", "electron-to-chromium", "update-browserslist-db", "baseline-browser-mapping"]
+    },
+    {
+      "id": "fraction-js", "name": "fraction.js", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Arbitrary-precision rational number arithmetic.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["fraction.js"]
+    },
+    {
+      "id": "json5", "name": "JSON5", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "JSON-compatible configuration syntax with comments, trailing commas, and unquoted keys.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["json5"]
+    },
+    {
+      "id": "nanoid", "name": "Nano ID", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Small secure generator for URL-friendly unique identifiers.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["nanoid"]
+    },
+    {
+      "id": "cookie-parsing", "name": "Cookie parsing utilities", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package_family", "language_ecosystem": "npm", "purpose": "HTTP Cookie and Set-Cookie parsing and serialization utilities.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["cookie", "set-cookie-parser"]
+    },
+    {
+      "id": "ms", "name": "ms", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Converts between human-readable time spans and millisecond values.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["ms"]
+    },
+    {
+      "id": "zod-validation-error", "name": "zod-validation-error", "domain_id": "backend", "category_id": "data-algorithm-utilities", "entity_kind": "package", "language_ecosystem": "npm", "purpose": "Formats Zod validation failures into user-friendly error messages.", "curated_signal": "", "source": "oss-core-package-definitions-2026-08-21", "confidence": 1.0, "assertion_class": "CURATED", "aliases": ["zod-validation-error"]
+    }
+  ]
+}

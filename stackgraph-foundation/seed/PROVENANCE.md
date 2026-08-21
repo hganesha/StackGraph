@@ -10,6 +10,11 @@ preserves its source-row key, source line, original text, curation class, and th
 The files `technologies.json`, `categories.json`, `capabilities.json`, `relationships.json`, and
 `assessments.json` are deterministic materializations of those retained rows.
 
+`oss-core.json` is a separately reviewed overlay for package-level classification. It records its own source
+identifier and review date, adds package aliases and package-family patterns, and may refine the classification
+of a base landscape record without changing the preserved `source-rows.json` evidence. Seed facts created from
+these additions and refinements cite `oss-core.json` as their locator.
+
 Before any seed record is promoted into production identity or used as a measured signal, it must have:
 
 1. an atomic product/project/package identity rather than a comparison group;
