@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
 import { stackGraphClient, type EstateSummary, type Namespace } from "@stackgraph/shared";
 
 export function useEstateSummary() {
@@ -8,7 +8,10 @@ export function useEstateSummary() {
   });
 }
 
-export function useEstateDomainSummary(domains: Namespace[]) {
+export function useEstateDomainSummary(
+  domains: Namespace[],
+  options?: Pick<UseQueryOptions<EstateSummary>, "enabled">,
+) {
   return useQuery({
     queryKey: ["estate", "summary", "domains", ...domains],
     queryFn: async () => {
@@ -30,6 +33,7 @@ export function useEstateDomainSummary(domains: Namespace[]) {
       if (!combined) throw new Error("Estate summary did not return a page.");
       return combined;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 

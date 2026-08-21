@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useMemo, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   DndContext,
   KeyboardSensor,
@@ -217,6 +218,8 @@ function Toolbar({
                 capabilities: (controller.placementsByStage.get(stage.id) ?? []).map((placement) => ({
                   name: controller.capabilityById.get(placement.capabilityId)?.name ?? placement.capabilityId,
                   maturity: placement.maturity,
+                  applications: (controller.applicationsByCapability.get(placement.capabilityId) ?? [])
+                    .map((application) => application.applicationName),
                 })),
               })),
               organizationUnits: map.organizationUnits.map((unit) => ({
@@ -376,6 +379,7 @@ function CapabilityCard({
   editing,
   onSelect,
   onMove,
+  applications,
 }: {
   capability: Capability;
   placement: CapabilityPlacement;
@@ -385,6 +389,7 @@ function CapabilityCard({
   editing: boolean;
   onSelect: () => void;
   onMove: (index: number) => void;
+  applications: Array<{ applicationId: string; applicationName: string }>;
 }) {
   const draggable = useDraggable({ id: placement.capabilityId, disabled: !editing });
   const transform = draggable.transform
@@ -406,23 +411,40 @@ function CapabilityCard({
   };
 
   return (
-    <button
+    <article
       ref={draggable.setNodeRef}
-      type="button"
       className={`${styles.capabilityCard} ${!editing ? styles.capabilityCardView : ""} ${selected ? styles.capabilityCardSelected : ""} ${draggable.isDragging ? styles.capabilityCardDragging : ""}`}
       style={{ transform } as CSSProperties}
-      {...(editing ? draggable.listeners : {})}
-      {...(editing ? draggable.attributes : {})}
-      aria-label={editing ? `${capability.name}. Maturity ${maturityLabel}. Alt plus left or right arrow moves between stages.` : `${capability.name}. Maturity ${maturityLabel}.`}
-      aria-pressed={selected}
-      onClick={onSelect}
-      onKeyDown={onKeyDown}
     >
-      <span className={styles.maturityTicks} aria-hidden="true">
-        {MATURITY.map((item) => <i key={item.value} data-filled={item.value <= placement.maturity} />)}
-      </span>
-      <span>{capability.name}</span>
-    </button>
+      <button
+        type="button"
+        className={styles.capabilityCardHeader}
+        {...(editing ? draggable.listeners : {})}
+        {...(editing ? draggable.attributes : {})}
+        aria-label={editing ? `${capability.name}. Maturity ${maturityLabel}. Alt plus left or right arrow moves between stages.` : `${capability.name}. Maturity ${maturityLabel}.`}
+        aria-pressed={selected}
+        onClick={onSelect}
+        onKeyDown={onKeyDown}
+      >
+        <span className={styles.maturityTicks} aria-hidden="true">
+          {MATURITY.map((item) => <i key={item.value} data-filled={item.value <= placement.maturity} />)}
+        </span>
+        <span>{capability.name}</span>
+        {applications.length > 0 ? <span className="sg-mono">{applications.length}</span> : null}
+      </button>
+      {applications.length > 0 ? (
+        <div className={styles.applicationStack} aria-label={`${capability.name} applications`}>
+          {applications.slice(0, 3).map((application) => (
+            <Link key={application.applicationId} href={`/applications/${application.applicationId}`}>
+              <span aria-hidden="true">ENT</span>
+              <span>{application.applicationName}</span>
+              <span aria-hidden="true">→</span>
+            </Link>
+          ))}
+          {applications.length > 3 ? <button type="button" onClick={onSelect}>+{applications.length - 3} more</button> : null}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -474,6 +496,7 @@ function ValueChainStage({
               stageIndex={stageIndex}
               stageCount={controller.map.stages.length}
               editing={editing}
+              applications={controller.applicationsByCapability.get(placement.capabilityId) ?? []}
               onSelect={() => controller.selectCapability(placement.capabilityId)}
               onMove={(index) => controller.moveCapability(placement.capabilityId, controller.map.stages[index]?.id ?? null)}
             />
@@ -737,6 +760,7 @@ function CapabilityPanel({
   onEdit: (target: CatalogEditorTarget) => void;
   editing: boolean;
 }) {
+  const [applicationId, setApplicationId] = useState("");
   const placement = controller.map.placements.find((item) => item.capabilityId === controller.selectedCapabilityId);
   const capability = placement ? controller.capabilityById.get(placement.capabilityId) : null;
   const owner = placement ? controller.map.catalog.find((fn) => fn.id === placement.sourceFunctionId) : null;
@@ -745,6 +769,11 @@ function CapabilityPanel({
     : null;
   if (!placement || !capability) return null;
   const stageIndex = controller.map.stages.findIndex((stage) => stage.id === placement.stageId);
+  const assignedApplications = controller.applicationsByCapability.get(capability.id) ?? [];
+  const assignedApplicationIds = new Set(assignedApplications.map((application) => application.applicationId));
+  const availableApplications = controller.estateApplications.filter(
+    (application) => !assignedApplicationIds.has(application.id),
+  );
 
   return (
     <aside className={styles.detailPanel} aria-label="Capability detail">
@@ -793,6 +822,66 @@ function CapabilityPanel({
             <div><dt>Process</dt><dd>{process?.name ?? "—"}</dd></div>
             <div><dt>Source</dt><dd>Starter catalog · CURATED</dd></div>
           </dl>
+        </section>
+        <section className={styles.panelSection}>
+          <div className={styles.panelSectionHeading}>
+            <h3>Applications</h3>
+            <span className="sg-mono">{String(assignedApplications.length).padStart(2, "0")}</span>
+          </div>
+          {assignedApplications.length > 0 ? (
+            <ul className={styles.capabilityApplications}>
+              {assignedApplications.map((application) => (
+                <li key={application.applicationId}>
+                  <Link href={`/applications/${application.applicationId}`}>
+                    <span aria-hidden="true">ENT</span>
+                    <strong>{application.applicationName}</strong>
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                  {editing ? (
+                    <button
+                      type="button"
+                      aria-label={`Unlink ${application.applicationName}`}
+                      title="Unlink application"
+                      onClick={() => controller.unassignApplication(capability.id, application.applicationId)}
+                    >
+                      <IconX size={14} />
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : <p className={styles.noCapabilityApplications}>No applications linked to this capability.</p>}
+          {editing ? (
+            <div className={styles.applicationAssignmentControl}>
+              <select
+                aria-label="Application to link"
+                value={applicationId}
+                disabled={controller.estateApplicationsLoading || availableApplications.length === 0}
+                onChange={(event) => setApplicationId(event.target.value)}
+              >
+                <option value="">
+                  {controller.estateApplicationsLoading
+                    ? "Loading estate applications…"
+                    : availableApplications.length === 0
+                      ? "No more applications"
+                      : "Select estate application"}
+                </option>
+                {availableApplications.map((application) => (
+                  <option key={application.id} value={application.id}>{application.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!applicationId}
+                onClick={() => {
+                  controller.assignApplication(capability.id, applicationId);
+                  setApplicationId("");
+                }}
+              >
+                <IconPlus size={14} /> Link
+              </button>
+            </div>
+          ) : null}
         </section>
         {capability.kpis?.length ? (
           <section className={styles.panelSection}>

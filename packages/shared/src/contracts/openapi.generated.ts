@@ -118,6 +118,12 @@ export interface AssessmentSummary {
   score?: number | null;
 }
 
+export interface BusinessMapApplicationAssignment {
+  application_id: string;
+  application_name: string;
+  capability_id: string;
+}
+
 export interface BusinessMapCapabilityNode {
   description?: string;
   id: string;
@@ -216,6 +222,7 @@ export interface BusinessMapSharedGroup {
 }
 
 export interface BusinessMapStateModel {
+  application_assignments?: Array<BusinessMapApplicationAssignment>;
   catalog?: Array<BusinessMapFunctionNode>;
   function_assignments?: Array<BusinessMapFunctionAssignment>;
   organization_units?: Array<BusinessMapLane>;
