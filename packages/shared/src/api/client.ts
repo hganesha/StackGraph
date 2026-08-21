@@ -9,6 +9,7 @@
 import { config, isFixtureMode } from "../config";
 import type {
   ApplicationDetail,
+  RepositoryDetail,
   AskRequest,
   AskResponse,
   EstateSummary,
@@ -29,7 +30,17 @@ import type {
   ModernizationValidationOutcomeResult,
   Phase3IntelligenceMetrics,
   ModernizationList,
+  CapabilityFootprintList,
+  ModernizationScenarioRequest,
+  ModernizationScenarioResult,
+  ModernizationGovernanceState,
+  ModernizationPolicyPublishRequest,
+  InternalCatalogComponentUpsertRequest,
+  CalibrationCorpusPublishRequest,
+  EcosystemAdmissionEvaluateRequest,
+  EcosystemName,
   TechnologyDetail,
+  TechnologyEstateHierarchy,
   BusinessMapList,
   BusinessMapDetail,
   BusinessMapSummary,
@@ -69,6 +80,7 @@ import type {
 // The golden fixture is contracts/v1/fixtures/estate-summary.json.
 import estateSummary from "../fixtures/estate-summary.demo.json";
 import applicationDetail from "../fixtures/application-detail.json";
+import repositoryDetail from "../fixtures/repository-detail.json";
 import technologyDetail from "../fixtures/technology-detail.json";
 import modernizationList from "../fixtures/modernization-list.json";
 import askResponse from "../fixtures/ask-response.json";
@@ -82,6 +94,10 @@ import repositoryCapabilities from "../fixtures/repository-capabilities.json";
 import repositoryModernization from "../fixtures/repository-modernization-intelligence.json";
 import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
 import businessMapDetail from "../fixtures/business-map-detail.json";
+import technologyEstateHierarchy from "../fixtures/technology-estate-hierarchy.json";
+import capabilityFootprints from "../fixtures/capability-footprints.json";
+import modernizationScenario from "../fixtures/modernization-scenario.json";
+import modernizationGovernance from "../fixtures/modernization-governance.json";
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -92,8 +108,12 @@ export interface EstateSummaryParams {
 export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
+  getRepository(id: string): Promise<RepositoryDetail>;
   getTechnology(id: string): Promise<TechnologyDetail>;
+  getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
+  listCapabilityFootprints(): Promise<CapabilityFootprintList>;
+  optimizeModernizationScenario(body: ModernizationScenarioRequest): Promise<ModernizationScenarioResult>;
   ask(body: AskRequest): Promise<AskResponse>;
   getGraphNeighborhood(centerId: string, depth?: number): Promise<GraphNeighborhood>;
   getFactEvidence(factId: string): Promise<EvidenceDetail>;
@@ -131,6 +151,11 @@ export interface StackGraphClient {
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
+  getModernizationGovernance(): Promise<ModernizationGovernanceState>;
+  publishModernizationPolicy(body: ModernizationPolicyPublishRequest): Promise<ModernizationGovernanceState>;
+  governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
+  publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
+  evaluateEcosystemAdmission(ecosystem: EcosystemName, body: EcosystemAdmissionEvaluateRequest): Promise<ModernizationGovernanceState>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
   updateAIProviderConfiguration(body: AIProviderConfigurationUpdateRequest): Promise<AIProviderConfiguration>;
   removeAIProviderKey(): Promise<AIProviderConfiguration>;
@@ -169,6 +194,9 @@ let adminAIConfiguration: AIProviderConfiguration = {
   key_configured: false, test_status: "NOT_TESTED", enrichment_status: "DISABLED",
   pending_enrichment_jobs: 0, running_enrichment_jobs: 0, failed_enrichment_jobs: 0,
 };
+let adminModernizationGovernance = clone(
+  modernizationGovernance as ModernizationGovernanceState,
+);
 {
   const now = "2026-08-19T12:00:00.000Z";
   for (const seed of [
@@ -233,13 +261,29 @@ const fixtureClient: StackGraphClient = {
     await delay();
     return applicationDetail as ApplicationDetail;
   },
+  async getRepository() {
+    await delay();
+    return repositoryDetail as RepositoryDetail;
+  },
   async getTechnology() {
     await delay();
     return technologyDetail as TechnologyDetail;
   },
+  async getTechnologyEstateHierarchy() {
+    await delay();
+    return technologyEstateHierarchy as TechnologyEstateHierarchy;
+  },
   async listModernization() {
     await delay();
     return modernizationList as ModernizationList;
+  },
+  async listCapabilityFootprints() {
+    await delay();
+    return capabilityFootprints as CapabilityFootprintList;
+  },
+  async optimizeModernizationScenario() {
+    await delay();
+    return modernizationScenario as ModernizationScenarioResult;
   },
   async ask() {
     await delay(300);
@@ -479,6 +523,135 @@ const fixtureClient: StackGraphClient = {
     adminConnectors.delete(id);
     return clone(connector);
   },
+  async getModernizationGovernance() {
+    await delay();
+    return clone(adminModernizationGovernance);
+  },
+  async publishModernizationPolicy(body) {
+    await delay();
+    const now = new Date().toISOString();
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      active_policy: {
+        id: adminModernizationGovernance.active_policy?.id ?? "00000000-0000-4000-8000-000000000921",
+        policy_key: body.policy_key ?? "modernization.default",
+        version: body.version,
+        status: "ACTIVE",
+        runtime_versions: body.runtime_versions ?? {},
+        allowed_licenses: body.allowed_licenses ?? [],
+        denied_option_keys: body.denied_option_keys ?? [],
+        allowed_security_statuses: body.allowed_security_statuses ?? ["CLEAR", "UNKNOWN"],
+        required_policy_tags: body.required_policy_tags ?? [],
+        configuration_fingerprint: `sha256:${"5".repeat(64)}`,
+        activated_by: "fixture-admin",
+        activated_at: now,
+      },
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async governInternalCatalogComponent(componentKey, body) {
+    await delay();
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      internal_components: [
+        ...adminModernizationGovernance.internal_components.filter(
+          (item) => item.component_key !== componentKey || item.version !== body.version,
+        ),
+        {
+          id: `fixture-${componentKey}-${body.version}`,
+          component_key: componentKey,
+          version: body.version,
+          name: componentKey,
+          status: body.status ?? "APPROVED",
+          review_state: body.decision === "APPROVE" ? "APPROVED" : "REJECTED",
+          owner: body.owner,
+          catalog_fingerprint: `sha256:${"6".repeat(64)}`,
+          supporting_fact_ids: body.supporting_fact_ids,
+          governed_by: "fixture-admin",
+          governed_at: new Date().toISOString(),
+        },
+      ],
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async publishCalibrationCorpus(body) {
+    await delay();
+    const minimumReviewedCases = body.minimum_reviewed_cases ?? 20;
+    const failures = [
+      ...(body.case_fingerprints.length >= minimumReviewedCases
+        ? [] : [`reviewed_cases ${body.case_fingerprints.length} < ${minimumReviewedCases}`]),
+      ...(body.candidate_precision != null && body.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
+        ? [] : ["candidate_precision is unavailable or below threshold"]),
+      ...(body.recommendation_acceptance != null && body.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
+        ? [] : ["recommendation_acceptance is unavailable or below threshold"]),
+      ...(body.validation_success != null && body.validation_success >= (body.minimum_validation_success ?? 0.8)
+        ? [] : ["validation_success is unavailable or below threshold"]),
+      ...(body.affected_scope_mae != null && body.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
+        ? [] : ["affected_scope_mae is unavailable or above threshold"]),
+      ...(body.effort_accuracy != null && body.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
+        ? [] : ["effort_accuracy is unavailable or below threshold"]),
+    ];
+    const promotionPassed = failures.length === 0;
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      active_calibration: {
+        id: "00000000-0000-4000-8000-000000000922",
+        corpus_key: body.corpus_key ?? "modernization.pilot",
+        version: body.version,
+        case_count: body.case_fingerprints.length,
+        corpus_fingerprint: `sha256:${"7".repeat(64)}`,
+        promotion_passed: promotionPassed,
+        promotion_failures: failures,
+        evaluation_fingerprint: `sha256:${"8".repeat(64)}`,
+        evaluated_at: new Date().toISOString(),
+      },
+      ecosystem_admissions: adminModernizationGovernance.ecosystem_admissions.map((item) => ({
+        ...item,
+        status: item.status === "NOT_EVALUATED" ? item.status : "STALE",
+        calibration_gate_passed: promotionPassed,
+      })),
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async evaluateEcosystemAdmission(ecosystem, body) {
+    await delay();
+    const admission = adminModernizationGovernance.ecosystem_admissions.find(
+      (item) => item.ecosystem === ecosystem,
+    );
+    if (!admission) throw new FixtureApiError(404, { code: "ECOSYSTEM_NOT_FOUND" });
+    const minimumRepositories = body.minimum_repositories ?? admission.minimum_repositories;
+    const minimumDependencyShare = body.minimum_dependency_share ?? admission.minimum_dependency_share;
+    const predecessor = adminModernizationGovernance.ecosystem_admissions.find(
+      (item) => item.sequence === admission.sequence - 1,
+    );
+    const predecessorAdmitted = admission.sequence === 1 || predecessor?.status === "ADMITTED";
+    const reasons = [
+      ...(predecessorAdmitted ? [] : ["predecessor ecosystem has not been admitted"]),
+      ...(admission.observed_repositories >= minimumRepositories ? [] : ["observed repository demand is below threshold"]),
+      ...(admission.observed_dependency_share >= minimumDependencyShare ? [] : ["observed dependency share is below threshold"]),
+      ...(admission.metadata_parity ? [] : ["metadata parity is incomplete"]),
+      ...(admission.calibration_gate_passed ? [] : ["calibration promotion gate has not passed"]),
+    ];
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      ecosystem_admissions: adminModernizationGovernance.ecosystem_admissions.map((item) => (
+        item.ecosystem === ecosystem
+          ? {
+              ...item,
+              status: reasons.length === 0 ? "ADMITTED" : "PROPOSED",
+              minimum_repositories: minimumRepositories,
+              minimum_dependency_share: minimumDependencyShare,
+              predecessor_admitted: predecessorAdmitted,
+              reasons,
+              decision_fingerprint: `sha256:${String(item.sequence).repeat(64)}`,
+              decided_by: "fixture-admin",
+              decided_at: new Date().toISOString(),
+            }
+          : item
+      )),
+    };
+    return clone(adminModernizationGovernance);
+  },
   async getAIProviderConfiguration() {
     await delay();
     return clone(adminAIConfiguration);
@@ -655,8 +828,15 @@ const liveClient: StackGraphClient = {
     return req(`/estate/summary${suffix}`);
   },
   getApplication: (id) => req(`/applications/${id}`),
+  getRepository: (id) => req(`/repositories/${id}`),
   getTechnology: (id) => req(`/technologies/${id}`),
+  getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),
+  listCapabilityFootprints: () => req("/capabilities/footprints"),
+  optimizeModernizationScenario: (body) =>
+    req("/modernization/scenarios", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   ask: (body) => req("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getGraphNeighborhood: (centerId, depth = 1) =>
     req(`/graph/neighborhood?center_id=${encodeURIComponent(centerId)}&depth=${depth}`),
@@ -729,6 +909,23 @@ const liveClient: StackGraphClient = {
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
+  getModernizationGovernance: () => req("/admin/modernization-governance"),
+  publishModernizationPolicy: (body) =>
+    req("/admin/modernization-governance/policy", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  governInternalCatalogComponent: (componentKey, body) =>
+    req(`/admin/modernization-governance/internal-components/${encodeURIComponent(componentKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  publishCalibrationCorpus: (body) =>
+    req("/admin/modernization-governance/calibration", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  evaluateEcosystemAdmission: (ecosystem, body) =>
+    req(`/admin/modernization-governance/ecosystems/${encodeURIComponent(ecosystem)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   getAIProviderConfiguration: () => req("/admin/ai-configuration"),
   updateAIProviderConfiguration: (body) =>
     req("/admin/ai-configuration", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

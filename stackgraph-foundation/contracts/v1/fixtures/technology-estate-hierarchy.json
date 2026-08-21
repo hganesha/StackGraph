@@ -1,0 +1,45 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-19T14:00:00Z",
+  "nodes": [
+    {
+      "technology": {
+        "id": "00000000-0000-4000-8000-000000000204",
+        "kind": "PackageVersion",
+        "name": "axios 1.7.9",
+        "canonical_key": "pkg:npm/axios@1.7.9"
+      },
+      "depth": 1,
+      "direct": true,
+      "relationship": "DEPENDS_ON",
+      "confidence": 0.99,
+      "confidence_label": "HIGH",
+      "dependent_applications": [
+        {
+          "id": "00000000-0000-4000-8000-000000000201",
+          "kind": "Application",
+          "name": "Billing API",
+          "canonical_key": "application:billing-api"
+        }
+      ],
+      "catalog_profile": {
+        "summary": "Promise based HTTP client for the browser and Node.js.",
+        "package_name": "axios",
+        "ecosystem": "npm",
+        "license": "MIT",
+        "domain": {"key": "frontend", "name": "Frontend"},
+        "category": {"key": "data-fetching", "name": "Data Fetching"},
+        "functions": [{"key": "http-client", "name": "HTTP Client"}],
+        "classification": "CATALOG_MATCH",
+        "citations": [{"fact_id": "00000000-0000-4000-8000-000000000305", "label": "OSS catalog metadata"}]
+      },
+      "citations": [
+        {
+          "fact_id": "00000000-0000-4000-8000-000000000301",
+          "label": "Declared dependency evidence"
+        }
+      ]
+    }
+  ],
+  "truncated": false
+}

@@ -23,6 +23,7 @@ from app.models import (
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
+    CapabilityFootprintList,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     EstateSummary,
@@ -31,6 +32,8 @@ from app.models import (
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
+    ModernizationScenarioRequest,
+    ModernizationScenarioResult,
     ModernizationCandidateReviewRequest,
     ModernizationCandidateReviewResult,
     ModernizationRecommendationReviewRequest,
@@ -39,9 +42,17 @@ from app.models import (
     ModernizationValidationOutcomeResult,
     Namespace,
     RepositoryCapabilityIntelligence,
+    RepositoryDetail,
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
+    ModernizationGovernanceState,
+    ModernizationPolicyPublishRequest,
+    InternalCatalogComponentUpsertRequest,
+    CalibrationCorpusPublishRequest,
+    EcosystemAdmissionEvaluateRequest,
+    EcosystemName,
     SessionInfo,
+    TechnologyEstateHierarchy,
     TechnologyDetail,
     ReviewQueue,
     ReviewQueueItemType,
@@ -74,8 +85,14 @@ class ReadModelsProtocol(Protocol):
         namespaces: list[str] | None = None,
     ) -> EstateSummary: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
+    async def repository_detail(self, repository_id: UUID, *, tenant_id: UUID | None) -> RepositoryDetail: ...
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
+    async def technology_estate_hierarchy(self, *, tenant_id: UUID | None) -> TechnologyEstateHierarchy: ...
     async def modernization(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> ModernizationList: ...
+    async def capability_footprints(self, *, tenant_id: UUID | None) -> CapabilityFootprintList: ...
+    async def modernization_scenario(
+        self, request: ModernizationScenarioRequest, *, tenant_id: UUID | None,
+    ) -> ModernizationScenarioResult: ...
     async def graph_neighborhood(
         self, center_id: UUID, *, tenant_id: UUID | None, depth: int, real_node_limit: int,
         predicates: list[str] | None, namespaces: list[str] | None,
@@ -118,6 +135,25 @@ class ReadModelsProtocol(Protocol):
     async def phase3_intelligence_metrics(
         self, *, tenant_id: UUID | None,
     ) -> Phase3IntelligenceMetrics: ...
+    async def get_modernization_governance(
+        self, *, tenant_id: UUID | None,
+    ) -> ModernizationGovernanceState: ...
+    async def publish_modernization_policy(
+        self, request: ModernizationPolicyPublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState: ...
+    async def govern_internal_component(
+        self, component_key: str, request: InternalCatalogComponentUpsertRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState: ...
+    async def publish_calibration_corpus(
+        self, request: CalibrationCorpusPublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState: ...
+    async def evaluate_ecosystem_admission(
+        self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState: ...
     async def list_business_maps(
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
     ) -> BusinessMapList: ...
@@ -263,6 +299,24 @@ async def get_application(id: UUID, request: Request) -> ApplicationDetail:
 
 
 @router.get(
+    "/technologies/hierarchy", response_model=TechnologyEstateHierarchy,
+    response_model_exclude_none=True, operation_id="getTechnologyEstateHierarchy", tags=["technologies"],
+)
+async def get_technology_estate_hierarchy(request: Request) -> TechnologyEstateHierarchy:
+    principal = await _principal(request)
+    return await _store(request).technology_estate_hierarchy(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/repositories/{id}", response_model=RepositoryDetail,
+    response_model_exclude_none=True, operation_id="getRepository", tags=["repositories"],
+)
+async def get_repository(id: UUID, request: Request) -> RepositoryDetail:
+    principal = await _principal(request)
+    return await _store(request).repository_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
     "/technologies/{id}", response_model=TechnologyDetail,
     response_model_exclude_none=True, operation_id="getTechnology", tags=["technologies"],
 )
@@ -284,6 +338,28 @@ async def list_modernization(
     return await _store(request).modernization(
         tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
     )
+
+
+@router.get(
+    "/capabilities/footprints", response_model=CapabilityFootprintList,
+    response_model_exclude_none=True, operation_id="listCapabilityFootprints",
+    tags=["intelligence"],
+)
+async def list_capability_footprints(request: Request) -> CapabilityFootprintList:
+    principal = await _principal(request)
+    return await _store(request).capability_footprints(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/modernization/scenarios", response_model=ModernizationScenarioResult,
+    response_model_exclude_none=True, operation_id="optimizeModernizationScenario",
+    tags=["intelligence"],
+)
+async def optimize_modernization_scenario(
+    body: ModernizationScenarioRequest, request: Request,
+) -> ModernizationScenarioResult:
+    principal = await _principal(request)
+    return await _store(request).modernization_scenario(body, tenant_id=principal.tenant_id)
 
 
 @router.post(
@@ -730,6 +806,76 @@ async def remove_connector(id: UUID, request: Request) -> Connector:
     _require(principal, "admin")
     return await _store(request).remove_connector(
         id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+# --- Admin: modernization governance ------------------------------------
+
+@router.get(
+    "/admin/modernization-governance", response_model=ModernizationGovernanceState,
+    response_model_exclude_none=True, operation_id="getModernizationGovernance", tags=["admin"],
+)
+async def get_modernization_governance(request: Request) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_modernization_governance(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/modernization-governance/policy", response_model=ModernizationGovernanceState,
+    response_model_exclude_none=True, operation_id="publishModernizationPolicy", tags=["admin"],
+)
+async def publish_modernization_policy(
+    body: ModernizationPolicyPublishRequest, request: Request,
+) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).publish_modernization_policy(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/modernization-governance/internal-components/{component_key}",
+    response_model=ModernizationGovernanceState, response_model_exclude_none=True,
+    operation_id="governInternalCatalogComponent", tags=["admin"],
+)
+async def govern_internal_catalog_component(
+    component_key: str, body: InternalCatalogComponentUpsertRequest, request: Request,
+) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).govern_internal_component(
+        component_key, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/modernization-governance/calibration", response_model=ModernizationGovernanceState,
+    response_model_exclude_none=True, operation_id="publishCalibrationCorpus", tags=["admin"],
+)
+async def publish_calibration_corpus(
+    body: CalibrationCorpusPublishRequest, request: Request,
+) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).publish_calibration_corpus(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/modernization-governance/ecosystems/{ecosystem}",
+    response_model=ModernizationGovernanceState, response_model_exclude_none=True,
+    operation_id="evaluateEcosystemAdmission", tags=["admin"],
+)
+async def evaluate_ecosystem_admission(
+    ecosystem: EcosystemName, body: EcosystemAdmissionEvaluateRequest, request: Request,
+) -> ModernizationGovernanceState:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).evaluate_ecosystem_admission(
+        ecosystem, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

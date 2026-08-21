@@ -1,0 +1,42 @@
+{
+  "contract_version": "1.0.0",
+  "repository": {
+    "id": "00000000-0000-4000-8000-000000000203",
+    "kind": "Repository",
+    "name": "billing-svc",
+    "canonical_key": "github:repo:123",
+    "summary": "Creates invoices and coordinates payment collection for customer orders."
+  },
+  "profile": {
+    "purpose": "Creates invoices and coordinates payment collection for customer orders.",
+    "purpose_source": "README.md",
+    "descriptions": ["Creates invoices and coordinates payment collection for customer orders.", "A service for the billing domain."],
+    "languages": ["TypeScript"],
+    "components": ["Repository root"],
+    "key_files": ["README.md", "package.json", "Dockerfile"],
+    "operational_signals": ["Container build"],
+    "limitations": ["documentation may be stale or describe only part of a monorepo"],
+    "source_revision": "abc123",
+    "confidence": 0.95,
+    "confidence_label": "HIGH",
+    "citations": [{
+      "fact_id": "00000000-0000-4000-8000-000000000311",
+      "label": "Repository profile · README.md",
+      "href": "/api/v1/facts/00000000-0000-4000-8000-000000000311/evidence"
+    }]
+  },
+  "applications": [{
+    "id": "00000000-0000-4000-8000-000000000201",
+    "kind": "Application",
+    "name": "Billing API",
+    "canonical_key": "app:billing-api"
+  }],
+  "technologies": [{
+    "id": "00000000-0000-4000-8000-000000000204",
+    "kind": "PackageVersion",
+    "name": "axios 1.7.7",
+    "canonical_key": "pkg:npm/axios@1.7.7"
+  }],
+  "deployments": [],
+  "freshness": {"observed_at": "2026-08-19T14:00:00Z", "status": "FRESH", "source_key": "github-enterprise"}
+}

@@ -34,17 +34,43 @@ export interface AIProviderConnectionTest {
   status?: "SUCCEEDED";
 }
 
+export interface ApplicationComponentDependencyHierarchy {
+  component_path: string;
+  dependencies: Array<ApplicationDependencyNode>;
+  truncated?: boolean;
+}
+
+export interface ApplicationDependencyNode {
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependency_relation?: string | null;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
+  requirement?: string | null;
+  scope?: string | null;
+  technology: EntitySummary;
+}
+
 export interface ApplicationDetail {
   application: EntitySummary;
   assessments: Array<AssessmentSummary>;
   business_context: Array<EntitySummary>;
   contract_version?: "1.0.0";
+  dependency_hierarchies?: Array<ApplicationRepositoryDependencyHierarchy>;
   deployments: Array<EntitySummary>;
   freshness: Freshness;
   recommendations: Array<RecommendationSummary>;
   repositories: Array<EntitySummary>;
   technologies: Array<EntitySummary>;
   technology_groups: Array<ApplicationTechnologyGroup>;
+}
+
+export interface ApplicationRepositoryDependencyHierarchy {
+  components: Array<ApplicationComponentDependencyHierarchy>;
+  repository: EntitySummary;
 }
 
 export interface ApplicationTechnologyFunction {
@@ -90,6 +116,12 @@ export interface AssessmentSummary {
   method_version: string;
   rationale?: string | null;
   score?: number | null;
+}
+
+export interface BusinessMapApplicationAssignment {
+  application_id: string;
+  application_name: string;
+  capability_id: string;
 }
 
 export interface BusinessMapCapabilityNode {
@@ -190,6 +222,7 @@ export interface BusinessMapSharedGroup {
 }
 
 export interface BusinessMapStateModel {
+  application_assignments?: Array<BusinessMapApplicationAssignment>;
   catalog?: Array<BusinessMapFunctionNode>;
   function_assignments?: Array<BusinessMapFunctionAssignment>;
   organization_units?: Array<BusinessMapLane>;
@@ -213,12 +246,57 @@ export interface BusinessMapSummary {
   view_mode: "value-chain" | "organization";
 }
 
+export interface CalibrationCorpusPublishRequest {
+  affected_scope_mae?: number | null;
+  candidate_precision?: number | null;
+  case_fingerprints: Array<string>;
+  corpus_key?: string;
+  effort_accuracy?: number | null;
+  maximum_affected_scope_mae?: number;
+  minimum_candidate_precision?: number;
+  minimum_effort_accuracy?: number;
+  minimum_recommendation_acceptance?: number;
+  minimum_reviewed_cases?: number;
+  minimum_validation_success?: number;
+  recommendation_acceptance?: number | null;
+  validation_success?: number | null;
+  version: string;
+}
+
+export interface CalibrationCorpusSummary {
+  case_count: number;
+  corpus_fingerprint: string;
+  corpus_key: string;
+  evaluated_at: string;
+  evaluation_fingerprint: string;
+  id: string;
+  promotion_failures: Array<string>;
+  promotion_passed: boolean;
+  version: string;
+}
+
 export interface CapabilityDefinitionModel {
   aliases?: Array<string>;
   description: string;
   key: string;
   name: string;
   parent_key?: string | null;
+}
+
+export interface CapabilityFootprintList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  footprints: Array<CapabilityFootprintModel>;
+}
+
+export interface CapabilityFootprintModel {
+  application_count: number;
+  capability: EntitySummary;
+  repository_count: number;
+  reuse_signal: number;
+  technology_count: number;
+  technology_counts: Record<string, number>;
+  technology_entropy: number;
 }
 
 export interface CapabilityInferenceReviewRequest {
@@ -342,6 +420,28 @@ export interface DuplicateCapabilityReviewResult {
   version: number;
 }
 
+export interface EcosystemAdmissionEvaluateRequest {
+  minimum_dependency_share?: number;
+  minimum_repositories?: number;
+}
+
+export interface EcosystemAdmissionSummary {
+  calibration_gate_passed: boolean;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  decision_fingerprint: string;
+  ecosystem: "PYPI" | "MAVEN" | "CARGO" | "NUGET";
+  metadata_parity: boolean;
+  minimum_dependency_share: number;
+  minimum_repositories: number;
+  observed_dependency_share: number;
+  observed_repositories: number;
+  predecessor_admitted: boolean;
+  reasons: Array<string>;
+  sequence: number;
+  status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
+}
+
 export interface EntitySummary {
   canonical_key?: string | null;
   id: string;
@@ -397,6 +497,7 @@ export interface Freshness {
 export interface GitHubInstallationConnectRequest {
   display_name?: string | null;
   installation_id: string;
+  pilot_manual_binding_acknowledged: true;
 }
 
 export interface GitHubRepositoryConnectRequest {
@@ -468,6 +569,36 @@ export interface IdentityReviewResult {
   version: number;
 }
 
+export interface InternalCatalogComponentSummary {
+  catalog_fingerprint: string;
+  component_key: string;
+  governed_at?: string | null;
+  governed_by?: string | null;
+  id: string;
+  name: string;
+  owner?: string | null;
+  review_state: "UNREVIEWED" | "APPROVED" | "REJECTED";
+  status: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  supporting_fact_ids: Array<string>;
+  version: string;
+}
+
+export interface InternalCatalogComponentUpsertRequest {
+  api_symbols?: Array<string>;
+  behavior_claims?: Array<Record<string, unknown>>;
+  capability_definition_id: string;
+  component_entity_id: string;
+  decision: "APPROVE" | "REJECT";
+  license?: string | null;
+  owner: string;
+  policy_tags?: Array<string>;
+  runtime_constraints?: Record<string, string>;
+  security_status?: "CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN";
+  status?: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  supporting_fact_ids: Array<string>;
+  version: string;
+}
+
 export interface InternalUsage {
   application_count: number;
   repositories?: Array<EntitySummary> | null;
@@ -519,6 +650,14 @@ export interface ModernizationCandidateReviewResult {
   review_state: "CONFIRMED" | "REJECTED";
   reviewed_at: string;
   version: number;
+}
+
+export interface ModernizationGovernanceState {
+  active_calibration?: CalibrationCorpusSummary | null;
+  active_policy?: ModernizationPolicySummary | null;
+  contract_version?: "1.0.0";
+  ecosystem_admissions: Array<EcosystemAdmissionSummary>;
+  internal_components: Array<InternalCatalogComponentSummary>;
 }
 
 export interface ModernizationImpactModel {
@@ -577,6 +716,31 @@ export interface ModernizationOptionModel {
   validation_gaps: Array<string>;
 }
 
+export interface ModernizationPolicyPublishRequest {
+  allowed_licenses?: Array<string>;
+  allowed_security_statuses?: Array<"CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN">;
+  denied_option_keys?: Array<string>;
+  policy_key?: string;
+  required_policy_tags?: Array<string>;
+  runtime_versions?: Record<string, string>;
+  version: string;
+}
+
+export interface ModernizationPolicySummary {
+  activated_at: string;
+  activated_by: string;
+  allowed_licenses: Array<string>;
+  allowed_security_statuses: Array<string>;
+  configuration_fingerprint: string;
+  denied_option_keys: Array<string>;
+  id: string;
+  policy_key: string;
+  required_policy_tags: Array<string>;
+  runtime_versions: Record<string, string>;
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+  version: string;
+}
+
 export interface ModernizationRecommendationModel {
   action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
   affected_call_sites: number;
@@ -613,6 +777,32 @@ export interface ModernizationRecommendationReviewResult {
   review_state: "ACCEPTED" | "REJECTED" | "DISMISSED";
   reviewed_at: string;
   version: number;
+}
+
+export interface ModernizationScenarioItem {
+  action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
+  effort_points: number;
+  policy_version: string;
+  recommendation_id: string;
+  repository: EntitySummary;
+  score: number;
+  score_components: Record<string, number>;
+  selected: boolean;
+  title: string;
+}
+
+export interface ModernizationScenarioRequest {
+  budget_points: number;
+  excluded_recommendation_ids?: Array<string>;
+}
+
+export interface ModernizationScenarioResult {
+  as_of: string;
+  budget_points: number;
+  contract_version?: "1.0.0";
+  items: Array<ModernizationScenarioItem>;
+  total_score: number;
+  used_points: number;
 }
 
 export interface ModernizationValidationOutcomeRequest {
@@ -717,12 +907,37 @@ export interface RepositoryCapabilityIntelligence {
   taxonomy_version?: string | null;
 }
 
+export interface RepositoryDetail {
+  applications: Array<EntitySummary>;
+  contract_version?: "1.0.0";
+  deployments: Array<EntitySummary>;
+  freshness: Freshness;
+  profile?: RepositoryProfile | null;
+  repository: EntitySummary;
+  technologies: Array<EntitySummary>;
+}
+
 export interface RepositoryModernizationIntelligence {
   candidates: Array<ModernizationCandidateModel>;
   contract_version?: "1.0.0";
   repository: EntitySummary;
   source_revision?: string | null;
   truncated: boolean;
+}
+
+export interface RepositoryProfile {
+  citations: Array<Citation>;
+  components?: Array<string>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  descriptions?: Array<string>;
+  key_files?: Array<string>;
+  languages?: Array<string>;
+  limitations?: Array<string>;
+  operational_signals?: Array<string>;
+  purpose?: string | null;
+  purpose_source?: string | null;
+  source_revision: string;
 }
 
 export interface RescanJob {
@@ -839,9 +1054,31 @@ export interface TaxonomySummary {
   summary?: string | null;
 }
 
+export interface TechnologyCatalogProfile {
+  catalog_technology?: EntitySummary | null;
+  category?: TaxonomySummary | null;
+  citations: Array<Citation>;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  dependents?: number | null;
+  domain?: TaxonomySummary | null;
+  ecosystem?: string | null;
+  functions?: Array<TaxonomySummary>;
+  homepage?: string | null;
+  installation_command?: string | null;
+  latest_version?: string | null;
+  license?: string | null;
+  package_name?: string | null;
+  package_url?: string | null;
+  repository_url?: string | null;
+  summary?: string | null;
+  versions?: number | null;
+  weekly_downloads?: number | null;
+}
+
 export interface TechnologyDetail {
   alternatives?: Array<EntitySummary> | null;
   assessments: Array<AssessmentSummary>;
+  catalog_profile?: TechnologyCatalogProfile | null;
   contract_version?: "1.0.0";
   freshness: Freshness;
   internal_usage: InternalUsage;
@@ -850,6 +1087,26 @@ export interface TechnologyDetail {
   projects: Array<EntitySummary>;
   recommendations: Array<RecommendationSummary>;
   registry_sources?: Array<PackageSource> | null;
+  technology: EntitySummary;
+}
+
+export interface TechnologyEstateHierarchy {
+  as_of: string;
+  contract_version?: "1.0.0";
+  nodes: Array<TechnologyEstateHierarchyNode>;
+  truncated?: boolean;
+}
+
+export interface TechnologyEstateHierarchyNode {
+  catalog_profile?: TechnologyCatalogProfile | null;
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependent_applications: Array<EntitySummary>;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
   technology: EntitySummary;
 }
 

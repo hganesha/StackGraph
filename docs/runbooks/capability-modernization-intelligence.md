@@ -49,6 +49,19 @@ MAX_JOBS=10 make intelligence-work
 
 The requeue command is idempotent for the computed configuration fingerprint.
 
+Tenant administrators can now publish the same governed inputs through the API:
+
+- `PUT /api/v1/admin/modernization-governance/policy`
+- `PUT /api/v1/admin/modernization-governance/internal-components/{component_key}`
+- `PUT /api/v1/admin/modernization-governance/calibration`
+- `PUT /api/v1/admin/modernization-governance/ecosystems/{ecosystem}`
+
+Policy and approved-internal changes compute a new explicit configuration fingerprint and enqueue
+the latest complete snapshot for every affected repository. A policy version is immutable: changed
+content must be published under a new version. Calibration fails closed when a required metric is
+missing or its representative-case threshold is not met; only a passing corpus promotes the active
+portfolio scoring policy.
+
 `intelligence-work` and the continuous pipeline automatically enable AI only for active dependency usage that
 has no curated mapping. Configure the provider, model, and write-only key in Admin before running the worker:
 
@@ -72,6 +85,9 @@ supplied in the invocation.
 - `POST /api/v1/modernization-recommendations/{id}/review`
 - `POST /api/v1/modernization-recommendations/{id}/validation-outcomes`
 - `GET /api/v1/intelligence/phase-3/metrics`
+- `GET /api/v1/capabilities/footprints`
+- `POST /api/v1/modernization/scenarios`
+- `GET /api/v1/admin/modernization-governance`
 
 Tenant identity comes from the authenticated session and is never accepted in a route, query, or body.
 
@@ -97,6 +113,27 @@ checks, failed checks, and notes feed the Phase 3 metrics endpoint.
 Use the endpoint to monitor candidate precision, acceptance, validation success, scope error, effort accuracy,
 evidence completeness, queue lag/latency, retry and dead-letter counts, stale results, and available model
 latency/cost. Production rollout should attach dashboards and alerts to these fields.
+
+## Ecosystem admission
+
+PyPI metadata parity is provided by `stackgraph_data.pypi_registry_cli`, including conditional
+fetching, raw-observation provenance, package/runtime requirements, project links, yanked state,
+artifact hashes, publication time, and redirect/credential safety equivalent to the npm adapter.
+
+Subsequent ecosystems are evaluated in order: PyPI, Maven, Cargo, then NuGet. Record a decision with:
+
+```shell
+PYTHONPATH=services/intelligence/ai-services python -m stackgraph_ai.ecosystem_admission \
+  --database-url "$DATABASE_URL" --tenant-id "$TENANT_ID" --ecosystem PYPI \
+  --actor-key "$ACTOR_KEY"
+```
+
+Admission requires measured repository count and dependency share, metadata parity, a passing
+calibration gate, and admission of the preceding ecosystem. A failed gate persists `PROPOSED` with
+reasons rather than silently widening ingestion. Metadata parity is derived from shipped server
+capability rather than accepted as an operator assertion: PyPI is currently ready; Maven, Cargo,
+and NuGet remain false until their adapters and provenance contracts are implemented. Admin exposes
+the live demand, current/stale decision state, thresholds, and an audited evaluation action.
 
 ## Retry and recovery
 

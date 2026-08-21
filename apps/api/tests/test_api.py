@@ -20,6 +20,7 @@ from app.models import (
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
+    CapabilityFootprintList,
     Coverage,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
@@ -36,8 +37,13 @@ from app.models import (
     ModernizationRecommendationReviewResult,
     ModernizationValidationOutcomeRequest,
     ModernizationValidationOutcomeResult,
+    ModernizationScenarioRequest,
+    ModernizationScenarioResult,
+    ModernizationGovernanceState,
+    EcosystemAdmissionSummary,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
+    RepositoryDetail,
     BusinessMapDetail,
     BusinessMapList,
     BusinessMapStateModel,
@@ -45,6 +51,7 @@ from app.models import (
     ReviewQueueItem,
     TenantMember,
     TenantMemberList,
+    TechnologyEstateHierarchy,
     Connector,
     ConnectorList,
     GitHubRepositoryOption,
@@ -136,8 +143,25 @@ class StubReadModels:
     async def technology_detail(self, technology_id, *, tenant_id):
         raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
 
+    async def technology_estate_hierarchy(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return TechnologyEstateHierarchy(as_of=NOW, nodes=[])
+
     async def modernization(self, *, tenant_id, cursor, limit):
         raise NotImplementedError
+
+    async def capability_footprints(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return CapabilityFootprintList(as_of=NOW, footprints=[])
+
+    async def modernization_scenario(
+        self, request: ModernizationScenarioRequest, *, tenant_id,
+    ):
+        self.last_tenant_id = tenant_id
+        return ModernizationScenarioResult(
+            as_of=NOW, budget_points=request.budget_points,
+            used_points=0, total_score=0, items=[],
+        )
 
     async def graph_neighborhood(
         self, center_id, *, tenant_id, depth, real_node_limit, predicates,
@@ -176,6 +200,17 @@ class StubReadModels:
 
     async def repository_capabilities(self, repository_id, *, tenant_id):
         raise NotImplementedError
+
+    async def repository_detail(self, repository_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return RepositoryDetail(
+            repository=EntitySummary(
+                id=repository_id, kind="Repository", name="billing-api",
+                canonical_key="github:repo:billing-api", summary="Creates invoices.",
+            ),
+            applications=[], technologies=[], deployments=[],
+            freshness=Freshness(observed_at=NOW, status="FRESH"),
+        )
 
     async def review_capability_inference(
         self, inference_id, review: CapabilityInferenceReviewRequest, *, tenant_id, actor_key,
@@ -373,6 +408,38 @@ class StubReadModels:
             scopes=[], status="REVOKED", created_at=NOW, updated_at=NOW,
         )
 
+    async def get_modernization_governance(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ModernizationGovernanceState(
+            internal_components=[],
+            ecosystem_admissions=[EcosystemAdmissionSummary(
+                ecosystem="PYPI", sequence=1, status="NOT_EVALUATED",
+                observed_repositories=18, observed_dependency_share=0.14,
+                minimum_repositories=10, minimum_dependency_share=0.02,
+                predecessor_admitted=True, metadata_parity=True,
+                calibration_gate_passed=False,
+                reasons=["calibration promotion gate has not passed"],
+                decision_fingerprint="sha256:" + "1" * 64,
+            )],
+        )
+
+    async def evaluate_ecosystem_admission(self, ecosystem, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ModernizationGovernanceState(
+            internal_components=[],
+            ecosystem_admissions=[EcosystemAdmissionSummary(
+                ecosystem=ecosystem, sequence=1, status="ADMITTED",
+                observed_repositories=18, observed_dependency_share=0.14,
+                minimum_repositories=request.minimum_repositories,
+                minimum_dependency_share=request.minimum_dependency_share,
+                predecessor_admitted=True, metadata_parity=True,
+                calibration_gate_passed=True, reasons=[],
+                decision_fingerprint="sha256:" + "2" * 64,
+                decided_by=actor_key, decided_at=NOW,
+            )],
+        )
+
     async def get_ai_provider_configuration(self, *, tenant_id):
         self.last_tenant_id = tenant_id
         return AIProviderConfiguration(provider="anthropic")
@@ -492,6 +559,15 @@ def test_estate_summary_forwards_domain_scope() -> None:
     assert store.last_estate_namespaces == ["TECHNOLOGY", "OSS"]
 
 
+def test_technology_hierarchy_is_exposed_before_dynamic_technology_route() -> None:
+    app, store = app_with_stubs()
+    response = asyncio.run(request(app, "GET", "/api/v1/technologies/hierarchy"))
+
+    assert response.status_code == 200
+    assert response.json()["nodes"] == []
+    assert store.last_tenant_id is not None
+
+
 def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
     app, _ = app_with_stubs()
     response = asyncio.run(request(
@@ -500,6 +576,21 @@ def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
 
     assert response.status_code == 200
     assert response.json()["capabilities"][0]["key"] == "http-client"
+
+
+def test_repository_detail_is_exposed_on_versioned_path() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+    response = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/repositories/00000000-0000-4000-8000-000000000701",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["repository"]["summary"] == "Creates invoices."
+    assert "profile" not in response.json()
+    assert store.last_tenant_id == tenant_id
 
 
 def test_capability_review_forwards_tenant_and_actor() -> None:
@@ -829,6 +920,22 @@ def test_unexpected_errors_use_contract_shape() -> None:
     assert response.json()["code"] == "INTERNAL_ERROR"
 
 
+def test_capability_footprint_and_budget_scenario_routes_are_versioned() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000111")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+
+    footprints = asyncio.run(request(app, "GET", "/capabilities/footprints"))
+    scenario = asyncio.run(request(
+        app, "POST", "/modernization/scenarios", json={"budget_points": 21},
+    ))
+
+    assert footprints.status_code == 200
+    assert footprints.json()["contract_version"] == "1.0.0"
+    assert scenario.status_code == 200
+    assert scenario.json()["budget_points"] == 21
+    assert store.last_tenant_id == tenant_id
+
+
 def test_identity_review_accepts_optimistic_version() -> None:
     app, _ = app_with_stubs()
     assertion_id = "00000000-0000-4000-8000-000000000501"
@@ -899,8 +1006,16 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
         ("GET", "/api/v1/admin/github/repositories/available", None),
+        ("GET", "/api/v1/admin/modernization-governance", None),
+        (
+            "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
+            {"minimum_repositories": 10, "minimum_dependency_share": 0.02},
+        ),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
-        ("POST", "/api/v1/admin/github/installations", {"installation_id": "123456"}),
+        (
+            "POST", "/api/v1/admin/github/installations",
+            {"installation_id": "123456", "pilot_manual_binding_acknowledged": True},
+        ),
         ("GET", "/api/v1/admin/ai-configuration", None),
         ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
         ("DELETE", "/api/v1/admin/ai-configuration/key", None),
@@ -931,6 +1046,32 @@ def test_invite_member_creates_and_forwards_actor() -> None:
     body = response.json()
     assert body["actor_key"] == "dana@acme.example"
     assert body["role"] == "review"
+    assert store.last_actor_key == "operator"
+
+
+def test_modernization_governance_exposes_measured_ecosystem_demand() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/modernization-governance",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["ecosystem_admissions"][0]["ecosystem"] == "PYPI"
+    assert response.json()["ecosystem_admissions"][0]["observed_repositories"] == 18
+    assert store.last_tenant_id == TENANT
+
+
+def test_ecosystem_admission_evaluation_forwards_thresholds_and_actor() -> None:
+    app, store = _signed_app()
+    response = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"minimum_repositories": 12, "minimum_dependency_share": 0.05},
+    ))
+    assert response.status_code == 200
+    admission = response.json()["ecosystem_admissions"][0]
+    assert admission["status"] == "ADMITTED"
+    assert admission["minimum_repositories"] == 12
     assert store.last_actor_key == "operator"
 
 
@@ -980,12 +1121,25 @@ def test_connect_github_installation_queues_reconciliation() -> None:
     response = asyncio.run(request(
         app, "POST", "/api/v1/admin/github/installations",
         headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
-        json={"installation_id": "12345678", "display_name": "Acme engineering"},
+        json={
+            "installation_id": "12345678", "display_name": "Acme engineering",
+            "pilot_manual_binding_acknowledged": True,
+        },
     ))
     assert response.status_code == 201
     assert response.json()["display_name"] == "Acme engineering"
     assert response.json()["external_account_key"] == "github:installation:12345678"
     assert store.last_actor_key == "operator"
+
+
+def test_manual_github_installation_requires_pilot_acknowledgement() -> None:
+    app, _ = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/installations",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"installation_id": "12345678", "display_name": "Acme engineering"},
+    ))
+    assert response.status_code == 422
 
 
 def test_service_status_is_admin_visible() -> None:

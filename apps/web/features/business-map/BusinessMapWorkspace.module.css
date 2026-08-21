@@ -962,12 +962,9 @@
 }
 
 .capabilityCard {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: var(--sg-space-2);
+  display: block;
+  overflow: hidden;
   min-block-size: 38px;
-  padding: 7px var(--sg-space-2);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-inline-start: 3px solid var(--sg-color-domain-business-400);
   border-radius: var(--sg-radius-control);
@@ -975,14 +972,30 @@
   color: var(--sg-text-secondary);
   font-size: 11px;
   line-height: 14px;
-  text-align: start;
   touch-action: none;
 }
 
-.capabilityCard > span:last-child {
+.capabilityCardHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sg-space-2);
+  inline-size: 100%;
+  min-block-size: 36px;
+  padding: 7px var(--sg-space-2);
+  color: inherit;
+  text-align: start;
+}
+
+.capabilityCardHeader > span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.capabilityCardHeader > span:last-child:not(:nth-child(2)) {
+  color: var(--sg-text-muted);
+  font-size: 9px;
 }
 
 .capabilityCard:hover {
@@ -1005,6 +1018,51 @@
   z-index: 30;
   box-shadow: var(--sg-elevation-raised);
   opacity: 0.86;
+}
+
+.applicationStack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 5px 5px;
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+  background: var(--sg-surface-sunken);
+}
+
+.applicationStack a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-block-size: 24px;
+  padding-inline: 5px;
+  border-radius: calc(var(--sg-radius-control) - 2px);
+  color: var(--sg-text-secondary);
+  font-size: 10px;
+}
+
+.applicationStack a:hover {
+  background: var(--sg-surface-card);
+  color: var(--sg-text-primary);
+}
+
+.applicationStack a > span:first-child {
+  color: var(--sg-color-domain-enterprise-700);
+  font-family: var(--sg-font-evidence);
+  font-size: 8px;
+}
+
+.applicationStack a > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.applicationStack button {
+  align-self: flex-start;
+  padding: 3px 5px;
+  color: var(--sg-text-muted);
+  font-size: 9px;
 }
 
 .maturityTicks {
@@ -1178,6 +1236,117 @@
 .panelSection h3 {
   margin-block-end: var(--sg-space-3);
   color: var(--sg-text-muted);
+}
+
+.panelSectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-2);
+  margin-block-end: var(--sg-space-3);
+}
+
+.panelSectionHeading h3 {
+  margin-block-end: 0;
+}
+
+.panelSectionHeading > span {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+
+.capabilityApplications {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capabilityApplications li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  overflow: hidden;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-sunken);
+}
+
+.capabilityApplications a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sg-space-2);
+  min-block-size: 36px;
+  padding-inline: var(--sg-space-2);
+  color: var(--sg-text-secondary);
+}
+
+.capabilityApplications a:hover {
+  color: var(--sg-text-primary);
+}
+
+.capabilityApplications a > span:first-child {
+  color: var(--sg-color-domain-enterprise-700);
+  font-family: var(--sg-font-evidence);
+  font-size: 9px;
+}
+
+.capabilityApplications strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capabilityApplications li > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 34px;
+  color: var(--sg-text-muted);
+}
+
+.capabilityApplications li > button:hover {
+  background: var(--sg-surface-card);
+  color: var(--sg-color-signal-danger-700);
+}
+
+.noCapabilityApplications {
+  color: var(--sg-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.applicationAssignmentControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sg-space-2);
+  margin-block-start: var(--sg-space-2);
+}
+
+.applicationAssignmentControl button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-block-size: 36px;
+  padding-inline: var(--sg-space-2);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-business-300);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-color-domain-business-800);
+  font-size: 11px;
+}
+
+.applicationAssignmentControl button:hover:not(:disabled) {
+  background: var(--sg-color-domain-business-50);
+}
+
+.applicationAssignmentControl button:disabled {
+  opacity: 0.45;
 }
 
 .maturityOptions {

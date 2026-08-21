@@ -43,6 +43,7 @@
     "shared_groups": [],
     "function_assignments": [
       { "function_id": "strategy", "unit_id": "org:0" }
-    ]
+    ],
+    "application_assignments": []
   }
 }

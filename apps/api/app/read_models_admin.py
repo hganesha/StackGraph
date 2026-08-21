@@ -12,6 +12,17 @@ from uuid import UUID
 
 import httpx
 from psycopg.errors import UniqueViolation
+from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
+from stackgraph_ai.governance import (
+    CalibrationMetrics,
+    CalibrationThresholds,
+    EcosystemDemand,
+    evaluate_ecosystem_admission as decide_ecosystem_admission,
+    evaluate_promotion_gate,
+    sha256_fingerprint,
+)
+from stackgraph_ai.models import ModelMessage, ModelRequest
+from stackgraph_ai.providers import AnthropicAdapter, OpenAIAdapter, OpenRouterAdapter
 
 from app.errors import APIError
 from app.models import (
@@ -29,6 +40,16 @@ from app.models import (
     GitHubRepositoryOptionList,
     MemberInviteRequest,
     MemberUpdateRequest,
+    ModernizationGovernanceState,
+    ModernizationPolicyPublishRequest,
+    ModernizationPolicySummary,
+    InternalCatalogComponentUpsertRequest,
+    InternalCatalogComponentSummary,
+    CalibrationCorpusPublishRequest,
+    CalibrationCorpusSummary,
+    EcosystemAdmissionEvaluateRequest,
+    EcosystemAdmissionSummary,
+    EcosystemName,
     PageInfo,
     ProviderQuota,
     RescanJob,
@@ -65,6 +86,24 @@ _CONTROLLABLE_SERVICES = frozenset({
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
+
+_ECOSYSTEM_SEQUENCE: dict[EcosystemName, int] = {
+    "PYPI": 1, "MAVEN": 2, "CARGO": 3, "NUGET": 4,
+}
+_ECOSYSTEM_PURL_TYPE: dict[EcosystemName, str] = {
+    "PYPI": "pypi", "MAVEN": "maven", "CARGO": "cargo", "NUGET": "nuget",
+}
+# Metadata parity is a server capability, not an operator attestation. Only PyPI is implemented.
+_ECOSYSTEM_METADATA_PARITY: dict[EcosystemName, bool] = {
+    "PYPI": True, "MAVEN": False, "CARGO": False, "NUGET": False,
+}
+
+_AI_CONNECTION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"answer": {"type": "string", "const": "ok"}},
+    "required": ["answer"],
+    "additionalProperties": False,
+}
 
 
 def _github_api_base_url() -> str:
@@ -788,6 +827,7 @@ class AdminReadModelsMixin:
                     tenant_id, display_name, external_account_key, credential_reference, scopes,
                     json.dumps({
                         "connection_mode": "GITHUB_APP_INSTALLATION",
+                        "binding_mode": "MANUAL_PILOT",
                         "installation_id": installation_id,
                         "ingest_target_id": str(target["id"]),
                     }),
@@ -810,7 +850,12 @@ class AdminReadModelsMixin:
             await self._write_admin_audit(
                 connection, tenant_id=tenant_id, actor_key=actor_key,
                 action="github_installation.connect", target_kind="connector", target_id=row["id"],
-                detail={"installation_id": installation_id, "ingest_target_id": str(target["id"])},
+                detail={
+                    "installation_id": installation_id,
+                    "ingest_target_id": str(target["id"]),
+                    "binding_mode": "MANUAL_PILOT",
+                    "pilot_manual_binding_acknowledged": request.pilot_manual_binding_acknowledged,
+                },
             )
         return self._connector(row)
 
@@ -926,6 +971,560 @@ class AdminReadModelsMixin:
             last_synced_at=row.get("effective_last_synced_at", row.get("last_synced_at")),
             last_error=row.get("effective_last_error", row.get("last_error")),
             created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    # --- Admin: modernization governance ---------------------------------
+
+    async def get_modernization_governance(
+        self, *, tenant_id: UUID | None,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read governance.")
+        async with self.database.session(tenant_id) as connection:
+            return await self._modernization_governance_state(connection)
+
+    async def publish_modernization_policy(
+        self, request: ModernizationPolicyPublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to publish policy.")
+        async with self.database.session(tenant_id) as connection:
+            components = await self._governed_component_payload(connection)
+            policy_payload = request.model_dump(mode="json")
+            configuration_fingerprint = sha256_fingerprint({
+                "version": "tenant-modernization-configuration/v1",
+                "policy": policy_payload,
+                "internal_components": components,
+            })
+            content_hash = sha256_fingerprint(policy_payload)
+            existing_cursor = await connection.execute(
+                """
+                SELECT content_hash FROM modernization_policy
+                WHERE policy_key=%s AND version=%s
+                """,
+                (request.policy_key, request.version),
+            )
+            existing = await existing_cursor.fetchone()
+            if existing is not None and existing["content_hash"] != content_hash:
+                raise APIError(
+                    409, "POLICY_VERSION_IMMUTABLE",
+                    "Publish policy changes under a new version.",
+                    {"policy_key": request.policy_key, "version": request.version},
+                )
+            await connection.execute(
+                """
+                UPDATE modernization_policy
+                SET status='RETIRED',retired_by=%s,retired_at=now(),updated_at=now()
+                WHERE policy_key=%s AND status='ACTIVE' AND version<>%s
+                """,
+                (actor_key, request.policy_key, request.version),
+            )
+            await connection.execute(
+                """
+                INSERT INTO modernization_policy(
+                  tenant_id,policy_key,version,status,runtime_versions,allowed_licenses,
+                  denied_option_keys,allowed_security_statuses,required_policy_tags,
+                  metadata,content_hash,configuration_fingerprint,created_by,activated_by,activated_at
+                ) VALUES (%s,%s,%s,'ACTIVE',%s::jsonb,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,now())
+                ON CONFLICT(tenant_id,policy_key,version) DO UPDATE SET
+                  status='ACTIVE',configuration_fingerprint=EXCLUDED.configuration_fingerprint,
+                  activated_by=EXCLUDED.activated_by,activated_at=now(),retired_by=NULL,
+                  retired_at=NULL,updated_at=now()
+                """,
+                (
+                    tenant_id, request.policy_key, request.version,
+                    json.dumps(request.runtime_versions), request.allowed_licenses,
+                    request.denied_option_keys, request.allowed_security_statuses,
+                    request.required_policy_tags,
+                    json.dumps({"fingerprint_version": "tenant-modernization-configuration/v1"}),
+                    content_hash, configuration_fingerprint, actor_key, actor_key,
+                ),
+            )
+            await self._enqueue_governed_reanalysis(connection, tenant_id, configuration_fingerprint)
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="modernization_policy.publish", target_kind="modernization_policy",
+                target_id=f"{request.policy_key}/{request.version}",
+                detail={"configuration_fingerprint": configuration_fingerprint},
+            )
+            return await self._modernization_governance_state(connection)
+
+    async def govern_internal_component(
+        self, component_key: str, request: InternalCatalogComponentUpsertRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to govern the catalog.")
+        normalized_key = component_key.strip()
+        if not normalized_key or len(normalized_key) > 255:
+            raise APIError(422, "INVALID_COMPONENT_KEY", "The component key is invalid.")
+        async with self.database.session(tenant_id) as connection:
+            entity_cursor = await connection.execute(
+                "SELECT id,name FROM entity WHERE id=%s", (request.component_entity_id,),
+            )
+            entity = await entity_cursor.fetchone()
+            if entity is None:
+                raise APIError(422, "COMPONENT_NOT_FOUND", "The internal component entity was not found.")
+            capability_cursor = await connection.execute(
+                "SELECT id FROM capability_definition WHERE id=%s", (request.capability_definition_id,),
+            )
+            if await capability_cursor.fetchone() is None:
+                raise APIError(422, "CAPABILITY_NOT_FOUND", "The capability definition was not found.")
+            fact_cursor = await connection.execute(
+                "SELECT id FROM current_fact WHERE id=ANY(%s::uuid[])",
+                (request.supporting_fact_ids,),
+            )
+            found_fact_ids = {row["id"] for row in await fact_cursor.fetchall()}
+            missing_fact_ids = [
+                str(fact_id) for fact_id in request.supporting_fact_ids
+                if fact_id not in found_fact_ids
+            ]
+            if missing_fact_ids:
+                raise APIError(
+                    422, "INTERNAL_COMPONENT_EVIDENCE_NOT_FOUND",
+                    "Approved internal components require current tenant evidence.",
+                    {"fact_ids": missing_fact_ids},
+                )
+            review_state = "APPROVED" if request.decision == "APPROVE" else "REJECTED"
+            payload = {"component_key": normalized_key, **request.model_dump(mode="json")}
+            catalog_fingerprint = sha256_fingerprint(payload)
+            await connection.execute(
+                """
+                INSERT INTO modernization_internal_component(
+                  tenant_id,component_entity_id,capability_definition_id,component_key,version,
+                  status,api_symbols,runtime_constraints,behavior_claims,license,security_status,
+                  policy_tags,supporting_fact_ids,metadata,review_state,owner,governed_by,
+                  governed_at,catalog_fingerprint
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,now(),%s)
+                ON CONFLICT(tenant_id,component_key,version) DO UPDATE SET
+                  component_entity_id=EXCLUDED.component_entity_id,
+                  capability_definition_id=EXCLUDED.capability_definition_id,status=EXCLUDED.status,
+                  api_symbols=EXCLUDED.api_symbols,runtime_constraints=EXCLUDED.runtime_constraints,
+                  behavior_claims=EXCLUDED.behavior_claims,license=EXCLUDED.license,
+                  security_status=EXCLUDED.security_status,policy_tags=EXCLUDED.policy_tags,
+                  supporting_fact_ids=EXCLUDED.supporting_fact_ids,review_state=EXCLUDED.review_state,
+                  owner=EXCLUDED.owner,governed_by=EXCLUDED.governed_by,governed_at=now(),
+                  catalog_fingerprint=EXCLUDED.catalog_fingerprint,updated_at=now()
+                """,
+                (
+                    tenant_id, request.component_entity_id, request.capability_definition_id,
+                    normalized_key, request.version, request.status, request.api_symbols,
+                    json.dumps(request.runtime_constraints), json.dumps(request.behavior_claims),
+                    request.license, request.security_status, request.policy_tags,
+                    request.supporting_fact_ids, json.dumps({"decision": request.decision}),
+                    review_state, request.owner, actor_key, catalog_fingerprint,
+                ),
+            )
+            fingerprint = await self._current_governance_fingerprint(connection)
+            if fingerprint is not None:
+                await connection.execute(
+                    """
+                    UPDATE modernization_policy SET configuration_fingerprint=%s,updated_at=now()
+                    WHERE status='ACTIVE'
+                    """,
+                    (fingerprint,),
+                )
+                await self._enqueue_governed_reanalysis(connection, tenant_id, fingerprint)
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="internal_component.govern", target_kind="modernization_internal_component",
+                target_id=f"{normalized_key}/{request.version}",
+                detail={"decision": request.decision, "catalog_fingerprint": catalog_fingerprint},
+            )
+            return await self._modernization_governance_state(connection)
+
+    async def publish_calibration_corpus(
+        self, request: CalibrationCorpusPublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to publish calibration.")
+        if any(
+            not value.startswith("sha256:")
+            or len(value) != 71
+            or any(character not in "0123456789abcdef" for character in value[7:])
+            for value in request.case_fingerprints
+        ):
+            raise APIError(422, "INVALID_CASE_FINGERPRINT", "Calibration cases require sha256 fingerprints.")
+        case_fingerprints = sorted(set(request.case_fingerprints))
+        metrics = CalibrationMetrics(
+            candidate_precision=request.candidate_precision,
+            recommendation_acceptance=request.recommendation_acceptance,
+            validation_success=request.validation_success,
+            affected_scope_mae=request.affected_scope_mae,
+            effort_accuracy=request.effort_accuracy,
+            reviewed_cases=len(case_fingerprints),
+        )
+        thresholds = CalibrationThresholds(
+            minimum_candidate_precision=request.minimum_candidate_precision,
+            minimum_recommendation_acceptance=request.minimum_recommendation_acceptance,
+            minimum_validation_success=request.minimum_validation_success,
+            maximum_affected_scope_mae=request.maximum_affected_scope_mae,
+            minimum_effort_accuracy=request.minimum_effort_accuracy,
+            minimum_reviewed_cases=request.minimum_reviewed_cases,
+        )
+        result = evaluate_promotion_gate(metrics, thresholds)
+        corpus_fingerprint = sha256_fingerprint({
+            "corpus_key": request.corpus_key,
+            "version": request.version,
+            "cases": case_fingerprints,
+        })
+        async with self.database.session(tenant_id) as connection:
+            case_cursor = await connection.execute(
+                """
+                SELECT analysis_fingerprint FROM modernization_candidate
+                WHERE analysis_fingerprint=ANY(%s::text[]) AND review_state<>'UNREVIEWED'
+                UNION
+                SELECT analysis_fingerprint FROM modernization_recommendation
+                WHERE analysis_fingerprint=ANY(%s::text[]) AND review_state<>'UNREVIEWED'
+                """,
+                (case_fingerprints, case_fingerprints),
+            )
+            found_cases = {row["analysis_fingerprint"] for row in await case_cursor.fetchall()}
+            missing_cases = sorted(set(case_fingerprints) - found_cases)
+            if missing_cases:
+                raise APIError(
+                    422, "CALIBRATION_CASE_NOT_REVIEWED",
+                    "Calibration cases must reference reviewed candidate or recommendation fingerprints.",
+                    {"case_fingerprints": missing_cases},
+                )
+            await connection.execute(
+                "UPDATE modernization_calibration_corpus SET status='RETIRED',updated_at=now() WHERE corpus_key=%s AND status='ACTIVE'",
+                (request.corpus_key,),
+            )
+            cursor = await connection.execute(
+                """
+                INSERT INTO modernization_calibration_corpus(
+                  tenant_id,corpus_key,version,status,case_count,case_fingerprints,
+                  thresholds,observed_metrics,corpus_fingerprint,promotion_passed,
+                  promotion_failures,evaluation_fingerprint,evaluated_at,created_by
+                ) VALUES (%s,%s,%s,'ACTIVE',%s,%s,%s::jsonb,%s::jsonb,%s,%s,%s,%s,now(),%s)
+                ON CONFLICT(tenant_id,corpus_key,version) DO UPDATE SET
+                  status='ACTIVE',case_count=EXCLUDED.case_count,
+                  case_fingerprints=EXCLUDED.case_fingerprints,thresholds=EXCLUDED.thresholds,
+                  observed_metrics=EXCLUDED.observed_metrics,
+                  corpus_fingerprint=EXCLUDED.corpus_fingerprint,
+                  promotion_passed=EXCLUDED.promotion_passed,
+                  promotion_failures=EXCLUDED.promotion_failures,
+                  evaluation_fingerprint=EXCLUDED.evaluation_fingerprint,
+                  evaluated_at=now(),updated_at=now()
+                RETURNING id
+                """,
+                (
+                    tenant_id, request.corpus_key, request.version,
+                    len(case_fingerprints), case_fingerprints,
+                    json.dumps({field: getattr(thresholds, field) for field in thresholds.__dataclass_fields__}),
+                    json.dumps({field: getattr(metrics, field) for field in metrics.__dataclass_fields__}),
+                    corpus_fingerprint, result.passed, list(result.failures), result.fingerprint, actor_key,
+                ),
+            )
+            corpus_id = (await cursor.fetchone())["id"]
+            if result.passed:
+                weights = {
+                    "business": 0.25, "viability_gap": 0.2, "entropy": 0.2,
+                    "reuse": 0.2, "confidence": 0.15,
+                }
+                policy_fingerprint = sha256_fingerprint({
+                    "version": "modernization-portfolio/v1",
+                    "weights": weights, "effort_penalty_weight": 0.2,
+                    "calibration": corpus_fingerprint,
+                })
+                await connection.execute(
+                    "UPDATE modernization_portfolio_policy SET status='RETIRED',updated_at=now() WHERE policy_key='modernization.portfolio' AND status='ACTIVE'",
+                )
+                await connection.execute(
+                    """
+                    INSERT INTO modernization_portfolio_policy(
+                      tenant_id,policy_key,version,status,weights,effort_penalty_weight,
+                      policy_fingerprint,calibration_corpus_id,created_by
+                    ) VALUES (%s,'modernization.portfolio',%s,'ACTIVE',%s::jsonb,0.2,%s,%s,%s)
+                    ON CONFLICT(tenant_id,policy_key,version) DO UPDATE SET
+                      status='ACTIVE',weights=EXCLUDED.weights,
+                      policy_fingerprint=EXCLUDED.policy_fingerprint,
+                      calibration_corpus_id=EXCLUDED.calibration_corpus_id,updated_at=now()
+                    """,
+                    (tenant_id, request.version, json.dumps(weights), policy_fingerprint, corpus_id, actor_key),
+                )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="calibration_corpus.publish", target_kind="modernization_calibration_corpus",
+                target_id=f"{request.corpus_key}/{request.version}",
+                detail={"promotion_passed": result.passed, "failures": list(result.failures)},
+            )
+            return await self._modernization_governance_state(connection)
+
+    async def evaluate_ecosystem_admission(
+        self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to evaluate ecosystem admission.")
+        sequence = _ECOSYSTEM_SEQUENCE[ecosystem]
+        async with self.database.session(tenant_id) as connection:
+            predecessor_admitted = True
+            if sequence > 1:
+                predecessor = next(
+                    item for item, item_sequence in _ECOSYSTEM_SEQUENCE.items()
+                    if item_sequence == sequence - 1
+                )
+                current = await self._ecosystem_governance_state(connection)
+                predecessor_admitted = next(
+                    item.status == "ADMITTED" for item in current if item.ecosystem == predecessor
+                )
+            observed_repositories, observed_dependency_share = await self._ecosystem_demand(
+                connection, ecosystem,
+            )
+            calibration_gate_passed = await self._calibration_gate_passed(connection)
+            metadata_parity = _ECOSYSTEM_METADATA_PARITY[ecosystem]
+            decision = decide_ecosystem_admission(
+                EcosystemDemand(
+                    ecosystem=ecosystem,
+                    observed_repositories=observed_repositories,
+                    observed_dependency_share=observed_dependency_share,
+                    metadata_parity=metadata_parity,
+                    calibration_gate_passed=calibration_gate_passed,
+                ),
+                predecessor_admitted=predecessor_admitted,
+                minimum_repositories=request.minimum_repositories,
+                minimum_dependency_share=request.minimum_dependency_share,
+            )
+            status = "ADMITTED" if decision.admitted else "PROPOSED"
+            await connection.execute(
+                """
+                INSERT INTO ecosystem_admission(
+                  tenant_id,ecosystem,sequence,status,observed_repositories,
+                  observed_dependency_share,minimum_repositories,minimum_dependency_share,
+                  metadata_parity,calibration_gate_passed,decision_fingerprint,reasons,decided_by
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,ecosystem) DO UPDATE SET
+                  sequence=EXCLUDED.sequence,status=EXCLUDED.status,
+                  observed_repositories=EXCLUDED.observed_repositories,
+                  observed_dependency_share=EXCLUDED.observed_dependency_share,
+                  minimum_repositories=EXCLUDED.minimum_repositories,
+                  minimum_dependency_share=EXCLUDED.minimum_dependency_share,
+                  metadata_parity=EXCLUDED.metadata_parity,
+                  calibration_gate_passed=EXCLUDED.calibration_gate_passed,
+                  decision_fingerprint=EXCLUDED.decision_fingerprint,
+                  reasons=EXCLUDED.reasons,decided_by=EXCLUDED.decided_by,decided_at=now()
+                """,
+                (
+                    tenant_id, ecosystem, sequence, status, observed_repositories,
+                    observed_dependency_share, request.minimum_repositories,
+                    request.minimum_dependency_share, metadata_parity,
+                    calibration_gate_passed, decision.fingerprint,
+                    list(decision.reasons), actor_key,
+                ),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="ecosystem_admission.evaluate", target_kind="ecosystem_admission",
+                target_id=ecosystem,
+                detail={
+                    "status": status,
+                    "observed_repositories": observed_repositories,
+                    "observed_dependency_share": observed_dependency_share,
+                    "metadata_parity": metadata_parity,
+                    "calibration_gate_passed": calibration_gate_passed,
+                    "predecessor_admitted": predecessor_admitted,
+                    "decision_fingerprint": decision.fingerprint,
+                    "reasons": list(decision.reasons),
+                },
+            )
+            return await self._modernization_governance_state(connection)
+
+    async def _ecosystem_demand(
+        self, connection: Any, ecosystem: EcosystemName,
+    ) -> tuple[int, float]:
+        purl_pattern = f"pkg:{_ECOSYSTEM_PURL_TYPE[ecosystem]}/%"
+        cursor = await connection.execute(
+            """
+            SELECT
+              count(DISTINCT fact.subject_entity_id)
+                FILTER (WHERE package.canonical_key LIKE %s) observed_repositories,
+              coalesce(
+                count(*) FILTER (WHERE package.canonical_key LIKE %s)::numeric
+                  / nullif(count(*),0),
+                0
+              ) observed_dependency_share
+            FROM dependency_usage_summary usage
+            JOIN current_fact fact ON fact.id=usage.dependency_fact_assertion_id
+            JOIN entity package ON package.id=fact.object_entity_id
+            WHERE usage.tenant_id=stackgraph_current_tenant_id()
+              AND (usage.referenced OR usage.runtime_observed='OBSERVED')
+            """,
+            (purl_pattern, purl_pattern),
+        )
+        row = await cursor.fetchone()
+        return int(row["observed_repositories"] or 0), float(row["observed_dependency_share"] or 0)
+
+    async def _calibration_gate_passed(self, connection: Any) -> bool:
+        cursor = await connection.execute(
+            """
+            SELECT 1 FROM modernization_calibration_corpus
+            WHERE status='ACTIVE' AND promotion_passed
+            LIMIT 1
+            """
+        )
+        return await cursor.fetchone() is not None
+
+    async def _ecosystem_governance_state(
+        self, connection: Any,
+    ) -> list[EcosystemAdmissionSummary]:
+        cursor = await connection.execute(
+            "SELECT * FROM ecosystem_admission ORDER BY sequence"
+        )
+        recorded = {row["ecosystem"]: row for row in await cursor.fetchall()}
+        calibration_gate_passed = await self._calibration_gate_passed(connection)
+        summaries: list[EcosystemAdmissionSummary] = []
+        predecessor_admitted = True
+        for ecosystem, sequence in _ECOSYSTEM_SEQUENCE.items():
+            row = recorded.get(ecosystem)
+            minimum_repositories = int(row["minimum_repositories"]) if row else 10
+            minimum_dependency_share = float(row["minimum_dependency_share"]) if row else 0.02
+            observed_repositories, observed_dependency_share = await self._ecosystem_demand(
+                connection, ecosystem,
+            )
+            decision = decide_ecosystem_admission(
+                EcosystemDemand(
+                    ecosystem=ecosystem,
+                    observed_repositories=observed_repositories,
+                    observed_dependency_share=observed_dependency_share,
+                    metadata_parity=_ECOSYSTEM_METADATA_PARITY[ecosystem],
+                    calibration_gate_passed=calibration_gate_passed,
+                ),
+                predecessor_admitted=predecessor_admitted,
+                minimum_repositories=minimum_repositories,
+                minimum_dependency_share=minimum_dependency_share,
+            )
+            if row is None:
+                status = "NOT_EVALUATED"
+            elif row["decision_fingerprint"] != decision.fingerprint:
+                status = "STALE"
+            else:
+                status = row["status"]
+            summaries.append(EcosystemAdmissionSummary(
+                ecosystem=ecosystem, sequence=sequence, status=status,
+                observed_repositories=observed_repositories,
+                observed_dependency_share=observed_dependency_share,
+                minimum_repositories=minimum_repositories,
+                minimum_dependency_share=minimum_dependency_share,
+                predecessor_admitted=predecessor_admitted,
+                metadata_parity=_ECOSYSTEM_METADATA_PARITY[ecosystem],
+                calibration_gate_passed=calibration_gate_passed,
+                reasons=list(decision.reasons), decision_fingerprint=decision.fingerprint,
+                decided_by=row["decided_by"] if row else None,
+                decided_at=row["decided_at"] if row else None,
+            ))
+            predecessor_admitted = status == "ADMITTED"
+        return summaries
+
+    async def _modernization_governance_state(self, connection: Any) -> ModernizationGovernanceState:
+        cursor = await connection.execute(
+            "SELECT * FROM modernization_policy WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1"
+        )
+        policy = await cursor.fetchone()
+        cursor = await connection.execute(
+            """
+            SELECT component.*,entity.name FROM modernization_internal_component component
+            JOIN entity ON entity.id=component.component_entity_id
+            ORDER BY component.component_key,component.version
+            """
+        )
+        components = await cursor.fetchall()
+        cursor = await connection.execute(
+            "SELECT * FROM modernization_calibration_corpus WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1"
+        )
+        calibration = await cursor.fetchone()
+        return ModernizationGovernanceState(
+            active_policy=ModernizationPolicySummary(
+                id=policy["id"], policy_key=policy["policy_key"], version=policy["version"],
+                status=policy["status"], runtime_versions=dict(policy["runtime_versions"]),
+                allowed_licenses=list(policy["allowed_licenses"]),
+                denied_option_keys=list(policy["denied_option_keys"]),
+                allowed_security_statuses=list(policy["allowed_security_statuses"]),
+                required_policy_tags=list(policy["required_policy_tags"]),
+                configuration_fingerprint=(
+                    policy["configuration_fingerprint"]
+                    or sha256_fingerprint({"legacy_policy_content_hash": policy["content_hash"]})
+                ),
+                activated_by=policy["activated_by"] or policy["created_by"],
+                activated_at=policy["activated_at"] or policy["created_at"],
+            ) if policy else None,
+            internal_components=[InternalCatalogComponentSummary(
+                id=row["id"], component_key=row["component_key"], version=row["version"],
+                name=row["name"], status=row["status"], review_state=row["review_state"],
+                owner=row["owner"], catalog_fingerprint=(
+                    row["catalog_fingerprint"]
+                    or sha256_fingerprint({
+                        "component_key": row["component_key"], "version": row["version"]
+                    })
+                ),
+                supporting_fact_ids=list(row["supporting_fact_ids"]),
+                governed_by=row["governed_by"], governed_at=row["governed_at"],
+            ) for row in components],
+            active_calibration=CalibrationCorpusSummary(
+                id=calibration["id"], corpus_key=calibration["corpus_key"],
+                version=calibration["version"], case_count=calibration["case_count"],
+                corpus_fingerprint=calibration["corpus_fingerprint"],
+                promotion_passed=calibration["promotion_passed"],
+                promotion_failures=list(calibration["promotion_failures"]),
+                evaluation_fingerprint=calibration["evaluation_fingerprint"],
+                evaluated_at=calibration["evaluated_at"],
+            ) if calibration else None,
+            ecosystem_admissions=await self._ecosystem_governance_state(connection),
+        )
+
+    async def _governed_component_payload(self, connection: Any) -> list[dict[str, Any]]:
+        cursor = await connection.execute(
+            """
+            SELECT component_key,version,status,review_state,catalog_fingerprint
+            FROM modernization_internal_component
+            WHERE review_state='APPROVED'
+            ORDER BY component_key,version
+            """
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def _current_governance_fingerprint(self, connection: Any) -> str | None:
+        cursor = await connection.execute(
+            "SELECT * FROM modernization_policy WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1"
+        )
+        policy = await cursor.fetchone()
+        if policy is None:
+            return None
+        return sha256_fingerprint({
+            "version": "tenant-modernization-configuration/v1",
+            "policy": {
+                "key": policy["policy_key"], "version": policy["version"],
+                "content_hash": policy["content_hash"],
+            },
+            "internal_components": await self._governed_component_payload(connection),
+        })
+
+    async def _enqueue_governed_reanalysis(
+        self, connection: Any, tenant_id: UUID, configuration_fingerprint: str,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO intelligence_job(
+              tenant_id,repository_entity_id,source_snapshot_id,source_revision,
+              job_kind,configuration_fingerprint
+            )
+            SELECT DISTINCT ON (repository.id)
+              %s,repository.id,snapshot.id,snapshot.source_revision,
+              'REPOSITORY_MODERNIZATION',%s
+            FROM source_snapshot snapshot
+            JOIN ingest_target target ON target.id=snapshot.ingest_target_id
+            JOIN entity repository
+              ON repository.tenant_id=%s AND repository.namespace='ENTERPRISE'
+             AND repository.entity_type='Repository' AND repository.canonical_key=target.target_key
+            WHERE snapshot.status='PUBLISHED' AND snapshot.completeness='COMPLETE'
+              AND snapshot.extractor_key='repository-dependency-usage'
+            ORDER BY repository.id,snapshot.published_at DESC,snapshot.id DESC
+            ON CONFLICT DO NOTHING
+            """,
+            (tenant_id, configuration_fingerprint, tenant_id),
         )
 
     # --- Admin: AI provider configuration --------------------------------
@@ -1122,10 +1721,10 @@ class AdminReadModelsMixin:
         url, headers = self._ai_models_request(provider, api_key)
         openrouter_zdr_endpoints: Any = None
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 if provider == "openrouter":
                     authentication = await client.get(
-                        "https://openrouter.ai/api/v1/auth/key", headers=headers,
+                        f"{self._ai_provider_base_url(provider)}/auth/key", headers=headers,
                     )
                     authentication.raise_for_status()
                 response = await client.get(url, headers=headers)
@@ -1133,69 +1732,141 @@ class AdminReadModelsMixin:
                 payload = response.json()
                 if provider == "openrouter":
                     endpoints = await client.get(
-                        "https://openrouter.ai/api/v1/endpoints/zdr", headers=headers,
+                        f"{self._ai_provider_base_url(provider)}/endpoints/zdr", headers=headers,
                     )
                     endpoints.raise_for_status()
                     openrouter_zdr_endpoints = endpoints.json()
-            available_models = self._ai_model_ids(payload)
-            models = available_models[:100]
+                available_models = self._ai_model_ids(payload)
+                models = available_models[:100]
+                if available_models and row["model"] not in available_models:
+                    message = f"The selected model {row['model']!r} is not available to this provider key."
+                    await self._record_ai_connection_test(
+                        tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+                    )
+                    raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
+                if (
+                    provider == "openrouter"
+                    and not self._openrouter_model_supports_intelligence(
+                        openrouter_zdr_endpoints, row["model"],
+                    )
+                ):
+                    required = ", ".join(sorted(_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS))
+                    message = (
+                        f"The selected model {row['model']!r} has no zero-data-retention endpoint "
+                        f"that supports StackGraph's required parameters: {required}."
+                    )
+                    await self._record_ai_connection_test(
+                        tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+                    )
+                    raise APIError(422, "AI_MODEL_INCOMPATIBLE", message)
+
+                adapter = self._ai_provider_adapter(provider, api_key, client)
+                probe = await adapter.complete(ModelRequest(
+                    model=row["model"],
+                    messages=(
+                        ModelMessage(
+                            role="system",
+                            content="Return only the requested structured result.",
+                        ),
+                        ModelMessage(role="user", content="Set answer to ok."),
+                    ),
+                    max_output_tokens=64,
+                    output_schema=_AI_CONNECTION_OUTPUT_SCHEMA,
+                    output_schema_name="stackgraph_connection_test",
+                ))
+                if probe.structured_output != {"answer": "ok"}:
+                    raise ProviderResponseError(
+                        f"{provider} did not satisfy the structured-output probe"
+                    )
+        except APIError:
+            raise
+        except (ProviderRequestError, ProviderResponseError) as error:
+            message = (
+                "Provider authentication and model discovery succeeded, but the selected model "
+                "failed StackGraph's structured-output probe."
+            )
+            await self._record_ai_connection_test(
+                tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
+            )
+            raise APIError(422, "AI_STRUCTURED_OUTPUT_FAILED", message) from error
         except (httpx.HTTPError, ValueError, TypeError) as error:
             message = "Provider authentication or model discovery failed."
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
+            await self._record_ai_connection_test(
+                tenant_id=tenant_id, actor_key=actor_key, status="FAILED", error=message,
             )
             raise APIError(502, "AI_CONNECTION_FAILED", message) from error
-        if available_models and row["model"] not in available_models:
-            message = f"The selected model {row['model']!r} is not available to this provider key."
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
-            )
-            raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
-        if (
-            provider == "openrouter"
-            and not self._openrouter_model_supports_intelligence(
-                openrouter_zdr_endpoints, row["model"],
-            )
-        ):
-            required = ", ".join(sorted(_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS))
-            message = (
-                f"The selected model {row['model']!r} has no zero-data-retention endpoint "
-                f"that supports StackGraph's required parameters: {required}."
-            )
-            await self.database.fetch_one(
-                """
-                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
-                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
-                """,
-                (message, actor_key), tenant_id=tenant_id,
-            )
-            raise APIError(422, "AI_MODEL_INCOMPATIBLE", message)
-        await self.database.fetch_one(
-            """
-            UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
-              last_error=NULL,updated_by=%s,updated_at=now() RETURNING tenant_id
-            """,
-            (actor_key,), tenant_id=tenant_id,
+        await self._record_ai_connection_test(
+            tenant_id=tenant_id, actor_key=actor_key, status="SUCCEEDED", error=None,
         )
         return AIProviderConnectionTest(provider=provider, models=models)
+
+    async def _record_ai_connection_test(
+        self,
+        *,
+        tenant_id: UUID,
+        actor_key: str,
+        status: str,
+        error: str | None,
+    ) -> None:
+        await self.database.fetch_one(
+            """
+            UPDATE tenant_ai_configuration SET test_status=%s,tested_at=now(),
+              last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+            """,
+            (status, error, actor_key), tenant_id=tenant_id,
+        )
+
+    @staticmethod
+    def _ai_provider_adapter(
+        provider: str, api_key: str, client: httpx.AsyncClient,
+    ) -> AnthropicAdapter | OpenAIAdapter | OpenRouterAdapter:
+        if provider == "anthropic":
+            return AnthropicAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                client=client,
+            )
+        if provider == "openai":
+            return OpenAIAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                client=client,
+            )
+        if provider == "openrouter":
+            return OpenRouterAdapter(
+                api_key,
+                base_url=AdminReadModelsMixin._ai_provider_base_url(provider),
+                site_url=os.getenv("OPENROUTER_SITE_URL"),
+                site_name=os.getenv("OPENROUTER_SITE_NAME", "StackGraph"),
+                client=client,
+            )
+        raise ValueError(f"Unsupported AI provider: {provider}")
 
     @staticmethod
     def _ai_models_request(provider: str, api_key: str) -> tuple[str, dict[str, str]]:
         if provider == "anthropic":
             return (
-                "https://api.anthropic.com/v1/models",
+                f"{AdminReadModelsMixin._ai_provider_base_url(provider)}/models",
                 {"x-api-key": api_key, "anthropic-version": "2023-06-01"},
             )
-        base = "https://openrouter.ai/api/v1" if provider == "openrouter" else "https://api.openai.com/v1"
+        base = AdminReadModelsMixin._ai_provider_base_url(provider)
         return f"{base}/models", {"Authorization": f"Bearer {api_key}"}
+
+    @staticmethod
+    def _ai_provider_base_url(provider: str) -> str:
+        defaults = {
+            "anthropic": "https://api.anthropic.com/v1",
+            "openai": "https://api.openai.com/v1",
+            "openrouter": "https://openrouter.ai/api/v1",
+        }
+        environment_names = {
+            "anthropic": "ANTHROPIC_BASE_URL",
+            "openai": "OPENAI_BASE_URL",
+            "openrouter": "OPENROUTER_BASE_URL",
+        }
+        if provider not in defaults:
+            raise ValueError(f"Unsupported AI provider: {provider}")
+        return os.getenv(environment_names[provider], defaults[provider]).rstrip("/")
 
     @staticmethod
     def _ai_model_ids(payload: Any) -> list[str]:
@@ -1592,6 +2263,18 @@ class AdminReadModelsMixin:
         )
         workload = await self.database.fetch_one(
             """
+            WITH intelligence_scope AS (
+              SELECT coalesce(
+                max(tenant_ai_configuration_fingerprint(
+                  provider,model,credential_secret_id
+                )) FILTER (
+                  WHERE enabled AND model<>'' AND credential_secret_id IS NOT NULL
+                ),
+                'snapshot-v1'
+              ) fingerprint
+              FROM tenant_ai_configuration
+              WHERE tenant_id=%s
+            )
             SELECT
               (SELECT count(*) FROM connector_account
                WHERE tenant_id=%s AND external_account_key LIKE 'github:%%' AND status='ACTIVE') github_configured,
@@ -1616,18 +2299,28 @@ class AdminReadModelsMixin:
               (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND leased_by IS NOT NULL AND processed_at IS NULL) projection_running,
               (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND last_error IS NOT NULL AND processed_at IS NULL) projection_failed,
               (SELECT max(coalesce(processed_at,created_at)) FROM projection_outbox WHERE tenant_id=%s) projection_last,
-              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='PENDING') intelligence_pending,
-              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='RUNNING') intelligence_running,
-              (SELECT count(*) FROM intelligence_job failed
-               WHERE failed.tenant_id=%s AND failed.status='FAILED'
+              (SELECT count(*) FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s AND job.configuration_fingerprint=scope.fingerprint
+                 AND job.status='PENDING') intelligence_pending,
+              (SELECT count(*) FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s AND job.configuration_fingerprint=scope.fingerprint
+                 AND job.status='RUNNING') intelligence_running,
+              (SELECT count(*) FROM intelligence_job failed, intelligence_scope scope
+               WHERE failed.tenant_id=%s
+                 AND failed.configuration_fingerprint=scope.fingerprint
+                 AND failed.status='FAILED'
                  AND NOT EXISTS (
                    SELECT 1 FROM intelligence_job recovered
                    WHERE recovered.tenant_id=failed.tenant_id
                      AND recovered.repository_entity_id=failed.repository_entity_id
+                     AND recovered.configuration_fingerprint=failed.configuration_fingerprint
                      AND recovered.status='SUCCEEDED'
                      AND recovered.completed_at>failed.updated_at
                  )) intelligence_failed,
-              (SELECT max(coalesce(completed_at,started_at,created_at)) FROM intelligence_job WHERE tenant_id=%s) intelligence_last,
+              (SELECT max(coalesce(job.completed_at,job.started_at,job.created_at))
+               FROM intelligence_job job, intelligence_scope scope
+               WHERE job.tenant_id=%s
+                 AND job.configuration_fingerprint=scope.fingerprint) intelligence_last,
               (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
                JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='PENDING') depsdev_pending,
@@ -1655,7 +2348,7 @@ class AdminReadModelsMixin:
                JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='osv.dev') osv_last
             """,
-            tuple([tenant_id] * 24),
+            tuple([tenant_id] * 25),
             tenant_id=tenant_id,
         ) or {}
         now = datetime.now(UTC)

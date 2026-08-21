@@ -1,0 +1,57 @@
+{
+  "contract_version": "1.0.0",
+  "active_policy": {
+    "id": "00000000-0000-4000-8000-000000000921",
+    "policy_key": "modernization.default",
+    "version": "1.0.0",
+    "status": "ACTIVE",
+    "runtime_versions": {"node": "20", "python": "3.12"},
+    "allowed_licenses": ["MIT", "Apache-2.0", "BSD-3-Clause"],
+    "denied_option_keys": [],
+    "allowed_security_statuses": ["CLEAR"],
+    "required_policy_tags": ["supported"],
+    "configuration_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "activated_by": "fixture-admin",
+    "activated_at": "2026-08-21T14:00:00Z"
+  },
+  "internal_components": [],
+  "active_calibration": null,
+  "ecosystem_admissions": [
+    {
+      "ecosystem": "PYPI", "sequence": 1, "status": "NOT_EVALUATED",
+      "observed_repositories": 18, "observed_dependency_share": 0.14,
+      "minimum_repositories": 10, "minimum_dependency_share": 0.02,
+      "predecessor_admitted": true, "metadata_parity": true,
+      "calibration_gate_passed": false,
+      "reasons": ["calibration promotion gate has not passed"],
+      "decision_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "ecosystem": "MAVEN", "sequence": 2, "status": "NOT_EVALUATED",
+      "observed_repositories": 7, "observed_dependency_share": 0.06,
+      "minimum_repositories": 10, "minimum_dependency_share": 0.02,
+      "predecessor_admitted": false, "metadata_parity": false,
+      "calibration_gate_passed": false,
+      "reasons": ["predecessor ecosystem has not been admitted", "observed repository demand is below threshold", "metadata parity is incomplete", "calibration promotion gate has not passed"],
+      "decision_fingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "ecosystem": "CARGO", "sequence": 3, "status": "NOT_EVALUATED",
+      "observed_repositories": 2, "observed_dependency_share": 0.01,
+      "minimum_repositories": 10, "minimum_dependency_share": 0.02,
+      "predecessor_admitted": false, "metadata_parity": false,
+      "calibration_gate_passed": false,
+      "reasons": ["predecessor ecosystem has not been admitted", "observed repository demand is below threshold", "observed dependency share is below threshold", "metadata parity is incomplete", "calibration promotion gate has not passed"],
+      "decision_fingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "ecosystem": "NUGET", "sequence": 4, "status": "NOT_EVALUATED",
+      "observed_repositories": 1, "observed_dependency_share": 0.005,
+      "minimum_repositories": 10, "minimum_dependency_share": 0.02,
+      "predecessor_admitted": false, "metadata_parity": false,
+      "calibration_gate_passed": false,
+      "reasons": ["predecessor ecosystem has not been admitted", "observed repository demand is below threshold", "observed dependency share is below threshold", "metadata parity is incomplete", "calibration promotion gate has not passed"],
+      "decision_fingerprint": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ]
+}

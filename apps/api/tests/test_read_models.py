@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -15,6 +16,7 @@ from app.read_models import (
     _decode_cursor,
     _encode_cursor,
     _group_application_technologies,
+    _technology_catalog_profiles,
 )
 
 
@@ -85,11 +87,89 @@ class AIConfigurationDatabaseStub:
         raise AssertionError(f"unexpected query: {query}")
 
 
+class ServiceStatusDatabaseStub:
+    def __init__(self) -> None:
+        self.workload_query = ""
+        self.workload_params: tuple[UUID, ...] = ()
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        if "FROM service_heartbeat" in query:
+            return [{
+                "service_key": "intelligence",
+                "status": "RUNNING",
+                "last_heartbeat_at": datetime.now(UTC),
+            }]
+        if "FROM tenant_service_control" in query:
+            return []
+        raise AssertionError(f"unexpected query: {query}")
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        self.workload_query = query
+        self.workload_params = params
+        return {"intelligence_failed": 5}
+
+
+class RepositoryDetailDatabaseStub:
+    def __init__(self) -> None:
+        self.fetch_one_calls = 0
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        self.fetch_one_calls += 1
+        if "FROM entity" in query:
+            return {
+                "id": UUID("00000000-0000-4000-8000-000000000401"),
+                "namespace": "ENTERPRISE", "entity_type": "Repository",
+                "canonical_key": "github:repo:billing", "name": "billing-api",
+                "properties": {}, "observed_at": NOW,
+            }
+        if "repository_profile" in query:
+            return {
+                "id": UUID("00000000-0000-4000-8000-000000000402"),
+                "object_value": {
+                    "purpose": "Creates invoices and coordinates payment collection.",
+                    "purpose_source": {"kind": "README", "path": "README.md"},
+                    "descriptions": ["Creates invoices and coordinates payment collection."],
+                    "languages": ["Python"], "components": ["Repository root"],
+                    "key_files": ["README.md", "pyproject.toml"],
+                    "operational_signals": ["Container build"],
+                    "limitations": ["documentation may be stale"],
+                },
+                "confidence": Decimal("0.95"), "source_revision": "revision-1",
+                "observed_at": NOW, "source_key": "github-enterprise",
+            }
+        raise AssertionError(f"unexpected query: {query}")
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        assert "FROM current_relationship" in query
+        return [{
+            "id": UUID("00000000-0000-4000-8000-000000000403"),
+            "namespace": "ENTERPRISE", "entity_type": "Application",
+            "canonical_key": "application:billing", "name": "Billing",
+            "properties": {}, "relationship_type": "IMPLEMENTED_BY", "observed_at": NOW,
+        }]
+
+
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.8499) == "MEDIUM"
     assert _confidence_label(0.85) == "HIGH"
     assert _confidence_label(0.5999) == "LOW"
     assert _confidence_label(0.60) == "MEDIUM"
+
+
+def test_repository_detail_surfaces_cited_revision_pinned_profile() -> None:
+    repository_id = UUID("00000000-0000-4000-8000-000000000401")
+    detail = asyncio.run(ReadModelStore(RepositoryDetailDatabaseStub()).repository_detail(
+        repository_id, tenant_id=UUID("00000000-0000-4000-8000-000000000499"),
+    ))
+
+    assert detail.repository.summary == "Creates invoices and coordinates payment collection."
+    assert detail.profile is not None
+    assert detail.profile.purpose_source == "README.md"
+    assert detail.profile.languages == ["Python"]
+    assert detail.profile.source_revision == "revision-1"
+    assert detail.profile.confidence_label == "HIGH"
+    assert detail.profile.citations[0].fact_id == UUID("00000000-0000-4000-8000-000000000402")
+    assert [application.name for application in detail.applications] == ["Billing"]
 
 
 def test_application_technologies_group_by_catalog_domain_and_capability() -> None:
@@ -160,6 +240,234 @@ def test_application_technologies_group_by_catalog_domain_and_capability() -> No
     assert unknown.classification == "UNCLASSIFIED"
     assert unknown.confidence == 0
     assert unknown.category is None
+
+
+def test_technology_catalog_profile_combines_oss_metadata_and_curated_classification() -> None:
+    package_id = UUID("00000000-0000-4000-8000-000000000211")
+    catalog_id = UUID("00000000-0000-4000-8000-000000000212")
+    metadata_fact_id = UUID("00000000-0000-4000-8000-000000000213")
+    classification_fact_id = UUID("00000000-0000-4000-8000-000000000214")
+    profiles = _technology_catalog_profiles(
+        [{
+            "id": package_id,
+            "namespace": "TECHNOLOGY",
+            "entity_type": "PackageVersion",
+            "canonical_key": "pkg:npm/%40biomejs/biome@2.5.8",
+            "name": "@biomejs/biome@2.5.8",
+            "properties": {"package_name": "@biomejs/biome"},
+        }],
+        [{
+            "id": catalog_id,
+            "namespace": "TECHNOLOGY",
+            "entity_type": "Technology",
+            "canonical_key": "stackgraph:technology:biome-eslint-oxlint-prettier",
+            "name": "Biome / ESLint / Oxlint / Prettier",
+            "properties": {
+                "purpose": "Linting and formatting.",
+                "domain_id": "frontend",
+                "category_id": "build-tooling",
+            },
+            "catalog_fact_id": classification_fact_id,
+            "capability_id": None,
+        }],
+        [{
+            "selected_technology_id": package_id,
+            "catalog_properties": {"catalog_metadata": {
+                "description": "Biome is a web toolchain.",
+                "package_name": "@biomejs/biome",
+                "ecosystem": "npm",
+                "license": "MIT OR Apache-2.0",
+                "weekly_downloads": 836700,
+            }},
+            "catalog_fact_id": metadata_fact_id,
+        }],
+    )
+
+    profile = profiles[package_id]
+    assert profile.summary == "Biome is a web toolchain."
+    assert profile.domain and profile.domain.key == "frontend"
+    assert profile.category and profile.category.key == "build-tooling"
+    assert profile.functions == []
+    assert profile.classification == "CATALOG_MATCH"
+    assert profile.weekly_downloads == 836700
+    assert {citation.fact_id for citation in profile.citations} == {
+        metadata_fact_id, classification_fact_id,
+    }
+
+
+def test_application_dependency_hierarchy_uses_declared_roots_and_breaks_cycles() -> None:
+    repository_id = UUID("00000000-0000-4000-8000-000000000401")
+    root_id = UUID("00000000-0000-4000-8000-000000000402")
+    child_id = UUID("00000000-0000-4000-8000-000000000403")
+    root_fact_id = UUID("00000000-0000-4000-8000-000000000404")
+    child_fact_id = UUID("00000000-0000-4000-8000-000000000405")
+
+    class DependencyDatabaseStub:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            self.calls += 1
+            if "WITH repositories AS" in query:
+                return [
+                    {
+                        "repository_id": repository_id,
+                        "id": root_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/root@1.0.0",
+                        "name": "root@1.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": root_fact_id,
+                        "confidence": Decimal("0.99"),
+                        "dependency_properties": {
+                            "direct": True,
+                            "component_path": "apps/web",
+                            "scope": "runtime",
+                            "requested_spec": "^1.0.0",
+                        },
+                    },
+                    {
+                        "repository_id": repository_id,
+                        "id": child_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/child@2.0.0",
+                        "name": "child@2.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": child_fact_id,
+                        "confidence": Decimal("0.98"),
+                        "dependency_properties": {"direct": False},
+                    },
+                ]
+            assert "FROM fact_assertion relationship" in query
+            return [
+                {
+                    "source_id": root_id,
+                    "target_id": child_id,
+                    "relationship_type": "DEPENDS_ON",
+                    "fact_assertion_id": child_fact_id,
+                    "confidence": Decimal("0.97"),
+                    "dependency_properties": {
+                        "dependency_relation": "DIRECT",
+                        "requirement": ">=2",
+                    },
+                },
+                {
+                    "source_id": child_id,
+                    "target_id": root_id,
+                    "relationship_type": "DEPENDS_ON",
+                    "fact_assertion_id": root_fact_id,
+                    "confidence": Decimal("0.96"),
+                    "dependency_properties": {},
+                },
+            ]
+
+    repository = {
+        "id": repository_id,
+        "namespace": "ENTERPRISE",
+        "entity_type": "Repository",
+        "canonical_key": "github:acme/web",
+        "name": "acme/web",
+        "properties": {},
+    }
+    database = DependencyDatabaseStub()
+
+    result = asyncio.run(ReadModelStore(database)._application_dependency_hierarchies(
+        [repository],
+        UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    assert database.calls == 2
+    assert len(result) == 1
+    component = result[0].components[0]
+    assert component.component_path == "apps/web"
+    assert component.truncated is False
+    assert [node.technology.id for node in component.dependencies] == [root_id, child_id]
+    assert component.dependencies[0].direct is True
+    assert component.dependencies[0].scope == "runtime"
+    assert component.dependencies[1].parent_technology_id == root_id
+    assert component.dependencies[1].depth == 2
+    assert component.dependencies[1].requirement == ">=2"
+    assert component.dependencies[1].citations[0].fact_id == child_fact_id
+
+
+def test_technology_estate_hierarchy_links_transitive_nodes_to_applications() -> None:
+    root_id = UUID("00000000-0000-4000-8000-000000000501")
+    child_id = UUID("00000000-0000-4000-8000-000000000502")
+    app_id = UUID("00000000-0000-4000-8000-000000000503")
+    root_fact_id = UUID("00000000-0000-4000-8000-000000000504")
+    child_fact_id = UUID("00000000-0000-4000-8000-000000000505")
+
+    class TechnologyHierarchyDatabaseStub:
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            if "SELECT repository.id repository_id" in query:
+                return [
+                    {
+                        "repository_id": UUID("00000000-0000-4000-8000-000000000506"),
+                        "id": root_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/root@1.0.0",
+                        "name": "root@1.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": root_fact_id,
+                        "confidence": Decimal("0.99"),
+                        "dependency_properties": {"direct": True},
+                    },
+                    {
+                        "repository_id": UUID("00000000-0000-4000-8000-000000000506"),
+                        "id": child_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/child@2.0.0",
+                        "name": "child@2.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": child_fact_id,
+                        "confidence": Decimal("0.98"),
+                        "dependency_properties": {"direct": False},
+                    },
+                ]
+            if "SELECT DISTINCT ON (dependency.subject_entity_id" in query:
+                return [{
+                    "source_id": root_id,
+                    "target_id": child_id,
+                    "relationship_type": "DEPENDS_ON",
+                    "fact_assertion_id": child_fact_id,
+                    "confidence": Decimal("0.97"),
+                    "dependency_properties": {},
+                }]
+            if "WHERE technology.namespace='TECHNOLOGY'" in query:
+                return []
+            if "WITH selected AS" in query:
+                return []
+            assert "WITH application_repositories AS" in query
+            return [{
+                "technology_id": child_id,
+                "id": app_id,
+                "namespace": "ENTERPRISE",
+                "entity_type": "Application",
+                "canonical_key": "application:checkout",
+                "name": "Checkout",
+                "properties": {},
+            }]
+
+    hierarchy = asyncio.run(ReadModelStore(
+        TechnologyHierarchyDatabaseStub()
+    ).technology_estate_hierarchy(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    assert [node.technology.id for node in hierarchy.nodes] == [root_id, child_id]
+    assert hierarchy.nodes[0].direct is True
+    assert hierarchy.nodes[1].parent_technology_id == root_id
+    assert hierarchy.nodes[1].depth == 2
+    assert [app.id for app in hierarchy.nodes[1].dependent_applications] == [app_id]
+    assert hierarchy.nodes[1].citations[0].fact_id == child_fact_id
 
 
 def test_cursor_is_typed_and_rejects_cross_endpoint_reuse() -> None:
@@ -264,6 +572,17 @@ def test_openrouter_connection_test_authenticates_and_checks_zdr_model_compatibi
                 "model_id": "anthropic/claude-sonnet-5",
                 "supported_parameters": ["max_tokens", "response_format"],
             }]})
+        if request.url.path == "/api/v1/chat/completions":
+            body = json.loads(request.content)
+            assert body["response_format"]["type"] == "json_schema"
+            assert body["response_format"]["json_schema"]["strict"] is True
+            return httpx.Response(200, json={
+                "model": "anthropic/claude-sonnet-5",
+                "choices": [{
+                    "message": {"content": "```json\n{\"answer\":\"ok\"}\n```"},
+                    "finish_reason": "stop",
+                }],
+            })
         raise AssertionError(f"unexpected request: {request.url}")
 
     database = AIConfigurationDatabaseStub()
@@ -274,9 +593,12 @@ def test_openrouter_connection_test_authenticates_and_checks_zdr_model_compatibi
             actor_key="operator",
         ))
 
-    assert paths == ["/api/v1/auth/key", "/api/v1/models", "/api/v1/endpoints/zdr"]
+    assert paths == [
+        "/api/v1/auth/key", "/api/v1/models", "/api/v1/endpoints/zdr",
+        "/api/v1/chat/completions",
+    ]
     assert result.models == ["anthropic/claude-sonnet-5"]
-    assert "test_status='SUCCEEDED'" in database.updates[-1][0]
+    assert database.updates[-1][1][0] == "SUCCEEDED"
 
 
 def test_openrouter_connection_test_rejects_public_catalog_false_positive() -> None:
@@ -295,7 +617,7 @@ def test_openrouter_connection_test_rejects_public_catalog_false_positive() -> N
             ))
 
     assert raised.value.code == "AI_CONNECTION_FAILED"
-    assert "test_status='FAILED'" in database.updates[-1][0]
+    assert database.updates[-1][1][0] == "FAILED"
 
 
 def test_openrouter_connection_test_rejects_incompatible_zdr_route() -> None:
@@ -321,7 +643,53 @@ def test_openrouter_connection_test_rejects_incompatible_zdr_route() -> None:
             ))
 
     assert raised.value.code == "AI_MODEL_INCOMPATIBLE"
-    assert "test_status='FAILED'" in database.updates[-1][0]
+    assert database.updates[-1][1][0] == "FAILED"
+
+
+def test_openrouter_connection_test_rejects_invalid_structured_completion() -> None:
+    def openrouter(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/key":
+            return httpx.Response(200, json={"data": {}})
+        if request.url.path == "/api/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "anthropic/claude-sonnet-5"}]})
+        if request.url.path == "/api/v1/endpoints/zdr":
+            return httpx.Response(200, json={"data": [{
+                "model_id": "anthropic/claude-sonnet-5",
+                "supported_parameters": ["max_tokens", "response_format"],
+            }]})
+        if request.url.path == "/api/v1/chat/completions":
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": "The answer is ok."}}],
+            })
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    database = AIConfigurationDatabaseStub()
+    client = httpx.AsyncClient(transport=httpx.MockTransport(openrouter))
+    with patch("app.read_models_admin.httpx.AsyncClient", return_value=client):
+        with pytest.raises(APIError) as raised:
+            asyncio.run(ReadModelStore(database).test_ai_provider_connection(
+                tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+                actor_key="operator",
+            ))
+
+    assert raised.value.code == "AI_STRUCTURED_OUTPUT_FAILED"
+    assert database.updates[-1][1][0] == "FAILED"
+
+
+def test_service_status_scopes_intelligence_workload_to_active_configuration() -> None:
+    database = ServiceStatusDatabaseStub()
+    result = asyncio.run(ReadModelStore(database).service_status(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    intelligence = next(service for service in result.services if service.key == "intelligence")
+    assert intelligence.failed == 5
+    assert intelligence.state == "DEGRADED"
+    assert "WITH intelligence_scope AS" in database.workload_query
+    assert database.workload_query.count(
+        "configuration_fingerprint=scope.fingerprint"
+    ) == 4
+    assert len(database.workload_params) == 25
 
 
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:
@@ -348,3 +716,55 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert "relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
     assert "e.tenant_id=(SELECT tenant_id FROM tenant_scope)" in estate_queries
+
+
+def test_modernization_portfolio_reads_phase3_recommendations_and_shared_footprint() -> None:
+    recommendation_id = UUID("00000000-0000-4000-8000-000000000951")
+    repository_id = UUID("00000000-0000-4000-8000-000000000952")
+    fact_id = UUID("00000000-0000-4000-8000-000000000953")
+
+    class PortfolioDatabaseStub:
+        def __init__(self) -> None:
+            self.queries: list[str] = []
+
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            self.queries.append(query)
+            assert "modernization_portfolio_policy" in query
+            return None
+
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            self.queries.append(query)
+            assert "FROM modernization_recommendation recommendation" in query
+            assert "LEFT JOIN capability_footprint footprint" in query
+            assert "FROM recommendation r" not in query
+            return [{
+                "id": recommendation_id,
+                "title": "Consolidate HTTP clients",
+                "rationale": "One approved implementation reduces duplicate maintenance.",
+                "action": "CONSOLIDATE",
+                "recommendation_confidence": Decimal("0.90"),
+                "supporting_fact_ids": [fact_id],
+                "created_at": NOW,
+                "updated_at": NOW,
+                "candidate_confidence": Decimal("0.92"),
+                "capability_definition_id": UUID("00000000-0000-4000-8000-000000000954"),
+                "repository_entity_id": repository_id,
+                "repository_name": "Billing API",
+                "repository_key": "github:repo:billing",
+                "effort_points": 8,
+                "selected_option_score": Decimal("0.80"),
+                "application_count": 5,
+                "repository_count": 8,
+                "technology_counts": {"node": 4, "python": 4},
+            }]
+
+    database = PortfolioDatabaseStub()
+    result = asyncio.run(ReadModelStore(database).modernization(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        cursor=None,
+        limit=10,
+    ))
+
+    assert [item.id for item in result.opportunities] == [recommendation_id]
+    assert result.opportunities[0].priority.method_version == "modernization-portfolio/v1-unconfigured"
+    assert result.opportunities[0].citations[0].fact_id == fact_id

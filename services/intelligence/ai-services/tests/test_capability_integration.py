@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from stackgraph_ai.capability_worker import analyze_repository
+from stackgraph_ai.ecosystem_admission import evaluate_and_record
 from stackgraph_ai.modernization_worker import analyze_modernization, enqueue_reanalysis, work_jobs
 
 
@@ -380,14 +381,17 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
                 INSERT INTO modernization_internal_component(
                   tenant_id,component_entity_id,capability_definition_id,
                   component_key,version,status,api_symbols,runtime_constraints,
-                  behavior_claims,license,security_status,policy_tags
+                  behavior_claims,license,security_status,policy_tags,
+                  supporting_fact_ids,review_state,owner,governed_by,governed_at,
+                  catalog_fingerprint
                 ) VALUES (%s,%s,%s,'internal:http-client','1.0.0','APPROVED',%s,%s,
-                          %s,'MIT','CLEAR',%s)
+                          %s,'MIT','CLEAR',%s,%s,'APPROVED','platform-team',
+                          'integration-test',now(),%s)
                 """,
                 (
                     tenant["id"], component["id"], capability["capability_definition_id"],
                     ["get"], Jsonb({"node": ">=18"}), Jsonb([{"verified": True}]),
-                    ["runtime-native"],
+                    ["runtime-native"], [fact["id"]], "sha256:" + "b" * 64,
                 ),
             )
         component_job, component_created, component_fingerprint = enqueue_reanalysis(
@@ -397,6 +401,15 @@ class CapabilityPersistenceIntegrationTests(unittest.TestCase):
         self.assertTrue(component_created)
         self.assertNotEqual(component_job, changed_job)
         self.assertNotEqual(component_fingerprint, changed_fingerprint)
+
+        admission = evaluate_and_record(
+            DATABASE_URL, tenant_id=tenant["id"], ecosystem="PYPI",
+            actor_key="integration-test", minimum_repositories=1,
+            minimum_dependency_share=0.01,
+        )
+        self.assertFalse(admission.admitted)
+        self.assertEqual(admission.observed_repositories, 0)
+        self.assertIn("calibration promotion gate has not passed", admission.reasons)
 
 
 if __name__ == "__main__":

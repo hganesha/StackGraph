@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { IconX } from "@tabler/icons-react";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton, confidenceLabel } from "@stackgraph/design-system";
 import { useGraphNeighborhood } from "@/lib/queries";
 import { useEvidenceStore } from "@/lib/evidenceStore";
@@ -21,12 +22,14 @@ export function GraphLens({
   collectionHref,
   collectionLabel,
   depth = 1,
+  headerAction,
 }: {
   centerId: string;
   centerName: string;
   collectionHref: string;
   collectionLabel: string;
   depth?: number;
+  headerAction?: ReactNode;
 }) {
   const { data, isLoading } = useGraphNeighborhood(centerId, depth);
   const [selected, setSelected] = useState<string | null>(null);
@@ -53,9 +56,12 @@ export function GraphLens({
           <span aria-hidden="true">›</span>
           <span className={styles.lensTag}>Graph lens</span>
         </nav>
-        <Link href={detailHref} className={styles.close} aria-label="Exit graph lens">
-          ✕ Exit
-        </Link>
+        {headerAction ?? (
+          <Link href={detailHref} className={styles.close} aria-label="Exit graph lens">
+            <IconX size={15} stroke={1.75} aria-hidden="true" />
+            Exit
+          </Link>
+        )}
       </header>
 
       <div className={styles.stage}>

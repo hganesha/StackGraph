@@ -100,6 +100,27 @@ class TaxonomySummary(ContractModel):
 TechnologyClassification = Literal["CURATED", "CATALOG_MATCH", "UNCLASSIFIED"]
 
 
+class TechnologyCatalogProfile(ContractModel):
+    summary: str | None = None
+    package_name: str | None = None
+    ecosystem: str | None = None
+    license: str | None = None
+    homepage: str | None = None
+    repository_url: str | None = None
+    package_url: str | None = None
+    latest_version: str | None = None
+    weekly_downloads: int | None = Field(default=None, ge=0)
+    dependents: int | None = Field(default=None, ge=0)
+    versions: int | None = Field(default=None, ge=0)
+    installation_command: str | None = None
+    catalog_technology: EntitySummary | None = None
+    domain: TaxonomySummary | None = None
+    category: TaxonomySummary | None = None
+    functions: list[TaxonomySummary] = Field(default_factory=list)
+    classification: TechnologyClassification
+    citations: list[Citation] = Field(min_length=1)
+
+
 class ApplicationTechnologyUsage(ContractModel):
     technology: EntitySummary
     category: TaxonomySummary | None = None
@@ -117,6 +138,51 @@ class ApplicationTechnologyFunction(ContractModel):
 class ApplicationTechnologyGroup(ContractModel):
     domain: TaxonomySummary
     functions: list[ApplicationTechnologyFunction] = Field(min_length=1)
+
+
+class ApplicationDependencyNode(ContractModel):
+    technology: EntitySummary
+    parent_technology_id: UUID | None = None
+    depth: int = Field(ge=1)
+    direct: bool
+    relationship: str = Field(min_length=1)
+    scope: str | None = None
+    requirement: str | None = None
+    dependency_relation: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class ApplicationComponentDependencyHierarchy(ContractModel):
+    component_path: str = Field(min_length=1)
+    dependencies: list[ApplicationDependencyNode] = Field(min_length=1)
+    truncated: bool = False
+
+
+class ApplicationRepositoryDependencyHierarchy(ContractModel):
+    repository: EntitySummary
+    components: list[ApplicationComponentDependencyHierarchy] = Field(min_length=1)
+
+
+class TechnologyEstateHierarchyNode(ContractModel):
+    technology: EntitySummary
+    parent_technology_id: UUID | None = None
+    depth: int = Field(ge=1)
+    direct: bool
+    relationship: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    dependent_applications: list[EntitySummary]
+    catalog_profile: TechnologyCatalogProfile | None = None
+    citations: list[Citation] = Field(min_length=1)
+
+
+class TechnologyEstateHierarchy(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    nodes: list[TechnologyEstateHierarchyNode]
+    truncated: bool = False
 
 
 class AssessmentSummary(ContractModel):
@@ -167,9 +233,35 @@ class ApplicationDetail(ContractModel):
     repositories: list[EntitySummary]
     technologies: list[EntitySummary]
     technology_groups: list[ApplicationTechnologyGroup]
+    dependency_hierarchies: list[ApplicationRepositoryDependencyHierarchy] = Field(default_factory=list)
     deployments: list[EntitySummary]
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]
+    freshness: Freshness
+
+
+class RepositoryProfile(ContractModel):
+    purpose: str | None = None
+    purpose_source: str | None = None
+    descriptions: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    components: list[str] = Field(default_factory=list)
+    key_files: list[str] = Field(default_factory=list)
+    operational_signals: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    source_revision: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class RepositoryDetail(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    profile: RepositoryProfile | None = None
+    applications: list[EntitySummary]
+    technologies: list[EntitySummary]
+    deployments: list[EntitySummary]
     freshness: Freshness
 
 
@@ -193,6 +285,7 @@ class TechnologyDetail(ContractModel):
     internal_usage: InternalUsage
     packages: list[EntitySummary]
     projects: list[EntitySummary]
+    catalog_profile: TechnologyCatalogProfile | None = None
     registry_sources: list[PackageSource] | None = None
     alternatives: list[EntitySummary] | None = None
     migration_patterns: list[EntitySummary] | None = None
@@ -558,6 +651,167 @@ class Phase3IntelligenceMetrics(ContractModel):
     model_latency_ms_p95: float | None = Field(default=None, ge=0)
 
 
+class ModernizationPolicyPublishRequest(ContractModel):
+    policy_key: str = Field(default="modernization.default", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    version: str = Field(min_length=1)
+    runtime_versions: dict[str, str] = Field(default_factory=dict)
+    allowed_licenses: list[str] = Field(default_factory=list)
+    denied_option_keys: list[str] = Field(default_factory=list)
+    allowed_security_statuses: list[Literal["CLEAR", "WARN", "BLOCKED", "UNKNOWN"]] = Field(
+        default_factory=lambda: ["CLEAR", "UNKNOWN"]
+    )
+    required_policy_tags: list[str] = Field(default_factory=list)
+
+
+class ModernizationPolicySummary(ContractModel):
+    id: UUID
+    policy_key: str
+    version: str
+    status: Literal["DRAFT", "ACTIVE", "RETIRED"]
+    runtime_versions: dict[str, str]
+    allowed_licenses: list[str]
+    denied_option_keys: list[str]
+    allowed_security_statuses: list[str]
+    required_policy_tags: list[str]
+    configuration_fingerprint: str
+    activated_by: str
+    activated_at: datetime
+
+
+class InternalCatalogComponentUpsertRequest(ContractModel):
+    component_entity_id: UUID
+    capability_definition_id: UUID
+    version: str = Field(min_length=1)
+    status: Literal["APPROVED", "DEPRECATED", "BLOCKED"] = "APPROVED"
+    api_symbols: list[str] = Field(default_factory=list)
+    runtime_constraints: dict[str, str] = Field(default_factory=dict)
+    behavior_claims: list[dict[str, Any]] = Field(default_factory=list)
+    license: str | None = None
+    security_status: Literal["CLEAR", "WARN", "BLOCKED", "UNKNOWN"] = "UNKNOWN"
+    policy_tags: list[str] = Field(default_factory=list)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    owner: str = Field(min_length=1)
+    decision: Literal["APPROVE", "REJECT"]
+
+
+class InternalCatalogComponentSummary(ContractModel):
+    id: UUID
+    component_key: str
+    version: str
+    name: str
+    status: Literal["APPROVED", "DEPRECATED", "BLOCKED"]
+    review_state: Literal["UNREVIEWED", "APPROVED", "REJECTED"]
+    owner: str | None = None
+    catalog_fingerprint: str
+    supporting_fact_ids: list[UUID]
+    governed_by: str | None = None
+    governed_at: datetime | None = None
+
+
+class CalibrationCorpusPublishRequest(ContractModel):
+    corpus_key: str = Field(default="modernization.pilot", pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    version: str = Field(min_length=1)
+    case_fingerprints: list[str] = Field(min_length=1)
+    candidate_precision: float | None = Field(default=None, ge=0, le=1)
+    recommendation_acceptance: float | None = Field(default=None, ge=0, le=1)
+    validation_success: float | None = Field(default=None, ge=0, le=1)
+    affected_scope_mae: float | None = Field(default=None, ge=0)
+    effort_accuracy: float | None = Field(default=None, ge=0, le=1)
+    minimum_candidate_precision: float = Field(default=0.8, ge=0, le=1)
+    minimum_recommendation_acceptance: float = Field(default=0.5, ge=0, le=1)
+    minimum_validation_success: float = Field(default=0.8, ge=0, le=1)
+    maximum_affected_scope_mae: float = Field(default=0.25, ge=0)
+    minimum_effort_accuracy: float = Field(default=0.7, ge=0, le=1)
+    minimum_reviewed_cases: int = Field(default=20, ge=1)
+
+
+class CalibrationCorpusSummary(ContractModel):
+    id: UUID
+    corpus_key: str
+    version: str
+    case_count: int = Field(ge=0)
+    corpus_fingerprint: str
+    promotion_passed: bool
+    promotion_failures: list[str]
+    evaluation_fingerprint: str
+    evaluated_at: datetime
+
+
+EcosystemName = Literal["PYPI", "MAVEN", "CARGO", "NUGET"]
+
+
+class EcosystemAdmissionEvaluateRequest(ContractModel):
+    minimum_repositories: int = Field(default=10, ge=1, le=100_000)
+    minimum_dependency_share: float = Field(default=0.02, ge=0, le=1)
+
+
+class EcosystemAdmissionSummary(ContractModel):
+    ecosystem: EcosystemName
+    sequence: int = Field(ge=1, le=4)
+    status: Literal["NOT_EVALUATED", "PROPOSED", "ADMITTED", "RETIRED", "STALE"]
+    observed_repositories: int = Field(ge=0)
+    observed_dependency_share: float = Field(ge=0, le=1)
+    minimum_repositories: int = Field(ge=1)
+    minimum_dependency_share: float = Field(ge=0, le=1)
+    predecessor_admitted: bool
+    metadata_parity: bool
+    calibration_gate_passed: bool
+    reasons: list[str]
+    decision_fingerprint: str
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+
+class ModernizationGovernanceState(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    active_policy: ModernizationPolicySummary | None = None
+    internal_components: list[InternalCatalogComponentSummary]
+    active_calibration: CalibrationCorpusSummary | None = None
+    ecosystem_admissions: list[EcosystemAdmissionSummary]
+
+
+class CapabilityFootprintModel(ContractModel):
+    capability: EntitySummary
+    application_count: int = Field(ge=0)
+    repository_count: int = Field(ge=0)
+    technology_count: int = Field(ge=0)
+    technology_counts: dict[str, int]
+    technology_entropy: float = Field(ge=0, le=1)
+    reuse_signal: float = Field(ge=0, le=1)
+
+
+class CapabilityFootprintList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    footprints: list[CapabilityFootprintModel]
+
+
+class ModernizationScenarioRequest(ContractModel):
+    budget_points: int = Field(ge=0, le=100000)
+    excluded_recommendation_ids: list[UUID] = Field(default_factory=list)
+
+
+class ModernizationScenarioItem(ContractModel):
+    recommendation_id: UUID
+    repository: EntitySummary
+    title: str
+    action: Literal["CONSOLIDATE", "REPLACE", "UPGRADE", "REFACTOR", "INVESTIGATE"]
+    score: float = Field(ge=0, le=100)
+    score_components: dict[str, float]
+    effort_points: int = Field(ge=0)
+    selected: bool
+    policy_version: str
+
+
+class ModernizationScenarioResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    budget_points: int = Field(ge=0)
+    used_points: int = Field(ge=0)
+    total_score: float = Field(ge=0)
+    items: list[ModernizationScenarioItem]
+
+
 # --- Business Map -----------------------------------------------------------
 # The contract mirrors the workspace's client state (kebab view modes, string keys as ids)
 # so the UI serializes with a thin adapter and no reducer changes. The store maps these
@@ -625,6 +879,12 @@ class BusinessMapFunctionAssignment(ContractModel):
     unit_id: str = Field(min_length=1)
 
 
+class BusinessMapApplicationAssignment(ContractModel):
+    capability_id: str = Field(min_length=1)
+    application_id: UUID
+    application_name: str = Field(min_length=1)
+
+
 class BusinessMapStateModel(ContractModel):
     title: str = Field(min_length=1)
     view_mode: BusinessMapViewMode = "value-chain"
@@ -635,6 +895,7 @@ class BusinessMapStateModel(ContractModel):
     placements: list[BusinessMapPlacement] = Field(default_factory=list)
     shared_groups: list[BusinessMapSharedGroup] = Field(default_factory=list)
     function_assignments: list[BusinessMapFunctionAssignment] = Field(default_factory=list)
+    application_assignments: list[BusinessMapApplicationAssignment] = Field(default_factory=list)
 
 
 class BusinessMapSummary(ContractModel):
@@ -845,6 +1106,12 @@ class GitHubInstallationConnectRequest(ContractModel):
         pattern=r"^[1-9][0-9]{0,19}$",
     )
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    pilot_manual_binding_acknowledged: Literal[True] = Field(
+        description=(
+            "Confirms that an operator verified the installation belongs to this pilot tenant; "
+            "hosted setup callback binding remains required for general availability."
+        )
+    )
 
 
 class ConnectorUpdateRequest(ContractModel):

@@ -108,7 +108,10 @@ class RepositoryScannerTests(unittest.TestCase):
             ["debounce", "get"],
         )
         self.assertEqual(dependency["properties"]["usage"]["static_reachability"], "OBSERVED")
-        finding = next(fact for fact in result["facts"] if fact["predicate"] == "HAS_PROPERTY")
+        finding = next(
+            fact for fact in result["facts"]
+            if fact.get("object_value", {}).get("finding_type") == "NARROW_USE_DEPENDENCY_CANDIDATE"
+        )
         self.assertEqual(finding["object_value"]["finding_type"], "NARROW_USE_DEPENDENCY_CANDIDATE")
         self.assertGreaterEqual(len(dependency["evidence"]), 3)
         self.assertEqual(
@@ -123,6 +126,57 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(application["assertion_class"], "INFERRED")
         self.assertEqual(application["properties"]["boundary_strategy"], "REPOSITORY_FALLBACK")
         self.assertEqual(application["evidence"][0]["locator"]["path"], "package.json")
+
+    def test_repository_profile_uses_readme_and_manifest_evidence(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "README.md").write_text(
+                "# Billing API\n\n"
+                "Billing API creates invoices and coordinates payment collection for customer orders.\n\n"
+                "## Installation\n\nRun `pnpm install`.\n"
+            )
+            (root / "package.json").write_text(json.dumps({
+                "name": "billing-api",
+                "description": "A service for the billing domain.",
+                "dependencies": {},
+            }))
+            (root / "src.ts").write_text("export const bill = true;\n")
+            (root / "Dockerfile").write_text("FROM node:22-slim\n")
+
+            result = scan_repository(request(root))
+
+        profile_fact = next(
+            fact for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "repository_profile"
+        )
+        profile = profile_fact["object_value"]
+        self.assertEqual(
+            profile["purpose"],
+            "Billing API creates invoices and coordinates payment collection for customer orders.",
+        )
+        self.assertEqual(profile["purpose_source"], {"kind": "README", "path": "README.md"})
+        self.assertEqual(profile["languages"], ["TypeScript"])
+        self.assertEqual(profile["components"], ["Repository root"])
+        self.assertIn("Container build", profile["operational_signals"])
+        self.assertEqual(profile_fact["assertion_class"], "DECLARED")
+        self.assertEqual(profile_fact["confidence"], 0.95)
+        self.assertEqual(profile_fact["evidence"][0]["locator"]["path"], "README.md")
+        self.assertEqual(profile_fact["evidence"][0]["locator"]["line_start"], 3)
+
+    def test_repository_profile_does_not_invent_missing_purpose(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "main.py").write_text("print('hello')\n")
+
+            result = scan_repository(request(root))
+
+        profile_fact = next(
+            fact for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "repository_profile"
+        )
+        self.assertNotIn("purpose", profile_fact["object_value"])
+        self.assertEqual(profile_fact["object_value"]["languages"], ["Python"])
+        self.assertEqual(profile_fact["assertion_class"], "INFERRED")
 
     def test_monorepo_application_boundary_is_explicitly_provisional(self) -> None:
         with TemporaryDirectory() as directory:
@@ -177,7 +231,7 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertIn(("USES", "InfrastructureResource"), relationships)
         terraform = next(
             fact for fact in result["facts"]
-            if fact["object_entity"]["type"] == "InfrastructureResource"
+            if fact.get("object_entity", {}).get("type") == "InfrastructureResource"
         )
         self.assertEqual(terraform["object_entity"]["name"], "aws_s3_bucket.invoices")
         self.assertEqual(terraform["evidence"][0]["locator"]["path"], "infra.tf")
@@ -260,12 +314,14 @@ class RepositoryScannerTests(unittest.TestCase):
 
         unused = [
             fact for fact in complete["facts"]
-            if fact["predicate"] == "HAS_PROPERTY"
-            and fact["object_value"]["finding_type"] == "UNUSED_DECLARED_DEPENDENCY_CANDIDATE"
+            if fact.get("object_value", {}).get("finding_type") == "UNUSED_DECLARED_DEPENDENCY_CANDIDATE"
         ]
         self.assertEqual(len(unused), 1)
         self.assertEqual(partial["completeness"], "PARTIAL")
-        self.assertFalse(any(fact["predicate"] == "HAS_PROPERTY" for fact in partial["facts"]))
+        self.assertFalse(any(
+            fact.get("object_value", {}).get("finding_type")
+            for fact in partial["facts"]
+        ))
 
     def test_runtime_trace_is_reported_separately_from_static_reference(self) -> None:
         with TemporaryDirectory() as directory:
@@ -282,7 +338,10 @@ class RepositoryScannerTests(unittest.TestCase):
         usage = dependency["properties"]["usage"]
         self.assertFalse(usage["referenced"])
         self.assertEqual(usage["runtime_observed"], "OBSERVED")
-        self.assertFalse(any(fact["predicate"] == "HAS_PROPERTY" for fact in result["facts"]))
+        self.assertFalse(any(
+            fact.get("object_value", {}).get("finding_type")
+            for fact in result["facts"]
+        ))
 
     def test_code_units_capture_structure_tests_dynamic_gaps_and_touchpoints(self) -> None:
         with TemporaryDirectory() as directory:

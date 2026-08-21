@@ -71,6 +71,24 @@ async def exercise_read_models() -> None:
             assert graph.center_id == entity_row["id"]
             assert len(graph.nodes) <= 10
 
+        package_row = await database.fetch_one(
+            """
+            SELECT pri.entity_id id
+            FROM package_registry_identity pri
+            JOIN entity e ON e.id=pri.entity_id
+            WHERE e.namespace='TECHNOLOGY'
+            ORDER BY pri.last_seen_at DESC NULLS LAST,pri.id
+            LIMIT 1
+            """
+        )
+        if package_row:
+            package_detail = await store.technology_detail(package_row["id"], tenant_id=None)
+            logical_sources = [
+                (source.registry_key, source.origin.lower().rstrip("/"))
+                for source in package_detail.registry_sources or []
+            ]
+            assert len(logical_sources) == len(set(logical_sources))
+
         connected_entity = await database.fetch_one(
             """
             SELECT r.source_entity_id id
@@ -329,7 +347,9 @@ def test_golden_billing_vertical_slice() -> None:
                 return {
                     "estateSummary": await client.get("/estate/summary"),
                     "applicationDetail": await client.get(f"/applications/{APPLICATION_ID}"),
+                    "repositoryDetail": await client.get(f"/repositories/{REPOSITORY_ID}"),
                     "technologyDetail": await client.get(f"/technologies/{PACKAGE_ID}"),
+                    "technologyHierarchy": await client.get("/technologies/hierarchy"),
                     "modernizationList": await client.get("/modernization"),
                     "graphNeighborhood": await client.get(
                         "/graph/neighborhood",
@@ -367,8 +387,8 @@ def test_golden_billing_vertical_slice() -> None:
 
         contract = ContractValidator(Path("/contracts/v1"))
         for definition in (
-            "estateSummary", "applicationDetail", "technologyDetail",
-            "modernizationList", "graphNeighborhood", "evidenceDetail",
+            "estateSummary", "applicationDetail", "repositoryDetail", "technologyDetail",
+            "technologyHierarchy", "modernizationList", "graphNeighborhood", "evidenceDetail",
         ):
             contract.validate_read_model(definition, responses[definition].json())
         for name in ("unsupportedAsk", "viabilityAsk", "dependencyAsk", "indirectAsk"):
@@ -392,11 +412,28 @@ def test_golden_billing_vertical_slice() -> None:
         assert grouped_package["technology"]["id"] == PACKAGE_ID
         assert grouped_package["classification"] == "UNCLASSIFIED"
         assert grouped_package["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
+        hierarchy = application["dependency_hierarchies"][0]
+        assert hierarchy["repository"]["id"] == REPOSITORY_ID
+        dependency = hierarchy["components"][0]["dependencies"][0]
+        assert dependency["technology"]["id"] == PACKAGE_ID
+        assert dependency["direct"] is True
+        assert dependency["scope"] == "runtime"
+        assert dependency["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
+
+        repository = responses["repositoryDetail"].json()
+        assert repository["repository"]["id"] == REPOSITORY_ID
+        assert {item["id"] for item in repository["applications"]} == {APPLICATION_ID}
+        assert PACKAGE_ID in {item["id"] for item in repository["technologies"]}
 
         technology = responses["technologyDetail"].json()
         assert technology["internal_usage"]["repository_count"] == 1
         assert technology["internal_usage"]["application_count"] == 1
         assert {item["id"] for item in technology["projects"]} == {OSS_PROJECT_ID}
+
+        hierarchy_node = responses["technologyHierarchy"].json()["nodes"][0]
+        assert hierarchy_node["technology"]["id"] == PACKAGE_ID
+        assert hierarchy_node["direct"] is True
+        assert hierarchy_node["dependent_applications"][0]["id"] == APPLICATION_ID
 
         graph = responses["graphNeighborhood"].json()
         assert graph["highlighted_path"] == [PACKAGE_ID, REPOSITORY_ID, APPLICATION_ID]
@@ -534,6 +571,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         "/admin/github/installations",
                         json={
                             "installation_id": "900000000000000001",
+                            "pilot_manual_binding_acknowledged": True,
                             "display_name": "Acme GitHub App",
                         },
                     )
@@ -598,15 +636,21 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         encryption_key="stackgraph-local-development-credential-key",
                     )
                     ai_removed = await client.delete("/admin/ai-configuration/key")
+                    governance = await client.get("/admin/modernization-governance")
+                    ecosystem = await client.put(
+                        "/admin/modernization-governance/ecosystems/PYPI",
+                        json={"minimum_repositories": 1, "minimum_dependency_share": 0.01},
+                    )
                     return (
                         member, members, connector, repository, installation, policy,
                         rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
-                        tenant_ai, ai_removed,
+                        tenant_ai, ai_removed, governance, ecosystem,
                     )
 
         (
             member, members, connector, repository, installation, policy, rescan_a,
             rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
+            governance, ecosystem,
         ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
@@ -641,6 +685,16 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert tenant_ai.openrouter_api_key == "integration-secret-5678"
         assert ai_removed.json()["key_configured"] is False
         assert ai_removed.json()["enrichment_status"] == "DISABLED"
+        assert governance.status_code == 200
+        assert [item["ecosystem"] for item in governance.json()["ecosystem_admissions"]] == [
+            "PYPI", "MAVEN", "CARGO", "NUGET",
+        ]
+        assert governance.json()["ecosystem_admissions"][0]["observed_repositories"] == 0
+        assert ecosystem.status_code == 200
+        assert ecosystem.json()["ecosystem_admissions"][0]["status"] == "PROPOSED"
+        assert "calibration promotion gate has not passed" in (
+            ecosystem.json()["ecosystem_admissions"][0]["reasons"]
+        )
 
         with psycopg.connect(database_url) as connection:
             configure_tenant(connection)
@@ -693,6 +747,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
     finally:
         with psycopg.connect(admin_database_url) as connection:
             configure_tenant(connection)
+            connection.execute("DELETE FROM ecosystem_admission WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM intelligence_job WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM source_snapshot WHERE tenant_id=%s", (tenant_id,))
             connection.execute(

@@ -232,6 +232,136 @@
         "title": "AIProviderConnectionTest",
         "type": "object"
       },
+      "ApplicationComponentDependencyHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "component_path": {
+            "minLength": 1,
+            "title": "Component Path",
+            "type": "string"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationDependencyNode"
+            },
+            "minItems": 1,
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "component_path",
+          "dependencies"
+        ],
+        "title": "ApplicationComponentDependencyHierarchy",
+        "type": "object"
+      },
+      "ApplicationDependencyNode": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "dependency_relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Relation"
+          },
+          "depth": {
+            "minimum": 1.0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "direct": {
+            "title": "Direct",
+            "type": "boolean"
+          },
+          "parent_technology_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Technology Id"
+          },
+          "relationship": {
+            "minLength": 1,
+            "title": "Relationship",
+            "type": "string"
+          },
+          "requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "depth",
+          "direct",
+          "relationship",
+          "confidence",
+          "confidence_label",
+          "citations"
+        ],
+        "title": "ApplicationDependencyNode",
+        "type": "object"
+      },
       "ApplicationDetail": {
         "additionalProperties": false,
         "properties": {
@@ -257,6 +387,13 @@
             "default": "1.0.0",
             "title": "Contract Version",
             "type": "string"
+          },
+          "dependency_hierarchies": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationRepositoryDependencyHierarchy"
+            },
+            "title": "Dependency Hierarchies",
+            "type": "array"
           },
           "deployments": {
             "items": {
@@ -309,6 +446,28 @@
           "freshness"
         ],
         "title": "ApplicationDetail",
+        "type": "object"
+      },
+      "ApplicationRepositoryDependencyHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationComponentDependencyHierarchy"
+            },
+            "minItems": 1,
+            "title": "Components",
+            "type": "array"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "repository",
+          "components"
+        ],
+        "title": "ApplicationRepositoryDependencyHierarchy",
         "type": "object"
       },
       "ApplicationTechnologyFunction": {
@@ -595,6 +754,33 @@
           "citations"
         ],
         "title": "AssessmentSummary",
+        "type": "object"
+      },
+      "BusinessMapApplicationAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "application_name": {
+            "minLength": 1,
+            "title": "Application Name",
+            "type": "string"
+          },
+          "capability_id": {
+            "minLength": 1,
+            "title": "Capability Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_id",
+          "application_id",
+          "application_name"
+        ],
+        "title": "BusinessMapApplicationAssignment",
         "type": "object"
       },
       "BusinessMapCapabilityNode": {
@@ -1080,6 +1266,13 @@
       "BusinessMapStateModel": {
         "additionalProperties": false,
         "properties": {
+          "application_assignments": {
+            "items": {
+              "$ref": "#/components/schemas/BusinessMapApplicationAssignment"
+            },
+            "title": "Application Assignments",
+            "type": "array"
+          },
           "catalog": {
             "items": {
               "$ref": "#/components/schemas/BusinessMapFunctionNode"
@@ -1219,6 +1412,200 @@
         "title": "BusinessMapSummary",
         "type": "object"
       },
+      "CalibrationCorpusPublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_scope_mae": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Scope Mae"
+          },
+          "candidate_precision": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Precision"
+          },
+          "case_fingerprints": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Case Fingerprints",
+            "type": "array"
+          },
+          "corpus_key": {
+            "default": "modernization.pilot",
+            "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
+            "title": "Corpus Key",
+            "type": "string"
+          },
+          "effort_accuracy": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort Accuracy"
+          },
+          "maximum_affected_scope_mae": {
+            "default": 0.25,
+            "minimum": 0.0,
+            "title": "Maximum Affected Scope Mae",
+            "type": "number"
+          },
+          "minimum_candidate_precision": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Candidate Precision",
+            "type": "number"
+          },
+          "minimum_effort_accuracy": {
+            "default": 0.7,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Effort Accuracy",
+            "type": "number"
+          },
+          "minimum_recommendation_acceptance": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Recommendation Acceptance",
+            "type": "number"
+          },
+          "minimum_reviewed_cases": {
+            "default": 20,
+            "minimum": 1.0,
+            "title": "Minimum Reviewed Cases",
+            "type": "integer"
+          },
+          "minimum_validation_success": {
+            "default": 0.8,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Validation Success",
+            "type": "number"
+          },
+          "recommendation_acceptance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Acceptance"
+          },
+          "validation_success": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validation Success"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "case_fingerprints"
+        ],
+        "title": "CalibrationCorpusPublishRequest",
+        "type": "object"
+      },
+      "CalibrationCorpusSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "case_count": {
+            "minimum": 0.0,
+            "title": "Case Count",
+            "type": "integer"
+          },
+          "corpus_fingerprint": {
+            "title": "Corpus Fingerprint",
+            "type": "string"
+          },
+          "corpus_key": {
+            "title": "Corpus Key",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "evaluation_fingerprint": {
+            "title": "Evaluation Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "promotion_failures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Promotion Failures",
+            "type": "array"
+          },
+          "promotion_passed": {
+            "title": "Promotion Passed",
+            "type": "boolean"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "corpus_key",
+          "version",
+          "case_count",
+          "corpus_fingerprint",
+          "promotion_passed",
+          "promotion_failures",
+          "evaluation_fingerprint",
+          "evaluated_at"
+        ],
+        "title": "CalibrationCorpusSummary",
+        "type": "object"
+      },
       "CapabilityDefinitionModel": {
         "additionalProperties": false,
         "properties": {
@@ -1262,6 +1649,88 @@
           "description"
         ],
         "title": "CapabilityDefinitionModel",
+        "type": "object"
+      },
+      "CapabilityFootprintList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "footprints": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityFootprintModel"
+            },
+            "title": "Footprints",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "footprints"
+        ],
+        "title": "CapabilityFootprintList",
+        "type": "object"
+      },
+      "CapabilityFootprintModel": {
+        "additionalProperties": false,
+        "properties": {
+          "application_count": {
+            "minimum": 0.0,
+            "title": "Application Count",
+            "type": "integer"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "repository_count": {
+            "minimum": 0.0,
+            "title": "Repository Count",
+            "type": "integer"
+          },
+          "reuse_signal": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Reuse Signal",
+            "type": "number"
+          },
+          "technology_count": {
+            "minimum": 0.0,
+            "title": "Technology Count",
+            "type": "integer"
+          },
+          "technology_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Technology Counts",
+            "type": "object"
+          },
+          "technology_entropy": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Technology Entropy",
+            "type": "number"
+          }
+        },
+        "required": [
+          "capability",
+          "application_count",
+          "repository_count",
+          "technology_count",
+          "technology_counts",
+          "technology_entropy",
+          "reuse_signal"
+        ],
+        "title": "CapabilityFootprintModel",
         "type": "object"
       },
       "CapabilityInferenceReviewRequest": {
@@ -1991,6 +2460,143 @@
         "title": "DuplicateCapabilityReviewResult",
         "type": "object"
       },
+      "EcosystemAdmissionEvaluateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "minimum_dependency_share": {
+            "default": 0.02,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Dependency Share",
+            "type": "number"
+          },
+          "minimum_repositories": {
+            "default": 10,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          }
+        },
+        "title": "EcosystemAdmissionEvaluateRequest",
+        "type": "object"
+      },
+      "EcosystemAdmissionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_gate_passed": {
+            "title": "Calibration Gate Passed",
+            "type": "boolean"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_fingerprint": {
+            "title": "Decision Fingerprint",
+            "type": "string"
+          },
+          "ecosystem": {
+            "enum": [
+              "PYPI",
+              "MAVEN",
+              "CARGO",
+              "NUGET"
+            ],
+            "title": "Ecosystem",
+            "type": "string"
+          },
+          "metadata_parity": {
+            "title": "Metadata Parity",
+            "type": "boolean"
+          },
+          "minimum_dependency_share": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Dependency Share",
+            "type": "number"
+          },
+          "minimum_repositories": {
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          },
+          "observed_dependency_share": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Observed Dependency Share",
+            "type": "number"
+          },
+          "observed_repositories": {
+            "minimum": 0.0,
+            "title": "Observed Repositories",
+            "type": "integer"
+          },
+          "predecessor_admitted": {
+            "title": "Predecessor Admitted",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sequence": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "NOT_EVALUATED",
+              "PROPOSED",
+              "ADMITTED",
+              "RETIRED",
+              "STALE"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ecosystem",
+          "sequence",
+          "status",
+          "observed_repositories",
+          "observed_dependency_share",
+          "minimum_repositories",
+          "minimum_dependency_share",
+          "predecessor_admitted",
+          "metadata_parity",
+          "calibration_gate_passed",
+          "reasons",
+          "decision_fingerprint"
+        ],
+        "title": "EcosystemAdmissionSummary",
+        "type": "object"
+      },
       "EntitySummary": {
         "additionalProperties": false,
         "properties": {
@@ -2326,10 +2932,17 @@
             "pattern": "^[1-9][0-9]{0,19}$",
             "title": "Installation Id",
             "type": "string"
+          },
+          "pilot_manual_binding_acknowledged": {
+            "const": true,
+            "description": "Confirms that an operator verified the installation belongs to this pilot tenant; hosted setup callback binding remains required for general availability.",
+            "title": "Pilot Manual Binding Acknowledged",
+            "type": "boolean"
           }
         },
         "required": [
-          "installation_id"
+          "installation_id",
+          "pilot_manual_binding_acknowledged"
         ],
         "title": "GitHubInstallationConnectRequest",
         "type": "object"
@@ -2733,6 +3346,217 @@
         "title": "IdentityReviewResult",
         "type": "object"
       },
+      "InternalCatalogComponentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_fingerprint": {
+            "title": "Catalog Fingerprint",
+            "type": "string"
+          },
+          "component_key": {
+            "title": "Component Key",
+            "type": "string"
+          },
+          "governed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governed At"
+          },
+          "governed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Governed By"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "review_state": {
+            "enum": [
+              "UNREVIEWED",
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "APPROVED",
+              "DEPRECATED",
+              "BLOCKED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "component_key",
+          "version",
+          "name",
+          "status",
+          "review_state",
+          "catalog_fingerprint",
+          "supporting_fact_ids"
+        ],
+        "title": "InternalCatalogComponentSummary",
+        "type": "object"
+      },
+      "InternalCatalogComponentUpsertRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "api_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Api Symbols",
+            "type": "array"
+          },
+          "behavior_claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Behavior Claims",
+            "type": "array"
+          },
+          "capability_definition_id": {
+            "format": "uuid",
+            "title": "Capability Definition Id",
+            "type": "string"
+          },
+          "component_entity_id": {
+            "format": "uuid",
+            "title": "Component Entity Id",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "APPROVE",
+              "REJECT"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "owner": {
+            "minLength": 1,
+            "title": "Owner",
+            "type": "string"
+          },
+          "policy_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Policy Tags",
+            "type": "array"
+          },
+          "runtime_constraints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runtime Constraints",
+            "type": "object"
+          },
+          "security_status": {
+            "default": "UNKNOWN",
+            "enum": [
+              "CLEAR",
+              "WARN",
+              "BLOCKED",
+              "UNKNOWN"
+            ],
+            "title": "Security Status",
+            "type": "string"
+          },
+          "status": {
+            "default": "APPROVED",
+            "enum": [
+              "APPROVED",
+              "DEPRECATED",
+              "BLOCKED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "component_entity_id",
+          "capability_definition_id",
+          "version",
+          "supporting_fact_ids",
+          "owner",
+          "decision"
+        ],
+        "title": "InternalCatalogComponentUpsertRequest",
+        "type": "object"
+      },
       "InternalUsage": {
         "additionalProperties": false,
         "properties": {
@@ -3070,6 +3894,57 @@
           "reviewed_at"
         ],
         "title": "ModernizationCandidateReviewResult",
+        "type": "object"
+      },
+      "ModernizationGovernanceState": {
+        "additionalProperties": false,
+        "properties": {
+          "active_calibration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CalibrationCorpusSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "active_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModernizationPolicySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "ecosystem_admissions": {
+            "items": {
+              "$ref": "#/components/schemas/EcosystemAdmissionSummary"
+            },
+            "title": "Ecosystem Admissions",
+            "type": "array"
+          },
+          "internal_components": {
+            "items": {
+              "$ref": "#/components/schemas/InternalCatalogComponentSummary"
+            },
+            "title": "Internal Components",
+            "type": "array"
+          }
+        },
+        "required": [
+          "internal_components",
+          "ecosystem_admissions"
+        ],
+        "title": "ModernizationGovernanceState",
         "type": "object"
       },
       "ModernizationImpactModel": {
@@ -3452,6 +4327,159 @@
         "title": "ModernizationOptionModel",
         "type": "object"
       },
+      "ModernizationPolicyPublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_licenses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Licenses",
+            "type": "array"
+          },
+          "allowed_security_statuses": {
+            "items": {
+              "enum": [
+                "CLEAR",
+                "WARN",
+                "BLOCKED",
+                "UNKNOWN"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Security Statuses",
+            "type": "array"
+          },
+          "denied_option_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Denied Option Keys",
+            "type": "array"
+          },
+          "policy_key": {
+            "default": "modernization.default",
+            "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "required_policy_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Policy Tags",
+            "type": "array"
+          },
+          "runtime_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runtime Versions",
+            "type": "object"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "ModernizationPolicyPublishRequest",
+        "type": "object"
+      },
+      "ModernizationPolicySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "activated_by": {
+            "title": "Activated By",
+            "type": "string"
+          },
+          "allowed_licenses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Licenses",
+            "type": "array"
+          },
+          "allowed_security_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Security Statuses",
+            "type": "array"
+          },
+          "configuration_fingerprint": {
+            "title": "Configuration Fingerprint",
+            "type": "string"
+          },
+          "denied_option_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Denied Option Keys",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_key": {
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "required_policy_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Policy Tags",
+            "type": "array"
+          },
+          "runtime_versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Runtime Versions",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "RETIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "policy_key",
+          "version",
+          "status",
+          "runtime_versions",
+          "allowed_licenses",
+          "denied_option_keys",
+          "allowed_security_statuses",
+          "required_policy_tags",
+          "configuration_fingerprint",
+          "activated_by",
+          "activated_at"
+        ],
+        "title": "ModernizationPolicySummary",
+        "type": "object"
+      },
       "ModernizationRecommendationModel": {
         "additionalProperties": false,
         "properties": {
@@ -3698,6 +4726,144 @@
           "reviewed_at"
         ],
         "title": "ModernizationRecommendationReviewResult",
+        "type": "object"
+      },
+      "ModernizationScenarioItem": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "CONSOLIDATE",
+              "REPLACE",
+              "UPGRADE",
+              "REFACTOR",
+              "INVESTIGATE"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "effort_points": {
+            "minimum": 0.0,
+            "title": "Effort Points",
+            "type": "integer"
+          },
+          "policy_version": {
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "format": "uuid",
+            "title": "Recommendation Id",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "score_components": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Score Components",
+            "type": "object"
+          },
+          "selected": {
+            "title": "Selected",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "repository",
+          "title",
+          "action",
+          "score",
+          "score_components",
+          "effort_points",
+          "selected",
+          "policy_version"
+        ],
+        "title": "ModernizationScenarioItem",
+        "type": "object"
+      },
+      "ModernizationScenarioRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "budget_points": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Budget Points",
+            "type": "integer"
+          },
+          "excluded_recommendation_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Excluded Recommendation Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "budget_points"
+        ],
+        "title": "ModernizationScenarioRequest",
+        "type": "object"
+      },
+      "ModernizationScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "budget_points": {
+            "minimum": 0.0,
+            "title": "Budget Points",
+            "type": "integer"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModernizationScenarioItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_score": {
+            "minimum": 0.0,
+            "title": "Total Score",
+            "type": "number"
+          },
+          "used_points": {
+            "minimum": 0.0,
+            "title": "Used Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "as_of",
+          "budget_points",
+          "used_points",
+          "total_score",
+          "items"
+        ],
+        "title": "ModernizationScenarioResult",
         "type": "object"
       },
       "ModernizationValidationOutcomeRequest": {
@@ -4461,6 +5627,63 @@
         "title": "RepositoryCapabilityIntelligence",
         "type": "object"
       },
+      "RepositoryDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "applications": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Applications",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Deployments",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "technologies": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Technologies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "repository",
+          "applications",
+          "technologies",
+          "deployments",
+          "freshness"
+        ],
+        "title": "RepositoryDetail",
+        "type": "object"
+      },
       "RepositoryModernizationIntelligence": {
         "additionalProperties": false,
         "properties": {
@@ -4502,6 +5725,111 @@
           "truncated"
         ],
         "title": "RepositoryModernizationIntelligence",
+        "type": "object"
+      },
+      "RepositoryProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "components": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "descriptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Descriptions",
+            "type": "array"
+          },
+          "key_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Files",
+            "type": "array"
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "operational_signals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operational Signals",
+            "type": "array"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "purpose_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose Source"
+          },
+          "source_revision": {
+            "minLength": 1,
+            "title": "Source Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_revision",
+          "confidence",
+          "confidence_label",
+          "citations"
+        ],
+        "title": "RepositoryProfile",
         "type": "object"
       },
       "RescanJob": {
@@ -5197,6 +6525,206 @@
         "title": "TaxonomySummary",
         "type": "object"
       },
+      "TechnologyCatalogProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_technology": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxonomySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "classification": {
+            "enum": [
+              "CURATED",
+              "CATALOG_MATCH",
+              "UNCLASSIFIED"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "dependents": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependents"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxonomySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ecosystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecosystem"
+          },
+          "functions": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomySummary"
+            },
+            "title": "Functions",
+            "type": "array"
+          },
+          "homepage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Homepage"
+          },
+          "installation_command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installation Command"
+          },
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Version"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
+          },
+          "package_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Name"
+          },
+          "package_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Url"
+          },
+          "repository_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Url"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "versions": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Versions"
+          },
+          "weekly_downloads": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weekly Downloads"
+          }
+        },
+        "required": [
+          "classification",
+          "citations"
+        ],
+        "title": "TechnologyCatalogProfile",
+        "type": "object"
+      },
       "TechnologyDetail": {
         "additionalProperties": false,
         "properties": {
@@ -5220,6 +6748,16 @@
             },
             "title": "Assessments",
             "type": "array"
+          },
+          "catalog_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnologyCatalogProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "contract_version": {
             "const": "1.0.0",
@@ -5296,6 +6834,126 @@
           "freshness"
         ],
         "title": "TechnologyDetail",
+        "type": "object"
+      },
+      "TechnologyEstateHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TechnologyEstateHierarchyNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "as_of",
+          "nodes"
+        ],
+        "title": "TechnologyEstateHierarchy",
+        "type": "object"
+      },
+      "TechnologyEstateHierarchyNode": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TechnologyCatalogProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "dependent_applications": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Dependent Applications",
+            "type": "array"
+          },
+          "depth": {
+            "minimum": 1.0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "direct": {
+            "title": "Direct",
+            "type": "boolean"
+          },
+          "parent_technology_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Technology Id"
+          },
+          "relationship": {
+            "minLength": 1,
+            "title": "Relationship",
+            "type": "string"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "depth",
+          "direct",
+          "relationship",
+          "confidence",
+          "confidence_label",
+          "dependent_applications",
+          "citations"
+        ],
+        "title": "TechnologyEstateHierarchyNode",
         "type": "object"
       },
       "TenantMember": {
@@ -5942,6 +7600,219 @@
           }
         },
         "summary": "Update Member",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance": {
+      "get": {
+        "operationId": "getModernizationGovernance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Modernization Governance",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance/calibration": {
+      "put": {
+        "operationId": "publishCalibrationCorpus",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalibrationCorpusPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Calibration Corpus",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance/ecosystems/{ecosystem}": {
+      "put": {
+        "operationId": "evaluateEcosystemAdmission",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ecosystem",
+            "required": true,
+            "schema": {
+              "enum": [
+                "PYPI",
+                "MAVEN",
+                "CARGO",
+                "NUGET"
+              ],
+              "title": "Ecosystem",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EcosystemAdmissionEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Ecosystem Admission",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance/internal-components/{component_key}": {
+      "put": {
+        "operationId": "governInternalCatalogComponent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "component_key",
+            "required": true,
+            "schema": {
+              "title": "Component Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InternalCatalogComponentUpsertRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Govern Internal Catalog Component",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/modernization-governance/policy": {
+      "put": {
+        "operationId": "publishModernizationPolicy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModernizationPolicyPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Modernization Policy",
         "tags": [
           "admin"
         ]
@@ -6694,6 +8565,27 @@
         "summary": "List Business Map Revisions",
         "tags": [
           "business-map"
+        ]
+      }
+    },
+    "/capabilities/footprints": {
+      "get": {
+        "operationId": "listCapabilityFootprints",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityFootprintList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Capability Footprints",
+        "tags": [
+          "intelligence"
         ]
       }
     },
@@ -7467,6 +9359,90 @@
         ]
       }
     },
+    "/modernization/scenarios": {
+      "post": {
+        "operationId": "optimizeModernizationScenario",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModernizationScenarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModernizationScenarioResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Optimize Modernization Scenario",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/repositories/{id}": {
+      "get": {
+        "operationId": "getRepository",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
     "/repositories/{id}/capabilities": {
       "get": {
         "operationId": "getRepositoryCapabilities",
@@ -7687,6 +9663,27 @@
         "summary": "Get Session",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/technologies/hierarchy": {
+      "get": {
+        "operationId": "getTechnologyEstateHierarchy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TechnologyEstateHierarchy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Technology Estate Hierarchy",
+        "tags": [
+          "technologies"
         ]
       }
     },

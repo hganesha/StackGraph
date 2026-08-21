@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -12,17 +12,20 @@ import {
 } from "@xyflow/react";
 import type { GraphNeighborhood, GraphEdge } from "@stackgraph/shared";
 import { DomainNode, type DomainFlowNode } from "./DomainNode";
-import { layoutNeighborhood } from "./layout";
+import { layoutNeighborhood, NODE_H, NODE_W } from "./layout";
 import styles from "./graph.module.css";
 
 const nodeTypes = { domain: DomainNode };
+// SVG marker identifiers cannot reliably contain CSS var() expressions. Keep
+// this value aligned with --sg-color-domain-enterprise-300.
+const EDGE_COLOR = "#92A9C9";
 
 function edgeStyle(edge: GraphEdge, crossDomain: boolean, touchesSelection: boolean) {
   // Uncertain bridge (POSSIBLE): dashed neutral, no motion, labeled "possible match".
   if (edge.review_state === "POSSIBLE") {
     return {
       className: styles.edgePossible,
-      style: { stroke: "var(--sg-text-muted)", strokeWidth: 1.5, strokeDasharray: "5 4" },
+      style: { stroke: "var(--sg-text-secondary)", strokeWidth: 2, strokeDasharray: "6 5", opacity: 0.9 },
       label: "possible match",
       animated: false,
     };
@@ -31,7 +34,7 @@ function edgeStyle(edge: GraphEdge, crossDomain: boolean, touchesSelection: bool
   if (edge.review_state === "CONFIRMED" && crossDomain) {
     return {
       className: touchesSelection ? styles.edgeBridgeActive : styles.edgeBridge,
-      style: { stroke: "var(--sg-color-domain-business-500)", strokeWidth: 2 },
+      style: { stroke: "var(--sg-color-domain-business-500)", strokeWidth: 2.5, opacity: 0.95 },
       label: undefined,
       animated: false,
     };
@@ -39,7 +42,9 @@ function edgeStyle(edge: GraphEdge, crossDomain: boolean, touchesSelection: bool
   // Regular edge (declared dependency etc.).
   return {
     className: styles.edgeRegular,
-    style: { stroke: "var(--sg-surface-border-strong)", strokeWidth: 1.5 },
+    // The initial bounded-graph fit can reduce the canvas to 40% zoom. A 1.5px
+    // border-token stroke becomes a sub-pixel, low-contrast line at that scale.
+    style: { stroke: EDGE_COLOR, strokeWidth: 3.5 },
     label: undefined,
     animated: false,
   };
@@ -74,7 +79,12 @@ function InnerCanvas({
   }, [graph]);
 
   const rfEdges: Edge[] = useMemo(() => {
-    const marker: EdgeMarkerType = { type: MarkerType.ArrowClosed, width: 14, height: 14 };
+    const marker: EdgeMarkerType = {
+      type: MarkerType.ArrowClosed,
+      width: 16,
+      height: 16,
+      color: EDGE_COLOR,
+    };
     return graph.edges.map((e) => {
       const crossDomain = nsById.get(e.source) !== nsById.get(e.target);
       const touchesSelection = selected != null && (e.source === selected || e.target === selected);
@@ -83,19 +93,39 @@ function InnerCanvas({
         id: e.id,
         source: e.source,
         target: e.target,
-        label: s.label ?? e.predicate,
+        // Dense graph predicates remain available in the inspector and the
+        // accessible edge list. Inline labels covered short connections at the
+        // default zoom, making the edge itself appear to be missing.
+        label: s.label,
         className: s.className,
         style: s.style,
         animated: s.animated,
         markerEnd: marker,
-        labelStyle: { fill: "var(--sg-text-muted)", fontSize: 11, fontFamily: "var(--sg-font-evidence)" },
-        labelBgStyle: { fill: "var(--sg-surface-base)" },
+        labelStyle: {
+          fill: "var(--sg-text-secondary)",
+          fontSize: 11,
+          fontWeight: 500,
+          fontFamily: "var(--sg-font-evidence)",
+        },
+        labelBgStyle: { fill: "var(--sg-surface-card)", fillOpacity: 0.94 },
+        labelBgPadding: [4, 2] as [number, number],
+        labelBgBorderRadius: 3,
       };
     });
   }, [graph.edges, nsById, selected]);
 
+  const paintSurface = useMemo(() => {
+    const width = Math.max(...rfNodes.map((node) => node.position.x + NODE_W), NODE_W) + 24;
+    const height = Math.max(...rfNodes.map((node) => node.position.y + NODE_H), NODE_H) + 24;
+    return {
+      ["--sg-graph-paint-width" as string]: `${Math.ceil(width)}px`,
+      ["--sg-graph-paint-height" as string]: `${Math.ceil(height)}px`,
+    } as CSSProperties;
+  }, [rfNodes]);
+
   return (
     <ReactFlow<DomainFlowNode, Edge>
+      style={paintSurface}
       nodes={rfNodes}
       edges={rfEdges}
       nodeTypes={nodeTypes}
@@ -104,15 +134,32 @@ function InnerCanvas({
       nodesConnectable={false}
       elementsSelectable
       deleteKeyCode={null}
-      fitView
-      fitViewOptions={{ padding: 0.2, minZoom: 0.4, maxZoom: 1.1 }}
-      minZoom={0.3}
+      onInit={(instance) => {
+        const center = rfNodes.find((node) => node.id === graph.center_id);
+        if (!center) return;
+        // Begin on the entity the user chose. Fitting a 50-node bounded graph
+        // made the center and its connecting lines land outside the viewport.
+        void instance.setCenter(
+          center.position.x + NODE_W / 2,
+          center.position.y + NODE_H / 2,
+          { zoom: 0.65, duration: 0 },
+        );
+      }}
+      minZoom={0.08}
       maxZoom={1.5}
       proOptions={{ hideAttribution: true }}
       onSelectionChange={({ nodes }) => {
         const id = nodes[0]?.id ?? null;
         setSelected(id);
         onSelect?.(id);
+      }}
+      onNodeClick={(_, node) => {
+        setSelected(node.id);
+        onSelect?.(node.id);
+      }}
+      onPaneClick={() => {
+        setSelected(null);
+        onSelect?.(null);
       }}
     >
       <Background color="var(--sg-surface-border)" gap={22} size={1} />

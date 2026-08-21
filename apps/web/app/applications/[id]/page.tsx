@@ -1,16 +1,30 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
-import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
-import { useEvidenceStore } from "@/lib/evidenceStore";
+import { ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
+import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
+import { TechnologyWorkspace } from "./TechnologyWorkspace";
 import styles from "./application.module.css";
+
+type ApplicationTab = "overview" | "technology" | "assessments" | "recommendations";
+
+const TABS: Array<{ id: ApplicationTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "technology", label: "Technology" },
+  { id: "assessments", label: "Assessments" },
+  { id: "recommendations", label: "Recommendations" },
+];
+
+function EmptyPanel({ children }: { children: string }) {
+  return <p className={styles.emptyPanel}>{children}</p>;
+}
 
 export default function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const openEvidence = useEvidenceStore((s) => s.open);
+  const [activeTab, setActiveTab] = useState<ApplicationTab>("technology");
   const { data, isLoading } = useQuery({
     queryKey: ["application", id],
     queryFn: () => stackGraphClient.getApplication(id),
@@ -19,21 +33,35 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
   if (isLoading || !data) {
     return (
       <div className={styles.page}>
-        <Skeleton height={28} width="40%" />
-        <Skeleton height={16} width="70%" />
+        <Skeleton height={18} width="28%" />
+        <Skeleton height={32} width="42%" />
+        <Skeleton height={44} width="100%" />
+        <Skeleton height={360} width="100%" />
       </div>
     );
   }
 
+  const dependencyHierarchies = data.dependency_hierarchies ?? [];
+  const moveTabFocus = (current: ApplicationTab, direction: -1 | 1 | "first" | "last") => {
+    const currentIndex = TABS.findIndex((tab) => tab.id === current);
+    const nextIndex = direction === "first"
+      ? 0
+      : direction === "last"
+        ? TABS.length - 1
+        : (currentIndex + direction + TABS.length) % TABS.length;
+    const nextTab = TABS[nextIndex].id;
+    setActiveTab(nextTab);
+    requestAnimationFrame(() => document.getElementById(`application-tab-${nextTab}`)?.focus());
+  };
+
   return (
     <div className={styles.page}>
       <nav className={styles.crumbs} aria-label="Breadcrumb">
-        <a href="/estate" className={styles.crumb}>
-          Estate
-        </a>
+        <a href="/estate" className={styles.crumb}>Estate</a>
         <span aria-hidden="true">›</span>
         <span className={styles.crumbCurrent}>
-          <DomainBadge namespace="ENTERPRISE" /> <span className="sg-mono">{data.application.name}</span>
+          <DomainBadge namespace="ENTERPRISE" />
+          <span className="sg-mono">{data.application.name}</span>
         </span>
       </nav>
 
@@ -42,135 +70,150 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
           <h1 className={`${styles.title} sg-mono`}>{data.application.name}</h1>
           {data.application.summary ? <p className={styles.summary}>{data.application.summary}</p> : null}
         </div>
-        <Link href={`/applications/${id}/graph`} className={styles.exploreBtn}>
-          <span aria-hidden="true">◇</span> Explore neighborhood
-        </Link>
+        <ApplicationViewSwitch applicationId={id} active="hierarchy" />
       </header>
 
-      {data.business_context.length > 0 ? (
-        <section className={styles.section} aria-label="Business context">
-          <h2 className={styles.h2}>Business context</h2>
-          <div className={styles.chips}>
-            {data.business_context.map((e) => (
-              <span key={e.id} className={styles.chip}>
-                <DomainBadge namespace="BUSINESS" /> {e.name}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <div className={styles.applicationTabs} role="tablist" aria-label="Application detail sections">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            id={`application-tab-${tab.id}`}
+            aria-controls={`application-panel-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            className={activeTab === tab.id ? styles.activeTab : undefined}
+            onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                moveTabFocus(tab.id, -1);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                moveTabFocus(tab.id, 1);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                moveTabFocus(tab.id, "first");
+              } else if (event.key === "End") {
+                event.preventDefault();
+                moveTabFocus(tab.id, "last");
+              }
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <section className={styles.section} aria-label="Technology landscape">
-        <div className={styles.sectionHeading}>
-          <h2 className={styles.h2}>Technology landscape</h2>
-          <span className={styles.sectionCount}>{data.technologies.length} linked</span>
-        </div>
-        {data.technology_groups.length > 0 ? (
-          <div className={styles.technologyGroups}>
-            {data.technology_groups.map((group) => (
-              <article key={group.domain.key} className={styles.technologyDomain}>
-                <header className={styles.domainHead}>
-                  <h3 className={styles.domainTitle}>{group.domain.name}</h3>
-                  <span className={styles.domainCount}>
-                    {new Set(group.functions.flatMap((item) => item.technologies.map((usage) => usage.technology.id))).size} technologies
-                  </span>
-                </header>
-                <div className={styles.functionList}>
-                  {group.functions.map((item) => (
-                    <section key={item.function.key} className={styles.functionGroup}>
-                      <div className={styles.functionHead}>
-                        <div>
-                          <h4 className={styles.functionTitle}>{item.function.name}</h4>
-                          {item.function.summary ? (
-                            <p className={styles.functionSummary}>{item.function.summary}</p>
-                          ) : null}
-                        </div>
-                      </div>
-                      <ul className={styles.technologyList}>
-                        {item.technologies.map((usage) => (
-                          <li key={usage.technology.id} className={styles.technologyRow}>
-                            <div className={styles.technologyMain}>
-                              <Link href={`/technologies/${usage.technology.id}`} className={`${styles.technologyName} sg-mono`}>
-                                {usage.technology.name}
-                              </Link>
-                              {usage.technology.summary ? (
-                                <p className={styles.technologySummary}>{usage.technology.summary}</p>
-                              ) : null}
-                              <div className={styles.technologyMeta}>
-                                {usage.category ? <span className={styles.category}>{usage.category.name}</span> : null}
-                                <span className={usage.classification === "UNCLASSIFIED" ? styles.needsClassification : styles.classification}>
-                                  {usage.classification === "CURATED"
-                                    ? "Curated catalog"
-                                    : usage.classification === "CATALOG_MATCH"
-                                      ? "Exact catalog match"
-                                      : "Needs classification"}
-                                </span>
-                              </div>
-                            </div>
-                            <div className={styles.technologyEvidence}>
-                              {usage.classification !== "UNCLASSIFIED" ? (
-                                <ConfidenceChip label={usage.confidence_label} value={usage.confidence} />
-                              ) : null}
-                              {usage.citations.map((citation) => (
-                                <CitationChip
-                                  key={citation.fact_id}
-                                  label={citation.label}
-                                  onOpen={() => openEvidence(citation.fact_id, citation.label)}
-                                />
-                              ))}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
+      <div
+        id={`application-panel-${activeTab}`}
+        role="tabpanel"
+        aria-labelledby={`application-tab-${activeTab}`}
+        className={styles.tabPanel}
+      >
+        {activeTab === "overview" ? (
+          <div className={styles.overviewLayout}>
+            <section className={styles.overviewSection} aria-labelledby="application-overview-heading">
+              <h2 id="application-overview-heading">Application overview</h2>
+              <dl className={styles.overviewFacts}>
+                <div><dt>Repositories</dt><dd className="sg-mono">{data.repositories.length}</dd></div>
+                <div><dt>Technologies</dt><dd className="sg-mono">{data.technologies.length}</dd></div>
+                <div><dt>Deployments</dt><dd className="sg-mono">{data.deployments.length}</dd></div>
+                <div><dt>Recommendations</dt><dd className="sg-mono">{data.recommendations.length}</dd></div>
+              </dl>
+            </section>
+
+            <section className={styles.overviewSection} aria-labelledby="business-context-heading">
+              <h2 id="business-context-heading">Business context</h2>
+              {data.business_context.length > 0 ? (
+                <ul className={styles.entityList}>
+                  {data.business_context.map((entity) => <li key={entity.id}>{entity.name}</li>)}
+                </ul>
+              ) : <EmptyPanel>No business context is linked yet.</EmptyPanel>}
+            </section>
+
+            <section className={styles.overviewSection} aria-labelledby="repositories-heading">
+              <h2 id="repositories-heading">Repositories</h2>
+              {data.repositories.length > 0 ? (
+                <ul className={`${styles.entityList} sg-mono`}>
+                  {data.repositories.map((repository) => (
+                    <li key={repository.id}>
+                      <Link className={styles.entityLink} href={`/repositories/${repository.id}`}>
+                        {repository.name}
+                      </Link>
+                    </li>
                   ))}
-                </div>
-              </article>
-            ))}
+                </ul>
+              ) : <EmptyPanel>No repositories are linked yet.</EmptyPanel>}
+            </section>
+
+            <section className={styles.overviewSection} aria-labelledby="deployments-heading">
+              <h2 id="deployments-heading">Deployments</h2>
+              {data.deployments.length > 0 ? (
+                <ul className={`${styles.entityList} sg-mono`}>
+                  {data.deployments.map((deployment) => <li key={deployment.id}>{deployment.name}</li>)}
+                </ul>
+              ) : <EmptyPanel>No deployments are linked yet.</EmptyPanel>}
+            </section>
           </div>
-        ) : (
-          <p className={styles.emptyTechnology}>No technology usage has been linked to this application yet.</p>
-        )}
-      </section>
+        ) : null}
 
-      <section className={styles.section} aria-label="Assessments">
-        <h2 className={styles.h2}>Assessments</h2>
-        <ul className={styles.assessments}>
-          {data.assessments.map((a) => {
-            const cite = a.citations[0];
-            return (
-              <li key={a.id} className={styles.assessment}>
-                <span className={styles.dimension}>{a.dimension}</span>
-                <span className={`${styles.value} sg-mono`}>{a.categorical_value ?? a.score}</span>
-                <span className={styles.assessTail}>
-                  <ConfidenceChip label={a.confidence_label} value={a.confidence} />
-                  {cite ? <CitationChip label={cite.label} onOpen={() => openEvidence(cite.fact_id, cite.label)} /> : null}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+        {activeTab === "technology" ? (
+          <TechnologyWorkspace
+            applicationId={id}
+            applicationName={data.application.name}
+            groups={data.technology_groups}
+            hierarchies={dependencyHierarchies}
+          />
+        ) : null}
 
-      <section className={styles.section} aria-label="Recommendations">
-        <h2 className={styles.h2}>Investigative recommendations</h2>
-        <div className={styles.recs}>
-          {data.recommendations.map((r) => (
-            <article key={r.id} className={styles.rec}>
-              <div className={styles.recHead}>
-                <span className={`${styles.action} sg-mono`}>{r.action}</span>
-                <ConfidenceChip label={r.confidence_label} value={r.confidence} />
+        {activeTab === "assessments" ? (
+          <section className={styles.focusSection} aria-labelledby="assessments-heading">
+            <div className={styles.sectionHeading}>
+              <h2 id="assessments-heading">Assessments</h2>
+              <span>{data.assessments.length}</span>
+            </div>
+            {data.assessments.length > 0 ? (
+              <ul className={styles.assessments}>
+                {data.assessments.map((assessment) => (
+                  <li key={assessment.id} className={styles.assessment}>
+                    <span className={styles.dimension}>{assessment.dimension}</span>
+                    <span className={`${styles.value} sg-mono`}>{assessment.categorical_value ?? assessment.score}</span>
+                    <ConfidenceChip label={assessment.confidence_label} value={assessment.confidence} />
+                  </li>
+                ))}
+              </ul>
+            ) : <EmptyPanel>No assessments are available yet.</EmptyPanel>}
+          </section>
+        ) : null}
+
+        {activeTab === "recommendations" ? (
+          <section className={styles.focusSection} aria-labelledby="recommendations-heading">
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2 id="recommendations-heading">Investigative recommendations</h2>
+                <p>Evidence-backed actions for this application.</p>
               </div>
-              <h3 className={styles.recTitle}>{r.title}</h3>
-              <p className={styles.recRationale}>{r.rationale}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <p className={styles.footnote}>
-        Full evidence drawer, viability radar, and uncertain-bridge actions land in Phase 1–2.
-      </p>
+              <span>{data.recommendations.length}</span>
+            </div>
+            {data.recommendations.length > 0 ? (
+              <div className={styles.recommendations}>
+                {data.recommendations.map((recommendation) => (
+                  <article key={recommendation.id} className={styles.recommendation}>
+                    <div className={styles.recommendationHead}>
+                      <span className={`${styles.action} sg-mono`}>{recommendation.action}</span>
+                      <ConfidenceChip label={recommendation.confidence_label} value={recommendation.confidence} />
+                    </div>
+                    <h3>{recommendation.title}</h3>
+                    <p>{recommendation.rationale}</p>
+                  </article>
+                ))}
+              </div>
+            ) : <EmptyPanel>No recommendations are available yet.</EmptyPanel>}
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

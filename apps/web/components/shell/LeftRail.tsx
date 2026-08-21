@@ -43,7 +43,7 @@ export function LeftRail({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => pathname === href || Boolean(pathname?.startsWith(`${href}/`));
 
   const renderItem = (item: { href: string; label: string; icon: Icon }) => {
     const ItemIcon = item.icon;

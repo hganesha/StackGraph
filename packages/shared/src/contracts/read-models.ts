@@ -109,6 +109,27 @@ export interface TaxonomySummary {
 
 export type TechnologyClassification = "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
 
+export interface TechnologyCatalogProfile {
+  summary?: string | null;
+  package_name?: string | null;
+  ecosystem?: string | null;
+  license?: string | null;
+  homepage?: string | null;
+  repository_url?: string | null;
+  package_url?: string | null;
+  latest_version?: string | null;
+  weekly_downloads?: number | null;
+  dependents?: number | null;
+  versions?: number | null;
+  installation_command?: string | null;
+  catalog_technology?: EntitySummary | null;
+  domain?: TaxonomySummary | null;
+  category?: TaxonomySummary | null;
+  functions: TaxonomySummary[];
+  classification: TechnologyClassification;
+  citations: Citation[];
+}
+
 export interface ApplicationTechnologyUsage {
   technology: EntitySummary;
   category?: TaxonomySummary | null;
@@ -126,6 +147,51 @@ export interface ApplicationTechnologyFunction {
 export interface ApplicationTechnologyGroup {
   domain: TaxonomySummary;
   functions: ApplicationTechnologyFunction[];
+}
+
+export interface ApplicationDependencyNode {
+  technology: EntitySummary;
+  parent_technology_id?: UUID | null;
+  depth: number;
+  direct: boolean;
+  relationship: string;
+  scope?: string | null;
+  requirement?: string | null;
+  dependency_relation?: string | null;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  citations: Citation[];
+}
+
+export interface ApplicationComponentDependencyHierarchy {
+  component_path: string;
+  dependencies: ApplicationDependencyNode[];
+  truncated: boolean;
+}
+
+export interface ApplicationRepositoryDependencyHierarchy {
+  repository: EntitySummary;
+  components: ApplicationComponentDependencyHierarchy[];
+}
+
+export interface TechnologyEstateHierarchyNode {
+  technology: EntitySummary;
+  parent_technology_id?: UUID | null;
+  depth: number;
+  direct: boolean;
+  relationship: string;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  dependent_applications: EntitySummary[];
+  catalog_profile?: TechnologyCatalogProfile | null;
+  citations: Citation[];
+}
+
+export interface TechnologyEstateHierarchy {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  nodes: TechnologyEstateHierarchyNode[];
+  truncated: boolean;
 }
 
 export interface AssessmentSummary {
@@ -184,9 +250,35 @@ export interface ApplicationDetail {
   repositories: EntitySummary[];
   technologies: EntitySummary[];
   technology_groups: ApplicationTechnologyGroup[];
+  dependency_hierarchies?: ApplicationRepositoryDependencyHierarchy[];
   deployments: EntitySummary[];
   assessments: AssessmentSummary[];
   recommendations: RecommendationSummary[];
+  freshness: Freshness;
+}
+
+export interface RepositoryProfile {
+  purpose?: string;
+  purpose_source?: string;
+  descriptions: string[];
+  languages: string[];
+  components: string[];
+  key_files: string[];
+  operational_signals: string[];
+  limitations: string[];
+  source_revision: string;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  citations: Citation[];
+}
+
+export interface RepositoryDetail {
+  contract_version: "1.0.0";
+  repository: EntitySummary;
+  profile?: RepositoryProfile;
+  applications: EntitySummary[];
+  technologies: EntitySummary[];
+  deployments: EntitySummary[];
   freshness: Freshness;
 }
 
@@ -208,6 +300,7 @@ export interface TechnologyDetail {
   };
   packages: EntitySummary[];
   projects: EntitySummary[];
+  catalog_profile?: TechnologyCatalogProfile | null;
   registry_sources?: PackageSource[];
   alternatives?: EntitySummary[];
   migration_patterns?: EntitySummary[];
@@ -221,6 +314,48 @@ export interface ModernizationList {
   as_of: Timestamp;
   opportunities: RankedItem[];
   page_info: PageInfo;
+}
+
+export interface CapabilityFootprint {
+  capability: EntitySummary;
+  application_count: number;
+  repository_count: number;
+  technology_count: number;
+  technology_counts: Record<string, number>;
+  technology_entropy: number;
+  reuse_signal: number;
+}
+
+export interface CapabilityFootprintList {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  footprints: CapabilityFootprint[];
+}
+
+export interface ModernizationScenarioRequest {
+  budget_points: number;
+  excluded_recommendation_ids?: UUID[];
+}
+
+export interface ModernizationScenarioItem {
+  recommendation_id: UUID;
+  repository: EntitySummary;
+  title: string;
+  action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
+  score: number;
+  score_components: Record<string, number>;
+  effort_points: number;
+  selected: boolean;
+  policy_version: string;
+}
+
+export interface ModernizationScenarioResult {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  budget_points: number;
+  used_points: number;
+  total_score: number;
+  items: ModernizationScenarioItem[];
 }
 
 export interface GraphNode {
@@ -627,6 +762,12 @@ export interface BusinessMapFunctionAssignment {
   unit_id: string;
 }
 
+export interface BusinessMapApplicationAssignment {
+  capability_id: string;
+  application_id: UUID;
+  application_name: string;
+}
+
 export interface BusinessMapStateModel {
   title: string;
   view_mode: BusinessMapViewMode;
@@ -637,6 +778,7 @@ export interface BusinessMapStateModel {
   placements: BusinessMapPlacement[];
   shared_groups: BusinessMapSharedGroup[];
   function_assignments: BusinessMapFunctionAssignment[];
+  application_assignments: BusinessMapApplicationAssignment[];
 }
 
 export interface BusinessMapSummary {
@@ -817,6 +959,8 @@ export interface GitHubInstallationConnectRequest {
   /** Public GitHub App installation identifier; no credential material crosses the browser. */
   installation_id: string;
   display_name?: string;
+  /** Required while installation IDs are manually bound during the named pilot. */
+  pilot_manual_binding_acknowledged: true;
 }
 
 export interface ConnectorUpdateRequest {
@@ -824,6 +968,122 @@ export interface ConnectorUpdateRequest {
   status?: ConnectorStatus;
   scopes?: string[];
   credential_reference?: string;
+}
+
+export interface ModernizationPolicyPublishRequest {
+  policy_key?: string;
+  version: string;
+  runtime_versions?: Record<string, string>;
+  allowed_licenses?: string[];
+  denied_option_keys?: string[];
+  allowed_security_statuses?: Array<"CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN">;
+  required_policy_tags?: string[];
+}
+
+export interface InternalCatalogComponentUpsertRequest {
+  component_entity_id: UUID;
+  capability_definition_id: UUID;
+  version: string;
+  status?: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  api_symbols?: string[];
+  runtime_constraints?: Record<string, string>;
+  behavior_claims?: Array<Record<string, unknown>>;
+  license?: string | null;
+  security_status?: "CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN";
+  policy_tags?: string[];
+  supporting_fact_ids: UUID[];
+  owner: string;
+  decision: "APPROVE" | "REJECT";
+}
+
+export interface CalibrationCorpusPublishRequest {
+  corpus_key?: string;
+  version: string;
+  case_fingerprints: string[];
+  candidate_precision?: number | null;
+  recommendation_acceptance?: number | null;
+  validation_success?: number | null;
+  affected_scope_mae?: number | null;
+  effort_accuracy?: number | null;
+  minimum_candidate_precision?: number;
+  minimum_recommendation_acceptance?: number;
+  minimum_validation_success?: number;
+  maximum_affected_scope_mae?: number;
+  minimum_effort_accuracy?: number;
+  minimum_reviewed_cases?: number;
+}
+
+export interface ModernizationPolicySummary {
+  id: UUID;
+  policy_key: string;
+  version: string;
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+  runtime_versions: Record<string, string>;
+  allowed_licenses: string[];
+  denied_option_keys: string[];
+  allowed_security_statuses: string[];
+  required_policy_tags: string[];
+  configuration_fingerprint: string;
+  activated_by: string;
+  activated_at: string;
+}
+
+export interface InternalCatalogComponentSummary {
+  id: UUID;
+  component_key: string;
+  version: string;
+  name: string;
+  status: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  review_state: "UNREVIEWED" | "APPROVED" | "REJECTED";
+  owner?: string | null;
+  catalog_fingerprint: string;
+  supporting_fact_ids: UUID[];
+  governed_by?: string | null;
+  governed_at?: string | null;
+}
+
+export interface CalibrationCorpusSummary {
+  id: UUID;
+  corpus_key: string;
+  version: string;
+  case_count: number;
+  corpus_fingerprint: string;
+  promotion_passed: boolean;
+  promotion_failures: string[];
+  evaluation_fingerprint: string;
+  evaluated_at: string;
+}
+
+export type EcosystemName = "PYPI" | "MAVEN" | "CARGO" | "NUGET";
+
+export interface EcosystemAdmissionEvaluateRequest {
+  minimum_repositories?: number;
+  minimum_dependency_share?: number;
+}
+
+export interface EcosystemAdmissionSummary {
+  ecosystem: EcosystemName;
+  sequence: number;
+  status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
+  observed_repositories: number;
+  observed_dependency_share: number;
+  minimum_repositories: number;
+  minimum_dependency_share: number;
+  predecessor_admitted: boolean;
+  metadata_parity: boolean;
+  calibration_gate_passed: boolean;
+  reasons: string[];
+  decision_fingerprint: string;
+  decided_by?: string | null;
+  decided_at?: string | null;
+}
+
+export interface ModernizationGovernanceState {
+  contract_version: "1.0.0";
+  active_policy?: ModernizationPolicySummary | null;
+  internal_components: InternalCatalogComponentSummary[];
+  active_calibration?: CalibrationCorpusSummary | null;
+  ecosystem_admissions: EcosystemAdmissionSummary[];
 }
 
 // --- Admin: AI provider configuration -----------------------------------
