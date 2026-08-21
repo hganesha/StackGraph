@@ -7,6 +7,14 @@ import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./technology.module.css";
 
+const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
+
+function classificationLabel(value: string) {
+  if (value === "CATALOG_MATCH") return "Matched to curated technology";
+  if (value === "CURATED") return "Curated technology";
+  return "OSS catalog metadata";
+}
+
 export default function TechnologyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const openEvidence = useEvidenceStore((s) => s.open);
@@ -51,6 +59,73 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
           <span aria-hidden="true">◇</span> Explore neighborhood
         </a>
       </header>
+
+      {data.catalog_profile ? (
+        <section className={styles.catalog} aria-label="OSS catalog intelligence">
+          <div className={styles.catalogMain}>
+            <header className={styles.catalogHead}>
+              <div>
+                <span className={styles.catalogEyebrow}>
+                  <DomainBadge namespace="OSS" /> Catalog intelligence
+                </span>
+                <h2>{data.catalog_profile.catalog_technology?.name ?? data.catalog_profile.package_name ?? data.technology.name}</h2>
+              </div>
+              <span className={styles.classification}>{classificationLabel(data.catalog_profile.classification)}</span>
+            </header>
+            {data.catalog_profile.summary ? <p className={styles.catalogSummary}>{data.catalog_profile.summary}</p> : null}
+            <div className={styles.taxonomyList} aria-label="Technology classification">
+              {data.catalog_profile.domain ? <span>{data.catalog_profile.domain.name}</span> : null}
+              {data.catalog_profile.category ? <span>{data.catalog_profile.category.name}</span> : null}
+              {data.catalog_profile.functions.map((item) => (
+                <span key={item.key} title={item.summary ?? undefined}>{item.name}</span>
+              ))}
+            </div>
+            {data.catalog_profile.installation_command ? (
+              <code className={`${styles.installCommand} sg-mono`}>{data.catalog_profile.installation_command}</code>
+            ) : null}
+            <div className={styles.catalogLinks}>
+              {data.catalog_profile.homepage ? (
+                <a href={data.catalog_profile.homepage} target="_blank" rel="noreferrer">Homepage ↗</a>
+              ) : null}
+              {data.catalog_profile.repository_url ? (
+                <a href={data.catalog_profile.repository_url} target="_blank" rel="noreferrer">Source repository ↗</a>
+              ) : null}
+              {data.catalog_profile.package_url ? (
+                <a href={data.catalog_profile.package_url} target="_blank" rel="noreferrer">Package registry ↗</a>
+              ) : null}
+            </div>
+            <div className={styles.catalogEvidence}>
+              {data.catalog_profile.citations.map((citation) => (
+                <CitationChip
+                  key={citation.fact_id}
+                  label={citation.label}
+                  onOpen={() => openEvidence(citation.fact_id, citation.label)}
+                />
+              ))}
+            </div>
+          </div>
+          <dl className={styles.catalogFacts}>
+            {data.catalog_profile.ecosystem ? (
+              <div><dt>Ecosystem</dt><dd>{data.catalog_profile.ecosystem}</dd></div>
+            ) : null}
+            {data.catalog_profile.license ? (
+              <div><dt>License</dt><dd>{data.catalog_profile.license}</dd></div>
+            ) : null}
+            {data.catalog_profile.latest_version ? (
+              <div><dt>Catalog version</dt><dd>{data.catalog_profile.latest_version}</dd></div>
+            ) : null}
+            {data.catalog_profile.weekly_downloads != null ? (
+              <div><dt>Weekly downloads</dt><dd>{compactNumber.format(data.catalog_profile.weekly_downloads)}</dd></div>
+            ) : null}
+            {data.catalog_profile.dependents != null ? (
+              <div><dt>Catalog dependents</dt><dd>{compactNumber.format(data.catalog_profile.dependents)}</dd></div>
+            ) : null}
+            {data.catalog_profile.versions != null ? (
+              <div><dt>Published versions</dt><dd>{compactNumber.format(data.catalog_profile.versions)}</dd></div>
+            ) : null}
+          </dl>
+        </section>
+      ) : null}
 
       <div className={styles.panes}>
         {/* Internal estate */}

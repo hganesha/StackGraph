@@ -47,6 +47,13 @@ export function useGraphNeighborhood(centerId: string, depth = 1) {
   });
 }
 
+export function useTechnologyEstateHierarchy() {
+  return useQuery({
+    queryKey: ["technologies", "hierarchy"],
+    queryFn: () => stackGraphClient.getTechnologyEstateHierarchy(),
+  });
+}
+
 export function useReviewQueue() {
   return useQuery({
     queryKey: ["reviews", "queue"],

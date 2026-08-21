@@ -34,17 +34,43 @@ export interface AIProviderConnectionTest {
   status?: "SUCCEEDED";
 }
 
+export interface ApplicationComponentDependencyHierarchy {
+  component_path: string;
+  dependencies: Array<ApplicationDependencyNode>;
+  truncated?: boolean;
+}
+
+export interface ApplicationDependencyNode {
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependency_relation?: string | null;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
+  requirement?: string | null;
+  scope?: string | null;
+  technology: EntitySummary;
+}
+
 export interface ApplicationDetail {
   application: EntitySummary;
   assessments: Array<AssessmentSummary>;
   business_context: Array<EntitySummary>;
   contract_version?: "1.0.0";
+  dependency_hierarchies?: Array<ApplicationRepositoryDependencyHierarchy>;
   deployments: Array<EntitySummary>;
   freshness: Freshness;
   recommendations: Array<RecommendationSummary>;
   repositories: Array<EntitySummary>;
   technologies: Array<EntitySummary>;
   technology_groups: Array<ApplicationTechnologyGroup>;
+}
+
+export interface ApplicationRepositoryDependencyHierarchy {
+  components: Array<ApplicationComponentDependencyHierarchy>;
+  repository: EntitySummary;
 }
 
 export interface ApplicationTechnologyFunction {
@@ -839,9 +865,31 @@ export interface TaxonomySummary {
   summary?: string | null;
 }
 
+export interface TechnologyCatalogProfile {
+  catalog_technology?: EntitySummary | null;
+  category?: TaxonomySummary | null;
+  citations: Array<Citation>;
+  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  dependents?: number | null;
+  domain?: TaxonomySummary | null;
+  ecosystem?: string | null;
+  functions?: Array<TaxonomySummary>;
+  homepage?: string | null;
+  installation_command?: string | null;
+  latest_version?: string | null;
+  license?: string | null;
+  package_name?: string | null;
+  package_url?: string | null;
+  repository_url?: string | null;
+  summary?: string | null;
+  versions?: number | null;
+  weekly_downloads?: number | null;
+}
+
 export interface TechnologyDetail {
   alternatives?: Array<EntitySummary> | null;
   assessments: Array<AssessmentSummary>;
+  catalog_profile?: TechnologyCatalogProfile | null;
   contract_version?: "1.0.0";
   freshness: Freshness;
   internal_usage: InternalUsage;
@@ -850,6 +898,26 @@ export interface TechnologyDetail {
   projects: Array<EntitySummary>;
   recommendations: Array<RecommendationSummary>;
   registry_sources?: Array<PackageSource> | null;
+  technology: EntitySummary;
+}
+
+export interface TechnologyEstateHierarchy {
+  as_of: string;
+  contract_version?: "1.0.0";
+  nodes: Array<TechnologyEstateHierarchyNode>;
+  truncated?: boolean;
+}
+
+export interface TechnologyEstateHierarchyNode {
+  catalog_profile?: TechnologyCatalogProfile | null;
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependent_applications: Array<EntitySummary>;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
   technology: EntitySummary;
 }
 

@@ -8,6 +8,31 @@
   },
   "packages": [{"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"}],
   "projects": [{"id": "00000000-0000-4000-8000-000000000206", "kind": "OSSProject", "name": "Axios"}],
+  "catalog_profile": {
+    "summary": "Promise based HTTP client for the browser and Node.js.",
+    "package_name": "axios",
+    "ecosystem": "npm",
+    "license": "MIT",
+    "homepage": "https://axios-http.com/",
+    "repository_url": "https://github.com/axios/axios",
+    "package_url": "https://www.npmjs.com/package/axios",
+    "latest_version": "1.7.9",
+    "weekly_downloads": 54000000,
+    "dependents": 145000,
+    "versions": 120,
+    "installation_command": "npm i axios",
+    "catalog_technology": {
+      "id": "00000000-0000-4000-8000-000000000210",
+      "kind": "Technology",
+      "name": "Axios",
+      "canonical_key": "stackgraph:technology:axios"
+    },
+    "domain": {"key": "frontend", "name": "Frontend"},
+    "category": {"key": "data-fetching", "name": "Data Fetching"},
+    "functions": [{"key": "http-client", "name": "HTTP Client"}],
+    "classification": "CATALOG_MATCH",
+    "citations": [{"fact_id": "00000000-0000-4000-8000-000000000305", "label": "OSS catalog metadata"}]
+  },
   "registry_sources": [
     {
       "registry_key": "npm-public",

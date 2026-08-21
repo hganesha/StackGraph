@@ -100,6 +100,27 @@ class TaxonomySummary(ContractModel):
 TechnologyClassification = Literal["CURATED", "CATALOG_MATCH", "UNCLASSIFIED"]
 
 
+class TechnologyCatalogProfile(ContractModel):
+    summary: str | None = None
+    package_name: str | None = None
+    ecosystem: str | None = None
+    license: str | None = None
+    homepage: str | None = None
+    repository_url: str | None = None
+    package_url: str | None = None
+    latest_version: str | None = None
+    weekly_downloads: int | None = Field(default=None, ge=0)
+    dependents: int | None = Field(default=None, ge=0)
+    versions: int | None = Field(default=None, ge=0)
+    installation_command: str | None = None
+    catalog_technology: EntitySummary | None = None
+    domain: TaxonomySummary | None = None
+    category: TaxonomySummary | None = None
+    functions: list[TaxonomySummary] = Field(default_factory=list)
+    classification: TechnologyClassification
+    citations: list[Citation] = Field(min_length=1)
+
+
 class ApplicationTechnologyUsage(ContractModel):
     technology: EntitySummary
     category: TaxonomySummary | None = None
@@ -117,6 +138,51 @@ class ApplicationTechnologyFunction(ContractModel):
 class ApplicationTechnologyGroup(ContractModel):
     domain: TaxonomySummary
     functions: list[ApplicationTechnologyFunction] = Field(min_length=1)
+
+
+class ApplicationDependencyNode(ContractModel):
+    technology: EntitySummary
+    parent_technology_id: UUID | None = None
+    depth: int = Field(ge=1)
+    direct: bool
+    relationship: str = Field(min_length=1)
+    scope: str | None = None
+    requirement: str | None = None
+    dependency_relation: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class ApplicationComponentDependencyHierarchy(ContractModel):
+    component_path: str = Field(min_length=1)
+    dependencies: list[ApplicationDependencyNode] = Field(min_length=1)
+    truncated: bool = False
+
+
+class ApplicationRepositoryDependencyHierarchy(ContractModel):
+    repository: EntitySummary
+    components: list[ApplicationComponentDependencyHierarchy] = Field(min_length=1)
+
+
+class TechnologyEstateHierarchyNode(ContractModel):
+    technology: EntitySummary
+    parent_technology_id: UUID | None = None
+    depth: int = Field(ge=1)
+    direct: bool
+    relationship: str = Field(min_length=1)
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    dependent_applications: list[EntitySummary]
+    catalog_profile: TechnologyCatalogProfile | None = None
+    citations: list[Citation] = Field(min_length=1)
+
+
+class TechnologyEstateHierarchy(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    nodes: list[TechnologyEstateHierarchyNode]
+    truncated: bool = False
 
 
 class AssessmentSummary(ContractModel):
@@ -167,6 +233,7 @@ class ApplicationDetail(ContractModel):
     repositories: list[EntitySummary]
     technologies: list[EntitySummary]
     technology_groups: list[ApplicationTechnologyGroup]
+    dependency_hierarchies: list[ApplicationRepositoryDependencyHierarchy] = Field(default_factory=list)
     deployments: list[EntitySummary]
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]
@@ -193,6 +260,7 @@ class TechnologyDetail(ContractModel):
     internal_usage: InternalUsage
     packages: list[EntitySummary]
     projects: list[EntitySummary]
+    catalog_profile: TechnologyCatalogProfile | None = None
     registry_sources: list[PackageSource] | None = None
     alternatives: list[EntitySummary] | None = None
     migration_patterns: list[EntitySummary] | None = None

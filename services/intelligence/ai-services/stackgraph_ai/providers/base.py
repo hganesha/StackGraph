@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping
 from typing import Any
 
 import httpx
 
 from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
+
+
+_JSON_FENCE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 
 
 def provider_error_code(status_code: int) -> tuple[str, bool]:
@@ -80,10 +84,22 @@ def parse_tool_arguments(value: Any, *, provider: str) -> Mapping[str, Any]:
 def parse_structured_text(text: str | None, *, provider: str) -> Mapping[str, Any] | list[Any] | None:
     if text is None:
         return None
+    stripped = text.strip()
     try:
-        decoded = json.loads(text)
-    except json.JSONDecodeError as error:
-        raise ProviderResponseError(f"{provider} returned malformed structured output") from error
+        decoded = json.loads(stripped)
+    except json.JSONDecodeError as direct_error:
+        fenced = _JSON_FENCE.findall(stripped)
+        if len(fenced) != 1:
+            raise ProviderResponseError(
+                f"{provider} returned malformed structured output "
+                "(expected one JSON object or one fenced JSON block)"
+            ) from direct_error
+        try:
+            decoded = json.loads(fenced[0].strip())
+        except json.JSONDecodeError as fenced_error:
+            raise ProviderResponseError(
+                f"{provider} returned malformed JSON inside its structured-output fence"
+            ) from fenced_error
     if not isinstance(decoded, (Mapping, list)):
         raise ProviderResponseError(f"{provider} structured output must be an object or array")
     return decoded

@@ -5,7 +5,7 @@ import unittest
 
 import httpx
 
-from stackgraph_ai.errors import ProviderRequestError
+from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
 from stackgraph_ai.models import ModelMessage, ModelRequest, ToolDefinition
 from stackgraph_ai.providers import AnthropicAdapter, OpenAIAdapter, OpenRouterAdapter, RetryingProvider
 
@@ -110,6 +110,44 @@ class ProviderAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.tool_calls[0].name, "query_estate")
         self.assertEqual(response.tool_calls[0].arguments, {"limit": 10})
         self.assertEqual(response.usage.actual_cost_usd, 0.001)
+
+    async def test_openrouter_accepts_one_markdown_fenced_structured_result(self) -> None:
+        def handler(http_request: httpx.Request) -> httpx.Response:
+            payload = json.loads(http_request.content)
+            self.assertEqual(payload["response_format"]["type"], "json_schema")
+            self.assertTrue(payload["provider"]["require_parameters"])
+            return httpx.Response(200, json={
+                "id": "or_structured",
+                "model": "resolved-router-model",
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {
+                        "content": "**Result**\n```json\n{\"answer\":\"yes\"}\n```",
+                    },
+                }],
+            })
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            response = await OpenRouterAdapter("secret", client=client).complete(
+                request(output_schema=SCHEMA)
+            )
+
+        self.assertEqual(response.structured_output, {"answer": "yes"})
+
+    async def test_openrouter_rejects_ambiguous_multiple_json_fences(self) -> None:
+        def handler(_http_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={
+                "choices": [{
+                    "finish_reason": "stop",
+                    "message": {"content": "```json\n{\"answer\":\"yes\"}\n```\n```json\n{}\n```"},
+                }],
+            })
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with self.assertRaisesRegex(ProviderResponseError, "expected one JSON object"):
+                await OpenRouterAdapter("secret", client=client).complete(
+                    request(output_schema=SCHEMA)
+                )
 
     async def test_anthropic_translates_system_and_structured_output(self) -> None:
         def handler(http_request: httpx.Request) -> httpx.Response:

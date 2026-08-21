@@ -47,6 +47,30 @@
       ]
     }
   ],
+  "dependency_hierarchies": [
+    {
+      "repository": {"id": "00000000-0000-4000-8000-000000000203", "kind": "Repository", "name": "billing-svc", "canonical_key": "github:repo:123"},
+      "components": [
+        {
+          "component_path": ".",
+          "dependencies": [
+            {
+              "technology": {"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"},
+              "depth": 1,
+              "direct": true,
+              "relationship": "DEPENDS_ON",
+              "scope": "runtime",
+              "requirement": "^1.7.9",
+              "confidence": 0.99,
+              "confidence_label": "HIGH",
+              "citations": [{"fact_id": "00000000-0000-4000-8000-000000000301", "label": "Declared dependency evidence"}]
+            }
+          ],
+          "truncated": false
+        }
+      ]
+    }
+  ],
   "deployments": [],
   "assessments": [
     {

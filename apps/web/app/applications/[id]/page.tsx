@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { ApplicationDependencyHierarchy } from "./DependencyHierarchy";
 import styles from "./application.module.css";
 
 export default function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,6 +25,8 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
       </div>
     );
   }
+
+  const dependencyHierarchies = data.dependency_hierarchies ?? [];
 
   return (
     <div className={styles.page}>
@@ -64,6 +67,14 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
         <div className={styles.sectionHeading}>
           <h2 className={styles.h2}>Technology landscape</h2>
           <span className={styles.sectionCount}>{data.technologies.length} linked</span>
+        </div>
+        <ApplicationDependencyHierarchy
+          hierarchies={dependencyHierarchies}
+          technologyGroups={data.technology_groups}
+        />
+        <div className={styles.subsectionHeading}>
+          <h3 className={styles.subsectionTitle}>Architecture classification</h3>
+          <p>Technology roles inferred from curated catalog evidence.</p>
         </div>
         {data.technology_groups.length > 0 ? (
           <div className={styles.technologyGroups}>
