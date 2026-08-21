@@ -693,6 +693,12 @@ class BusinessMapFunctionAssignment(ContractModel):
     unit_id: str = Field(min_length=1)
 
 
+class BusinessMapApplicationAssignment(ContractModel):
+    capability_id: str = Field(min_length=1)
+    application_id: UUID
+    application_name: str = Field(min_length=1)
+
+
 class BusinessMapStateModel(ContractModel):
     title: str = Field(min_length=1)
     view_mode: BusinessMapViewMode = "value-chain"
@@ -703,6 +709,7 @@ class BusinessMapStateModel(ContractModel):
     placements: list[BusinessMapPlacement] = Field(default_factory=list)
     shared_groups: list[BusinessMapSharedGroup] = Field(default_factory=list)
     function_assignments: list[BusinessMapFunctionAssignment] = Field(default_factory=list)
+    application_assignments: list[BusinessMapApplicationAssignment] = Field(default_factory=list)
 
 
 class BusinessMapSummary(ContractModel):

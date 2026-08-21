@@ -756,6 +756,33 @@
         "title": "AssessmentSummary",
         "type": "object"
       },
+      "BusinessMapApplicationAssignment": {
+        "additionalProperties": false,
+        "properties": {
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "application_name": {
+            "minLength": 1,
+            "title": "Application Name",
+            "type": "string"
+          },
+          "capability_id": {
+            "minLength": 1,
+            "title": "Capability Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability_id",
+          "application_id",
+          "application_name"
+        ],
+        "title": "BusinessMapApplicationAssignment",
+        "type": "object"
+      },
       "BusinessMapCapabilityNode": {
         "additionalProperties": false,
         "properties": {
@@ -1239,6 +1266,13 @@
       "BusinessMapStateModel": {
         "additionalProperties": false,
         "properties": {
+          "application_assignments": {
+            "items": {
+              "$ref": "#/components/schemas/BusinessMapApplicationAssignment"
+            },
+            "title": "Application Assignments",
+            "type": "array"
+          },
           "catalog": {
             "items": {
               "$ref": "#/components/schemas/BusinessMapFunctionNode"

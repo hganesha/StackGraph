@@ -3,7 +3,8 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RankedTable, StatTile, Skeleton } from "@stackgraph/design-system";
-import { useEstateSummary } from "@/lib/queries";
+import type { Namespace } from "@stackgraph/shared";
+import { useEstateDomainSummary, useEstateSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
@@ -11,8 +12,19 @@ import styles from "./estate.module.css";
 
 export function EstateView() {
   const router = useRouter();
-  const { data, isLoading, isError } = useEstateSummary();
+  const summary = useEstateSummary();
   const { query, setQuery, applyLens, reset } = useEstateQuery();
+  const selectedDomains = useMemo(
+    () => query.domain === "ALL" ? [] : [query.domain as Namespace],
+    [query.domain],
+  );
+  const domainSummary = useEstateDomainSummary(selectedDomains, {
+    enabled: selectedDomains.length > 0,
+  });
+  const data = selectedDomains.length > 0 ? domainSummary.data : summary.data;
+  const counts = summary.data?.counts ?? data?.counts;
+  const isLoading = summary.isLoading || (selectedDomains.length > 0 && domainSummary.isLoading);
+  const isError = summary.isError || (selectedDomains.length > 0 && domainSummary.isError);
 
   // Route to the explorer that matches the item's domain (plan §5.1).
   const hrefFor = (domain: string, id: string) =>
@@ -36,7 +48,7 @@ export function EstateView() {
       ) : null}
 
       <section className={styles.tiles} aria-label="Estate counts">
-        {isLoading || !data ? (
+        {isLoading || !counts ? (
           <>
             {[0, 1, 2, 3].map((i) => (
               <div key={i} className={styles.tileSkeleton}>
@@ -47,10 +59,10 @@ export function EstateView() {
           </>
         ) : (
           <>
-            <StatTile label="Applications" value={data.counts.applications} />
-            <StatTile label="Repositories" value={data.counts.repositories} />
-            <StatTile label="Services" value={data.counts.services} />
-            <StatTile label="Technologies" value={data.counts.technologies} />
+            <StatTile label="Applications" value={counts.applications} />
+            <StatTile label="Repositories" value={counts.repositories} />
+            <StatTile label="Services" value={counts.services} />
+            <StatTile label="Technologies" value={counts.technologies} />
           </>
         )}
       </section>

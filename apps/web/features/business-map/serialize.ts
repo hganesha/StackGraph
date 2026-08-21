@@ -76,6 +76,11 @@ export function toApiState(map: BusinessMapState): BusinessMapStateModel {
       function_id: assignment.functionId,
       unit_id: assignment.unitId,
     })),
+    application_assignments: map.applicationAssignments.map((assignment) => ({
+      capability_id: assignment.capabilityId,
+      application_id: assignment.applicationId,
+      application_name: assignment.applicationName,
+    })),
   };
 }
 
@@ -125,6 +130,11 @@ export function fromApiState(state: BusinessMapStateModel): BusinessMapState {
     functionAssignments: state.function_assignments.map((assignment) => ({
       functionId: assignment.function_id,
       unitId: assignment.unit_id,
+    })),
+    applicationAssignments: (state.application_assignments ?? []).map((assignment) => ({
+      capabilityId: assignment.capability_id,
+      applicationId: assignment.application_id,
+      applicationName: assignment.application_name,
     })),
   };
 }

@@ -33,6 +33,7 @@ from app.models import (
     AskRequest,
     AskResponse,
     AssessmentSummary,
+    BusinessMapApplicationAssignment,
     BusinessMapCapabilityNode,
     BusinessMapCreateRequest,
     BusinessMapDetail,
@@ -3099,6 +3100,12 @@ class ReadModelStore(AdminReadModelsMixin):
         for assignment in state.function_assignments:
             require(assignment.function_id in function_keys, "assignment.function_id", assignment.function_id)
             require(assignment.unit_id in unit_keys, "assignment.unit_id", assignment.unit_id)
+        for assignment in state.application_assignments:
+            require(
+                assignment.capability_id in capability_keys,
+                "application_assignment.capability_id",
+                assignment.capability_id,
+            )
 
     async def _write_business_map_children(
         self, connection: Any, *, map_id: UUID, tenant_id: UUID, state: BusinessMapStateModel,
@@ -3204,6 +3211,46 @@ class ReadModelStore(AdminReadModelsMixin):
                 """,
                 (tenant_id, map_id, function_ids[assignment.function_id], unit_ids.get(assignment.unit_id)),
             )
+        if state.application_assignments:
+            requested_application_ids = sorted(
+                {assignment.application_id for assignment in state.application_assignments},
+                key=str,
+            )
+            cursor = await connection.execute(
+                """
+                SELECT id FROM entity
+                WHERE id=ANY(%s::uuid[]) AND tenant_id=%s
+                  AND namespace='ENTERPRISE' AND entity_type='Application'
+                """,
+                (requested_application_ids, tenant_id),
+            )
+            found_application_ids = {row["id"] for row in await cursor.fetchall()}
+            missing_application_ids = [
+                str(application_id)
+                for application_id in requested_application_ids
+                if application_id not in found_application_ids
+            ]
+            if missing_application_ids:
+                raise APIError(
+                    422,
+                    "BUSINESS_MAP_INVALID_APPLICATION",
+                    "A business capability can only be linked to an application in this tenant's estate.",
+                    {"application_ids": missing_application_ids},
+                )
+            for assignment in state.application_assignments:
+                await connection.execute(
+                    """
+                    INSERT INTO business_map_application_assignment
+                      (tenant_id,business_map_id,business_map_capability_id,application_entity_id)
+                    VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING
+                    """,
+                    (
+                        tenant_id,
+                        map_id,
+                        capability_ids[assignment.capability_id],
+                        assignment.application_id,
+                    ),
+                )
 
     async def _write_business_map_revision(
         self, connection: Any, *, map_id: UUID, tenant_id: UUID, version: int,
@@ -3326,6 +3373,26 @@ class ReadModelStore(AdminReadModelsMixin):
             for assignment in await cursor.fetchall()
         ]
 
+        cursor = await connection.execute(
+            """
+            SELECT assignment.business_map_capability_id,
+                   assignment.application_entity_id,application.name application_name
+            FROM business_map_application_assignment assignment
+            JOIN entity application ON application.id=assignment.application_entity_id
+            WHERE assignment.business_map_id=%s
+            ORDER BY application.name,application.id
+            """,
+            (map_id,),
+        )
+        application_assignments = [
+            BusinessMapApplicationAssignment(
+                capability_id=capability_key_by_id[assignment["business_map_capability_id"]],
+                application_id=assignment["application_entity_id"],
+                application_name=assignment["application_name"],
+            )
+            for assignment in await cursor.fetchall()
+        ]
+
         return BusinessMapDetail(
             id=row["id"], map_key=row["map_key"], status=row["status"], version=row["version"],
             created_at=row["created_at"], updated_at=row["updated_at"],
@@ -3333,7 +3400,7 @@ class ReadModelStore(AdminReadModelsMixin):
                 title=row["title"], view_mode=_VIEW_MODE_FROM_DB[row["view_mode"]],
                 template_id=row["template_id"], stages=stages, organization_units=units,
                 catalog=catalog, placements=placements, shared_groups=shared_groups,
-                function_assignments=assignments,
+                function_assignments=assignments, application_assignments=application_assignments,
             ),
         )
 

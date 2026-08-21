@@ -695,6 +695,12 @@ export interface BusinessMapFunctionAssignment {
   unit_id: string;
 }
 
+export interface BusinessMapApplicationAssignment {
+  capability_id: string;
+  application_id: UUID;
+  application_name: string;
+}
+
 export interface BusinessMapStateModel {
   title: string;
   view_mode: BusinessMapViewMode;
@@ -705,6 +711,7 @@ export interface BusinessMapStateModel {
   placements: BusinessMapPlacement[];
   shared_groups: BusinessMapSharedGroup[];
   function_assignments: BusinessMapFunctionAssignment[];
+  application_assignments: BusinessMapApplicationAssignment[];
 }
 
 export interface BusinessMapSummary {

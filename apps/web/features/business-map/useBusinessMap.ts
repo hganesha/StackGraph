@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { stackGraphClient, ApiRequestError } from "@stackgraph/shared";
 import { useCan, useSession } from "@/lib/session";
+import { useEstateDomainSummary } from "@/lib/queries";
 import {
   BUSINESS_FUNCTIONS,
   ORGANIZATION_UNIT_TEMPLATE,
@@ -52,6 +53,12 @@ export interface FunctionAssignment {
   unitId: string;
 }
 
+export interface CapabilityApplicationAssignment {
+  capabilityId: string;
+  applicationId: string;
+  applicationName: string;
+}
+
 export type MapViewMode = "value-chain" | "organization";
 
 export interface CapabilityPlacement {
@@ -71,6 +78,7 @@ export interface BusinessMapState {
   sharedGroups: SharedCapabilityGroup[];
   organizationUnits: ValueChainStep[];
   functionAssignments: FunctionAssignment[];
+  applicationAssignments: CapabilityApplicationAssignment[];
 }
 
 const STORAGE_KEY = "stackgraph.business-map.v3";
@@ -145,6 +153,7 @@ function createInitialState(): BusinessMapState {
     sharedGroups: [],
     organizationUnits,
     functionAssignments: seedFunctionAssignments(catalog, organizationUnits),
+    applicationAssignments: [],
   };
 }
 
@@ -171,6 +180,7 @@ export function useBusinessMap() {
   // Editing writes to the server; a view-only session stays on the local draft only.
   const { ready: sessionReady } = useSession();
   const canEdit = useCan("execute");
+  const estateApplicationsQuery = useEstateDomainSummary(["ENTERPRISE"]);
   const [map, setMap] = useState<BusinessMapState>(createInitialState);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string | null>(null);
   const [panel, setPanel] = useState<PanelMode>(null);
@@ -213,6 +223,9 @@ export function useBusinessMap() {
             functionAssignments: Array.isArray(parsed.functionAssignments)
               ? parsed.functionAssignments
               : seedFunctionAssignments(catalog, organizationUnits),
+            applicationAssignments: Array.isArray(parsed.applicationAssignments)
+              ? parsed.applicationAssignments
+              : [],
           };
           setMap(seeded);
         }
@@ -317,6 +330,27 @@ export function useBusinessMap() {
     () => new Map<string, Capability>(map.catalog.flatMap((fn) => fn.processes.flatMap((process) => process.capabilities)).map((capability) => [capability.id, capability])),
     [map.catalog],
   );
+
+  const estateApplications = useMemo(
+    () => (estateApplicationsQuery.data?.ranked_items ?? [])
+      .filter((item) => item.domain === "ENTERPRISE" && item.kind === "Application")
+      .map((item) => ({ id: item.id, name: item.name }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    [estateApplicationsQuery.data?.ranked_items],
+  );
+
+  const applicationsByCapability = useMemo(() => {
+    const grouped = new Map<string, CapabilityApplicationAssignment[]>();
+    for (const assignment of map.applicationAssignments) {
+      const current = grouped.get(assignment.capabilityId) ?? [];
+      current.push(assignment);
+      grouped.set(assignment.capabilityId, current);
+    }
+    for (const assignments of grouped.values()) {
+      assignments.sort((left, right) => left.applicationName.localeCompare(right.applicationName));
+    }
+    return grouped;
+  }, [map.applicationAssignments]);
 
   const selectCapability = useCallback((capabilityId: string | null) => {
     setSelectedCapabilityId(capabilityId);
@@ -461,6 +495,9 @@ export function useBusinessMap() {
           .map((group) => ({ ...group, capabilityIds: group.capabilityIds.filter((capabilityId) => !deletedIds.has(capabilityId)) }))
           .filter((group) => group.capabilityIds.length > 0),
         functionAssignments: current.functionAssignments.filter((assignment) => assignment.functionId !== functionId),
+        applicationAssignments: current.applicationAssignments.filter(
+          (assignment) => !deletedIds.has(assignment.capabilityId),
+        ),
       };
     });
     setSelectedCapabilityId((selected) => (selected && deletedIds.has(selected) ? null : selected));
@@ -520,6 +557,9 @@ export function useBusinessMap() {
         sharedGroups: current.sharedGroups
           .map((group) => ({ ...group, capabilityIds: group.capabilityIds.filter((capabilityId) => !deletedIds.has(capabilityId)) }))
           .filter((group) => group.capabilityIds.length > 0),
+        applicationAssignments: current.applicationAssignments.filter(
+          (assignment) => !deletedIds.has(assignment.capabilityId),
+        ),
       };
     });
     setSelectedCapabilityId((selected) => (selected && deletedIds.has(selected) ? null : selected));
@@ -607,6 +647,9 @@ export function useBusinessMap() {
       sharedGroups: current.sharedGroups
         .map((group) => ({ ...group, capabilityIds: group.capabilityIds.filter((id) => id !== capabilityId) }))
         .filter((group) => group.capabilityIds.length > 0),
+      applicationAssignments: current.applicationAssignments.filter(
+        (assignment) => assignment.capabilityId !== capabilityId,
+      ),
     }));
     setSelectedCapabilityId((selected) => (selected === capabilityId ? null : selected));
     setPanel((current) => (selectedCapabilityId === capabilityId ? null : current));
@@ -640,6 +683,32 @@ export function useBusinessMap() {
             assignment.functionId === functionId ? { ...assignment, unitId } : assignment,
           )
         : [...current.functionAssignments, { functionId, unitId }],
+    }));
+  }, []);
+
+  const assignApplication = useCallback((capabilityId: string, applicationId: string) => {
+    setMap((current) => {
+      if (current.applicationAssignments.some(
+        (assignment) => assignment.capabilityId === capabilityId && assignment.applicationId === applicationId,
+      )) return current;
+      const application = estateApplications.find((candidate) => candidate.id === applicationId);
+      if (!application) return current;
+      return {
+        ...current,
+        applicationAssignments: [
+          ...current.applicationAssignments,
+          { capabilityId, applicationId, applicationName: application.name },
+        ],
+      };
+    });
+  }, [estateApplications]);
+
+  const unassignApplication = useCallback((capabilityId: string, applicationId: string) => {
+    setMap((current) => ({
+      ...current,
+      applicationAssignments: current.applicationAssignments.filter(
+        (assignment) => assignment.capabilityId !== capabilityId || assignment.applicationId !== applicationId,
+      ),
     }));
   }, []);
 
@@ -747,6 +816,9 @@ export function useBusinessMap() {
     serverBacked,
     placementsByStage,
     capabilityById,
+    estateApplications,
+    estateApplicationsLoading: estateApplicationsQuery.isLoading,
+    applicationsByCapability,
     selectCapability,
     setTemplate,
     loadFunction,
@@ -767,6 +839,8 @@ export function useBusinessMap() {
     updateSharedGroup,
     deleteSharedGroup,
     assignFunction,
+    assignApplication,
+    unassignApplication,
     addOrganizationUnit,
     renameOrganizationUnit,
     deleteOrganizationUnit,
