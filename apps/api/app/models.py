@@ -119,6 +119,31 @@ class ApplicationTechnologyGroup(ContractModel):
     functions: list[ApplicationTechnologyFunction] = Field(min_length=1)
 
 
+class ApplicationDependencyNode(ContractModel):
+    technology: EntitySummary
+    parent_technology_id: UUID | None = None
+    depth: int = Field(ge=1)
+    direct: bool
+    relationship: str = Field(min_length=1)
+    scope: str | None = None
+    requirement: str | None = None
+    dependency_relation: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    citations: list[Citation] = Field(min_length=1)
+
+
+class ApplicationComponentDependencyHierarchy(ContractModel):
+    component_path: str = Field(min_length=1)
+    dependencies: list[ApplicationDependencyNode] = Field(min_length=1)
+    truncated: bool = False
+
+
+class ApplicationRepositoryDependencyHierarchy(ContractModel):
+    repository: EntitySummary
+    components: list[ApplicationComponentDependencyHierarchy] = Field(min_length=1)
+
+
 class AssessmentSummary(ContractModel):
     id: UUID
     dimension: str = Field(min_length=1)
@@ -167,6 +192,7 @@ class ApplicationDetail(ContractModel):
     repositories: list[EntitySummary]
     technologies: list[EntitySummary]
     technology_groups: list[ApplicationTechnologyGroup]
+    dependency_hierarchies: list[ApplicationRepositoryDependencyHierarchy] = Field(default_factory=list)
     deployments: list[EntitySummary]
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]

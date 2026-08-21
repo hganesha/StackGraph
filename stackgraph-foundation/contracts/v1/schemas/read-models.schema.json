@@ -164,6 +164,43 @@
       },
       "additionalProperties": false
     },
+    "applicationDependencyNode": {
+      "type": "object",
+      "required": ["technology", "depth", "direct", "relationship", "confidence", "confidence_label", "citations"],
+      "properties": {
+        "technology": {"$ref": "#/$defs/entitySummary"},
+        "parent_technology_id": {"type": "string", "format": "uuid"},
+        "depth": {"type": "integer", "minimum": 1},
+        "direct": {"type": "boolean"},
+        "relationship": {"type": "string", "minLength": 1},
+        "scope": {"type": "string"},
+        "requirement": {"type": "string"},
+        "dependency_relation": {"type": "string"},
+        "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+        "confidence_label": {"$ref": "common.schema.json#/$defs/confidenceLabel"},
+        "citations": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/citation"}}
+      },
+      "additionalProperties": false
+    },
+    "applicationComponentDependencyHierarchy": {
+      "type": "object",
+      "required": ["component_path", "dependencies", "truncated"],
+      "properties": {
+        "component_path": {"type": "string", "minLength": 1},
+        "dependencies": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/applicationDependencyNode"}},
+        "truncated": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "applicationRepositoryDependencyHierarchy": {
+      "type": "object",
+      "required": ["repository", "components"],
+      "properties": {
+        "repository": {"$ref": "#/$defs/entitySummary"},
+        "components": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/applicationComponentDependencyHierarchy"}}
+      },
+      "additionalProperties": false
+    },
     "applicationDetail": {
       "type": "object",
       "required": ["contract_version", "application", "business_context", "repositories", "technologies", "technology_groups", "deployments", "assessments", "recommendations", "freshness"],
@@ -174,6 +211,7 @@
         "repositories": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technology_groups": {"type": "array", "items": {"$ref": "#/$defs/applicationTechnologyGroup"}},
+        "dependency_hierarchies": {"type": "array", "items": {"$ref": "#/$defs/applicationRepositoryDependencyHierarchy"}},
         "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
         "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},

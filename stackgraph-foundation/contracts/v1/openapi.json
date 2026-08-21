@@ -232,6 +232,136 @@
         "title": "AIProviderConnectionTest",
         "type": "object"
       },
+      "ApplicationComponentDependencyHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "component_path": {
+            "minLength": 1,
+            "title": "Component Path",
+            "type": "string"
+          },
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationDependencyNode"
+            },
+            "minItems": 1,
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "component_path",
+          "dependencies"
+        ],
+        "title": "ApplicationComponentDependencyHierarchy",
+        "type": "object"
+      },
+      "ApplicationDependencyNode": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "dependency_relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Relation"
+          },
+          "depth": {
+            "minimum": 1.0,
+            "title": "Depth",
+            "type": "integer"
+          },
+          "direct": {
+            "title": "Direct",
+            "type": "boolean"
+          },
+          "parent_technology_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Technology Id"
+          },
+          "relationship": {
+            "minLength": 1,
+            "title": "Relationship",
+            "type": "string"
+          },
+          "requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requirement"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "depth",
+          "direct",
+          "relationship",
+          "confidence",
+          "confidence_label",
+          "citations"
+        ],
+        "title": "ApplicationDependencyNode",
+        "type": "object"
+      },
       "ApplicationDetail": {
         "additionalProperties": false,
         "properties": {
@@ -257,6 +387,13 @@
             "default": "1.0.0",
             "title": "Contract Version",
             "type": "string"
+          },
+          "dependency_hierarchies": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationRepositoryDependencyHierarchy"
+            },
+            "title": "Dependency Hierarchies",
+            "type": "array"
           },
           "deployments": {
             "items": {
@@ -309,6 +446,28 @@
           "freshness"
         ],
         "title": "ApplicationDetail",
+        "type": "object"
+      },
+      "ApplicationRepositoryDependencyHierarchy": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationComponentDependencyHierarchy"
+            },
+            "minItems": 1,
+            "title": "Components",
+            "type": "array"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "repository",
+          "components"
+        ],
+        "title": "ApplicationRepositoryDependencyHierarchy",
         "type": "object"
       },
       "ApplicationTechnologyFunction": {

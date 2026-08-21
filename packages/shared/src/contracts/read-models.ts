@@ -128,6 +128,31 @@ export interface ApplicationTechnologyGroup {
   functions: ApplicationTechnologyFunction[];
 }
 
+export interface ApplicationDependencyNode {
+  technology: EntitySummary;
+  parent_technology_id?: UUID | null;
+  depth: number;
+  direct: boolean;
+  relationship: string;
+  scope?: string | null;
+  requirement?: string | null;
+  dependency_relation?: string | null;
+  confidence: Confidence;
+  confidence_label: ConfidenceLabel;
+  citations: Citation[];
+}
+
+export interface ApplicationComponentDependencyHierarchy {
+  component_path: string;
+  dependencies: ApplicationDependencyNode[];
+  truncated: boolean;
+}
+
+export interface ApplicationRepositoryDependencyHierarchy {
+  repository: EntitySummary;
+  components: ApplicationComponentDependencyHierarchy[];
+}
+
 export interface AssessmentSummary {
   id: UUID;
   dimension: string;
@@ -184,6 +209,7 @@ export interface ApplicationDetail {
   repositories: EntitySummary[];
   technologies: EntitySummary[];
   technology_groups: ApplicationTechnologyGroup[];
+  dependency_hierarchies?: ApplicationRepositoryDependencyHierarchy[];
   deployments: EntitySummary[];
   assessments: AssessmentSummary[];
   recommendations: RecommendationSummary[];

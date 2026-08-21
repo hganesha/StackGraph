@@ -34,17 +34,43 @@ export interface AIProviderConnectionTest {
   status?: "SUCCEEDED";
 }
 
+export interface ApplicationComponentDependencyHierarchy {
+  component_path: string;
+  dependencies: Array<ApplicationDependencyNode>;
+  truncated?: boolean;
+}
+
+export interface ApplicationDependencyNode {
+  citations: Array<Citation>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  dependency_relation?: string | null;
+  depth: number;
+  direct: boolean;
+  parent_technology_id?: string | null;
+  relationship: string;
+  requirement?: string | null;
+  scope?: string | null;
+  technology: EntitySummary;
+}
+
 export interface ApplicationDetail {
   application: EntitySummary;
   assessments: Array<AssessmentSummary>;
   business_context: Array<EntitySummary>;
   contract_version?: "1.0.0";
+  dependency_hierarchies?: Array<ApplicationRepositoryDependencyHierarchy>;
   deployments: Array<EntitySummary>;
   freshness: Freshness;
   recommendations: Array<RecommendationSummary>;
   repositories: Array<EntitySummary>;
   technologies: Array<EntitySummary>;
   technology_groups: Array<ApplicationTechnologyGroup>;
+}
+
+export interface ApplicationRepositoryDependencyHierarchy {
+  components: Array<ApplicationComponentDependencyHierarchy>;
+  repository: EntitySummary;
 }
 
 export interface ApplicationTechnologyFunction {

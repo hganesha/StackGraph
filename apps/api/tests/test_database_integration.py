@@ -392,6 +392,13 @@ def test_golden_billing_vertical_slice() -> None:
         assert grouped_package["technology"]["id"] == PACKAGE_ID
         assert grouped_package["classification"] == "UNCLASSIFIED"
         assert grouped_package["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
+        hierarchy = application["dependency_hierarchies"][0]
+        assert hierarchy["repository"]["id"] == REPOSITORY_ID
+        dependency = hierarchy["components"][0]["dependencies"][0]
+        assert dependency["technology"]["id"] == PACKAGE_ID
+        assert dependency["direct"] is True
+        assert dependency["scope"] == "runtime"
+        assert dependency["citations"][0]["fact_id"] == DEPENDENCY_FACT_ID
 
         technology = responses["technologyDetail"].json()
         assert technology["internal_usage"]["repository_count"] == 1

@@ -162,6 +162,105 @@ def test_application_technologies_group_by_catalog_domain_and_capability() -> No
     assert unknown.category is None
 
 
+def test_application_dependency_hierarchy_uses_declared_roots_and_breaks_cycles() -> None:
+    repository_id = UUID("00000000-0000-4000-8000-000000000401")
+    root_id = UUID("00000000-0000-4000-8000-000000000402")
+    child_id = UUID("00000000-0000-4000-8000-000000000403")
+    root_fact_id = UUID("00000000-0000-4000-8000-000000000404")
+    child_fact_id = UUID("00000000-0000-4000-8000-000000000405")
+
+    class DependencyDatabaseStub:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            self.calls += 1
+            if "WITH repositories AS" in query:
+                return [
+                    {
+                        "repository_id": repository_id,
+                        "id": root_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/root@1.0.0",
+                        "name": "root@1.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": root_fact_id,
+                        "confidence": Decimal("0.99"),
+                        "dependency_properties": {
+                            "direct": True,
+                            "component_path": "apps/web",
+                            "scope": "runtime",
+                            "requested_spec": "^1.0.0",
+                        },
+                    },
+                    {
+                        "repository_id": repository_id,
+                        "id": child_id,
+                        "namespace": "TECHNOLOGY",
+                        "entity_type": "PackageVersion",
+                        "canonical_key": "pkg:npm/child@2.0.0",
+                        "name": "child@2.0.0",
+                        "properties": {},
+                        "relationship_type": "DEPENDS_ON",
+                        "fact_assertion_id": child_fact_id,
+                        "confidence": Decimal("0.98"),
+                        "dependency_properties": {"direct": False},
+                    },
+                ]
+            assert "FROM fact_assertion relationship" in query
+            return [
+                {
+                    "source_id": root_id,
+                    "target_id": child_id,
+                    "relationship_type": "DEPENDS_ON",
+                    "fact_assertion_id": child_fact_id,
+                    "confidence": Decimal("0.97"),
+                    "dependency_properties": {
+                        "dependency_relation": "DIRECT",
+                        "requirement": ">=2",
+                    },
+                },
+                {
+                    "source_id": child_id,
+                    "target_id": root_id,
+                    "relationship_type": "DEPENDS_ON",
+                    "fact_assertion_id": root_fact_id,
+                    "confidence": Decimal("0.96"),
+                    "dependency_properties": {},
+                },
+            ]
+
+    repository = {
+        "id": repository_id,
+        "namespace": "ENTERPRISE",
+        "entity_type": "Repository",
+        "canonical_key": "github:acme/web",
+        "name": "acme/web",
+        "properties": {},
+    }
+    database = DependencyDatabaseStub()
+
+    result = asyncio.run(ReadModelStore(database)._application_dependency_hierarchies(
+        [repository],
+        UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    assert database.calls == 2
+    assert len(result) == 1
+    component = result[0].components[0]
+    assert component.component_path == "apps/web"
+    assert component.truncated is False
+    assert [node.technology.id for node in component.dependencies] == [root_id, child_id]
+    assert component.dependencies[0].direct is True
+    assert component.dependencies[0].scope == "runtime"
+    assert component.dependencies[1].parent_technology_id == root_id
+    assert component.dependencies[1].depth == 2
+    assert component.dependencies[1].requirement == ">=2"
+    assert component.dependencies[1].citations[0].fact_id == child_fact_id
+
+
 def test_cursor_is_typed_and_rejects_cross_endpoint_reuse() -> None:
     cursor = _encode_cursor(
         "estate", score="81", name="Billing API",

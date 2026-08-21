@@ -19,6 +19,9 @@ from app.errors import APIError
 from app.read_models_admin import AdminReadModelsMixin
 from app.models import (
     ApplicationDetail,
+    ApplicationComponentDependencyHierarchy,
+    ApplicationDependencyNode,
+    ApplicationRepositoryDependencyHierarchy,
     ApplicationTechnologyFunction,
     ApplicationTechnologyGroup,
     ApplicationTechnologyUsage,
@@ -175,6 +178,13 @@ WITH tenant_scope AS (
 
 def _number(value: Decimal | float | int | None, default: float = 0.0) -> float:
     return float(value) if value is not None else default
+
+
+def _optional_string(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 # The per-source submission endpoint for each review-queue item type, so the queue can point
@@ -676,13 +686,19 @@ class ReadModelStore(AdminReadModelsMixin):
         assessments = await self._assessments(application_id, tenant_id)
         recommendations = await self._recommendations(application_id, tenant_id)
         technology_rows = [row for row in related if row["namespace"] in {"TECHNOLOGY", "OSS"}]
+        repository_rows = [row for row in related if row["entity_type"] == "Repository"]
         catalog_rows = await self._technology_classification_catalog(tenant_id) if technology_rows else []
+        dependency_hierarchies = await self._application_dependency_hierarchies(
+            repository_rows,
+            tenant_id,
+        )
         return ApplicationDetail(
             application=_entity(application),
             business_context=[_entity(row) for row in related if row["namespace"] == "BUSINESS"],
-            repositories=[_entity(row) for row in related if row["entity_type"] == "Repository"],
+            repositories=[_entity(row) for row in repository_rows],
             technologies=[_entity(row) for row in technology_rows],
             technology_groups=_group_application_technologies(technology_rows, catalog_rows),
+            dependency_hierarchies=dependency_hierarchies,
             deployments=[_entity(row) for row in related if row["namespace"] == "DEPLOYMENT"],
             assessments=assessments,
             recommendations=recommendations,
@@ -3146,6 +3162,182 @@ class ReadModelStore(AdminReadModelsMixin):
             tenant_id=tenant_id,
         )
 
+    async def _application_dependency_hierarchies(
+        self,
+        repository_rows: list[dict[str, Any]],
+        tenant_id: UUID | None,
+    ) -> list[ApplicationRepositoryDependencyHierarchy]:
+        if not repository_rows:
+            return []
+
+        max_depth = 6
+        max_nodes_per_component = 250
+        membership_rows = await self.database.fetch_all(
+            """
+            WITH repositories AS (
+              SELECT unnest(%s::uuid[]) id
+            )
+            SELECT repositories.id repository_id,
+                   relationship.predicate relationship_type,
+                   relationship.id fact_assertion_id,
+                   relationship.confidence,
+                   relationship.properties dependency_properties,
+                   technology.*
+            FROM repositories
+            JOIN fact_assertion relationship
+              ON relationship.subject_entity_id=repositories.id
+             AND relationship.system_to IS NULL
+            JOIN entity technology ON technology.id=relationship.object_entity_id
+            WHERE technology.namespace IN ('TECHNOLOGY','OSS')
+              AND relationship.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON')
+            ORDER BY repositories.id,technology.name,technology.id,
+                     relationship.confidence DESC,relationship.id
+            """,
+            ([row["id"] for row in repository_rows],),
+            tenant_id=tenant_id,
+        )
+
+        repositories_by_id = {UUID(str(row["id"])): row for row in repository_rows}
+        technologies_by_id: dict[UUID, dict[str, Any]] = {}
+        members_by_repository: dict[UUID, set[UUID]] = defaultdict(set)
+        roots: dict[tuple[UUID, str], dict[UUID, dict[str, Any]]] = defaultdict(dict)
+        for row in membership_rows:
+            repository_id = UUID(str(row["repository_id"]))
+            technology_id = UUID(str(row["id"]))
+            technologies_by_id[technology_id] = row
+            members_by_repository[repository_id].add(technology_id)
+            properties = (
+                row.get("dependency_properties")
+                if isinstance(row.get("dependency_properties"), dict) else {}
+            )
+            direct_marker = properties.get("direct")
+            is_direct = (
+                str(row["relationship_type"]) != "DEPENDS_ON"
+                or direct_marker is None
+                or direct_marker is True
+                or (isinstance(direct_marker, str) and direct_marker.lower() == "true")
+            )
+            if not is_direct:
+                continue
+            component_path = _optional_string(properties.get("component_path")) or "."
+            component_roots = roots[(repository_id, component_path)]
+            existing = component_roots.get(technology_id)
+            if existing is None or _number(row.get("confidence")) > _number(existing.get("confidence")):
+                component_roots[technology_id] = row
+
+        technology_ids = list(technologies_by_id)
+        edge_rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT ON (relationship.subject_entity_id,relationship.object_entity_id)
+                   relationship.subject_entity_id source_id,
+                   relationship.object_entity_id target_id,
+                   relationship.predicate relationship_type,
+                   relationship.id fact_assertion_id,
+                   relationship.confidence,
+                   relationship.properties dependency_properties
+            FROM fact_assertion relationship
+            WHERE relationship.predicate='DEPENDS_ON'
+              AND relationship.system_to IS NULL
+              AND relationship.subject_entity_id=ANY(%s::uuid[])
+              AND relationship.object_entity_id=ANY(%s::uuid[])
+            ORDER BY relationship.subject_entity_id,relationship.object_entity_id,
+                     relationship.confidence DESC,relationship.id
+            """,
+            (technology_ids, technology_ids),
+            tenant_id=tenant_id,
+        ) if technology_ids else []
+        adjacency: dict[UUID, list[dict[str, Any]]] = defaultdict(list)
+        for row in edge_rows:
+            adjacency[UUID(str(row["source_id"]))].append(row)
+        for edges in adjacency.values():
+            edges.sort(key=lambda row: (str(row["target_id"]), str(row["fact_assertion_id"])))
+
+        grouped: dict[UUID, list[ApplicationComponentDependencyHierarchy]] = defaultdict(list)
+        for (repository_id, component_path), component_roots in sorted(
+            roots.items(), key=lambda item: (str(item[0][0]), item[0][1].lower())
+        ):
+            repository_members = members_by_repository[repository_id]
+            selected: dict[UUID, tuple[UUID | None, int, dict[str, Any]]] = {}
+            queue: deque[UUID] = deque()
+            truncated = False
+            for technology_id, row in sorted(
+                component_roots.items(),
+                key=lambda item: (
+                    str(item[1]["name"]).lower(),
+                    str(item[0]),
+                ),
+            ):
+                if len(selected) >= max_nodes_per_component:
+                    truncated = True
+                    break
+                selected[technology_id] = (None, 1, row)
+                queue.append(technology_id)
+
+            while queue and not truncated:
+                parent_id = queue.popleft()
+                parent_depth = selected[parent_id][1]
+                if parent_depth >= max_depth:
+                    continue
+                for edge in adjacency.get(parent_id, []):
+                    child_id = UUID(str(edge["target_id"]))
+                    if child_id not in repository_members or child_id in selected:
+                        continue
+                    if len(selected) >= max_nodes_per_component:
+                        truncated = True
+                        break
+                    selected[child_id] = (parent_id, parent_depth + 1, edge)
+                    queue.append(child_id)
+
+            dependencies: list[ApplicationDependencyNode] = []
+            for technology_id, (parent_id, depth, evidence_row) in selected.items():
+                properties = (
+                    evidence_row.get("dependency_properties")
+                    if isinstance(evidence_row.get("dependency_properties"), dict) else {}
+                )
+                fact_id = UUID(str(evidence_row["fact_assertion_id"]))
+                confidence = _number(evidence_row.get("confidence"), 0.0)
+                dependencies.append(ApplicationDependencyNode(
+                    technology=_entity(technologies_by_id[technology_id]),
+                    parent_technology_id=parent_id,
+                    depth=depth,
+                    direct=depth == 1,
+                    relationship=str(evidence_row["relationship_type"]),
+                    scope=_optional_string(properties.get("scope")),
+                    requirement=_optional_string(
+                        properties.get("requirement") or properties.get("requested_spec")
+                    ),
+                    dependency_relation=_optional_string(properties.get("dependency_relation")),
+                    confidence=confidence,
+                    confidence_label=_confidence_label(confidence),
+                    citations=[Citation(
+                        fact_id=fact_id,
+                        label=(
+                            "Declared dependency evidence"
+                            if depth == 1 else "Resolved dependency evidence"
+                        ),
+                        href=f"/api/v1/facts/{fact_id}/evidence",
+                    )],
+                ))
+            grouped[repository_id].append(ApplicationComponentDependencyHierarchy(
+                component_path=component_path,
+                dependencies=dependencies,
+                truncated=truncated,
+            ))
+
+        return [
+            ApplicationRepositoryDependencyHierarchy(
+                repository=_entity(repositories_by_id[repository_id]),
+                components=components,
+            )
+            for repository_id, components in sorted(
+                grouped.items(),
+                key=lambda item: (
+                    str(repositories_by_id[item[0]]["name"]).lower(),
+                    str(item[0]),
+                ),
+            )
+        ]
+
     async def _technology_classification_catalog(
         self,
         tenant_id: UUID | None,
@@ -3161,23 +3353,25 @@ class ReadModelStore(AdminReadModelsMixin):
                    capability.name capability_name,
                    capability.properties->>'definition' capability_summary,
                    catalog_fact.fact_assertion_id catalog_fact_id,
-                   provides.fact_assertion_id classification_fact_id,
+                   provides.id classification_fact_id,
                    provides.confidence classification_confidence
             FROM entity technology
-            LEFT JOIN current_relationship provides
-              ON provides.source_entity_id=technology.id
-             AND provides.relationship_type='PROVIDES'
+            LEFT JOIN fact_assertion provides
+              ON provides.subject_entity_id=technology.id
+             AND provides.predicate='PROVIDES'
+             AND provides.system_to IS NULL
             LEFT JOIN LATERAL (
               SELECT fact.id fact_assertion_id
-              FROM current_fact fact
+              FROM fact_assertion fact
               WHERE fact.subject_entity_id=technology.id
                 AND fact.predicate='HAS_PROPERTY'
                 AND fact.object_value->>'record_kind'='technology_catalog_entry'
+                AND fact.system_to IS NULL
               ORDER BY fact.observed_at DESC,fact.id DESC
               LIMIT 1
             ) catalog_fact ON true
             LEFT JOIN entity capability
-              ON capability.id=provides.target_entity_id
+              ON capability.id=provides.object_entity_id
              AND capability.entity_type='Capability'
             WHERE technology.namespace='TECHNOLOGY'
               AND technology.entity_type='Technology'
