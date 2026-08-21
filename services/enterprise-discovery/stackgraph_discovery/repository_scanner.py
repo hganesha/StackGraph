@@ -20,7 +20,7 @@ from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.4.0"
+SCANNER_VERSION = "1.5.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -59,6 +59,131 @@ LANGUAGE_LABELS = {
     ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
     ".ts": "TypeScript", ".tsx": "TypeScript", ".mts": "TypeScript", ".cts": "TypeScript",
     ".py": "Python",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceTechnology:
+    entity_type: str
+    key: str
+    name: str
+    engine: str
+    provider: str | None = None
+
+
+POSTGRESQL = ResourceTechnology(
+    "Database", "stackgraph:database:postgresql", "PostgreSQL", "postgresql",
+)
+MYSQL = ResourceTechnology(
+    "Database", "stackgraph:database:mysql", "MySQL / MariaDB", "mysql",
+)
+MONGODB = ResourceTechnology(
+    "Database", "stackgraph:database:mongodb", "MongoDB", "mongodb",
+)
+REDIS = ResourceTechnology(
+    "Database", "stackgraph:database:redis-valkey", "Redis / Valkey", "redis",
+)
+SQLITE = ResourceTechnology(
+    "Database", "stackgraph:database:sqlite", "SQLite", "sqlite",
+)
+DYNAMODB = ResourceTechnology(
+    "Database", "stackgraph:database:amazon-dynamodb", "Amazon DynamoDB", "dynamodb", "aws",
+)
+RDS = ResourceTechnology(
+    "Database", "stackgraph:database:amazon-rds", "Amazon RDS", "rds", "aws",
+)
+GOOGLE_CLOUD_SQL = ResourceTechnology(
+    "Database", "stackgraph:database:google-cloud-sql", "Google Cloud SQL", "cloud-sql", "gcp",
+)
+COSMOS_DB = ResourceTechnology(
+    "Database", "stackgraph:database:azure-cosmos-db", "Azure Cosmos DB", "cosmos-db", "azure",
+)
+AMAZON_S3 = ResourceTechnology(
+    "Storage", "stackgraph:storage:amazon-s3", "Amazon S3", "s3", "aws",
+)
+S3_COMPATIBLE = ResourceTechnology(
+    "Storage", "stackgraph:storage:s3-compatible", "S3-compatible object storage", "s3-compatible",
+)
+GOOGLE_CLOUD_STORAGE = ResourceTechnology(
+    "Storage", "stackgraph:storage:google-cloud-storage", "Google Cloud Storage", "gcs", "gcp",
+)
+AZURE_BLOB_STORAGE = ResourceTechnology(
+    "Storage", "stackgraph:storage:azure-blob", "Azure Blob Storage", "azure-blob", "azure",
+)
+
+
+RESOURCE_DEPENDENCIES: dict[tuple[str, str], ResourceTechnology] = {
+    ("pypi", "psycopg"): POSTGRESQL,
+    ("pypi", "psycopg2"): POSTGRESQL,
+    ("pypi", "psycopg2-binary"): POSTGRESQL,
+    ("pypi", "asyncpg"): POSTGRESQL,
+    ("pypi", "pymysql"): MYSQL,
+    ("pypi", "mysqlclient"): MYSQL,
+    ("pypi", "mysql-connector-python"): MYSQL,
+    ("pypi", "aiomysql"): MYSQL,
+    ("pypi", "pymongo"): MONGODB,
+    ("pypi", "motor"): MONGODB,
+    ("pypi", "redis"): REDIS,
+    ("pypi", "aiosqlite"): SQLITE,
+    ("pypi", "minio"): S3_COMPATIBLE,
+    ("pypi", "google-cloud-storage"): GOOGLE_CLOUD_STORAGE,
+    ("pypi", "azure-storage-blob"): AZURE_BLOB_STORAGE,
+    ("npm", "pg"): POSTGRESQL,
+    ("npm", "postgres"): POSTGRESQL,
+    ("npm", "mysql"): MYSQL,
+    ("npm", "mysql2"): MYSQL,
+    ("npm", "mongodb"): MONGODB,
+    ("npm", "mongoose"): MONGODB,
+    ("npm", "redis"): REDIS,
+    ("npm", "ioredis"): REDIS,
+    ("npm", "sqlite3"): SQLITE,
+    ("npm", "better-sqlite3"): SQLITE,
+    ("npm", "@aws-sdk/client-s3"): AMAZON_S3,
+    ("npm", "minio"): S3_COMPATIBLE,
+    ("npm", "@google-cloud/storage"): GOOGLE_CLOUD_STORAGE,
+    ("npm", "@azure/storage-blob"): AZURE_BLOB_STORAGE,
+}
+
+URL_SCHEME_RESOURCES: tuple[tuple[re.Pattern[str], ResourceTechnology, str], ...] = (
+    (re.compile(r"\bpostgres(?:ql)?(?:\+[a-z0-9_-]+)?://", re.I), POSTGRESQL, "postgresql"),
+    (re.compile(r"\bmysql(?:\+[a-z0-9_-]+)?://", re.I), MYSQL, "mysql"),
+    (re.compile(r"\bmongodb(?:\+srv)?://", re.I), MONGODB, "mongodb"),
+    (re.compile(r"\brediss?://", re.I), REDIS, "redis"),
+    (re.compile(r"\bsqlite(?:\+[a-z0-9_-]+)?:(?://)?", re.I), SQLITE, "sqlite"),
+    (re.compile(r"\bs3://", re.I), AMAZON_S3, "s3"),
+)
+
+CONFIG_KEY_RESOURCES: tuple[tuple[re.Pattern[str], ResourceTechnology], ...] = (
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:POSTGRES(?:QL)?(?:_(?:URL|URI|HOST|PORT|DATABASE|DB|USER|USERNAME|PASSWORD|DSN|SERVICE))?|PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD|PGSERVICE)$"), POSTGRESQL),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:MYSQL|MARIADB)(?:_(?:URL|URI|HOST|PORT|DATABASE|DB|USER|USERNAME|PASSWORD|DSN))?$"), MYSQL),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:MONGO|MONGODB)(?:_(?:URL|URI|HOST|PORT|DATABASE|DB|USER|USERNAME|PASSWORD|DSN))?$"), MONGODB),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:REDIS|VALKEY)(?:_(?:URL|URI|HOST|PORT|DATABASE|DB|USER|USERNAME|PASSWORD))?$"), REDIS),
+    (re.compile(r"^(?:[A-Z0-9]+_)*SQLITE(?:_(?:URL|URI|PATH|DATABASE|DB))?$"), SQLITE),
+    (re.compile(r"^(?:[A-Z0-9]+_)*DYNAMODB(?:_(?:URL|URI|ENDPOINT|TABLE|REGION))?$"), DYNAMODB),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:AWS_)?S3(?:_(?:URL|URI|ENDPOINT|BUCKET|PREFIX|REGION|ACCESS_KEY|SECRET_KEY|KMS_KEY_ID|PROFILE))?$"), AMAZON_S3),
+    (re.compile(r"^(?:[A-Z0-9]+_)*MINIO(?:_(?:URL|URI|ENDPOINT|BUCKET|REGION|ROOT_USER|ROOT_PASSWORD|ACCESS_KEY|SECRET_KEY))?$"), S3_COMPATIBLE),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:GCS|GOOGLE_CLOUD_STORAGE)(?:_(?:URL|URI|ENDPOINT|BUCKET|PROJECT|REGION|CREDENTIALS))?$"), GOOGLE_CLOUD_STORAGE),
+    (re.compile(r"^(?:[A-Z0-9]+_)*(?:AZURE_STORAGE|AZURE_BLOB)(?:_(?:URL|URI|ENDPOINT|ACCOUNT|CONTAINER|CREDENTIALS|CONNECTION_STRING))?$"), AZURE_BLOB_STORAGE),
+)
+
+GENERIC_DATABASE_CONFIG_KEYS = {"DATABASE_URL", "DB_URL", "DATABASE_URI", "DB_URI"}
+GENERIC_STORAGE_CONFIG_KEYS = {"STORAGE_URL", "BLOB_URL", "BUCKET_NAME"}
+CONFIG_KEY = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
+COMPOSE_FILE = re.compile(r"^(?:docker-)?compose(?:\.[a-z0-9_-]+)*\.ya?ml$", re.I)
+
+TERRAFORM_RESOURCE_TECHNOLOGIES: dict[str, ResourceTechnology] = {
+    "aws_s3_bucket": AMAZON_S3,
+    "aws_s3_object": AMAZON_S3,
+    "aws_dynamodb_table": DYNAMODB,
+    "aws_db_instance": RDS,
+    "aws_rds_cluster": RDS,
+    "google_storage_bucket": GOOGLE_CLOUD_STORAGE,
+    "google_storage_bucket_object": GOOGLE_CLOUD_STORAGE,
+    "google_sql_database_instance": GOOGLE_CLOUD_SQL,
+    "azurerm_storage_account": AZURE_BLOB_STORAGE,
+    "azurerm_storage_container": AZURE_BLOB_STORAGE,
+    "azurerm_storage_blob": AZURE_BLOB_STORAGE,
+    "azurerm_cosmosdb_account": COSMOS_DB,
 }
 
 
@@ -131,6 +256,19 @@ class Evidence:
         if self.metadata:
             value["metadata"] = dict(self.metadata)
         return value
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSignal:
+    resource: ResourceTechnology
+    evidence: Evidence
+    signal_kind: str
+    confidence: float
+    assertion_class: str = "INFERRED"
+    package: str | None = None
+    config_key: str | None = None
+    provider: str | None = None
+    detail: str | None = None
 
 
 @dataclass(slots=True)
@@ -255,6 +393,9 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     if any(item.severity == "ERROR" for item in diagnostics):
         completeness = "PARTIAL"
     facts = list(inventory_facts)
+    facts.extend(_database_storage_facts(
+        scan_input, contents, dependencies, references,
+    ))
     facts.extend(_dependency_facts(
         scan_input,
         dependencies,
@@ -1295,7 +1436,7 @@ def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str,
         name = PurePosixPath(lowered).name
         kind = None
         if (
-            name in {"dockerfile", "compose.yaml", "compose.yml"}
+            name == "dockerfile" or name.startswith("dockerfile.") or _is_compose_file(name)
             or "deploy" in lowered or "/k8s/" in f"/{lowered}/"
             or PurePosixPath(lowered).suffix == ".tf"
         ):
@@ -1753,7 +1894,7 @@ def _repository_operational_signals(contents: Mapping[str, bytes]) -> list[str]:
         parts = {part.lower() for part in PurePosixPath(path).parts}
         if name == "dockerfile" or name.startswith("dockerfile."):
             signals.add("Container build")
-        if name in {"compose.yml", "compose.yaml", "docker-compose.yml", "docker-compose.yaml"}:
+        if _is_compose_file(name):
             signals.add("Compose deployment")
         if suffix == ".tf":
             signals.add("Terraform infrastructure")
@@ -1771,9 +1912,10 @@ def _repository_key_files(contents: Mapping[str, bytes]) -> list[str]:
         path for path in contents
         if _is_readme(path)
         or PurePosixPath(path).name in {
-            "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Dockerfile",
-            "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml", "Makefile",
+            "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Dockerfile", "Makefile",
         }
+        or _is_compose_file(PurePosixPath(path).name)
+        or PurePosixPath(path).name.lower().startswith("dockerfile.")
         or PurePosixPath(path).suffix.lower() == ".tf"
     ]
     return sorted(values, key=lambda path: (len(PurePosixPath(path).parts), path))[:24]
@@ -1844,6 +1986,473 @@ def _application_boundary_facts(
     }]
 
 
+def _database_storage_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    dependencies: Iterable[Dependency],
+    references: Iterable[Reference],
+) -> list[dict[str, Any]]:
+    """Correlate repository evidence into normalized database and storage usage.
+
+    Configuration values are intentionally never copied into facts or evidence metadata. The
+    scanner records only the key name or URL scheme that supported an inference; the existing
+    content-addressed source artifact remains the auditable evidence boundary.
+    """
+    references_by_dependency: dict[tuple[str, str], list[Reference]] = {}
+    for reference in references:
+        references_by_dependency.setdefault(
+            (reference.ecosystem, reference.package_name), [],
+        ).append(reference)
+
+    signals: list[ResourceSignal] = []
+    for dependency in dependencies:
+        if not dependency.direct:
+            continue
+        dependency_key = (dependency.ecosystem, dependency.normalized_name)
+        resource = RESOURCE_DEPENDENCIES.get(dependency_key)
+        if resource is None:
+            continue
+        package = f"{dependency.ecosystem}:{dependency.normalized_name}"
+        signals.append(ResourceSignal(
+            resource=resource,
+            evidence=dependency.declaration,
+            signal_kind="DEPENDENCY_DECLARATION",
+            confidence=0.72,
+            package=package,
+        ))
+        for reference in references_by_dependency.get(dependency_key, []):
+            signals.append(ResourceSignal(
+                resource=resource,
+                evidence=Evidence(
+                    reference.path,
+                    "SOURCE_REFERENCE",
+                    content_hash(contents[reference.path]),
+                    {
+                        "path": reference.path,
+                        "line_start": reference.line,
+                        "line_end": reference.line,
+                    },
+                    sha256_key(reference.path, reference.line, sorted(reference.symbols)),
+                    {"symbols": sorted(reference.symbols)},
+                ),
+                signal_kind="SOURCE_REFERENCE",
+                confidence=0.9,
+                package=package,
+            ))
+
+    signals.extend(_source_client_resource_signals(contents))
+    signals.extend(_infrastructure_resource_signals(contents))
+    candidates = {signal.resource for signal in signals}
+    signals.extend(_configuration_resource_signals(contents, candidates))
+
+    grouped: dict[str, list[ResourceSignal]] = {}
+    for signal in signals:
+        grouped.setdefault(signal.resource.key, []).append(signal)
+
+    facts: list[dict[str, Any]] = []
+    for resource_key, resource_signals in sorted(grouped.items()):
+        resource = resource_signals[0].resource
+        unique_signals = _dedupe_resource_signals(resource_signals)
+        signal_kinds = sorted({signal.signal_kind for signal in unique_signals})
+        base_confidence = max(signal.confidence for signal in unique_signals)
+        confidence = round(min(0.99, base_confidence + 0.03 * (len(signal_kinds) - 1)), 2)
+        assertion_class = (
+            "DECLARED"
+            if any(signal.assertion_class == "DECLARED" for signal in unique_signals)
+            else "INFERRED"
+        )
+        evidence = _dedupe_resource_evidence(unique_signals)
+        signal_summaries: list[dict[str, str]] = []
+        for signal in unique_signals:
+            summary = {
+                "kind": signal.signal_kind,
+                "path": signal.evidence.path,
+            }
+            if signal.package:
+                summary["package"] = signal.package
+            if signal.config_key:
+                summary["config_key"] = signal.config_key
+            if signal.detail:
+                summary["detail"] = signal.detail
+            signal_summaries.append(summary)
+        properties: dict[str, Any] = {
+            "resource_kind": resource.entity_type.upper(),
+            "engine": resource.engine,
+            "inference_method": "CORRELATED_REPOSITORY_EVIDENCE",
+            "signal_kinds": signal_kinds,
+            "signals": signal_summaries,
+            "package_dependencies": sorted({
+                signal.package for signal in unique_signals if signal.package
+            }),
+            "config_keys": sorted({
+                signal.config_key for signal in unique_signals if signal.config_key
+            }),
+            "source_referenced": any(
+                signal.signal_kind in {"SOURCE_REFERENCE", "CLIENT_CONSTRUCTION"}
+                for signal in unique_signals
+            ),
+            "limitations": [
+                "declared client libraries can be present without a live connection",
+                "configuration values and credentials are not copied into normalized facts",
+                "runtime connectivity requires deployment or telemetry corroboration",
+            ],
+        }
+        providers = sorted({
+            provider
+            for signal in unique_signals
+            if (provider := signal.provider or signal.resource.provider)
+        })
+        if providers:
+            properties["providers"] = providers
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key({
+                "tenant": scan_input.tenant_key,
+                "repository": scan_input.repository_key,
+                "predicate": "USES",
+                "resource": resource_key,
+                "source_revision": scan_input.source_revision,
+                "extractor": SCANNER_VERSION,
+            }),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "USES",
+            "object_entity": {
+                "namespace": "TECHNOLOGY",
+                "type": resource.entity_type,
+                "key": resource.key,
+                "name": resource.name,
+            },
+            "assertion_class": assertion_class,
+            "confidence": confidence,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": properties,
+            "evidence": [_evidence_dict(item, scan_input) for item in evidence],
+        })
+    return facts
+
+
+def _dedupe_resource_signals(signals: Iterable[ResourceSignal]) -> list[ResourceSignal]:
+    indexed: dict[tuple[object, ...], ResourceSignal] = {}
+    for signal in signals:
+        key = (
+            signal.resource.key,
+            signal.signal_kind,
+            signal.evidence.path,
+            canonical_json(signal.evidence.locator),
+            signal.package,
+            signal.config_key,
+            signal.detail,
+        )
+        indexed.setdefault(key, signal)
+    return sorted(
+        indexed.values(),
+        key=lambda signal: (
+            signal.evidence.path,
+            int(signal.evidence.locator.get("line_start", 0)),
+            signal.signal_kind,
+            signal.package or "",
+            signal.config_key or "",
+            signal.detail or "",
+        ),
+    )
+
+
+def _dedupe_resource_evidence(signals: Iterable[ResourceSignal]) -> list[Evidence]:
+    indexed: dict[tuple[object, ...], Evidence] = {}
+    for signal in signals:
+        evidence = signal.evidence
+        key = (
+            evidence.path,
+            evidence.evidence_type,
+            canonical_json(evidence.locator),
+            evidence.excerpt_hash,
+        )
+        indexed.setdefault(key, evidence)
+    return list(indexed.values())
+
+
+def _source_client_resource_signals(contents: Mapping[str, bytes]) -> list[ResourceSignal]:
+    patterns: tuple[tuple[re.Pattern[str], ResourceTechnology, str], ...] = (
+        (re.compile(r"\bsqlite3\.connect\s*\("), SQLITE, "sqlite3.connect"),
+        (re.compile(r"\bboto3\.(?:client|resource)\s*\(\s*[\"']s3[\"']"), AMAZON_S3, "boto3:s3"),
+        (re.compile(r"\b(?:new\s+)?AWS\.S3\s*\("), AMAZON_S3, "aws-sdk:s3"),
+    )
+    signals: list[ResourceSignal] = []
+    for path, content in sorted(contents.items()):
+        if not _is_source(path):
+            continue
+        text = content.decode("utf-8", errors="replace")
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for pattern, resource, detail in patterns:
+                if not pattern.search(line):
+                    continue
+                signals.append(ResourceSignal(
+                    resource=resource,
+                    evidence=_resource_signal_evidence(
+                        path, content, line_number, "SOURCE_REFERENCE",
+                        "CLIENT_CONSTRUCTION", detail,
+                    ),
+                    signal_kind="CLIENT_CONSTRUCTION",
+                    confidence=0.92,
+                    detail=detail,
+                ))
+    return signals
+
+
+def _configuration_resource_signals(
+    contents: Mapping[str, bytes],
+    candidates: set[ResourceTechnology],
+) -> list[ResourceSignal]:
+    signals: list[ResourceSignal] = []
+    database_candidates = {
+        resource for resource in candidates
+        if resource.entity_type == "Database" and resource.engine != "redis"
+    }
+    storage_candidates = {
+        resource for resource in candidates if resource.entity_type == "Storage"
+    }
+    for path, content in sorted(contents.items()):
+        if not _is_configuration_signal_path(path):
+            continue
+        text = content.decode("utf-8", errors="replace")
+        for line_number, line in enumerate(text.splitlines(), 1):
+            for pattern, resource, scheme in URL_SCHEME_RESOURCES:
+                if pattern.search(line):
+                    signals.append(ResourceSignal(
+                        resource=resource,
+                        evidence=_resource_signal_evidence(
+                            path, content, line_number, "CONFIG_REFERENCE",
+                            "URL_SCHEME", scheme,
+                        ),
+                        signal_kind="URL_SCHEME",
+                        confidence=0.96,
+                        assertion_class="DECLARED",
+                        detail=scheme,
+                    ))
+            for key in sorted(set(CONFIG_KEY.findall(line))):
+                matched_resources = {
+                    resource
+                    for pattern, resource in CONFIG_KEY_RESOURCES
+                    if pattern.search(key)
+                }
+                if _generic_database_config_key(key) and len(database_candidates) == 1:
+                    matched_resources.update(database_candidates)
+                if _generic_storage_config_key(key) and len(storage_candidates) == 1:
+                    matched_resources.update(storage_candidates)
+                for resource in sorted(matched_resources, key=lambda item: item.key):
+                    signals.append(ResourceSignal(
+                        resource=resource,
+                        evidence=_resource_signal_evidence(
+                            path, content, line_number, "CONFIG_REFERENCE",
+                            "CONFIG_KEY", key,
+                        ),
+                        signal_kind="CONFIG_KEY",
+                        confidence=0.84,
+                        assertion_class="DECLARED",
+                        config_key=key,
+                    ))
+    return signals
+
+
+def _is_configuration_signal_path(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    name = pure_path.name.lower()
+    parts = {part.lower() for part in pure_path.parts}
+    return (
+        _is_source(path)
+        or name in {
+            ".env.example", ".env.sample", "env.example", "env.sample",
+            "application.yml", "application.yaml", "application.properties",
+            "appsettings.json", "config.yml", "config.yaml", "config.json", "config.toml",
+            "dockerfile",
+        }
+        or _is_compose_file(name)
+        or name.startswith("dockerfile.")
+        or (
+            (name.startswith(".env.") or name.startswith("env."))
+            and name.endswith((".example", ".sample", ".template"))
+        )
+        or bool(parts & {"config", "deploy", "deployment", "k8s", "kubernetes"})
+    )
+
+
+def _generic_database_config_key(key: str) -> bool:
+    return key in GENERIC_DATABASE_CONFIG_KEYS or key.endswith(tuple(
+        f"_{value}" for value in GENERIC_DATABASE_CONFIG_KEYS
+    ))
+
+
+def _generic_storage_config_key(key: str) -> bool:
+    return key in GENERIC_STORAGE_CONFIG_KEYS or key.endswith(tuple(
+        f"_{value}" for value in GENERIC_STORAGE_CONFIG_KEYS
+    ))
+
+
+def _infrastructure_resource_signals(contents: Mapping[str, bytes]) -> list[ResourceSignal]:
+    signals: list[ResourceSignal] = []
+    terraform_pattern = re.compile(
+        r'^\s*resource\s+"(?P<type>[A-Za-z0-9_-]+)"\s+"(?P<name>[A-Za-z0-9_-]+)"',
+        re.M,
+    )
+    for path, content in sorted(contents.items()):
+        name = PurePosixPath(path).name.lower()
+        text = content.decode("utf-8", errors="replace")
+        if _is_compose_file(name):
+            try:
+                document = next(yaml.safe_load_all(text), None)
+            except yaml.YAMLError:
+                document = None
+            services = document.get("services") if isinstance(document, Mapping) else None
+            if isinstance(services, Mapping):
+                for service_name, definition in sorted(services.items()):
+                    image = definition.get("image") if isinstance(definition, Mapping) else None
+                    resource = _resource_from_container_image(image) if isinstance(image, str) else None
+                    if resource is None:
+                        continue
+                    line = _line_for_yaml_key(text, str(service_name))
+                    signals.append(ResourceSignal(
+                        resource=resource,
+                        evidence=_resource_signal_evidence(
+                            path, content, line, "DEPLOYMENT_CONFIG", "COMPOSE_IMAGE", image,
+                        ),
+                        signal_kind="COMPOSE_IMAGE",
+                        confidence=0.98,
+                        assertion_class="DECLARED",
+                        provider=resource.provider,
+                        detail=image,
+                    ))
+        elif PurePosixPath(path).suffix.lower() in {".yaml", ".yml"} and (
+            "/k8s/" in f"/{path.lower()}/"
+            or "/kubernetes/" in f"/{path.lower()}/"
+            or "/deploy/" in f"/{path.lower()}/"
+        ):
+            try:
+                documents = list(yaml.safe_load_all(text))
+            except yaml.YAMLError:
+                documents = []
+            for document in documents:
+                if not isinstance(document, Mapping):
+                    continue
+                for image in _kubernetes_images(document):
+                    resource = _resource_from_container_image(image)
+                    if resource is None:
+                        continue
+                    metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
+                    workload_name = str(metadata.get("name") or "document")
+                    line = _line_for_yaml_key(text, workload_name)
+                    signals.append(ResourceSignal(
+                        resource=resource,
+                        evidence=_resource_signal_evidence(
+                            path, content, line, "DEPLOYMENT_CONFIG", "KUBERNETES_IMAGE", image,
+                        ),
+                        signal_kind="KUBERNETES_IMAGE",
+                        confidence=0.98,
+                        assertion_class="DECLARED",
+                        provider=resource.provider,
+                        detail=image,
+                    ))
+        elif PurePosixPath(path).suffix.lower() == ".tf":
+            for match in terraform_pattern.finditer(text):
+                resource_type = match.group("type").lower()
+                resource_name = match.group("name")
+                block = _terraform_resource_block(text, match)
+                resource = _resource_from_terraform(resource_type, block)
+                if resource is None:
+                    continue
+                line = text.count("\n", 0, match.start()) + 1
+                detail = f"{resource_type}.{resource_name}"
+                signals.append(ResourceSignal(
+                    resource=resource,
+                    evidence=_resource_signal_evidence(
+                        path, content, line, "DEPLOYMENT_CONFIG", "TERRAFORM_RESOURCE", detail,
+                    ),
+                    signal_kind="TERRAFORM_RESOURCE",
+                    confidence=0.98,
+                    assertion_class="DECLARED",
+                    provider=resource.provider,
+                    detail=detail,
+                ))
+    return signals
+
+
+def _resource_signal_evidence(
+    path: str,
+    content: bytes,
+    line: int,
+    evidence_type: str,
+    signal_kind: str,
+    safe_detail: str,
+) -> Evidence:
+    return Evidence(
+        path=path,
+        evidence_type=evidence_type,
+        content_hash=content_hash(content),
+        locator={"path": path, "line_start": line, "line_end": line},
+        excerpt_hash=sha256_key(path, line, signal_kind, safe_detail),
+        metadata={"signal_kind": signal_kind, "detail": safe_detail},
+    )
+
+
+def _resource_from_container_image(image: str) -> ResourceTechnology | None:
+    repository = image.split("@", 1)[0].rsplit("/", 1)[-1].split(":", 1)[0].lower()
+    if repository in {"postgres", "postgis", "timescaledb"}:
+        return POSTGRESQL
+    if repository in {"mysql", "mariadb", "percona"}:
+        return MYSQL
+    if repository in {"mongo", "mongodb"}:
+        return MONGODB
+    if repository in {"redis", "valkey", "keydb"}:
+        return REDIS
+    if repository in {"minio"}:
+        return S3_COMPATIBLE
+    if repository in {"dynamodb-local"}:
+        return DYNAMODB
+    return None
+
+
+def _is_compose_file(name: str) -> bool:
+    return COMPOSE_FILE.fullmatch(name) is not None
+
+
+def _terraform_resource_block(text: str, match: re.Match[str]) -> str:
+    opening = text.find("{", match.end())
+    if opening < 0:
+        return ""
+    closing = _matching_brace(text, opening)
+    return text[opening + 1:closing] if closing is not None else ""
+
+
+def _resource_from_terraform(
+    resource_type: str, block: str,
+) -> ResourceTechnology | None:
+    if "postgresql" in resource_type:
+        return POSTGRESQL
+    if "mysql" in resource_type or "mariadb" in resource_type:
+        return MYSQL
+    if "mongodb" in resource_type or resource_type.startswith("mongodbatlas_"):
+        return MONGODB
+    if "redis" in resource_type or resource_type.startswith("aws_elasticache_"):
+        return REDIS
+    resource = TERRAFORM_RESOURCE_TECHNOLOGIES.get(resource_type)
+    engine_match = re.search(
+        r'\b(?:engine|database_version)\s*=\s*"(?P<engine>[^"]+)"', block, re.I,
+    )
+    if engine_match:
+        engine = engine_match.group("engine").lower()
+        if "postgres" in engine:
+            return POSTGRESQL
+        if "mysql" in engine or "maria" in engine:
+            return MYSQL
+        if "mongo" in engine:
+            return MONGODB
+        if "redis" in engine or "valkey" in engine:
+            return REDIS
+    return resource
+
+
 def _deployment_facts(
     scan_input: ScanInput,
     contents: Mapping[str, bytes],
@@ -1852,9 +2461,9 @@ def _deployment_facts(
     facts: list[dict[str, Any]] = []
     for path, content in sorted(contents.items()):
         name = PurePosixPath(path).name.lower()
-        if name == "dockerfile":
+        if name == "dockerfile" or name.startswith("dockerfile."):
             facts.extend(_dockerfile_facts(scan_input, path, content))
-        elif name in {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}:
+        elif _is_compose_file(name):
             facts.extend(_compose_facts(scan_input, path, content, diagnostics))
         elif PurePosixPath(path).suffix.lower() in {".yaml", ".yml"} and (
             "/k8s/" in f"/{path.lower()}/"
@@ -2093,6 +2702,13 @@ def _application_boundary_evidence_path(contents: Mapping[str, bytes]) -> str | 
         matches = sorted(path for path in contents if PurePosixPath(path).name == name)
         if matches:
             return min(matches, key=lambda path: (len(PurePosixPath(path).parts), path))
+    deployment_configs = sorted(
+        path for path in contents
+        if _is_compose_file(PurePosixPath(path).name)
+        or PurePosixPath(path).name.lower().startswith("dockerfile.")
+    )
+    if deployment_configs:
+        return min(deployment_configs, key=lambda path: (len(PurePosixPath(path).parts), path))
     return min(contents, default=None, key=lambda path: (len(PurePosixPath(path).parts), path))
 
 
