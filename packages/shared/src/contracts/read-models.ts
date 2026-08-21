@@ -316,6 +316,48 @@ export interface ModernizationList {
   page_info: PageInfo;
 }
 
+export interface CapabilityFootprint {
+  capability: EntitySummary;
+  application_count: number;
+  repository_count: number;
+  technology_count: number;
+  technology_counts: Record<string, number>;
+  technology_entropy: number;
+  reuse_signal: number;
+}
+
+export interface CapabilityFootprintList {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  footprints: CapabilityFootprint[];
+}
+
+export interface ModernizationScenarioRequest {
+  budget_points: number;
+  excluded_recommendation_ids?: UUID[];
+}
+
+export interface ModernizationScenarioItem {
+  recommendation_id: UUID;
+  repository: EntitySummary;
+  title: string;
+  action: "CONSOLIDATE" | "REPLACE" | "UPGRADE" | "REFACTOR" | "INVESTIGATE";
+  score: number;
+  score_components: Record<string, number>;
+  effort_points: number;
+  selected: boolean;
+  policy_version: string;
+}
+
+export interface ModernizationScenarioResult {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  budget_points: number;
+  used_points: number;
+  total_score: number;
+  items: ModernizationScenarioItem[];
+}
+
 export interface GraphNode {
   id: UUID;
   namespace: Namespace;
@@ -917,6 +959,8 @@ export interface GitHubInstallationConnectRequest {
   /** Public GitHub App installation identifier; no credential material crosses the browser. */
   installation_id: string;
   display_name?: string;
+  /** Required while installation IDs are manually bound during the named pilot. */
+  pilot_manual_binding_acknowledged: true;
 }
 
 export interface ConnectorUpdateRequest {
@@ -924,6 +968,56 @@ export interface ConnectorUpdateRequest {
   status?: ConnectorStatus;
   scopes?: string[];
   credential_reference?: string;
+}
+
+export interface ModernizationPolicyPublishRequest {
+  policy_key?: string;
+  version: string;
+  runtime_versions?: Record<string, string>;
+  allowed_licenses?: string[];
+  denied_option_keys?: string[];
+  allowed_security_statuses?: Array<"CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN">;
+  required_policy_tags?: string[];
+}
+
+export interface InternalCatalogComponentUpsertRequest {
+  component_entity_id: UUID;
+  capability_definition_id: UUID;
+  version: string;
+  status?: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  api_symbols?: string[];
+  runtime_constraints?: Record<string, string>;
+  behavior_claims?: Array<Record<string, unknown>>;
+  license?: string | null;
+  security_status?: "CLEAR" | "WARN" | "BLOCKED" | "UNKNOWN";
+  policy_tags?: string[];
+  supporting_fact_ids: UUID[];
+  owner: string;
+  decision: "APPROVE" | "REJECT";
+}
+
+export interface CalibrationCorpusPublishRequest {
+  corpus_key?: string;
+  version: string;
+  case_fingerprints: string[];
+  candidate_precision?: number | null;
+  recommendation_acceptance?: number | null;
+  validation_success?: number | null;
+  affected_scope_mae?: number | null;
+  effort_accuracy?: number | null;
+  minimum_candidate_precision?: number;
+  minimum_recommendation_acceptance?: number;
+  minimum_validation_success?: number;
+  maximum_affected_scope_mae?: number;
+  minimum_effort_accuracy?: number;
+  minimum_reviewed_cases?: number;
+}
+
+export interface ModernizationGovernanceState {
+  contract_version: "1.0.0";
+  active_policy?: Record<string, unknown> | null;
+  internal_components: Array<Record<string, unknown>>;
+  active_calibration?: Record<string, unknown> | null;
 }
 
 // --- Admin: AI provider configuration -----------------------------------

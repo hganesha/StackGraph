@@ -30,6 +30,13 @@ import type {
   ModernizationValidationOutcomeResult,
   Phase3IntelligenceMetrics,
   ModernizationList,
+  CapabilityFootprintList,
+  ModernizationScenarioRequest,
+  ModernizationScenarioResult,
+  ModernizationGovernanceState,
+  ModernizationPolicyPublishRequest,
+  InternalCatalogComponentUpsertRequest,
+  CalibrationCorpusPublishRequest,
   TechnologyDetail,
   TechnologyEstateHierarchy,
   BusinessMapList,
@@ -86,6 +93,9 @@ import repositoryModernization from "../fixtures/repository-modernization-intell
 import phase3Metrics from "../fixtures/phase3-intelligence-metrics.json";
 import businessMapDetail from "../fixtures/business-map-detail.json";
 import technologyEstateHierarchy from "../fixtures/technology-estate-hierarchy.json";
+import capabilityFootprints from "../fixtures/capability-footprints.json";
+import modernizationScenario from "../fixtures/modernization-scenario.json";
+import modernizationGovernance from "../fixtures/modernization-governance.json";
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -100,6 +110,8 @@ export interface StackGraphClient {
   getTechnology(id: string): Promise<TechnologyDetail>;
   getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
+  listCapabilityFootprints(): Promise<CapabilityFootprintList>;
+  optimizeModernizationScenario(body: ModernizationScenarioRequest): Promise<ModernizationScenarioResult>;
   ask(body: AskRequest): Promise<AskResponse>;
   getGraphNeighborhood(centerId: string, depth?: number): Promise<GraphNeighborhood>;
   getFactEvidence(factId: string): Promise<EvidenceDetail>;
@@ -137,6 +149,10 @@ export interface StackGraphClient {
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   updateConnector(id: string, body: ConnectorUpdateRequest): Promise<Connector>;
   removeConnector(id: string): Promise<Connector>;
+  getModernizationGovernance(): Promise<ModernizationGovernanceState>;
+  publishModernizationPolicy(body: ModernizationPolicyPublishRequest): Promise<ModernizationGovernanceState>;
+  governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
+  publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
   updateAIProviderConfiguration(body: AIProviderConfigurationUpdateRequest): Promise<AIProviderConfiguration>;
   removeAIProviderKey(): Promise<AIProviderConfiguration>;
@@ -175,6 +191,9 @@ let adminAIConfiguration: AIProviderConfiguration = {
   key_configured: false, test_status: "NOT_TESTED", enrichment_status: "DISABLED",
   pending_enrichment_jobs: 0, running_enrichment_jobs: 0, failed_enrichment_jobs: 0,
 };
+let adminModernizationGovernance = clone(
+  modernizationGovernance as ModernizationGovernanceState,
+);
 {
   const now = "2026-08-19T12:00:00.000Z";
   for (const seed of [
@@ -254,6 +273,14 @@ const fixtureClient: StackGraphClient = {
   async listModernization() {
     await delay();
     return modernizationList as ModernizationList;
+  },
+  async listCapabilityFootprints() {
+    await delay();
+    return capabilityFootprints as CapabilityFootprintList;
+  },
+  async optimizeModernizationScenario() {
+    await delay();
+    return modernizationScenario as ModernizationScenarioResult;
   },
   async ask() {
     await delay(300);
@@ -493,6 +520,43 @@ const fixtureClient: StackGraphClient = {
     adminConnectors.delete(id);
     return clone(connector);
   },
+  async getModernizationGovernance() {
+    await delay();
+    return clone(adminModernizationGovernance);
+  },
+  async publishModernizationPolicy(body) {
+    await delay();
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      active_policy: { ...body, status: "ACTIVE" },
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async governInternalCatalogComponent(componentKey, body) {
+    await delay();
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      internal_components: [
+        ...adminModernizationGovernance.internal_components.filter(
+          (item) => item.component_key !== componentKey || item.version !== body.version,
+        ),
+        { component_key: componentKey, ...body, review_state: body.decision === "APPROVE" ? "APPROVED" : "REJECTED" },
+      ],
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async publishCalibrationCorpus(body) {
+    await delay();
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      active_calibration: {
+        corpus_key: body.corpus_key ?? "modernization.pilot",
+        version: body.version,
+        case_count: body.case_fingerprints.length,
+      },
+    };
+    return clone(adminModernizationGovernance);
+  },
   async getAIProviderConfiguration() {
     await delay();
     return clone(adminAIConfiguration);
@@ -673,6 +737,11 @@ const liveClient: StackGraphClient = {
   getTechnology: (id) => req(`/technologies/${id}`),
   getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),
+  listCapabilityFootprints: () => req("/capabilities/footprints"),
+  optimizeModernizationScenario: (body) =>
+    req("/modernization/scenarios", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   ask: (body) => req("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getGraphNeighborhood: (centerId, depth = 1) =>
     req(`/graph/neighborhood?center_id=${encodeURIComponent(centerId)}&depth=${depth}`),
@@ -745,6 +814,19 @@ const liveClient: StackGraphClient = {
   updateConnector: (id, body) =>
     req(`/admin/connectors/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   removeConnector: (id) => req(`/admin/connectors/${id}`, { method: "DELETE" }),
+  getModernizationGovernance: () => req("/admin/modernization-governance"),
+  publishModernizationPolicy: (body) =>
+    req("/admin/modernization-governance/policy", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  governInternalCatalogComponent: (componentKey, body) =>
+    req(`/admin/modernization-governance/internal-components/${encodeURIComponent(componentKey)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  publishCalibrationCorpus: (body) =>
+    req("/admin/modernization-governance/calibration", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   getAIProviderConfiguration: () => req("/admin/ai-configuration"),
   updateAIProviderConfiguration: (body) =>
     req("/admin/ai-configuration", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),

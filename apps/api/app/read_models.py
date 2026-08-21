@@ -14,6 +14,13 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
+from stackgraph_ai.governance import (
+    CapabilityFootprint as GovernedCapabilityFootprint,
+    PortfolioCandidate,
+    PortfolioScoringPolicy,
+    optimize_portfolio,
+    score_portfolio_candidate,
+)
 
 from app.age_graph import AgeGraphReader, AgeTopology
 from app.database import Database
@@ -54,6 +61,8 @@ from app.models import (
     CapabilityInferenceReviewResult,
     CapabilityInferenceSummary,
     CapabilityTaxonomyResponse,
+    CapabilityFootprintList,
+    CapabilityFootprintModel,
     Citation,
     Coverage,
     DuplicateCapabilityReviewRequest,
@@ -72,6 +81,9 @@ from app.models import (
     IdentityReviewResult,
     InternalUsage,
     ModernizationList,
+    ModernizationScenarioItem,
+    ModernizationScenarioRequest,
+    ModernizationScenarioResult,
     ModernizationCandidateModel,
     ModernizationCandidateReviewRequest,
     ModernizationCandidateReviewResult,
@@ -1268,40 +1280,30 @@ class ReadModelStore(AdminReadModelsMixin):
     ) -> ModernizationList:
         cursor_data = _decode_cursor(cursor, "modernization")
         try:
-            cursor_confidence = Decimal(cursor_data["confidence"]) if cursor_data else None
-            cursor_created_at = datetime.fromisoformat(cursor_data["created_at"]) if cursor_data else None
+            cursor_score = float(cursor_data["score"]) if cursor_data else None
             cursor_id = UUID(cursor_data["id"]) if cursor_data else None
         except (KeyError, TypeError, ValueError) as error:
             raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
-        rows = await self.database.fetch_all(
-            """
-            SELECT r.*,e.namespace,e.entity_type,e.name,e.properties,
-                   coalesce(e.last_seen_at,r.updated_at,r.created_at) observed_at
-            FROM recommendation r JOIN entity e ON e.id=r.subject_entity_id
-            WHERE r.status NOT IN ('REJECTED','COMPLETED','DISMISSED') AND r.action<>'RETAIN'
-              AND (
-                %s::numeric IS NULL
-                OR r.confidence<%s::numeric
-                OR (r.confidence=%s::numeric AND r.created_at<%s::timestamptz)
-                OR (r.confidence=%s::numeric AND r.created_at=%s::timestamptz AND r.id>%s::uuid)
-              )
-            ORDER BY r.confidence DESC,r.created_at DESC,r.id LIMIT %s
-            """,
-            (
-                cursor_confidence, cursor_confidence, cursor_confidence, cursor_created_at,
-                cursor_confidence, cursor_created_at, cursor_id, limit + 1,
-            ),
-            tenant_id=tenant_id,
-        )
-        has_next = len(rows) > limit
-        rows = rows[:limit]
-        citations_by_recommendation = await self._recommendation_citations_batch(
-            [row["id"] for row in rows], tenant_id,
-        )
+        scored = await self._governed_portfolio_scores(tenant_id)
+        if cursor_score is not None and cursor_id is not None:
+            scored = [
+                item for item in scored
+                if item[1].score < cursor_score
+                or (item[1].score == cursor_score and item[0]["id"] > cursor_id)
+            ]
+        has_next = len(scored) > limit
+        page = scored[:limit]
         opportunities: list[RankedItem] = []
-        for row in rows:
-            confidence = _number(row["confidence"])
-            citations = citations_by_recommendation.get(row["id"], [])
+        for row, portfolio_score in page:
+            confidence = _number(row["recommendation_confidence"])
+            citations = [
+                Citation(
+                    fact_id=fact_id,
+                    label=f"Evidence for {row['title']}",
+                    href=f"/api/v1/facts/{fact_id}/evidence",
+                )
+                for fact_id in row["supporting_fact_ids"]
+            ]
             opportunities.append(
                 RankedItem(
                     id=row["id"],
@@ -1309,13 +1311,13 @@ class ReadModelStore(AdminReadModelsMixin):
                     name=row["title"],
                     domain="INTELLIGENCE",
                     priority=Score(
-                        value=round(confidence * 100, 2),
+                        value=round(portfolio_score.score * 100, 2),
                         confidence=confidence,
                         confidence_label=_confidence_label(confidence),
-                        method_version=row["method_version"],
+                        method_version=portfolio_score.policy_version,
                     ),
-                    summary=row["rationale"],
-                    freshness=_freshness(row.get("observed_at")),
+                    summary=f"{row['repository_name']} · {row['rationale']}",
+                    freshness=_freshness(row.get("updated_at") or row.get("created_at")),
                     citations=citations,
                 )
             )
@@ -1327,14 +1329,160 @@ class ReadModelStore(AdminReadModelsMixin):
                 next_cursor=(
                     _encode_cursor(
                         "modernization",
-                        confidence=str(rows[-1]["confidence"]),
-                        created_at=rows[-1]["created_at"].isoformat(),
-                        id=str(rows[-1]["id"]),
+                        score=page[-1][1].score,
+                        id=str(page[-1][0]["id"]),
                     )
-                    if has_next else None
+                    if has_next and page else None
                 ),
             ),
         )
+
+    async def capability_footprints(
+        self, *, tenant_id: UUID | None,
+    ) -> CapabilityFootprintList:
+        rows = await self.database.fetch_all(
+            """
+            SELECT footprint.*,entity.namespace,entity.entity_type,entity.canonical_key,
+                   entity.name,entity.properties
+            FROM capability_footprint footprint
+            JOIN entity ON entity.id=footprint.capability_entity_id
+            ORDER BY footprint.technology_entropy DESC,footprint.repository_count DESC,
+                     entity.name,entity.id
+            """,
+            tenant_id=tenant_id,
+        )
+        return CapabilityFootprintList(
+            as_of=datetime.now(UTC),
+            footprints=[CapabilityFootprintModel(
+                capability=_entity(row),
+                application_count=row["application_count"],
+                repository_count=row["repository_count"],
+                technology_count=row["technology_count"],
+                technology_counts={
+                    str(key): int(value) for key, value in row["technology_counts"].items()
+                },
+                technology_entropy=_number(row["technology_entropy"]),
+                reuse_signal=_number(row["reuse_signal"]),
+            ) for row in rows],
+        )
+
+    async def modernization_scenario(
+        self, request: ModernizationScenarioRequest, *, tenant_id: UUID | None,
+    ) -> ModernizationScenarioResult:
+        scored = [
+            item for item in await self._governed_portfolio_scores(tenant_id)
+            if item[0]["id"] not in set(request.excluded_recommendation_ids)
+        ]
+        selected = optimize_portfolio(
+            (item[1] for item in scored), budget_points=request.budget_points,
+        )
+        selected_ids = {UUID(item.candidate.id) for item in selected}
+        items = [ModernizationScenarioItem(
+            recommendation_id=row["id"],
+            repository=EntitySummary(
+                id=row["repository_entity_id"], kind="Repository",
+                name=row["repository_name"], canonical_key=row["repository_key"],
+            ),
+            title=row["title"], action=row["action"],
+            score=round(value.score * 100, 2),
+            score_components={key: round(component, 6) for key, component in value.components.items()},
+            effort_points=value.candidate.effort_points,
+            selected=row["id"] in selected_ids,
+            policy_version=value.policy_version,
+        ) for row, value in scored]
+        return ModernizationScenarioResult(
+            as_of=datetime.now(UTC), budget_points=request.budget_points,
+            used_points=sum(item.effort_points for item in items if item.selected),
+            total_score=round(sum(item.score for item in items if item.selected), 2),
+            items=items,
+        )
+
+    async def _governed_portfolio_scores(self, tenant_id: UUID | None) -> list[tuple[dict[str, Any], Any]]:
+        policy_row = await self.database.fetch_one(
+            """
+            SELECT * FROM modernization_portfolio_policy
+            WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1
+            """,
+            tenant_id=tenant_id,
+        )
+        weights = dict(policy_row["weights"]) if policy_row else {}
+        policy = PortfolioScoringPolicy(
+            business_weight=_number(weights.get("business"), 0.25),
+            viability_gap_weight=_number(weights.get("viability_gap"), 0.2),
+            entropy_weight=_number(weights.get("entropy"), 0.2),
+            reuse_weight=_number(weights.get("reuse"), 0.2),
+            confidence_weight=_number(weights.get("confidence"), 0.15),
+            effort_penalty_weight=_number(
+                policy_row.get("effort_penalty_weight") if policy_row else None, 0.2,
+            ),
+            version=(
+                f"{policy_row['policy_key']}/{policy_row['version']}"
+                if policy_row else "modernization-portfolio/v1-unconfigured"
+            ),
+        )
+        rows = await self.database.fetch_all(
+            """
+            SELECT recommendation.id,recommendation.title,recommendation.rationale,
+                   recommendation.action,recommendation.confidence recommendation_confidence,
+                   recommendation.supporting_fact_ids,recommendation.created_at,
+                   recommendation.updated_at,candidate.confidence candidate_confidence,
+                   candidate.capability_definition_id,repository.id repository_entity_id,
+                   repository.name repository_name,repository.canonical_key repository_key,
+                   coalesce(impact.effort_points,
+                     CASE recommendation.estimated_effort WHEN 'LOW' THEN 3 WHEN 'MEDIUM' THEN 8
+                          WHEN 'HIGH' THEN 13 ELSE 21 END) effort_points,
+                   coalesce(selected.score,0) selected_option_score,
+                   coalesce(footprint.application_count,0) application_count,
+                   coalesce(footprint.repository_count,0) repository_count,
+                   coalesce(footprint.technology_counts,'{}'::jsonb) technology_counts
+            FROM modernization_recommendation recommendation
+            JOIN modernization_candidate candidate
+              ON candidate.id=recommendation.modernization_candidate_id
+             AND candidate.stale_at IS NULL AND candidate.review_state<>'REJECTED'
+            JOIN entity repository ON repository.id=recommendation.repository_entity_id
+            LEFT JOIN modernization_impact impact
+              ON impact.modernization_candidate_id=candidate.id
+            LEFT JOIN modernization_option selected ON selected.id=recommendation.selected_option_id
+            LEFT JOIN capability_definition definition
+              ON definition.id=candidate.capability_definition_id
+            LEFT JOIN entity capability
+              ON capability.tenant_id=recommendation.tenant_id
+             AND capability.namespace='BUSINESS' AND capability.entity_type='BusinessCapability'
+             AND capability.canonical_key='capability:'||definition.capability_key
+            LEFT JOIN capability_footprint footprint
+              ON footprint.capability_entity_id=capability.id
+            WHERE recommendation.stale_at IS NULL
+              AND recommendation.review_state NOT IN ('REJECTED','DISMISSED')
+            ORDER BY recommendation.created_at DESC,recommendation.id
+            LIMIT 5000
+            """,
+            tenant_id=tenant_id,
+        )
+        scored = []
+        for row in rows:
+            footprint = GovernedCapabilityFootprint(
+                application_count=row["application_count"],
+                repository_count=row["repository_count"],
+                technology_counts={
+                    str(key): int(value) for key, value in row["technology_counts"].items()
+                },
+            )
+            value = score_portfolio_candidate(PortfolioCandidate(
+                id=str(row["id"]),
+                business_importance=min(1.0, row["application_count"] / 10.0),
+                viability_gap=1.0 - _number(row["selected_option_score"]),
+                confidence=min(
+                    _number(row["candidate_confidence"]),
+                    _number(row["recommendation_confidence"]),
+                ),
+                effort_points=row["effort_points"], footprint=footprint,
+                mutually_exclusive_group=(
+                    str(row["capability_definition_id"])
+                    if row["capability_definition_id"] else None
+                ),
+            ), policy)
+            scored.append((row, value))
+        return sorted(scored, key=lambda item: (-item[1].score, item[0]["id"]))
 
     async def graph_neighborhood(
         self,
@@ -3262,12 +3410,39 @@ class ReadModelStore(AdminReadModelsMixin):
                 for capability_order, capability in enumerate(process.capabilities):
                     cursor = await connection.execute(
                         """
-                        INSERT INTO business_map_capability
-                          (tenant_id,business_map_id,business_map_process_id,capability_key,name,description,tags,kpis,owner,position)
-                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                        INSERT INTO entity
+                          (tenant_id,namespace,entity_type,canonical_key,name,properties,first_seen_at,last_seen_at)
+                        VALUES (%s,'BUSINESS','BusinessCapability',%s,%s,%s::jsonb,now(),now())
+                        ON CONFLICT(tenant_id,namespace,entity_type,canonical_key) DO UPDATE
+                        SET name=EXCLUDED.name,
+                            properties=entity.properties||EXCLUDED.properties,
+                            last_seen_at=now(),updated_at=now()
+                        RETURNING id
                         """,
-                        (tenant_id, map_id, process_id, capability.id, capability.name, capability.description,
-                         capability.tags, capability.kpis, capability.owner, capability_order),
+                        (
+                            tenant_id,
+                            f"capability:{capability.id}",
+                            capability.name,
+                            json.dumps({
+                                "description": capability.description,
+                                "tags": capability.tags,
+                                "owner": capability.owner,
+                                "governance": "CURATED",
+                            }),
+                        ),
+                    )
+                    capability_entity_id = (await cursor.fetchone())["id"]
+                    cursor = await connection.execute(
+                        """
+                        INSERT INTO business_map_capability
+                          (tenant_id,business_map_id,business_map_process_id,capability_key,entity_id,name,description,tags,kpis,owner,position)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
+                        """,
+                        (
+                            tenant_id, map_id, process_id, capability.id, capability_entity_id,
+                            capability.name, capability.description, capability.tags, capability.kpis,
+                            capability.owner, capability_order,
+                        ),
                     )
                     capability_ids[capability.id] = (await cursor.fetchone())["id"]
 

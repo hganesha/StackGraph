@@ -824,6 +824,74 @@
       },
       "additionalProperties": false
     },
+    "capabilityFootprintList": {
+      "type": "object",
+      "required": ["contract_version", "as_of", "footprints"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "footprints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["capability", "application_count", "repository_count", "technology_count", "technology_counts", "technology_entropy", "reuse_signal"],
+            "properties": {
+              "capability": {"$ref": "#/$defs/entitySummary"},
+              "application_count": {"type": "integer", "minimum": 0},
+              "repository_count": {"type": "integer", "minimum": 0},
+              "technology_count": {"type": "integer", "minimum": 0},
+              "technology_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+              "technology_entropy": {"type": "number", "minimum": 0, "maximum": 1},
+              "reuse_signal": {"type": "number", "minimum": 0, "maximum": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "modernizationScenario": {
+      "type": "object",
+      "required": ["contract_version", "as_of", "budget_points", "used_points", "total_score", "items"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "budget_points": {"type": "integer", "minimum": 0},
+        "used_points": {"type": "integer", "minimum": 0},
+        "total_score": {"type": "number", "minimum": 0},
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["recommendation_id", "repository", "title", "action", "score", "score_components", "effort_points", "selected", "policy_version"],
+            "properties": {
+              "recommendation_id": {"$ref": "common.schema.json#/$defs/uuid"},
+              "repository": {"$ref": "#/$defs/entitySummary"},
+              "title": {"type": "string", "minLength": 1},
+              "action": {"enum": ["CONSOLIDATE", "REPLACE", "UPGRADE", "REFACTOR", "INVESTIGATE"]},
+              "score": {"type": "number", "minimum": 0, "maximum": 100},
+              "score_components": {"type": "object", "additionalProperties": {"type": "number"}},
+              "effort_points": {"type": "integer", "minimum": 0},
+              "selected": {"type": "boolean"},
+              "policy_version": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "modernizationGovernanceState": {
+      "type": "object",
+      "required": ["contract_version", "internal_components"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "active_policy": {"type": ["object", "null"]},
+        "internal_components": {"type": "array", "items": {"type": "object"}},
+        "active_calibration": {"type": ["object", "null"]}
+      },
+      "additionalProperties": false
+    },
     "error": {
       "type": "object",
       "required": ["code", "message", "request_id"],

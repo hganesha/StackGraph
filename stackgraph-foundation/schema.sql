@@ -402,6 +402,7 @@ CREATE TABLE modernization_policy (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),policy_key text NOT NULL,version text NOT NULL,status text NOT NULL CHECK(status IN ('DRAFT','ACTIVE','RETIRED')),
  runtime_versions jsonb NOT NULL DEFAULT '{}',allowed_licenses text[] NOT NULL DEFAULT '{}',denied_option_keys text[] NOT NULL DEFAULT '{}',allowed_security_statuses text[] NOT NULL DEFAULT ARRAY['CLEAR','UNKNOWN']::text[],
  required_policy_tags text[] NOT NULL DEFAULT '{}',metadata jsonb NOT NULL DEFAULT '{}',content_hash text NOT NULL CHECK(content_hash ~ '^sha256:[a-f0-9]{64}$'),created_by text NOT NULL,
+ configuration_fingerprint text CHECK(configuration_fingerprint IS NULL OR configuration_fingerprint ~ '^sha256:[a-f0-9]{64}$'),activated_by text,activated_at timestamptz,retired_by text,retired_at timestamptz,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,policy_key,version)
 );
 CREATE UNIQUE INDEX uq_modernization_policy_active ON modernization_policy(tenant_id,policy_key) WHERE status='ACTIVE';
@@ -410,7 +411,8 @@ CREATE TABLE modernization_internal_component (
  capability_definition_id uuid NOT NULL REFERENCES capability_definition(id),component_key text NOT NULL,version text NOT NULL,status text NOT NULL CHECK(status IN ('APPROVED','DEPRECATED','BLOCKED')),
  api_symbols text[] NOT NULL DEFAULT '{}',runtime_constraints jsonb NOT NULL DEFAULT '{}',behavior_claims jsonb NOT NULL DEFAULT '[]',license text,
  security_status text NOT NULL DEFAULT 'UNKNOWN' CHECK(security_status IN ('CLEAR','WARN','BLOCKED','UNKNOWN')),policy_tags text[] NOT NULL DEFAULT '{}',supporting_fact_ids uuid[] NOT NULL DEFAULT '{}',
- metadata jsonb NOT NULL DEFAULT '{}',created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,component_key,version)
+ metadata jsonb NOT NULL DEFAULT '{}',review_state text NOT NULL DEFAULT 'UNREVIEWED' CHECK(review_state IN ('UNREVIEWED','APPROVED','REJECTED')),owner text,governed_by text,governed_at timestamptz,
+ catalog_fingerprint text CHECK(catalog_fingerprint IS NULL OR catalog_fingerprint ~ '^sha256:[a-f0-9]{64}$'),created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,component_key,version)
 );
 CREATE TABLE modernization_option_evaluation (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),modernization_option_id uuid NOT NULL UNIQUE REFERENCES modernization_option(id) ON DELETE CASCADE,
@@ -466,6 +468,13 @@ CREATE TABLE business_map_function_assignment(id uuid PRIMARY KEY DEFAULT gen_ra
 CREATE TABLE business_map_application_assignment(tenant_id uuid NOT NULL REFERENCES tenant(id),business_map_id uuid NOT NULL REFERENCES business_map(id) ON DELETE CASCADE,business_map_capability_id uuid NOT NULL REFERENCES business_map_capability(id) ON DELETE CASCADE,application_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(business_map_id,business_map_capability_id,application_entity_id));
 CREATE TABLE business_map_revision(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),business_map_id uuid NOT NULL REFERENCES business_map(id) ON DELETE CASCADE,version integer NOT NULL CHECK(version>0),snapshot jsonb NOT NULL CHECK(jsonb_typeof(snapshot)='object'),actor_key text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(business_map_id,version));
 
+-- Governed modernization portfolio (migration 018).
+CREATE TABLE modernization_calibration_corpus(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),corpus_key text NOT NULL CHECK(corpus_key ~ '^[a-z][a-z0-9_.-]{2,127}$'),version text NOT NULL CHECK(version<>''),status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','ACTIVE','RETIRED')),case_count integer NOT NULL DEFAULT 0 CHECK(case_count>=0),case_fingerprints text[] NOT NULL DEFAULT '{}',thresholds jsonb NOT NULL CHECK(jsonb_typeof(thresholds)='object'),observed_metrics jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(observed_metrics)='object'),corpus_fingerprint text NOT NULL CHECK(corpus_fingerprint ~ '^sha256:[a-f0-9]{64}$'),promotion_passed boolean NOT NULL DEFAULT false,promotion_failures text[] NOT NULL DEFAULT '{}',evaluation_fingerprint text CHECK(evaluation_fingerprint IS NULL OR evaluation_fingerprint ~ '^sha256:[a-f0-9]{64}$'),evaluated_at timestamptz,created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,corpus_key,version));
+CREATE UNIQUE INDEX uq_modernization_calibration_active ON modernization_calibration_corpus(tenant_id,corpus_key) WHERE status='ACTIVE';
+CREATE TABLE modernization_portfolio_policy(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),policy_key text NOT NULL CHECK(policy_key ~ '^[a-z][a-z0-9_.-]{2,127}$'),version text NOT NULL CHECK(version<>''),status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','ACTIVE','RETIRED')),weights jsonb NOT NULL CHECK(jsonb_typeof(weights)='object'),effort_penalty_weight numeric(5,4) NOT NULL CHECK(effort_penalty_weight BETWEEN 0 AND 1),policy_fingerprint text NOT NULL CHECK(policy_fingerprint ~ '^sha256:[a-f0-9]{64}$'),calibration_corpus_id uuid REFERENCES modernization_calibration_corpus(id),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,policy_key,version));
+CREATE UNIQUE INDEX uq_modernization_portfolio_policy_active ON modernization_portfolio_policy(tenant_id,policy_key) WHERE status='ACTIVE';
+CREATE TABLE ecosystem_admission(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),ecosystem text NOT NULL CHECK(ecosystem IN ('PYPI','MAVEN','CARGO','NUGET')),sequence integer NOT NULL CHECK(sequence>0),status text NOT NULL DEFAULT 'PROPOSED' CHECK(status IN ('PROPOSED','ADMITTED','RETIRED')),observed_repositories integer NOT NULL DEFAULT 0 CHECK(observed_repositories>=0),observed_dependency_share numeric(7,6) NOT NULL DEFAULT 0 CHECK(observed_dependency_share BETWEEN 0 AND 1),minimum_repositories integer NOT NULL DEFAULT 10 CHECK(minimum_repositories>0),minimum_dependency_share numeric(7,6) NOT NULL DEFAULT 0.02 CHECK(minimum_dependency_share BETWEEN 0 AND 1),metadata_parity boolean NOT NULL DEFAULT false,calibration_gate_passed boolean NOT NULL DEFAULT false,decision_fingerprint text NOT NULL CHECK(decision_fingerprint ~ '^sha256:[a-f0-9]{64}$'),reasons text[] NOT NULL DEFAULT '{}',decided_by text NOT NULL,decided_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,ecosystem),UNIQUE(tenant_id,sequence));
+
 -- Tenant administration and operator control (migration 010).
 CREATE TABLE tenant_member(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),actor_key text NOT NULL CHECK(actor_key<>''),display_name text NOT NULL DEFAULT '',email text NOT NULL DEFAULT '',role text NOT NULL DEFAULT 'view' CHECK(role IN ('view','review','execute','admin')),status text NOT NULL DEFAULT 'INVITED' CHECK(status IN ('INVITED','ACTIVE','SUSPENDED')),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,actor_key));
 CREATE TABLE connector(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),provider text NOT NULL CHECK(provider IN ('GITHUB_APP','PACKAGE_REGISTRY','DEPS_DEV','OSV','OTHER')),display_name text NOT NULL CHECK(display_name<>''),external_account_key text NOT NULL DEFAULT '',credential_reference text NOT NULL DEFAULT '',scopes text[] NOT NULL DEFAULT '{}',status text NOT NULL DEFAULT 'CONNECTED' CHECK(status IN ('CONNECTED','NEEDS_REAUTH','DISABLED','REVOKED')),last_synced_at timestamptz,last_error text,metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(metadata)='object'),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(tenant_id,provider,external_account_key));
@@ -483,6 +492,54 @@ CREATE VIEW current_fact WITH (security_invoker=true) AS SELECT * FROM (
 CREATE VIEW current_relationship WITH (security_invoker=true) AS SELECT f.id fact_assertion_id,f.tenant_id,f.subject_entity_id source_entity_id,f.predicate relationship_type,
  f.object_entity_id target_entity_id,f.confidence,f.assertion_class,f.properties,f.effective_from,f.effective_to,f.observed_at,f.source_snapshot_id
  FROM current_fact f JOIN predicate_definition p ON p.predicate=f.predicate WHERE p.projects_as_edge AND f.object_entity_id IS NOT NULL;
+
+CREATE VIEW current_capability_application_relationship WITH (security_invoker=true) AS
+SELECT assignment.tenant_id,capability.entity_id capability_entity_id,assignment.application_entity_id,assignment.business_map_id,
+ revision.id evidence_revision_id,'CURATED'::text assertion_class,1.0::numeric(5,4) confidence,
+ 'sha256:'||encode(digest(convert_to(assignment.tenant_id::text||chr(31)||capability.entity_id::text||chr(31)||assignment.application_entity_id::text||chr(31)||revision.id::text,'UTF8'),'sha256'),'hex') analysis_fingerprint,
+ revision.created_at observed_at
+FROM business_map_application_assignment assignment
+JOIN business_map_capability capability ON capability.id=assignment.business_map_capability_id
+JOIN LATERAL (SELECT value.id,value.created_at FROM business_map_revision value WHERE value.business_map_id=assignment.business_map_id ORDER BY value.version DESC LIMIT 1) revision ON true
+WHERE capability.entity_id IS NOT NULL;
+
+CREATE VIEW capability_footprint WITH (security_invoker=true) AS
+WITH relationship AS (SELECT DISTINCT tenant_id,capability_entity_id,application_entity_id FROM current_capability_application_relationship),
+repository_link AS (
+ SELECT DISTINCT relationship.tenant_id,relationship.capability_entity_id,relationship.application_entity_id,
+  CASE WHEN edge.source_entity_id=relationship.application_entity_id THEN edge.target_entity_id ELSE edge.source_entity_id END repository_entity_id
+ FROM relationship JOIN current_relationship edge ON edge.tenant_id=relationship.tenant_id AND (edge.source_entity_id=relationship.application_entity_id OR edge.target_entity_id=relationship.application_entity_id)
+ JOIN entity repository ON repository.id=CASE WHEN edge.source_entity_id=relationship.application_entity_id THEN edge.target_entity_id ELSE edge.source_entity_id END
+ WHERE repository.namespace='ENTERPRISE' AND repository.entity_type='Repository' AND edge.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+), technology_link AS (
+ SELECT DISTINCT repository_link.tenant_id,repository_link.capability_entity_id,repository_link.repository_entity_id,
+  CASE WHEN edge.source_entity_id=repository_link.repository_entity_id THEN edge.target_entity_id ELSE edge.source_entity_id END technology_entity_id
+ FROM repository_link JOIN current_relationship edge ON edge.tenant_id=repository_link.tenant_id AND (edge.source_entity_id=repository_link.repository_entity_id OR edge.target_entity_id=repository_link.repository_entity_id)
+ JOIN entity technology ON technology.id=CASE WHEN edge.source_entity_id=repository_link.repository_entity_id THEN edge.target_entity_id ELSE edge.source_entity_id END
+ WHERE technology.namespace IN ('TECHNOLOGY','OSS') AND edge.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+), technology_count AS (
+ SELECT tenant_id,capability_entity_id,technology_entity_id,count(DISTINCT repository_entity_id)::integer repository_occurrences
+ FROM technology_link GROUP BY tenant_id,capability_entity_id,technology_entity_id
+), technology_stat AS (
+ SELECT tenant_id,capability_entity_id,count(*)::integer technology_count,sum(repository_occurrences)::numeric total_occurrences,
+  jsonb_object_agg(technology_entity_id::text,repository_occurrences ORDER BY technology_entity_id) technology_counts
+ FROM technology_count GROUP BY tenant_id,capability_entity_id
+), entropy AS (
+ SELECT item.tenant_id,item.capability_entity_id,
+  CASE WHEN stat.technology_count<=1 OR stat.total_occurrences=0 THEN 0::numeric ELSE -sum((item.repository_occurrences/stat.total_occurrences)*ln(item.repository_occurrences/stat.total_occurrences))/ln(stat.technology_count) END technology_entropy
+ FROM technology_count item JOIN technology_stat stat USING(tenant_id,capability_entity_id)
+ GROUP BY item.tenant_id,item.capability_entity_id,stat.technology_count,stat.total_occurrences
+), application_stat AS (
+ SELECT tenant_id,capability_entity_id,count(DISTINCT application_entity_id)::integer application_count FROM relationship GROUP BY tenant_id,capability_entity_id
+), repository_stat AS (
+ SELECT tenant_id,capability_entity_id,count(DISTINCT repository_entity_id)::integer repository_count FROM repository_link GROUP BY tenant_id,capability_entity_id
+)
+SELECT application_stat.tenant_id,application_stat.capability_entity_id,application_stat.application_count,coalesce(repository_stat.repository_count,0) repository_count,
+ coalesce(technology_stat.technology_count,0) technology_count,coalesce(technology_stat.technology_counts,'{}'::jsonb) technology_counts,
+ coalesce(entropy.technology_entropy,0)::numeric(7,6) technology_entropy,
+ least(1::numeric,ln(1+application_stat.application_count+coalesce(repository_stat.repository_count,0))/ln(21))::numeric(7,6) reuse_signal
+FROM application_stat LEFT JOIN repository_stat USING(tenant_id,capability_entity_id)
+LEFT JOIN technology_stat USING(tenant_id,capability_entity_id) LEFT JOIN entropy USING(tenant_id,capability_entity_id);
 
 CREATE FUNCTION publish_source_snapshot(p_snapshot_id uuid) RETURNS void LANGUAGE plpgsql AS $$
 DECLARE s source_snapshot%ROWTYPE;
@@ -526,7 +583,7 @@ BEGIN
    job_kind,configuration_fingerprint
   )
   SELECT NEW.tenant_id,repository.id,NEW.id,NEW.source_revision,'REPOSITORY_MODERNIZATION',
-   coalesce(tenant_ai_configuration_fingerprint(
+   coalesce(policy.configuration_fingerprint,tenant_ai_configuration_fingerprint(
     configuration.provider,configuration.model,configuration.credential_secret_id
    ),'snapshot-v1')
   FROM ingest_target target JOIN entity repository
@@ -535,6 +592,12 @@ BEGIN
   LEFT JOIN tenant_ai_configuration configuration
     ON configuration.tenant_id=NEW.tenant_id AND configuration.enabled
    AND configuration.model<>'' AND configuration.credential_secret_id IS NOT NULL
+  LEFT JOIN LATERAL (
+    SELECT value.configuration_fingerprint FROM modernization_policy value
+    WHERE value.tenant_id=NEW.tenant_id AND value.status='ACTIVE'
+      AND value.configuration_fingerprint IS NOT NULL
+    ORDER BY value.updated_at DESC,value.id DESC LIMIT 1
+  ) policy ON true
   WHERE target.id=NEW.ingest_target_id
   ON CONFLICT DO NOTHING;
  END IF;
@@ -567,6 +630,10 @@ CREATE INDEX idx_code_implementation_repository ON code_implementation_summary(t
 CREATE INDEX idx_code_implementation_structure ON code_implementation_summary(tenant_id,structural_fingerprint,source_revision);
 CREATE INDEX idx_code_implementation_tokens ON code_implementation_summary USING gin(semantic_tokens);
 CREATE INDEX idx_modernization_internal_capability ON modernization_internal_component(tenant_id,capability_definition_id,status);
+CREATE INDEX idx_modernization_policy_tenant_status ON modernization_policy(tenant_id,status,updated_at DESC);
+CREATE INDEX idx_modernization_internal_governance ON modernization_internal_component(tenant_id,review_state,status,updated_at DESC);
+CREATE INDEX idx_calibration_corpus_tenant ON modernization_calibration_corpus(tenant_id,status,updated_at DESC);
+CREATE INDEX idx_ecosystem_admission_tenant ON ecosystem_admission(tenant_id,sequence,status);
 CREATE INDEX idx_tenant_member_tenant ON tenant_member(tenant_id,role,status);
 CREATE INDEX idx_connector_tenant ON connector(tenant_id,status,updated_at DESC);
 CREATE INDEX idx_rescan_job_tenant ON rescan_job(tenant_id,created_at DESC,id DESC);
@@ -596,7 +663,7 @@ CREATE INDEX idx_business_map_revision_map ON business_map_revision(tenant_id,bu
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_application_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','auth_token_revocation','api_rate_limit_window','tenant_service_control'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','modernization_calibration_corpus','modernization_portfolio_policy','ecosystem_admission','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_application_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','auth_token_revocation','api_rate_limit_window','tenant_service_control'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END; $$;
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
@@ -620,5 +687,6 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('014_repair_dependency_usage_legacy.sql','1d9becc7e78515554e3872aa5a06b52415360c69c9bfba8b3790f24c3bd26c77'), -- gitleaks:allow; migration checksum, not a credential
  ('015_service_visibility_and_github_admin.sql','359d26f1effb73467370bc7171e200c8e9586f21395f0a2e24f11fc4d3ed0182'), -- gitleaks:allow; migration checksum, not a credential
  ('016_tenant_service_controls.sql','210333fcc9859254d39aee913dacb55f593a382f9e506b62c95e6a9b72d93091'), -- gitleaks:allow; migration checksum, not a credential
- ('017_business_map_application_assignments.sql','f16b5ca133365bec3f11b88ce141a8915692119ea435607c506a3d27825f119e'); -- gitleaks:allow; migration checksum, not a credential
+ ('017_business_map_application_assignments.sql','f16b5ca133365bec3f11b88ce141a8915692119ea435607c506a3d27825f119e'), -- gitleaks:allow; migration checksum, not a credential
+ ('018_governed_modernization_portfolio.sql','67180a2d058bad994888d50cf5ffccad857178dbdb8ba82ae5f6ebb1139f6aea'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

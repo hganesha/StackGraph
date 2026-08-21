@@ -20,6 +20,7 @@ from app.models import (
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
+    CapabilityFootprintList,
     Coverage,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
@@ -36,6 +37,8 @@ from app.models import (
     ModernizationRecommendationReviewResult,
     ModernizationValidationOutcomeRequest,
     ModernizationValidationOutcomeResult,
+    ModernizationScenarioRequest,
+    ModernizationScenarioResult,
     Phase3IntelligenceMetrics,
     RepositoryModernizationIntelligence,
     RepositoryDetail,
@@ -144,6 +147,19 @@ class StubReadModels:
 
     async def modernization(self, *, tenant_id, cursor, limit):
         raise NotImplementedError
+
+    async def capability_footprints(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return CapabilityFootprintList(as_of=NOW, footprints=[])
+
+    async def modernization_scenario(
+        self, request: ModernizationScenarioRequest, *, tenant_id,
+    ):
+        self.last_tenant_id = tenant_id
+        return ModernizationScenarioResult(
+            as_of=NOW, budget_points=request.budget_points,
+            used_points=0, total_score=0, items=[],
+        )
 
     async def graph_neighborhood(
         self, center_id, *, tenant_id, depth, real_node_limit, predicates,
@@ -870,6 +886,22 @@ def test_unexpected_errors_use_contract_shape() -> None:
     assert response.json()["code"] == "INTERNAL_ERROR"
 
 
+def test_capability_footprint_and_budget_scenario_routes_are_versioned() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000111")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+
+    footprints = asyncio.run(request(app, "GET", "/capabilities/footprints"))
+    scenario = asyncio.run(request(
+        app, "POST", "/modernization/scenarios", json={"budget_points": 21},
+    ))
+
+    assert footprints.status_code == 200
+    assert footprints.json()["contract_version"] == "1.0.0"
+    assert scenario.status_code == 200
+    assert scenario.json()["budget_points"] == 21
+    assert store.last_tenant_id == tenant_id
+
+
 def test_identity_review_accepts_optimistic_version() -> None:
     app, _ = app_with_stubs()
     assertion_id = "00000000-0000-4000-8000-000000000501"
@@ -941,7 +973,10 @@ def test_admin_routes_require_admin_capability() -> None:
         ("GET", "/api/v1/admin/connectors", None),
         ("GET", "/api/v1/admin/github/repositories/available", None),
         ("POST", "/api/v1/admin/github/repositories", {"repository": "acme/billing"}),
-        ("POST", "/api/v1/admin/github/installations", {"installation_id": "123456"}),
+        (
+            "POST", "/api/v1/admin/github/installations",
+            {"installation_id": "123456", "pilot_manual_binding_acknowledged": True},
+        ),
         ("GET", "/api/v1/admin/ai-configuration", None),
         ("PUT", "/api/v1/admin/ai-configuration", {"provider": "openrouter", "api_key": "secret-key"}),
         ("DELETE", "/api/v1/admin/ai-configuration/key", None),
@@ -1021,12 +1056,25 @@ def test_connect_github_installation_queues_reconciliation() -> None:
     response = asyncio.run(request(
         app, "POST", "/api/v1/admin/github/installations",
         headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
-        json={"installation_id": "12345678", "display_name": "Acme engineering"},
+        json={
+            "installation_id": "12345678", "display_name": "Acme engineering",
+            "pilot_manual_binding_acknowledged": True,
+        },
     ))
     assert response.status_code == 201
     assert response.json()["display_name"] == "Acme engineering"
     assert response.json()["external_account_key"] == "github:installation:12345678"
     assert store.last_actor_key == "operator"
+
+
+def test_manual_github_installation_requires_pilot_acknowledgement() -> None:
+    app, _ = _signed_app()
+    response = asyncio.run(request(
+        app, "POST", "/api/v1/admin/github/installations",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+        json={"installation_id": "12345678", "display_name": "Acme engineering"},
+    ))
+    assert response.status_code == 422
 
 
 def test_service_status_is_admin_visible() -> None:
