@@ -109,7 +109,7 @@ echo "Validating the Docker Compose configuration..."
 
 if [[ "$build_images" == true ]]; then
   echo "Building application and continuous pipeline images..."
-  "${compose[@]}" build migrate seed projection api web github-webhook github-control-loop \
+  "${compose[@]}" build migrate seed projection ai-prompts api web github-webhook github-control-loop \
     depsdev-continuous osv-continuous projection-continuous intelligence-continuous
 fi
 
@@ -123,6 +123,9 @@ echo "Starting PostgreSQL/AGE..."
 
 echo "Applying database migrations..."
 "${compose[@]}" run --rm migrate
+
+echo "Synchronizing the versioned AI prompt catalog..."
+"${compose[@]}" run --rm ai-prompts
 
 if [[ "$seed_database" == true ]]; then
   echo "Loading the reference data cohort..."

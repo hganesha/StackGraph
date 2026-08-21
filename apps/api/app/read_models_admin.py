@@ -64,6 +64,8 @@ _CONTROLLABLE_SERVICES = frozenset({
     "github-webhook", "github-control-loop", "projection", "intelligence",
 })
 
+_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
+
 
 def _github_api_base_url() -> str:
     base_url = os.getenv("STACKGRAPH_GITHUB_API_URL", "https://api.github.com").rstrip("/")
@@ -1026,6 +1028,30 @@ class AdminReadModelsMixin:
                     "enabled": request.enabled,
                 },
             )
+            if (
+                existing is not None
+                and existing["credential_secret_id"] is not None
+                and existing["model"]
+            ):
+                previous_fingerprint = self._tenant_ai_configuration_fingerprint(
+                    existing["provider"], existing["model"], existing["credential_secret_id"],
+                )
+                current_fingerprint = (
+                    self._tenant_ai_configuration_fingerprint(
+                        request.provider, request.model.strip(), secret_id,
+                    )
+                    if request.enabled and secret_id is not None and request.model.strip()
+                    else None
+                )
+                if previous_fingerprint != current_fingerprint:
+                    await connection.execute(
+                        """
+                        DELETE FROM intelligence_job
+                        WHERE tenant_id=%s AND configuration_fingerprint=%s
+                          AND status='PENDING'
+                        """,
+                        (tenant_id, previous_fingerprint),
+                    )
             if request.enabled and secret_id is not None and request.model.strip():
                 await self._enqueue_tenant_ai_reanalysis(
                     connection,
@@ -1094,11 +1120,23 @@ class AdminReadModelsMixin:
         provider = row["provider"]
         api_key = row["api_key"]
         url, headers = self._ai_models_request(provider, api_key)
+        openrouter_zdr_endpoints: Any = None
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
+                if provider == "openrouter":
+                    authentication = await client.get(
+                        "https://openrouter.ai/api/v1/auth/key", headers=headers,
+                    )
+                    authentication.raise_for_status()
                 response = await client.get(url, headers=headers)
                 response.raise_for_status()
                 payload = response.json()
+                if provider == "openrouter":
+                    endpoints = await client.get(
+                        "https://openrouter.ai/api/v1/endpoints/zdr", headers=headers,
+                    )
+                    endpoints.raise_for_status()
+                    openrouter_zdr_endpoints = endpoints.json()
             available_models = self._ai_model_ids(payload)
             models = available_models[:100]
         except (httpx.HTTPError, ValueError, TypeError) as error:
@@ -1121,6 +1159,25 @@ class AdminReadModelsMixin:
                 (message, actor_key), tenant_id=tenant_id,
             )
             raise APIError(422, "AI_MODEL_UNAVAILABLE", message)
+        if (
+            provider == "openrouter"
+            and not self._openrouter_model_supports_intelligence(
+                openrouter_zdr_endpoints, row["model"],
+            )
+        ):
+            required = ", ".join(sorted(_OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS))
+            message = (
+                f"The selected model {row['model']!r} has no zero-data-retention endpoint "
+                f"that supports StackGraph's required parameters: {required}."
+            )
+            await self.database.fetch_one(
+                """
+                UPDATE tenant_ai_configuration SET test_status='FAILED',tested_at=now(),
+                  last_error=%s,updated_by=%s,updated_at=now() RETURNING tenant_id
+                """,
+                (message, actor_key), tenant_id=tenant_id,
+            )
+            raise APIError(422, "AI_MODEL_INCOMPATIBLE", message)
         await self.database.fetch_one(
             """
             UPDATE tenant_ai_configuration SET test_status='SUCCEEDED',tested_at=now(),
@@ -1147,6 +1204,24 @@ class AdminReadModelsMixin:
         return sorted(
             str(item["id"]) for item in payload["data"]
             if isinstance(item, dict) and isinstance(item.get("id"), str)
+        )
+
+    @staticmethod
+    def _openrouter_model_supports_intelligence(payload: Any, model: str) -> bool:
+        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+            return False
+        return any(
+            isinstance(endpoint, dict)
+            and endpoint.get("model_id") == model
+            and isinstance(endpoint.get("supported_parameters"), list)
+            and _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS.issubset(
+                {
+                    parameter
+                    for parameter in endpoint["supported_parameters"]
+                    if isinstance(parameter, str)
+                }
+            )
+            for endpoint in payload["data"]
         )
 
     async def _ai_provider_configuration_with_status(
@@ -1543,7 +1618,15 @@ class AdminReadModelsMixin:
               (SELECT max(coalesce(processed_at,created_at)) FROM projection_outbox WHERE tenant_id=%s) projection_last,
               (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='PENDING') intelligence_pending,
               (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='RUNNING') intelligence_running,
-              (SELECT count(*) FROM intelligence_job WHERE tenant_id=%s AND status='FAILED') intelligence_failed,
+              (SELECT count(*) FROM intelligence_job failed
+               WHERE failed.tenant_id=%s AND failed.status='FAILED'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM intelligence_job recovered
+                   WHERE recovered.tenant_id=failed.tenant_id
+                     AND recovered.repository_entity_id=failed.repository_entity_id
+                     AND recovered.status='SUCCEEDED'
+                     AND recovered.completed_at>failed.updated_at
+                 )) intelligence_failed,
               (SELECT max(coalesce(completed_at,started_at,created_at)) FROM intelligence_job WHERE tenant_id=%s) intelligence_last,
               (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
                JOIN source_system source ON source.id=target.source_system_id

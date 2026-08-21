@@ -82,6 +82,8 @@ class PromptCatalogTests(unittest.IsolatedAsyncioTestCase):
         )
         explanation = next(prompt for prompt in prompts if prompt.key == "ask.explain")
         self.assertIsNotNone(explanation.output_schema)
+        capability = next(prompt for prompt in prompts if prompt.key == "capability.inference")
+        self.assertNotIn("temperature", capability.model_parameters)
         self.assertEqual(
             explanation.metadata["policy_version"],
             "evidence-first-explanation/v1",

@@ -18,6 +18,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from stackgraph_ai.capability_worker import analyze_repository
+from stackgraph_ai.errors import ProviderRequestError
 from stackgraph_ai.modernization import (
     ANALYZER_KEY,
     ANALYZER_VERSION,
@@ -910,13 +911,25 @@ def _complete_job(database_url: str, job_id: UUID) -> None:
         )
 
 
+def _job_failure_is_terminal(job: Mapping[str, Any], error: Exception) -> bool:
+    return (
+        isinstance(error, ProviderRequestError) and not error.retryable
+    ) or int(job["attempt"]) >= int(job["max_attempts"])
+
+
 def _fail_job(database_url: str, job: Mapping[str, Any], error: Exception) -> bool:
-    terminal = int(job["attempt"]) >= int(job["max_attempts"])
+    terminal = _job_failure_is_terminal(job, error)
     detail = {
         "type": type(error).__name__,
         "message": str(error)[:2000],
         "failed_at": datetime.now(UTC).isoformat(),
     }
+    if isinstance(error, ProviderRequestError):
+        detail.update({
+            "code": error.code,
+            "retryable": error.retryable,
+            "status_code": error.status_code,
+        })
     with psycopg.connect(database_url) as connection:
         connection.execute(
             """
