@@ -177,7 +177,12 @@ _OBSERVED_TECHNOLOGY_CTE = """
 WITH tenant_scope AS (
   SELECT %s::uuid tenant_id
 ), observed_technology AS (
-  SELECT DISTINCT technology.id
+  SELECT technology.id,
+         min(CASE
+           WHEN relationship.relationship_type<>'DEPENDS_ON'
+             OR relationship.properties->>'direct' IS NULL
+             OR lower(relationship.properties->>'direct')='true'
+           THEN 1 ELSE 2 END) dependency_tier
   FROM current_relationship relationship
   JOIN entity technology
     ON technology.id IN (relationship.source_entity_id,relationship.target_entity_id)
@@ -192,6 +197,7 @@ WITH tenant_scope AS (
    AND estate_entity.namespace='ENTERPRISE'
    AND estate_entity.tenant_id=(SELECT tenant_id FROM tenant_scope)
   WHERE relationship.tenant_id=(SELECT tenant_id FROM tenant_scope)
+  GROUP BY technology.id
 )
 """
 
@@ -347,7 +353,10 @@ def _technology_lookup_keys(row: dict[str, Any]) -> set[str]:
         for name in names:
             if not isinstance(name, str):
                 continue
-            for part in name.split("/"):
+            # A slash separates products in legacy comparison-group names, but
+            # it is part of the identity of a scoped npm package or pattern.
+            parts = [name] if name.strip().startswith("@") else name.split("/")
+            for part in parts:
                 normalized_name = re.sub(r"\s*\([^)]*\)\s*", " ", part).strip().lower()
                 if normalized_name:
                     keys.add(normalized_name)
@@ -379,12 +388,29 @@ def _resolve_technology_catalog_entry(
 ) -> tuple[dict[str, Any] | None, bool]:
     technology_id = UUID(str(technology_row["id"]))
     direct = catalog_by_id.get(technology_id)
-    matches = {
+    technology_keys = _technology_lookup_keys(technology_row)
+    exact_matches = {
         UUID(str(entry["row"]["id"])): entry
-        for key in _technology_lookup_keys(technology_row)
+        for key in technology_keys
         for entry in catalog_by_key.get(key, [])
     }
-    return (direct or (next(iter(matches.values())) if len(matches) == 1 else None), direct is not None)
+    if direct is not None or exact_matches:
+        return (
+            direct or (next(iter(exact_matches.values())) if len(exact_matches) == 1 else None),
+            direct is not None,
+        )
+
+    wildcard_matches = {
+        UUID(str(entry["row"]["id"])): entry
+        for key in technology_keys
+        for pattern, entries in catalog_by_key.items()
+        if pattern != "*" and pattern.endswith("*") and key.startswith(pattern[:-1])
+        for entry in entries
+    }
+    return (
+        next(iter(wildcard_matches.values())) if len(wildcard_matches) == 1 else None,
+        False,
+    )
 
 
 def _technology_catalog_profiles(
@@ -773,7 +799,8 @@ class ReadModelStore(AdminReadModelsMixin):
             _OBSERVED_TECHNOLOGY_CTE + """
             SELECT e.*, coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at,
                    p.id priority_id,p.score priority_score,p.confidence priority_confidence,p.method_version priority_method,
-                   v.score viability_score,v.confidence viability_confidence,v.method_version viability_method
+                   v.score viability_score,v.confidence viability_confidence,v.method_version viability_method,
+                   dependency.dependency_tier
             FROM entity e
             LEFT JOIN LATERAL (
               SELECT * FROM assessment a WHERE a.subject_entity_id=e.id AND a.status='CURRENT' AND lower(a.dimension)='priority'
@@ -783,6 +810,7 @@ class ReadModelStore(AdminReadModelsMixin):
               SELECT * FROM assessment a WHERE a.subject_entity_id=e.id AND a.status='CURRENT' AND lower(a.dimension)='viability'
               ORDER BY a.valid_from DESC LIMIT 1
             ) v ON true
+            LEFT JOIN observed_technology dependency ON dependency.id=e.id
             WHERE (
                 (e.namespace='ENTERPRISE' AND e.entity_type='Application'
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
@@ -842,6 +870,10 @@ class ReadModelStore(AdminReadModelsMixin):
                     ),
                     viability=viability,
                     summary=(row.get("properties") or {}).get("summary"),
+                    dependency_tier=(
+                        int(row["dependency_tier"])
+                        if row.get("dependency_tier") is not None else None
+                    ),
                     freshness=_freshness(row.get("observed_at")),
                     citations=citations_by_entity.get(row["id"], []),
                 )

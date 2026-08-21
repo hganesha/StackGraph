@@ -16,11 +16,13 @@ interface Props {
   reset: () => void;
   resultCount: number;
   total: number;
+  hasMore?: boolean;
+  incremental?: boolean;
   /** Hide the domain control when the surface is already domain-scoped (list pages). */
   showDomain?: boolean;
 }
 
-export function FilterBar({ query, setQuery, applyLens, reset, resultCount, total, showDomain = true }: Props) {
+export function FilterBar({ query, setQuery, applyLens, reset, resultCount, total, hasMore = false, incremental = false, showDomain = true }: Props) {
   const active = activeFilterCount(query);
 
   return (
@@ -131,7 +133,9 @@ export function FilterBar({ query, setQuery, applyLens, reset, resultCount, tota
 
         <div className={styles.summary}>
           <span className={`${styles.count} sg-mono`}>
-            {resultCount} of {total}
+            {incremental
+              ? `${resultCount === total ? total : `${resultCount} of ${total}`} loaded${hasMore ? " · more available" : ""}`
+              : `${resultCount} of ${total}`}
           </span>
           {active > 0 ? (
             <button type="button" className={styles.clear} onClick={reset}>

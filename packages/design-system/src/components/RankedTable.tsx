@@ -20,8 +20,10 @@ export function RankedTable({
   onOpen?: (item: RankedItem) => void;
   renderRowHref?: (item: RankedItem) => string;
 }) {
+  const showDependencyTier = items.some((item) => item.dependency_tier !== undefined);
+
   return (
-    <table className={styles.table}>
+    <table className={`${styles.table} ${showDependencyTier ? styles.withTier : ""}`}>
       <caption className={styles.caption}>{caption}</caption>
       <thead>
         <tr>
@@ -29,6 +31,11 @@ export function RankedTable({
             Domain
           </th>
           <th scope="col">Name</th>
+          {showDependencyTier ? (
+            <th scope="col" className={styles.hTier}>
+              Dependency tier
+            </th>
+          ) : null}
           <th scope="col" className={styles.hConf}>
             Confidence
           </th>
@@ -68,6 +75,18 @@ export function RankedTable({
                   <span className={styles.link}>{NameCell}</span>
                 )}
               </td>
+              {showDependencyTier ? (
+                <td className={styles.cTier}>
+                  {item.dependency_tier ? (
+                    <span className={styles.tierBadge}>
+                      Tier {item.dependency_tier}
+                      <span>{item.dependency_tier === 1 ? "Direct" : "Transitive"}</span>
+                    </span>
+                  ) : (
+                    <span className={styles.notApplicable}>—</span>
+                  )}
+                </td>
+              ) : null}
               <td className={styles.cConf}>
                 <ConfidenceChip label={item.priority.confidence_label} value={item.priority.confidence} />
               </td>

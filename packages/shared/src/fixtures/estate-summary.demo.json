@@ -33,6 +33,7 @@
     {
       "id": "00000000-0000-4000-8000-000000000204",
       "kind": "PackageVersion", "name": "axios 1.7.9", "domain": "TECHNOLOGY",
+      "dependency_tier": 1,
       "priority": {"value": 72, "confidence": 0.84, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
       "viability": {"value": 58, "confidence": 0.8, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
       "summary": "Widely used HTTP client; native fetch is a viable alternative.",
@@ -41,6 +42,7 @@
     {
       "id": "00000000-0000-4000-8000-000000000703",
       "kind": "PackageVersion", "name": "request 2.88.2", "domain": "TECHNOLOGY",
+      "dependency_tier": 2,
       "priority": {"value": 88, "confidence": 0.87, "confidence_label": "HIGH", "method_version": "priority-v1"},
       "viability": {"value": 22, "confidence": 0.71, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
       "summary": "Deprecated by maintainer; 0 releases in 38 months. Replace with native fetch.",
@@ -49,6 +51,7 @@
     {
       "id": "00000000-0000-4000-8000-000000000704",
       "kind": "Runtime", "name": "Node 18", "domain": "TECHNOLOGY",
+      "dependency_tier": 1,
       "priority": {"value": 64, "confidence": 0.83, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
       "viability": {"value": 48, "confidence": 0.79, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
       "summary": "Approaching end of active support; plan an upgrade path.",
@@ -57,6 +60,7 @@
     {
       "id": "00000000-0000-4000-8000-000000000705",
       "kind": "OSSProject", "name": "express", "domain": "OSS",
+      "dependency_tier": 1,
       "priority": {"value": 60, "confidence": 0.82, "confidence_label": "MEDIUM", "method_version": "priority-v1"},
       "viability": {"value": 75, "confidence": 0.85, "confidence_label": "HIGH", "method_version": "viability-v1"},
       "summary": "Healthy, actively maintained web framework.",
@@ -65,6 +69,7 @@
     {
       "id": "00000000-0000-4000-8000-000000000706",
       "kind": "OSSProject", "name": "lodash", "domain": "OSS",
+      "dependency_tier": 2,
       "priority": {"value": 55, "confidence": 0.58, "confidence_label": "LOW", "method_version": "priority-v1"},
       "viability": {"value": 61, "confidence": 0.6, "confidence_label": "MEDIUM", "method_version": "viability-v1"},
       "summary": "Common utility library; many usages replaceable by native JS.",

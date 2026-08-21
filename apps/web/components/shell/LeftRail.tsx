@@ -18,7 +18,7 @@ import styles from "./LeftRail.module.css";
 
 // Nav mirrors the surfaces in spec §46 V0 order (plan §3.2).
 const PRIMARY = [
-  { href: "/estate", label: "Software Estate", icon: IconLayoutDashboard },
+  { href: "/estate", label: "Estate", icon: IconLayoutDashboard },
   { href: "/business-map", label: "Business Map", icon: IconHierarchy3 },
   { href: "/applications", label: "Applications", icon: IconApps },
   { href: "/technologies", label: "Technologies", icon: IconStack2 },

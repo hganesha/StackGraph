@@ -33,6 +33,9 @@
 .hConf {
   inline-size: 10rem;
 }
+.hTier {
+  inline-size: 10rem;
+}
 
 .row {
   border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
@@ -64,6 +67,24 @@
 .summary {
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-secondary);
+}
+.tierBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding: 3px var(--sg-space-2);
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: 999px;
+}
+.tierBadge span,
+.notApplicable {
+  color: var(--sg-text-muted);
+  font-weight: 400;
 }
 .cNum {
   text-align: end;
@@ -112,6 +133,15 @@
   .cNum {
     grid-area: priority;
     font-size: var(--sg-type-h2-size);
+  }
+  .cTier {
+    grid-area: tier;
+  }
+  .withTier .row {
+    grid-template-areas:
+      "domain name priority"
+      "tier   tier tier"
+      "conf   conf conf";
   }
   .cConf {
     grid-area: conf;

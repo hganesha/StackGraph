@@ -1,36 +1,200 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
 import { RankedTable, StatTile, Skeleton } from "@stackgraph/design-system";
-import type { Namespace } from "@stackgraph/shared";
-import { useEstateDomainSummary, useEstateSummary } from "@/lib/queries";
+import { namespaceLabel, type Namespace, type RankedItem } from "@stackgraph/shared";
+import { useEstateSummary, useInfiniteEstateSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import styles from "./estate.module.css";
 
+const DOMAIN_ORDER: Namespace[] = [
+  "BUSINESS",
+  "ENTERPRISE",
+  "TECHNOLOGY",
+  "OSS",
+  "DEPLOYMENT",
+];
+const PAGED_DOMAINS = DOMAIN_ORDER;
+
+const hrefFor = (domain: string, id: string) =>
+  domain === "TECHNOLOGY" || domain === "OSS" ? `/technologies/${id}` : `/applications/${id}`;
+
+function EstateDomainSection({
+  domain,
+  items,
+  loadedCount,
+  sort,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+  onOpen,
+}: {
+  domain: Namespace;
+  items: RankedItem[];
+  loadedCount: number;
+  sort: string;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+  onOpen: (item: RankedItem) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const contentId = `estate-domain-${domain.toLowerCase()}`;
+
+  return (
+    <section className={styles.domainGroup} aria-labelledby={`${contentId}-heading`}>
+      <button
+        type="button"
+        id={`${contentId}-heading`}
+        className={styles.domainDisclosure}
+        aria-expanded={open}
+        aria-controls={contentId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? (
+          <IconChevronDown size={18} stroke={1.75} aria-hidden="true" />
+        ) : (
+          <IconChevronRight size={18} stroke={1.75} aria-hidden="true" />
+        )}
+        <strong>{namespaceLabel(domain)}</strong>
+        <span>{items.length === loadedCount ? `${loadedCount} loaded` : `${items.length} of ${loadedCount} match`}</span>
+      </button>
+      {open ? (
+        <div id={contentId} className={styles.domainTable}>
+          {items.length ? (
+            <RankedTable
+              caption={`${items.length} matching · ${loadedCount} loaded · sorted by ${sort}`}
+              items={items}
+              renderRowHref={(item) => hrefFor(item.domain, item.id)}
+              onOpen={onOpen}
+            />
+          ) : (
+            <p className={styles.domainEmpty}>
+              {loadedCount === 0
+                ? domain === "OSS"
+                  ? "No linked OSS projects are represented yet. Open-source packages discovered in repositories appear under Technology; this section shows external project intelligence such as source repositories, releases, licenses, maintainers, and ecosystem health once linked."
+                  : `No ${namespaceLabel(domain).toLowerCase()} items are currently represented in the estate.`
+                : "No loaded items in this domain match the active lens or filters."}
+            </p>
+          )}
+          {hasMore ? (
+            <div className={styles.domainLoadMore}>
+              <button
+                type="button"
+                className={styles.loadMore}
+                disabled={isLoadingMore}
+                onClick={onLoadMore}
+              >
+                {isLoadingMore ? "Loading…" : `Load 50 more ${namespaceLabel(domain)} items`}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function EstateView() {
   const router = useRouter();
-  const summary = useEstateSummary();
   const { query, setQuery, applyLens, reset } = useEstateQuery();
-  const selectedDomains = useMemo(
-    () => query.domain === "ALL" ? [] : [query.domain as Namespace],
-    [query.domain],
+  const showAllDomains = query.domain === "ALL";
+  const selectedDomain = query.domain as Namespace;
+  const selectedOtherDomains = useMemo(
+    () => !showAllDomains && !PAGED_DOMAINS.includes(selectedDomain) ? [selectedDomain] : [],
+    [selectedDomain, showAllDomains],
   );
-  const domainSummary = useEstateDomainSummary(selectedDomains, {
-    enabled: selectedDomains.length > 0,
+  const overview = useEstateSummary();
+  const businessEstate = useInfiniteEstateSummary(["BUSINESS"], {
+    enabled: showAllDomains || selectedDomain === "BUSINESS",
   });
-  const data = selectedDomains.length > 0 ? domainSummary.data : summary.data;
-  const counts = summary.data?.counts ?? data?.counts;
-  const isLoading = summary.isLoading || (selectedDomains.length > 0 && domainSummary.isLoading);
-  const isError = summary.isError || (selectedDomains.length > 0 && domainSummary.isError);
-
-  // Route to the explorer that matches the item's domain (plan §5.1).
-  const hrefFor = (domain: string, id: string) =>
-    domain === "TECHNOLOGY" || domain === "OSS" ? `/technologies/${id}` : `/applications/${id}`;
-
-  const items = useMemo(() => (data ? applyEstateQuery(data.ranked_items, query) : []), [data, query]);
+  const enterpriseEstate = useInfiniteEstateSummary(["ENTERPRISE"], {
+    enabled: showAllDomains || selectedDomain === "ENTERPRISE",
+  });
+  const technologyEstate = useInfiniteEstateSummary(["TECHNOLOGY"], {
+    enabled: showAllDomains || selectedDomain === "TECHNOLOGY",
+  });
+  const ossEstate = useInfiniteEstateSummary(["OSS"], {
+    enabled: showAllDomains || selectedDomain === "OSS",
+  });
+  const deploymentEstate = useInfiniteEstateSummary(["DEPLOYMENT"], {
+    enabled: showAllDomains || selectedDomain === "DEPLOYMENT",
+  });
+  const otherEstate = useInfiniteEstateSummary(selectedOtherDomains, {
+    enabled: selectedOtherDomains.length > 0,
+  });
+  const activeEstate = selectedDomain === "BUSINESS"
+    ? businessEstate
+    : selectedDomain === "ENTERPRISE"
+      ? enterpriseEstate
+      : selectedDomain === "TECHNOLOGY"
+        ? technologyEstate
+        : selectedDomain === "OSS"
+          ? ossEstate
+          : selectedDomain === "DEPLOYMENT"
+            ? deploymentEstate
+            : otherEstate;
+  const activeDomainEstates = showAllDomains
+    ? [businessEstate, enterpriseEstate, technologyEstate, ossEstate, deploymentEstate]
+    : [activeEstate];
+  const counts = overview.data?.counts;
+  const isLoading = overview.isLoading || activeDomainEstates.some((estate) => estate.isLoading);
+  const isError = overview.isError || activeDomainEstates.some((estate) => estate.isError);
+  const loadedItems = useMemo(
+    () => {
+      const dataSets = showAllDomains
+        ? [
+            businessEstate.data,
+            enterpriseEstate.data,
+            technologyEstate.data,
+            ossEstate.data,
+            deploymentEstate.data,
+          ]
+        : [activeEstate.data];
+      return dataSets.flatMap(
+        (data) => data?.pages.flatMap((page) => page.ranked_items) ?? [],
+      );
+    },
+    [
+      activeEstate.data,
+      businessEstate.data,
+      deploymentEstate.data,
+      enterpriseEstate.data,
+      ossEstate.data,
+      showAllDomains,
+      technologyEstate.data,
+    ],
+  );
+  const items = useMemo(() => applyEstateQuery(loadedItems, query), [loadedItems, query]);
+  const domainGroups = useMemo(() => {
+    const grouped = new Map<Namespace, RankedItem[]>();
+    for (const item of loadedItems) {
+      const group = grouped.get(item.domain) ?? [];
+      group.push(item);
+      grouped.set(item.domain, group);
+    }
+    return DOMAIN_ORDER.flatMap((domain) => {
+      const group = grouped.get(domain) ?? [];
+      return [{
+        domain,
+        loadedCount: group.length,
+        items: applyEstateQuery(group, { ...query, domain: "ALL" }),
+      }];
+    });
+  }, [loadedItems, query]);
+  const estateForDomain = (domain: Namespace) => {
+    if (domain === "BUSINESS") return businessEstate;
+    if (domain === "ENTERPRISE") return enterpriseEstate;
+    if (domain === "TECHNOLOGY") return technologyEstate;
+    if (domain === "OSS") return ossEstate;
+    if (domain === "DEPLOYMENT") return deploymentEstate;
+    return otherEstate;
+  };
+  const hasMore = activeDomainEstates.some((estate) => estate.hasNextPage);
 
   return (
     <div className={styles.page}>
@@ -67,19 +231,21 @@ export function EstateView() {
         )}
       </section>
 
-      {data ? (
+      {overview.data ? (
         <FilterBar
           query={query}
           setQuery={setQuery}
           applyLens={applyLens}
           reset={reset}
           resultCount={items.length}
-          total={data.ranked_items.length}
+          total={loadedItems.length}
+          hasMore={hasMore}
+          incremental
         />
       ) : null}
 
       <section className={styles.tableWrap} aria-label="Ranked items">
-        {isLoading || !data ? (
+        {isLoading || !overview.data ? (
           <div className={styles.tableSkeleton}>
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className={styles.rowSkeleton}>
@@ -90,23 +256,34 @@ export function EstateView() {
               </div>
             ))}
           </div>
-        ) : data.ranked_items.length === 0 ? (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>No applications scanned yet.</p>
-            <p className={styles.emptyBody}>Connect a GitHub org to begin. Results appear as coverage grows.</p>
-          </div>
-        ) : items.length === 0 ? (
-          <div className={styles.empty}>
-            <p className={styles.emptyTitle}>No items match these filters.</p>
-            <button type="button" className={styles.emptyBody} onClick={reset}>
-              Clear filters to see all {data.ranked_items.length} items.
-            </button>
+        ) : showAllDomains ? (
+          <div className={styles.domainGroups}>
+            {domainGroups.map((group) => {
+              const estate = estateForDomain(group.domain);
+              return (
+                <EstateDomainSection
+                  key={group.domain}
+                  domain={group.domain}
+                  items={group.items}
+                  loadedCount={group.loadedCount}
+                  sort={query.sort}
+                  hasMore={Boolean(estate.hasNextPage)}
+                  isLoadingMore={estate.isFetchingNextPage}
+                  onLoadMore={() => estate.fetchNextPage()}
+                  onOpen={(item) => router.push(hrefFor(item.domain, item.id))}
+                />
+              );
+            })}
           </div>
         ) : (
-          <RankedTable
-            caption={`${items.length} items · sorted by ${query.sort}`}
+          <EstateDomainSection
+            domain={selectedDomain}
             items={items}
-            renderRowHref={(item) => hrefFor(item.domain, item.id)}
+            loadedCount={loadedItems.length}
+            sort={query.sort}
+            hasMore={Boolean(activeEstate.hasNextPage)}
+            isLoadingMore={activeEstate.isFetchingNextPage}
+            onLoadMore={() => activeEstate.fetchNextPage()}
             onOpen={(item) => router.push(hrefFor(item.domain, item.id))}
           />
         )}
