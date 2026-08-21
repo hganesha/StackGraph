@@ -71,6 +71,22 @@ export function useEnterpriseInsightReports() {
   });
 }
 
+export function useScanStatus() {
+  return useQuery({
+    queryKey: ["admin", "scan-status"],
+    queryFn: () => stackGraphClient.getScanStatus(),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useServiceStatus() {
+  return useQuery({
+    queryKey: ["admin", "service-status"],
+    queryFn: () => stackGraphClient.getServiceStatus(),
+    refetchInterval: 15_000,
+  });
+}
+
 export function useGraphNeighborhood(centerId: string, depth = 1) {
   return useQuery({
     queryKey: ["graph", centerId, depth],
