@@ -12,18 +12,18 @@ export function useEstateQuery(): {
   reset: () => void;
 } {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/estate";
   const params = useSearchParams();
 
   const query = useMemo<EstateQuery>(
     () => ({
-      domain: (params.get("domain") as EstateQuery["domain"]) ?? DEFAULT_QUERY.domain,
-      confidence: (params.get("confidence") as EstateQuery["confidence"]) ?? DEFAULT_QUERY.confidence,
-      freshness: (params.get("freshness") as EstateQuery["freshness"]) ?? DEFAULT_QUERY.freshness,
-      sort: (params.get("sort") as EstateQuery["sort"]) ?? DEFAULT_QUERY.sort,
-      dir: (params.get("dir") as EstateQuery["dir"]) ?? DEFAULT_QUERY.dir,
-      q: params.get("q") ?? DEFAULT_QUERY.q,
-      lens: params.get("lens") ?? DEFAULT_QUERY.lens,
+      domain: (params?.get("domain") as EstateQuery["domain"]) ?? DEFAULT_QUERY.domain,
+      confidence: (params?.get("confidence") as EstateQuery["confidence"]) ?? DEFAULT_QUERY.confidence,
+      freshness: (params?.get("freshness") as EstateQuery["freshness"]) ?? DEFAULT_QUERY.freshness,
+      sort: (params?.get("sort") as EstateQuery["sort"]) ?? DEFAULT_QUERY.sort,
+      dir: (params?.get("dir") as EstateQuery["dir"]) ?? DEFAULT_QUERY.dir,
+      q: params?.get("q") ?? DEFAULT_QUERY.q,
+      lens: params?.get("lens") ?? DEFAULT_QUERY.lens,
     }),
     [params],
   );

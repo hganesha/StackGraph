@@ -16,6 +16,8 @@ from stackgraph_ai.errors import ProviderRequestError, ProviderResponseError
 from stackgraph_ai.governance import (
     CalibrationMetrics,
     CalibrationThresholds,
+    EcosystemDemand,
+    evaluate_ecosystem_admission as decide_ecosystem_admission,
     evaluate_promotion_gate,
     sha256_fingerprint,
 )
@@ -45,6 +47,9 @@ from app.models import (
     InternalCatalogComponentSummary,
     CalibrationCorpusPublishRequest,
     CalibrationCorpusSummary,
+    EcosystemAdmissionEvaluateRequest,
+    EcosystemAdmissionSummary,
+    EcosystemName,
     PageInfo,
     ProviderQuota,
     RescanJob,
@@ -81,6 +86,17 @@ _CONTROLLABLE_SERVICES = frozenset({
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
+
+_ECOSYSTEM_SEQUENCE: dict[EcosystemName, int] = {
+    "PYPI": 1, "MAVEN": 2, "CARGO": 3, "NUGET": 4,
+}
+_ECOSYSTEM_PURL_TYPE: dict[EcosystemName, str] = {
+    "PYPI": "pypi", "MAVEN": "maven", "CARGO": "cargo", "NUGET": "nuget",
+}
+# Metadata parity is a server capability, not an operator attestation. Only PyPI is implemented.
+_ECOSYSTEM_METADATA_PARITY: dict[EcosystemName, bool] = {
+    "PYPI": True, "MAVEN": False, "CARGO": False, "NUGET": False,
+}
 
 _AI_CONNECTION_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -1238,6 +1254,171 @@ class AdminReadModelsMixin:
             )
             return await self._modernization_governance_state(connection)
 
+    async def evaluate_ecosystem_admission(
+        self, ecosystem: EcosystemName, request: EcosystemAdmissionEvaluateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ModernizationGovernanceState:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to evaluate ecosystem admission.")
+        sequence = _ECOSYSTEM_SEQUENCE[ecosystem]
+        async with self.database.session(tenant_id) as connection:
+            predecessor_admitted = True
+            if sequence > 1:
+                predecessor = next(
+                    item for item, item_sequence in _ECOSYSTEM_SEQUENCE.items()
+                    if item_sequence == sequence - 1
+                )
+                current = await self._ecosystem_governance_state(connection)
+                predecessor_admitted = next(
+                    item.status == "ADMITTED" for item in current if item.ecosystem == predecessor
+                )
+            observed_repositories, observed_dependency_share = await self._ecosystem_demand(
+                connection, ecosystem,
+            )
+            calibration_gate_passed = await self._calibration_gate_passed(connection)
+            metadata_parity = _ECOSYSTEM_METADATA_PARITY[ecosystem]
+            decision = decide_ecosystem_admission(
+                EcosystemDemand(
+                    ecosystem=ecosystem,
+                    observed_repositories=observed_repositories,
+                    observed_dependency_share=observed_dependency_share,
+                    metadata_parity=metadata_parity,
+                    calibration_gate_passed=calibration_gate_passed,
+                ),
+                predecessor_admitted=predecessor_admitted,
+                minimum_repositories=request.minimum_repositories,
+                minimum_dependency_share=request.minimum_dependency_share,
+            )
+            status = "ADMITTED" if decision.admitted else "PROPOSED"
+            await connection.execute(
+                """
+                INSERT INTO ecosystem_admission(
+                  tenant_id,ecosystem,sequence,status,observed_repositories,
+                  observed_dependency_share,minimum_repositories,minimum_dependency_share,
+                  metadata_parity,calibration_gate_passed,decision_fingerprint,reasons,decided_by
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,ecosystem) DO UPDATE SET
+                  sequence=EXCLUDED.sequence,status=EXCLUDED.status,
+                  observed_repositories=EXCLUDED.observed_repositories,
+                  observed_dependency_share=EXCLUDED.observed_dependency_share,
+                  minimum_repositories=EXCLUDED.minimum_repositories,
+                  minimum_dependency_share=EXCLUDED.minimum_dependency_share,
+                  metadata_parity=EXCLUDED.metadata_parity,
+                  calibration_gate_passed=EXCLUDED.calibration_gate_passed,
+                  decision_fingerprint=EXCLUDED.decision_fingerprint,
+                  reasons=EXCLUDED.reasons,decided_by=EXCLUDED.decided_by,decided_at=now()
+                """,
+                (
+                    tenant_id, ecosystem, sequence, status, observed_repositories,
+                    observed_dependency_share, request.minimum_repositories,
+                    request.minimum_dependency_share, metadata_parity,
+                    calibration_gate_passed, decision.fingerprint,
+                    list(decision.reasons), actor_key,
+                ),
+            )
+            await self._write_admin_audit(
+                connection, tenant_id=tenant_id, actor_key=actor_key,
+                action="ecosystem_admission.evaluate", target_kind="ecosystem_admission",
+                target_id=ecosystem,
+                detail={
+                    "status": status,
+                    "observed_repositories": observed_repositories,
+                    "observed_dependency_share": observed_dependency_share,
+                    "metadata_parity": metadata_parity,
+                    "calibration_gate_passed": calibration_gate_passed,
+                    "predecessor_admitted": predecessor_admitted,
+                    "decision_fingerprint": decision.fingerprint,
+                    "reasons": list(decision.reasons),
+                },
+            )
+            return await self._modernization_governance_state(connection)
+
+    async def _ecosystem_demand(
+        self, connection: Any, ecosystem: EcosystemName,
+    ) -> tuple[int, float]:
+        purl_pattern = f"pkg:{_ECOSYSTEM_PURL_TYPE[ecosystem]}/%"
+        cursor = await connection.execute(
+            """
+            SELECT
+              count(DISTINCT fact.subject_entity_id)
+                FILTER (WHERE package.canonical_key LIKE %s) observed_repositories,
+              coalesce(
+                count(*) FILTER (WHERE package.canonical_key LIKE %s)::numeric
+                  / nullif(count(*),0),
+                0
+              ) observed_dependency_share
+            FROM dependency_usage_summary usage
+            JOIN current_fact fact ON fact.id=usage.dependency_fact_assertion_id
+            JOIN entity package ON package.id=fact.object_entity_id
+            WHERE usage.tenant_id=stackgraph_current_tenant_id()
+              AND (usage.referenced OR usage.runtime_observed='OBSERVED')
+            """,
+            (purl_pattern, purl_pattern),
+        )
+        row = await cursor.fetchone()
+        return int(row["observed_repositories"] or 0), float(row["observed_dependency_share"] or 0)
+
+    async def _calibration_gate_passed(self, connection: Any) -> bool:
+        cursor = await connection.execute(
+            """
+            SELECT 1 FROM modernization_calibration_corpus
+            WHERE status='ACTIVE' AND promotion_passed
+            LIMIT 1
+            """
+        )
+        return await cursor.fetchone() is not None
+
+    async def _ecosystem_governance_state(
+        self, connection: Any,
+    ) -> list[EcosystemAdmissionSummary]:
+        cursor = await connection.execute(
+            "SELECT * FROM ecosystem_admission ORDER BY sequence"
+        )
+        recorded = {row["ecosystem"]: row for row in await cursor.fetchall()}
+        calibration_gate_passed = await self._calibration_gate_passed(connection)
+        summaries: list[EcosystemAdmissionSummary] = []
+        predecessor_admitted = True
+        for ecosystem, sequence in _ECOSYSTEM_SEQUENCE.items():
+            row = recorded.get(ecosystem)
+            minimum_repositories = int(row["minimum_repositories"]) if row else 10
+            minimum_dependency_share = float(row["minimum_dependency_share"]) if row else 0.02
+            observed_repositories, observed_dependency_share = await self._ecosystem_demand(
+                connection, ecosystem,
+            )
+            decision = decide_ecosystem_admission(
+                EcosystemDemand(
+                    ecosystem=ecosystem,
+                    observed_repositories=observed_repositories,
+                    observed_dependency_share=observed_dependency_share,
+                    metadata_parity=_ECOSYSTEM_METADATA_PARITY[ecosystem],
+                    calibration_gate_passed=calibration_gate_passed,
+                ),
+                predecessor_admitted=predecessor_admitted,
+                minimum_repositories=minimum_repositories,
+                minimum_dependency_share=minimum_dependency_share,
+            )
+            if row is None:
+                status = "NOT_EVALUATED"
+            elif row["decision_fingerprint"] != decision.fingerprint:
+                status = "STALE"
+            else:
+                status = row["status"]
+            summaries.append(EcosystemAdmissionSummary(
+                ecosystem=ecosystem, sequence=sequence, status=status,
+                observed_repositories=observed_repositories,
+                observed_dependency_share=observed_dependency_share,
+                minimum_repositories=minimum_repositories,
+                minimum_dependency_share=minimum_dependency_share,
+                predecessor_admitted=predecessor_admitted,
+                metadata_parity=_ECOSYSTEM_METADATA_PARITY[ecosystem],
+                calibration_gate_passed=calibration_gate_passed,
+                reasons=list(decision.reasons), decision_fingerprint=decision.fingerprint,
+                decided_by=row["decided_by"] if row else None,
+                decided_at=row["decided_at"] if row else None,
+            ))
+            predecessor_admitted = status == "ADMITTED"
+        return summaries
+
     async def _modernization_governance_state(self, connection: Any) -> ModernizationGovernanceState:
         cursor = await connection.execute(
             "SELECT * FROM modernization_policy WHERE status='ACTIVE' ORDER BY updated_at DESC,id LIMIT 1"
@@ -1291,6 +1472,7 @@ class AdminReadModelsMixin:
                 evaluation_fingerprint=calibration["evaluation_fingerprint"],
                 evaluated_at=calibration["evaluated_at"],
             ) if calibration else None,
+            ecosystem_admissions=await self._ecosystem_governance_state(connection),
         )
 
     async def _governed_component_payload(self, connection: Any) -> list[dict[str, Any]]:

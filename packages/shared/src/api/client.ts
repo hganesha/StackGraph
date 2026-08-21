@@ -37,6 +37,8 @@ import type {
   ModernizationPolicyPublishRequest,
   InternalCatalogComponentUpsertRequest,
   CalibrationCorpusPublishRequest,
+  EcosystemAdmissionEvaluateRequest,
+  EcosystemName,
   TechnologyDetail,
   TechnologyEstateHierarchy,
   BusinessMapList,
@@ -153,6 +155,7 @@ export interface StackGraphClient {
   publishModernizationPolicy(body: ModernizationPolicyPublishRequest): Promise<ModernizationGovernanceState>;
   governInternalCatalogComponent(componentKey: string, body: InternalCatalogComponentUpsertRequest): Promise<ModernizationGovernanceState>;
   publishCalibrationCorpus(body: CalibrationCorpusPublishRequest): Promise<ModernizationGovernanceState>;
+  evaluateEcosystemAdmission(ecosystem: EcosystemName, body: EcosystemAdmissionEvaluateRequest): Promise<ModernizationGovernanceState>;
   getAIProviderConfiguration(): Promise<AIProviderConfiguration>;
   updateAIProviderConfiguration(body: AIProviderConfigurationUpdateRequest): Promise<AIProviderConfiguration>;
   removeAIProviderKey(): Promise<AIProviderConfiguration>;
@@ -526,9 +529,23 @@ const fixtureClient: StackGraphClient = {
   },
   async publishModernizationPolicy(body) {
     await delay();
+    const now = new Date().toISOString();
     adminModernizationGovernance = {
       ...adminModernizationGovernance,
-      active_policy: { ...body, status: "ACTIVE" },
+      active_policy: {
+        id: adminModernizationGovernance.active_policy?.id ?? "00000000-0000-4000-8000-000000000921",
+        policy_key: body.policy_key ?? "modernization.default",
+        version: body.version,
+        status: "ACTIVE",
+        runtime_versions: body.runtime_versions ?? {},
+        allowed_licenses: body.allowed_licenses ?? [],
+        denied_option_keys: body.denied_option_keys ?? [],
+        allowed_security_statuses: body.allowed_security_statuses ?? ["CLEAR", "UNKNOWN"],
+        required_policy_tags: body.required_policy_tags ?? [],
+        configuration_fingerprint: `sha256:${"5".repeat(64)}`,
+        activated_by: "fixture-admin",
+        activated_at: now,
+      },
     };
     return clone(adminModernizationGovernance);
   },
@@ -540,20 +557,98 @@ const fixtureClient: StackGraphClient = {
         ...adminModernizationGovernance.internal_components.filter(
           (item) => item.component_key !== componentKey || item.version !== body.version,
         ),
-        { component_key: componentKey, ...body, review_state: body.decision === "APPROVE" ? "APPROVED" : "REJECTED" },
+        {
+          id: `fixture-${componentKey}-${body.version}`,
+          component_key: componentKey,
+          version: body.version,
+          name: componentKey,
+          status: body.status ?? "APPROVED",
+          review_state: body.decision === "APPROVE" ? "APPROVED" : "REJECTED",
+          owner: body.owner,
+          catalog_fingerprint: `sha256:${"6".repeat(64)}`,
+          supporting_fact_ids: body.supporting_fact_ids,
+          governed_by: "fixture-admin",
+          governed_at: new Date().toISOString(),
+        },
       ],
     };
     return clone(adminModernizationGovernance);
   },
   async publishCalibrationCorpus(body) {
     await delay();
+    const minimumReviewedCases = body.minimum_reviewed_cases ?? 20;
+    const failures = [
+      ...(body.case_fingerprints.length >= minimumReviewedCases
+        ? [] : [`reviewed_cases ${body.case_fingerprints.length} < ${minimumReviewedCases}`]),
+      ...(body.candidate_precision != null && body.candidate_precision >= (body.minimum_candidate_precision ?? 0.8)
+        ? [] : ["candidate_precision is unavailable or below threshold"]),
+      ...(body.recommendation_acceptance != null && body.recommendation_acceptance >= (body.minimum_recommendation_acceptance ?? 0.5)
+        ? [] : ["recommendation_acceptance is unavailable or below threshold"]),
+      ...(body.validation_success != null && body.validation_success >= (body.minimum_validation_success ?? 0.8)
+        ? [] : ["validation_success is unavailable or below threshold"]),
+      ...(body.affected_scope_mae != null && body.affected_scope_mae <= (body.maximum_affected_scope_mae ?? 0.25)
+        ? [] : ["affected_scope_mae is unavailable or above threshold"]),
+      ...(body.effort_accuracy != null && body.effort_accuracy >= (body.minimum_effort_accuracy ?? 0.7)
+        ? [] : ["effort_accuracy is unavailable or below threshold"]),
+    ];
+    const promotionPassed = failures.length === 0;
     adminModernizationGovernance = {
       ...adminModernizationGovernance,
       active_calibration: {
+        id: "00000000-0000-4000-8000-000000000922",
         corpus_key: body.corpus_key ?? "modernization.pilot",
         version: body.version,
         case_count: body.case_fingerprints.length,
+        corpus_fingerprint: `sha256:${"7".repeat(64)}`,
+        promotion_passed: promotionPassed,
+        promotion_failures: failures,
+        evaluation_fingerprint: `sha256:${"8".repeat(64)}`,
+        evaluated_at: new Date().toISOString(),
       },
+      ecosystem_admissions: adminModernizationGovernance.ecosystem_admissions.map((item) => ({
+        ...item,
+        status: item.status === "NOT_EVALUATED" ? item.status : "STALE",
+        calibration_gate_passed: promotionPassed,
+      })),
+    };
+    return clone(adminModernizationGovernance);
+  },
+  async evaluateEcosystemAdmission(ecosystem, body) {
+    await delay();
+    const admission = adminModernizationGovernance.ecosystem_admissions.find(
+      (item) => item.ecosystem === ecosystem,
+    );
+    if (!admission) throw new FixtureApiError(404, { code: "ECOSYSTEM_NOT_FOUND" });
+    const minimumRepositories = body.minimum_repositories ?? admission.minimum_repositories;
+    const minimumDependencyShare = body.minimum_dependency_share ?? admission.minimum_dependency_share;
+    const predecessor = adminModernizationGovernance.ecosystem_admissions.find(
+      (item) => item.sequence === admission.sequence - 1,
+    );
+    const predecessorAdmitted = admission.sequence === 1 || predecessor?.status === "ADMITTED";
+    const reasons = [
+      ...(predecessorAdmitted ? [] : ["predecessor ecosystem has not been admitted"]),
+      ...(admission.observed_repositories >= minimumRepositories ? [] : ["observed repository demand is below threshold"]),
+      ...(admission.observed_dependency_share >= minimumDependencyShare ? [] : ["observed dependency share is below threshold"]),
+      ...(admission.metadata_parity ? [] : ["metadata parity is incomplete"]),
+      ...(admission.calibration_gate_passed ? [] : ["calibration promotion gate has not passed"]),
+    ];
+    adminModernizationGovernance = {
+      ...adminModernizationGovernance,
+      ecosystem_admissions: adminModernizationGovernance.ecosystem_admissions.map((item) => (
+        item.ecosystem === ecosystem
+          ? {
+              ...item,
+              status: reasons.length === 0 ? "ADMITTED" : "PROPOSED",
+              minimum_repositories: minimumRepositories,
+              minimum_dependency_share: minimumDependencyShare,
+              predecessor_admitted: predecessorAdmitted,
+              reasons,
+              decision_fingerprint: `sha256:${String(item.sequence).repeat(64)}`,
+              decided_by: "fixture-admin",
+              decided_at: new Date().toISOString(),
+            }
+          : item
+      )),
     };
     return clone(adminModernizationGovernance);
   },
@@ -825,6 +920,10 @@ const liveClient: StackGraphClient = {
     }),
   publishCalibrationCorpus: (body) =>
     req("/admin/modernization-governance/calibration", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  evaluateEcosystemAdmission: (ecosystem, body) =>
+    req(`/admin/modernization-governance/ecosystems/${encodeURIComponent(ecosystem)}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
   getAIProviderConfiguration: () => req("/admin/ai-configuration"),

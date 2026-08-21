@@ -1013,11 +1013,77 @@ export interface CalibrationCorpusPublishRequest {
   minimum_reviewed_cases?: number;
 }
 
+export interface ModernizationPolicySummary {
+  id: UUID;
+  policy_key: string;
+  version: string;
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+  runtime_versions: Record<string, string>;
+  allowed_licenses: string[];
+  denied_option_keys: string[];
+  allowed_security_statuses: string[];
+  required_policy_tags: string[];
+  configuration_fingerprint: string;
+  activated_by: string;
+  activated_at: string;
+}
+
+export interface InternalCatalogComponentSummary {
+  id: UUID;
+  component_key: string;
+  version: string;
+  name: string;
+  status: "APPROVED" | "DEPRECATED" | "BLOCKED";
+  review_state: "UNREVIEWED" | "APPROVED" | "REJECTED";
+  owner?: string | null;
+  catalog_fingerprint: string;
+  supporting_fact_ids: UUID[];
+  governed_by?: string | null;
+  governed_at?: string | null;
+}
+
+export interface CalibrationCorpusSummary {
+  id: UUID;
+  corpus_key: string;
+  version: string;
+  case_count: number;
+  corpus_fingerprint: string;
+  promotion_passed: boolean;
+  promotion_failures: string[];
+  evaluation_fingerprint: string;
+  evaluated_at: string;
+}
+
+export type EcosystemName = "PYPI" | "MAVEN" | "CARGO" | "NUGET";
+
+export interface EcosystemAdmissionEvaluateRequest {
+  minimum_repositories?: number;
+  minimum_dependency_share?: number;
+}
+
+export interface EcosystemAdmissionSummary {
+  ecosystem: EcosystemName;
+  sequence: number;
+  status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
+  observed_repositories: number;
+  observed_dependency_share: number;
+  minimum_repositories: number;
+  minimum_dependency_share: number;
+  predecessor_admitted: boolean;
+  metadata_parity: boolean;
+  calibration_gate_passed: boolean;
+  reasons: string[];
+  decision_fingerprint: string;
+  decided_by?: string | null;
+  decided_at?: string | null;
+}
+
 export interface ModernizationGovernanceState {
   contract_version: "1.0.0";
-  active_policy?: Record<string, unknown> | null;
-  internal_components: Array<Record<string, unknown>>;
-  active_calibration?: Record<string, unknown> | null;
+  active_policy?: ModernizationPolicySummary | null;
+  internal_components: InternalCatalogComponentSummary[];
+  active_calibration?: CalibrationCorpusSummary | null;
+  ecosystem_admissions: EcosystemAdmissionSummary[];
 }
 
 // --- Admin: AI provider configuration -----------------------------------
