@@ -2,8 +2,17 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
-import { RankedTable, StatTile, Skeleton } from "@stackgraph/design-system";
+import {
+  IconAlertTriangle,
+  IconApps,
+  IconChevronDown,
+  IconChevronRight,
+  IconGitBranch,
+  IconInbox,
+  IconServer2,
+  IconStack2,
+} from "@tabler/icons-react";
+import { DomainIcon, RankedTable, StatTile, Skeleton } from "@stackgraph/design-system";
 import { namespaceLabel, type Namespace, type RankedItem } from "@stackgraph/shared";
 import { useEstateSummary, useInfiniteEstateSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
@@ -60,8 +69,13 @@ function EstateDomainSection({
         ) : (
           <IconChevronRight size={18} stroke={1.75} aria-hidden="true" />
         )}
+        <span className={styles.domainGlyph}>
+          <DomainIcon namespace={domain} size={16} />
+        </span>
         <strong>{namespaceLabel(domain)}</strong>
-        <span>{items.length === loadedCount ? `${loadedCount} loaded` : `${items.length} of ${loadedCount} match`}</span>
+        <span className={styles.domainCount}>
+          {items.length === loadedCount ? `${loadedCount} loaded` : `${items.length} of ${loadedCount} match`}
+        </span>
       </button>
       {open ? (
         <div id={contentId} className={styles.domainTable}>
@@ -74,6 +88,7 @@ function EstateDomainSection({
             />
           ) : (
             <p className={styles.domainEmpty}>
+              <IconInbox size={20} stroke={1.5} aria-hidden="true" />
               {loadedCount === 0
                 ? domain === "OSS"
                   ? "No linked OSS projects are represented yet. Open-source packages discovered in repositories appear under Technology; this section shows external project intelligence such as source repositories, releases, licenses, maintainers, and ecosystem health once linked."
@@ -201,13 +216,15 @@ export function EstateView() {
       <header className={styles.head}>
         <h1 className={styles.title}>Software Estate</h1>
         <p className={styles.subtitle}>
-          Your portfolio, ranked by priority. Scan first — evidence is one click beneath every number.
+          Every application, repository, service, and technology discovered across the connected
+          repositories, grouped by domain and ranked by priority.
         </p>
       </header>
 
       {isError ? (
         <div className={styles.notice} role="alert">
-          Couldn’t load the estate summary. Retry, or check the API connection.
+          <IconAlertTriangle size={18} stroke={1.5} aria-hidden="true" />
+          <span>Couldn’t load the estate summary. Retry, or check the API connection.</span>
         </div>
       ) : null}
 
@@ -223,10 +240,10 @@ export function EstateView() {
           </>
         ) : (
           <>
-            <StatTile label="Applications" value={counts.applications} />
-            <StatTile label="Repositories" value={counts.repositories} />
-            <StatTile label="Services" value={counts.services} />
-            <StatTile label="Technologies" value={counts.technologies} />
+            <StatTile label="Applications" value={counts.applications} icon={IconApps} />
+            <StatTile label="Repositories" value={counts.repositories} icon={IconGitBranch} />
+            <StatTile label="Services" value={counts.services} icon={IconServer2} />
+            <StatTile label="Technologies" value={counts.technologies} icon={IconStack2} />
           </>
         )}
       </section>

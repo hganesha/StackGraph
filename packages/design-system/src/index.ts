@@ -1,7 +1,8 @@
-export { confidencePolicy, confidenceLabel, confidenceSegments, domainMeta } from "./tokens/tokens";
+export { confidencePolicy, confidenceLabel, confidenceSegments, domainMeta, NAMESPACES } from "./tokens/tokens";
 export { ThemeProvider, useTheme, themeInitScript } from "./theme/ThemeProvider";
 export type { ThemeChoice } from "./theme/ThemeProvider";
 export { DomainBadge } from "./components/DomainBadge";
+export { DomainIcon, domainIcons } from "./components/DomainIcon";
 export { ConfidenceChip } from "./components/ConfidenceChip";
 export { StatTile } from "./components/StatTile";
 export { StatusStrip } from "./components/StatusStrip";

@@ -2,7 +2,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-inline-size: 2.5rem;
+  gap: var(--sg-space-1);
+  min-inline-size: 3.75rem;
   padding: 2px var(--sg-space-2);
   border-radius: var(--sg-radius-pill);
   background: var(--fill);
@@ -12,4 +13,11 @@
   font-weight: 500;
   letter-spacing: 0.04em;
   user-select: none;
+}
+
+/* Optically aligns the stroked glyph with the mono cap-height beside it. */
+.glyph {
+  flex: none;
+  margin-block-start: -1px;
+  opacity: 0.85;
 }

@@ -342,7 +342,7 @@ function EcosystemAdmissions({ state }: { state: ModernizationGovernanceState })
   return (
     <section className={styles.governanceCard} aria-labelledby="ecosystem-admission-heading">
       <div className={styles.governanceCardHead}>
-        <div><span className={styles.eyebrow}>Bounded expansion</span><h2 id="ecosystem-admission-heading" className={styles.cardTitle}>Ecosystem admission</h2></div>
+        <div><span className={styles.eyebrow}>Rollout</span><h2 id="ecosystem-admission-heading" className={styles.cardTitle}>Ecosystem admission</h2></div>
       </div>
       <p className={styles.sectionNote}>Demand is recalculated from current, active dependency evidence. PyPI metadata parity is implemented; later ecosystems stay blocked until their adapter exists and every preceding gate is current.</p>
       <div className={styles.ecosystemGrid}>{state.ecosystem_admissions.map((admission) => <EcosystemCard key={admission.ecosystem} admission={admission} />)}</div>

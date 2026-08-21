@@ -42,7 +42,9 @@ export default function ModernizationPage() {
     <div className={styles.page}>
       <header className={styles.head}>
         <h1 className={styles.title}>Modernization</h1>
-        <p className={styles.subtitle}>What to do, in what order — ranked by opportunity, not by noise.</p>
+        <p className={styles.subtitle}>
+          Modernization opportunities across the estate, ranked by priority, with the effort each one carries.
+        </p>
       </header>
 
       <aside className={styles.status} aria-label="Recommendation status">
@@ -60,9 +62,9 @@ export default function ModernizationPage() {
       <section className={styles.plan} aria-labelledby="scenario-title">
         <div className={styles.planHeader}>
           <div className={styles.sectionIntro}>
-            <span className={styles.eyebrow}>Portfolio planner</span>
+            <span className={styles.eyebrow}>Budget scenario</span>
             <h2 id="scenario-title">Recommended plan</h2>
-            <p>Adjust the effort budget to see which initiatives deliver the most value together.</p>
+            <p>Set an effort budget to see which initiatives fit inside it.</p>
           </div>
           <label className={styles.budgetControl}>
             <span className={styles.budgetLabel}>Effort budget</span>
@@ -141,7 +143,7 @@ export default function ModernizationPage() {
       <section className={styles.opportunities} aria-labelledby="opportunities-title">
         <div className={styles.opportunityHeader}>
           <div className={styles.sectionIntro}>
-            <span className={styles.eyebrow}>Work queue</span>
+            <span className={styles.eyebrow}>Full list</span>
             <h2 id="opportunities-title">Ranked opportunities</h2>
             <p>Start with the highest-priority items, then open a repository to review the evidence.</p>
           </div>

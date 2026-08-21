@@ -7,6 +7,7 @@ import {
   IconApps,
   IconChecklist,
   IconHierarchy3,
+  IconInfoCircle,
   IconLayoutDashboard,
   IconMessageQuestion,
   IconSettings,
@@ -31,7 +32,10 @@ const SECONDARY = [
   { href: "/health", label: "Estate Health", icon: IconActivityHeartbeat },
 ];
 
-const ADMIN = [{ href: "/admin", label: "Admin", icon: IconSettings }];
+const ADMIN = [
+  { href: "/about", label: "About", icon: IconInfoCircle },
+  { href: "/admin", label: "Admin", icon: IconSettings },
+];
 
 export function LeftRail({
   open = false,

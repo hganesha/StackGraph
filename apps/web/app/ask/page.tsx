@@ -109,7 +109,7 @@ export default function AskPage() {
       <header className={styles.head}>
         <h1 className={styles.title}>Ask your estate</h1>
         <p className={styles.subtitle}>
-          {businessMapContext ? "Ask across the current business map and the evidence already in your estate." : "Answered from your facts, text-first, always cited — never generated from model memory."}
+          {businessMapContext ? "Questions are answered against the attached business map and the evidence already in your estate." : "Answers are built from facts already recorded in your estate, and each one carries the citations it was drawn from."}
         </p>
         {businessMapContext ? (
           <div className={styles.contextBanner}>

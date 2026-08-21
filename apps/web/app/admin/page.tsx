@@ -41,7 +41,7 @@ export default function AdminPage() {
       <header className={styles.head}>
         <h1 className={styles.title}>Admin</h1>
         <p className={styles.subtitle}>
-          Workspace policy — connections, refresh, AI, modernization governance, and roles. Every change here is audited.
+          Connections, refresh schedules, AI settings, modernization governance, and roles. Changes here are written to the audit log.
         </p>
       </header>
 

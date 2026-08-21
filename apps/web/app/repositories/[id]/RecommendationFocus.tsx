@@ -210,7 +210,7 @@ export function RecommendationFocus({
           <div className={styles.focusSectionHead}>
             <div>
               <span className={styles.eyebrow}>Affected code</span>
-              <h2 id="affected-modules-heading">Exact modules behind this recommendation</h2>
+              <h2 id="affected-modules-heading">Modules behind this recommendation</h2>
               <p>These are the files and symbols the analysis matched. Review them before changing shared behavior.</p>
             </div>
             <span>{modules.length}</span>
