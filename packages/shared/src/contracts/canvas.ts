@@ -360,6 +360,12 @@ export interface CanvasUnresolvedPolicy {
   source: "PRIMARY" | "CUSTOM";
   reason: string;
   technology_count: number;
+  /**
+   * [COMPLETES SPEC] The decisions the unresolved policy carries. §7.3 requires that
+   * no legacy or custom policy is silently dropped, which means the UI has to be able
+   * to move one onto a cell — and it cannot do that from a count alone.
+   */
+  technologies: CanvasPolicyTechnologyDecision[];
 }
 
 export interface CanvasClassificationTray {

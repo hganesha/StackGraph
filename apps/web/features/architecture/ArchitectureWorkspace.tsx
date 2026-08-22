@@ -12,12 +12,14 @@ import {
   useCanvasComparison,
   useCanvasProjection,
   useCanvasReferenceModel,
+  useCanvasTargetProjection,
   useCanvasTemplate,
 } from "@/lib/canvasQueries";
+import { useEstateDomainSummary } from "@/lib/queries";
 import { useCan } from "@/lib/session";
 import { CanvasControls, type CanvasView } from "./CanvasControls";
 import { CanvasDetailPanel } from "./CanvasDetailPanel";
-import { PolicyIntentDialog } from "./PolicyIntentDialog";
+import { PolicyIntentDialog, type PolicySubmission } from "./PolicyIntentDialog";
 import { useCanvasPolicy } from "./useCanvasPolicy";
 import styles from "./architecture.module.css";
 
@@ -47,32 +49,76 @@ export function ArchitectureWorkspace({
   const [mode, setMode] = useState<CanvasMode>("read");
   const [selectedCellKey, setSelectedCellKey] = useState<string | null>(null);
   const [activeAspectKey, setActiveAspectKey] = useState<string | null>(null);
+  // Application-to-application comparison: the same frame twice, so a difference is a
+  // real difference and not a relayout.
+  const [baselineSubjectId, setBaselineSubjectId] = useState<string | null>(null);
 
   const referenceModel = useCanvasReferenceModel();
   const template = useCanvasTemplate();
 
-  const activeScope: CanvasScope = view === "target" ? "TARGET" : scope;
-  const projection = useCanvasProjection(
-    { scope: activeScope, subjectId, referenceModelKey: DEFAULT_REFERENCE_MODEL_KEY, templateKey: DEFAULT_TEMPLATE_KEY },
-    { enabled: view !== "target" || canReview },
+  const showingTarget = view === "target";
+  const actualProjection = useCanvasProjection(
+    { scope, subjectId, referenceModelKey: DEFAULT_REFERENCE_MODEL_KEY, templateKey: DEFAULT_TEMPLATE_KEY },
+    { enabled: !showingTarget },
   );
 
   const comparisonRequest: CanvasComparisonRequest | null = useMemo(() => {
+    const version = referenceModel.data?.version ?? "1.0.0";
+    if (view === "compare" && baselineSubjectId) {
+      return {
+        comparison_kind: "ACTUAL_TO_ACTUAL",
+        reference_model_key: DEFAULT_REFERENCE_MODEL_KEY,
+        reference_model_version: version,
+        actual: { scope, subject_id: subjectId },
+        baseline: { scope: "APPLICATION", subject_id: baselineSubjectId },
+      };
+    }
     if (view !== "drift" || !canReview) return null;
     return {
       comparison_kind: "ACTUAL_TO_TARGET",
       reference_model_key: DEFAULT_REFERENCE_MODEL_KEY,
-      reference_model_version: referenceModel.data?.version ?? "1.0.0",
+      reference_model_version: version,
       actual: { scope, subject_id: subjectId },
       baseline: { scope: "TARGET" },
     };
-  }, [canReview, referenceModel.data?.version, scope, subjectId, view]);
+  }, [baselineSubjectId, canReview, referenceModel.data?.version, scope, subjectId, view]);
   const comparison = useCanvasComparison(comparisonRequest);
 
+  // Comparison peers are only meaningful when the canvas is already scoped to one
+  // application, so the estate list is fetched lazily rather than on every surface.
+  const applications = useEstateDomainSummary(["ENTERPRISE"], {
+    enabled: scope === "APPLICATION" && Boolean(subjectId),
+  });
+  const comparableApplications = useMemo(
+    () =>
+      (applications.data?.ranked_items ?? [])
+        .filter((item) => item.kind === "Application" && item.id !== subjectId)
+        .map((item) => ({ id: item.id, name: item.name })),
+    [applications.data, subjectId],
+  );
+
   const profiles = useArchitectureProfiles({ enabled: canGovern });
-  const activeProfile =
-    profiles.data?.profiles.find((entry) => entry.status === "ACTIVE") ?? profiles.data?.profiles[0] ?? null;
-  const policy = useCanvasPolicy(activeProfile);
+  // Governance edits target a DRAFT revision, never the one in force: PUT
+  // /admin/architecture-profiles/{id} updates a draft (spec §10.2), and editing the
+  // active standard in place would skip the publish step that makes a change
+  // deliberate. With no draft open, govern mode is read-only and says why.
+  const draftProfile = useMemo(
+    () =>
+      [...(profiles.data?.profiles ?? [])]
+        .filter((entry) => entry.status === "DRAFT")
+        .sort((a, b) => b.version - a.version)[0] ?? null,
+    [profiles.data],
+  );
+  const policy = useCanvasPolicy(draftProfile);
+  const canWritePolicy = canGovern && Boolean(draftProfile);
+  const governing = showingTarget && mode === "govern" && canWritePolicy;
+
+  // While governing, the target view previews the draft, so an edit is visible before
+  // it is published. Otherwise it shows the revision actually in force.
+  const targetProjection = useCanvasTargetProjection(governing ? draftProfile?.id : undefined, {
+    enabled: showingTarget && canReview,
+  });
+  const projection = showingTarget ? targetProjection : actualProjection;
 
   const selectedDefinition = useMemo(
     () => referenceModel.data?.cells.find((cell) => cell.key === selectedCellKey) ?? null,
@@ -85,6 +131,69 @@ export function ArchitectureWorkspace({
   const selectedComparison = useMemo(
     () => comparison.data?.cells.find((cell) => cell.cell_key === selectedCellKey) ?? null,
     [comparison.data, selectedCellKey],
+  );
+  const promptCellKey =
+    policy.prompt && "cell_key" in policy.prompt.intent ? policy.prompt.intent.cell_key : null;
+  const promptCell = useMemo(
+    () => projection.data?.cells.find((cell) => cell.cell_key === promptCellKey) ?? null,
+    [projection.data, promptCellKey],
+  );
+  const promptDefinition = useMemo(
+    () => referenceModel.data?.cells.find((cell) => cell.key === promptCellKey) ?? null,
+    [referenceModel.data, promptCellKey],
+  );
+  const promptUnresolvedPolicy = useMemo(() => {
+    if (policy.prompt?.intent.kind !== "RESOLVE_UNRESOLVED_POLICY") return null;
+    const key = policy.prompt.intent.policy_key;
+    return (
+      projection.data?.classification_tray.unresolved_policies.find(
+        (entry) => entry.policy_key === key,
+      ) ?? null
+    );
+  }, [policy.prompt, projection.data]);
+
+  const removeException = useCallback(
+    (cellKey: string, exceptionId: string) => {
+      const existing = projection.data?.cells.find((cell) => cell.cell_key === cellKey)?.policy?.exceptions ?? [];
+      void policy.applyExceptions(
+        cellKey,
+        existing.filter((exception) => exception.id !== exceptionId),
+      );
+    },
+    [policy, projection.data],
+  );
+
+  const submitPolicy = useCallback(
+    (submission: PolicySubmission) => {
+      const intent = policy.prompt?.intent;
+      if (!intent) return;
+      switch (intent.kind) {
+        case "PROMOTE_FROM_ACTUAL":
+          void policy.applyDecision(intent.cell_key, intent.technology_id, "PREFERRED", submission.rationale);
+          break;
+        case "SET_TECHNOLOGY_DECISION":
+          void policy.applyDecision(intent.cell_key, intent.technology_id, intent.decision, submission.rationale);
+          break;
+        case "SET_EXPECTATION":
+          if (submission.expectation) {
+            void policy.applyExpectation(intent.cell_key, submission.expectation, submission.rationale);
+          }
+          break;
+        case "EDIT_POLICY_DETAILS":
+          if (submission.details) void policy.applyPolicyDetails(intent.cell_key, submission.details);
+          break;
+        case "RESOLVE_UNRESOLVED_POLICY":
+          if (submission.targetCellKey && promptUnresolvedPolicy) {
+            void policy.resolveUnresolvedPolicy(
+              submission.targetCellKey,
+              promptUnresolvedPolicy,
+              submission.rationale,
+            );
+          }
+          break;
+      }
+    },
+    [policy, promptUnresolvedPolicy],
   );
 
   const onSelectOccupant = useCallback(
@@ -100,6 +209,14 @@ export function ArchitectureWorkspace({
   // Drift is an emphasis on top of the actual projection; forcing it here means the
   // control and the rendering can never disagree about what the tone is showing.
   const effectiveEmphasis: CanvasEmphasis = view === "drift" ? "conformance" : emphasis;
+  // Govern is only reachable from the target view: editing the estate's observed state
+  // is meaningless, and editing while looking at drift would hide what changed.
+  const canvasMode: CanvasMode =
+    view === "target" && mode === "govern"
+      ? "govern"
+      : view === "drift" || view === "compare"
+        ? "compare"
+        : "read";
 
   return (
     <div className={styles.workspace}>
@@ -121,6 +238,10 @@ export function ArchitectureWorkspace({
           setView(next);
           setSelectedCellKey(null);
         }}
+        baselineSubjectId={baselineSubjectId}
+        onBaselineChange={setBaselineSubjectId}
+        subjectId={subjectId}
+        comparableApplications={comparableApplications}
         emphasis={effectiveEmphasis}
         onEmphasisChange={setEmphasis}
         density={density}
@@ -128,10 +249,19 @@ export function ArchitectureWorkspace({
         mode={mode}
         onModeChange={variant === "workspace" ? setMode : undefined}
         canGovern={canGovern}
+        canWritePolicy={canWritePolicy}
+        draftVersion={draftProfile?.version ?? null}
         canReview={canReview}
         projection={projection.data ?? null}
         summaryVisible={variant === "workspace"}
       />
+
+      {governing && draftProfile ? (
+        <p className={styles.draftBanner} role="status">
+          Previewing draft revision v{draftProfile.version}. Changes save to the draft and take
+          effect for the estate only when it is published.
+        </p>
+      ) : null}
 
       {isLoading ? (
         <Skeleton height="480px" />
@@ -151,8 +281,8 @@ export function ArchitectureWorkspace({
               template={template.data}
               referenceModel={referenceModel.data}
               projection={projection.data}
-              comparison={view === "drift" ? comparison.data ?? null : null}
-              mode={view === "target" && mode === "govern" ? "govern" : view === "drift" ? "compare" : "read"}
+              comparison={view === "drift" || view === "compare" ? comparison.data ?? null : null}
+              mode={canvasMode}
               density={density}
               emphasis={effectiveEmphasis}
               selectedCellKey={selectedCellKey}
@@ -160,7 +290,7 @@ export function ArchitectureWorkspace({
               onSelectCell={setSelectedCellKey}
               onSelectOccupant={onSelectOccupant}
               onSelectAspect={setActiveAspectKey}
-              onPolicyIntent={canGovern ? policy.handleIntent : undefined}
+              onPolicyIntent={canWritePolicy ? policy.handleIntent : undefined}
             />
           </div>
 
@@ -169,9 +299,10 @@ export function ArchitectureWorkspace({
               definition={selectedDefinition}
               cell={selectedCell}
               comparison={selectedComparison}
-              canGovern={canGovern}
+              canGovern={canWritePolicy}
               onClose={() => setSelectedCellKey(null)}
-              onPolicyIntent={canGovern ? policy.handleIntent : undefined}
+              onPolicyIntent={canWritePolicy ? policy.handleIntent : undefined}
+              onRemoveException={canWritePolicy ? removeException : undefined}
             />
           ) : null}
         </div>
@@ -180,22 +311,17 @@ export function ArchitectureWorkspace({
       {policy.prompt ? (
         <PolicyIntentDialog
           prompt={policy.prompt}
+          cell={promptCell}
+          definition={promptDefinition}
+          cells={referenceModel.data?.cells ?? []}
+          unresolvedPolicy={promptUnresolvedPolicy}
           conflict={policy.conflict}
           isSaving={policy.isSaving}
           onDismiss={policy.dismiss}
-          onConfirm={(rationale) => {
-            const intent = policy.prompt?.intent;
-            if (!intent) return;
-            if (intent.kind === "PROMOTE_FROM_ACTUAL") {
-              void policy.applyDecision(intent.cell_key, intent.technology_id, "PREFERRED", rationale);
-            } else if (intent.kind === "SET_TECHNOLOGY_DECISION") {
-              void policy.applyDecision(intent.cell_key, intent.technology_id, intent.decision, rationale);
-            } else {
-              policy.dismiss();
-            }
-          }}
+          onConfirm={submitPolicy}
         />
       ) : null}
+
     </div>
   );
 }

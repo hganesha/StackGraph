@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import type { CanvasEmphasis, CanvasMode } from "@stackgraph/canvas-ui";
 import type { CanvasProjection } from "@stackgraph/shared";
 import styles from "./architecture.module.css";
 
-export type CanvasView = "actual" | "target" | "drift";
+export type CanvasView = "actual" | "target" | "drift" | "compare";
 
 const EMPHASIS_OPTIONS: Array<{ value: CanvasEmphasis; label: string; hint: string }> = [
   { value: "posture", label: "Posture", hint: "Tone follows the measured posture band." },
@@ -28,9 +29,15 @@ export function CanvasControls({
   mode,
   onModeChange,
   canGovern,
+  canWritePolicy = false,
+  draftVersion = null,
   canReview,
   projection,
   summaryVisible = true,
+  subjectId,
+  baselineSubjectId,
+  onBaselineChange,
+  comparableApplications = [],
 }: {
   view: CanvasView;
   onViewChange: (view: CanvasView) => void;
@@ -41,9 +48,15 @@ export function CanvasControls({
   mode: CanvasMode;
   onModeChange?: (mode: CanvasMode) => void;
   canGovern: boolean;
+  canWritePolicy?: boolean;
+  draftVersion?: number | null;
   canReview: boolean;
   projection: CanvasProjection | null;
   summaryVisible?: boolean;
+  subjectId?: string;
+  baselineSubjectId: string | null;
+  onBaselineChange: (subjectId: string | null) => void;
+  comparableApplications?: Array<{ id: string; name: string }>;
 }) {
   return (
     <div className={styles.controls}>
@@ -52,18 +65,24 @@ export function CanvasControls({
         <div className={styles.segmented} role="radiogroup" aria-label="Canvas view">
           {(
             [
-              ["actual", "Actual", true],
-              ["target", "Target", canReview],
-              ["drift", "Drift", canReview],
-            ] as Array<[CanvasView, string, boolean]>
-          ).map(([value, label, allowed]) => (
+              ["actual", "Actual", true, undefined],
+              ["target", "Target", canReview, "Target and drift require review access."],
+              ["drift", "Drift", canReview, "Target and drift require review access."],
+              [
+                "compare",
+                "Compare",
+                Boolean(subjectId) && comparableApplications.length > 0,
+                "Comparison needs an application in scope and at least one other to compare against.",
+              ],
+            ] as Array<[CanvasView, string, boolean, string | undefined]>
+          ).map(([value, label, allowed, blockedReason]) => (
             <button
               key={value}
               type="button"
               role="radio"
               aria-checked={view === value}
               disabled={!allowed}
-              title={allowed ? undefined : "Target and drift require review access."}
+              title={allowed ? undefined : blockedReason}
               className={`${styles.segment} ${view === value ? styles.segmentActive : ""}`}
               onClick={() => onViewChange(value)}
             >
@@ -72,6 +91,25 @@ export function CanvasControls({
           ))}
         </div>
       </fieldset>
+
+      {view === "compare" ? (
+        <fieldset className={styles.controlGroup}>
+          <legend className={styles.controlLegend}>Compare against</legend>
+          <select
+            className={styles.controlSelect}
+            aria-label="Baseline application"
+            value={baselineSubjectId ?? ""}
+            onChange={(event) => onBaselineChange(event.target.value || null)}
+          >
+            <option value="">Choose an application…</option>
+            {comparableApplications.map((application) => (
+              <option key={application.id} value={application.id}>
+                {application.name}
+              </option>
+            ))}
+          </select>
+        </fieldset>
+      ) : null}
 
       <fieldset className={styles.controlGroup}>
         <legend className={styles.controlLegend}>Emphasis</legend>
@@ -117,10 +155,19 @@ export function CanvasControls({
             <input
               type="checkbox"
               checked={mode === "govern"}
+              disabled={!canWritePolicy}
               onChange={(event) => onModeChange(event.target.checked ? "govern" : "read")}
             />
-            <span>Govern target</span>
+            <span>
+              {canWritePolicy ? `Govern draft v${draftVersion}` : "Govern target"}
+            </span>
           </label>
+          {!canWritePolicy ? (
+            <p className={styles.controlNote}>
+              No draft revision is open. Edits are made against a draft and take effect when it is
+              published — <Link href="/admin?tab=governance">start one in Admin</Link>.
+            </p>
+          ) : null}
         </fieldset>
       ) : null}
 

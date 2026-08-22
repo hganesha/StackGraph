@@ -76,10 +76,13 @@ export function useCanvasProjection(
  * gate on the capability; passing `enabled: false` keeps an unauthorised surface from
  * firing a request that would 403.
  */
-export function useCanvasTargetProjection(options?: { enabled?: boolean }) {
+export function useCanvasTargetProjection(
+  profileId?: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
-    queryKey: ["canvas", "projection", "TARGET"],
-    queryFn: () => stackGraphClient.getCanvasTargetProjection(),
+    queryKey: ["canvas", "projection", "TARGET", profileId ?? null],
+    queryFn: () => stackGraphClient.getCanvasTargetProjection({ profileId }),
     enabled: options?.enabled ?? true,
   });
 }

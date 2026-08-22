@@ -15,11 +15,11 @@
       "allowed_diversity": 2,
       "scope_selector": {},
       "preferred_technology_ids": [
-        "aa521c45-1959-408c-83e4-03c4b2425013"
+        "4480fdc8-2280-49d3-8be2-88afc8a566b3"
       ],
       "allowed_technology_ids": [],
       "discouraged_technology_ids": [
-        "25c26943-76a2-44ab-8a69-62ce6b092d61"
+        "4b430abe-2242-4d69-8756-1d42ce3057e8"
       ],
       "prohibited_technology_ids": [],
       "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
@@ -36,16 +36,16 @@
       "allowed_diversity": 3,
       "scope_selector": {},
       "preferred_technology_ids": [
-        "5cb21413-4718-4548-8dd0-aea5da0e91e9"
+        "3f9d5e17-552d-463c-8f7d-17f728453d76"
       ],
       "allowed_technology_ids": [
-        "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808"
+        "f71eb2d5-2c99-413f-8207-93ae3cf76c25"
       ],
       "discouraged_technology_ids": [
-        "d8982a6a-8943-4042-8bfc-4329005bee11"
+        "701be562-914b-45f2-84d4-c0026fb67006"
       ],
       "prohibited_technology_ids": [
-        "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79"
+        "52c6d8a7-0b44-4565-889e-a95f49edf8bd"
       ],
       "rationale": "Zustand for client state, TanStack Query for server state. Redux is being retired; MobX is prohibited.",
       "owner": "frontend-guild",
@@ -61,13 +61,13 @@
       "allowed_diversity": 2,
       "scope_selector": {},
       "preferred_technology_ids": [
-        "3938ba19-c483-4e8b-820f-8c4c28fe28d5"
+        "d62e402e-7fea-4375-888f-5025b7bb7076"
       ],
       "allowed_technology_ids": [
-        "2712c40e-d538-47dc-89fe-a73c873dad1f"
+        "7f5c974e-8a99-42b0-8ac4-124f4baea132"
       ],
       "discouraged_technology_ids": [
-        "d2aa2088-606d-4edb-84a5-a116588da1eb"
+        "9fce2b50-845e-4ca8-88ca-07f631fbe797"
       ],
       "prohibited_technology_ids": [],
       "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
@@ -84,11 +84,11 @@
       "allowed_diversity": 2,
       "scope_selector": {},
       "preferred_technology_ids": [
-        "b2119897-839f-4f28-8e1a-e89b2e9184ac"
+        "819e9923-6986-467a-8cf6-7d824e9679d1"
       ],
       "allowed_technology_ids": [],
       "discouraged_technology_ids": [
-        "b2466522-252b-44ca-88c2-4fbd8baefc58"
+        "50b31e9c-7005-4827-8ed6-6d778c3c417d"
       ],
       "prohibited_technology_ids": [],
       "rationale": "PostgreSQL is the standard relational engine across all environments.",
@@ -124,10 +124,10 @@
       "allowed_diversity": 3,
       "scope_selector": {},
       "preferred_technology_ids": [
-        "305dfe02-7869-4fee-8d87-0e7c3c2b60c8"
+        "f8249c05-b58e-4676-8b0e-469b311320ba"
       ],
       "allowed_technology_ids": [
-        "e89e1e5a-5a6b-4c63-8209-24a95266d338"
+        "6b79b09c-918f-43a9-8841-6bebb17ad13f"
       ],
       "discouraged_technology_ids": [],
       "prohibited_technology_ids": [],

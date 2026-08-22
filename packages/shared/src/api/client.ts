@@ -399,7 +399,8 @@ interface CanvasFixtureBundle {
   application: CanvasProjection;
   target: CanvasProjection;
   comparison: CanvasComparison;
-  profile: TenantArchitectureProfile;
+  /** Revision history, newest last. The Admin surface exists to show this. */
+  profiles: TenantArchitectureProfile[];
 }
 
 let canvasBundle: Promise<CanvasFixtureBundle> | null = null;
@@ -420,7 +421,7 @@ function loadCanvasFixtures(): Promise<CanvasFixtureBundle> {
     application: clone(application.default as unknown as CanvasProjection),
     target: clone(target.default as unknown as CanvasProjection),
     comparison: clone(comparison.default as unknown as CanvasComparison),
-    profile: clone(profile.default as unknown as TenantArchitectureProfile),
+    profiles: [clone(profile.default as unknown as TenantArchitectureProfile)],
   }));
   return canvasBundle;
 }
@@ -446,14 +447,38 @@ const CANVAS_DECISION_FIELDS: Array<[CanvasPolicyDecision, "preferred_technology
  * reflects an edit immediately. The server computes this properly; the fixture keeps
  * the two consistent enough that the UI's mutate-then-refetch path is real.
  */
+/** The revision in force, which is what every projection resolves against. */
+function activeProfile(bundle: CanvasFixtureBundle): TenantArchitectureProfile {
+  return (
+    bundle.profiles.find((entry) => entry.status === "ACTIVE") ??
+    bundle.profiles[bundle.profiles.length - 1]
+  );
+}
+
 function applyProfileToTarget(
   target: CanvasProjection,
   profile: TenantArchitectureProfile,
 ): CanvasProjection {
+  // Every technology the profile can reference has to be resolvable to a name. The
+  // classification tray matters here specifically: a policy migrated off the tray onto
+  // a cell names technologies that appear in no cell yet, and rendering a raw id to a
+  // reviewer would be worse than not offering the migration at all.
   const knownTechnology = new Map<string, EntitySummary>();
   for (const cell of target.cells) {
     for (const occupant of cell.occupants) knownTechnology.set(occupant.technology.id, occupant.technology);
     for (const decision of cell.policy?.decisions ?? []) {
+      knownTechnology.set(decision.technology.id, decision.technology);
+    }
+  }
+  const tray = target.classification_tray;
+  for (const entry of tray.unclassified_technologies) {
+    knownTechnology.set(entry.technology.id, entry.technology);
+  }
+  for (const entry of tray.ambiguous_observations) {
+    knownTechnology.set(entry.technology.id, entry.technology);
+  }
+  for (const policyEntry of tray.unresolved_policies) {
+    for (const decision of policyEntry.technologies) {
       knownTechnology.set(decision.technology.id, decision.technology);
     }
   }
@@ -1327,7 +1352,7 @@ const fixtureClient: StackGraphClient = {
     const bundle = await loadCanvasFixtures();
     await delay(180);
     if (params.scope === "TARGET") {
-      return applyProfileToTarget(bundle.target, bundle.profile);
+      return applyProfileToTarget(bundle.target, activeProfile(bundle));
     }
     if (params.scope === "APPLICATION" || params.scope === "REPOSITORY") {
       const projection = clone(bundle.application);
@@ -1337,10 +1362,15 @@ const fixtureClient: StackGraphClient = {
     }
     return clone(bundle.estate);
   },
-  getCanvasTargetProjection: async () => {
+  getCanvasTargetProjection: async (params) => {
     const bundle = await loadCanvasFixtures();
     await delay(180);
-    return applyProfileToTarget(bundle.target, bundle.profile);
+    // A named profile previews that revision — this is how govern mode shows a draft's
+    // effect before it is published. Without it, editing a draft looks like a no-op.
+    const profile = params?.profileId
+      ? bundle.profiles.find((entry) => entry.id === params.profileId)
+      : undefined;
+    return applyProfileToTarget(bundle.target, profile ?? activeProfile(bundle));
   },
   createCanvasComparison: async (body) => {
     const bundle = await loadCanvasFixtures();
@@ -1348,48 +1378,69 @@ const fixtureClient: StackGraphClient = {
     return { ...clone(bundle.comparison), comparison_kind: body.comparison_kind };
   },
   listArchitectureProfiles: async () => {
-    const { profile } = await loadCanvasFixtures();
+    const bundle = await loadCanvasFixtures();
     await delay();
-    return { contract_version: "1.0.0" as const, profiles: [clone(profile)] };
+    return { contract_version: "1.0.0" as const, profiles: clone(bundle.profiles) };
   },
   createArchitectureProfile: async (body) => {
     const bundle = await loadCanvasFixtures();
     await delay();
-    bundle.profile = {
-      ...clone(bundle.profile),
+    // A draft is a NEW revision. Earlier ones stay, and the active one stays active
+    // until the draft is published — the Admin surface has to be able to show both.
+    const source = body.copy_from_profile_id
+      ? bundle.profiles.find((entry) => entry.id === body.copy_from_profile_id)
+      : undefined;
+    const highest = Math.max(...bundle.profiles.map((entry) => entry.version), 0);
+    const draft: TenantArchitectureProfile = {
+      ...clone(source ?? activeProfile(bundle)),
+      id: canvasFingerprint(`${body.name}:${highest + 1}`).replace("sha256:", "").slice(0, 32)
+        .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12}).*$/, "$1-$2-4$3-8$4-$5"),
       name: body.name,
-      version: bundle.profile.version + 1,
+      version: highest + 1,
       status: "DRAFT",
-      cell_overrides: body.copy_from_profile_id ? clone(bundle.profile.cell_overrides) : [],
-      fingerprint: canvasFingerprint(body.name),
+      cell_overrides: source ? clone(source.cell_overrides) : [],
+      fingerprint: canvasFingerprint(`${body.name}:${highest + 1}`),
       updated_at: new Date().toISOString(),
     };
-    return clone(bundle.profile);
+    bundle.profiles = [...bundle.profiles, draft];
+    return clone(draft);
   },
   updateArchitectureProfile: async (id, body) => {
     const bundle = await loadCanvasFixtures();
     await delay();
-    if (id !== bundle.profile.id) throw new FixtureApiError(404, { detail: "Unknown profile" });
-    if (body.expected_fingerprint !== bundle.profile.fingerprint) {
+    const index = bundle.profiles.findIndex((entry) => entry.id === id);
+    if (index === -1) throw new FixtureApiError(404, { detail: "Unknown profile" });
+    const current = bundle.profiles[index];
+    if (body.expected_fingerprint !== current.fingerprint) {
       throw new FixtureApiError(409, { detail: "Profile changed since it was loaded" });
     }
-    bundle.profile = {
-      ...bundle.profile,
-      name: body.name ?? bundle.profile.name,
-      cell_overrides: body.cell_overrides ? clone(body.cell_overrides) : bundle.profile.cell_overrides,
-      extension_cells: body.extension_cells ? clone(body.extension_cells) : bundle.profile.extension_cells,
+    const next: TenantArchitectureProfile = {
+      ...current,
+      name: body.name ?? current.name,
+      cell_overrides: body.cell_overrides ? clone(body.cell_overrides) : current.cell_overrides,
+      extension_cells: body.extension_cells ? clone(body.extension_cells) : current.extension_cells,
       // A changed body yields a changed fingerprint, so a stale second save 409s.
       fingerprint: canvasFingerprint(JSON.stringify(body.cell_overrides ?? [])),
       updated_at: new Date().toISOString(),
     };
-    return clone(bundle.profile);
+    bundle.profiles = bundle.profiles.map((entry, position) => (position === index ? next : entry));
+    return clone(next);
   },
   publishArchitectureProfile: async (id) => {
     const bundle = await loadCanvasFixtures();
     await delay();
-    if (id !== bundle.profile.id) throw new FixtureApiError(404, { detail: "Unknown profile" });
-    bundle.profile = { ...bundle.profile, status: "ACTIVE", updated_at: new Date().toISOString() };
-    return clone(bundle.profile);
+    if (!bundle.profiles.some((entry) => entry.id === id)) {
+      throw new FixtureApiError(404, { detail: "Unknown profile" });
+    }
+    // Exactly one revision is in force: publishing archives whatever it replaces.
+    bundle.profiles = bundle.profiles.map((entry) =>
+      entry.id === id
+        ? { ...entry, status: "ACTIVE" as const, updated_at: new Date().toISOString() }
+        : entry.status === "ACTIVE"
+          ? { ...entry, status: "ARCHIVED" as const }
+          : entry,
+    );
+    return clone(bundle.profiles.find((entry) => entry.id === id)!);
   },
 };
 

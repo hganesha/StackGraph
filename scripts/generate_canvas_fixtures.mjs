@@ -548,8 +548,25 @@ const tray = {
     { technology: tech("NGINX"), candidate_cell_keys: ["cell.integration.edge-gateway", "cell.platform.network-ingress"], reason: "Reverse-proxy and ingress-controller roles both match the observed configuration.", citations: [cite("NGINX configuration observed in two deployments", "ambiguous:nginx")] },
   ],
   unresolved_policies: [
-    { policy_key: "tenant-design-tokens", label: "Tenant design tokens", source: "CUSTOM", reason: "Custom governed function has no mapping to a canonical cell or tenant extension cell.", technology_count: 2 },
-    { policy_key: "legacy-reporting-stack", label: "Legacy reporting stack", source: "CUSTOM", reason: "Migrated from code policies; awaiting an architecture-cell decision.", technology_count: 4 },
+    {
+      policy_key: "tenant-design-tokens", label: "Tenant design tokens", source: "CUSTOM",
+      reason: "Custom governed function has no mapping to a canonical cell or tenant extension cell.",
+      technology_count: 2,
+      technologies: [
+        { technology: tech("Style Dictionary"), decision: "PREFERRED", rationale: null },
+        { technology: tech("Theo"), decision: "PROHIBITED", rationale: null },
+      ],
+    },
+    {
+      policy_key: "legacy-reporting-stack", label: "Legacy reporting stack", source: "CUSTOM",
+      reason: "Migrated from code policies; awaiting an architecture-cell decision.",
+      technology_count: 3,
+      technologies: [
+        { technology: tech("Crystal Reports"), decision: "DISCOURAGED", rationale: null },
+        { technology: tech("JasperReports"), decision: "ALLOWED", rationale: null },
+        { technology: tech("Apache Superset"), decision: "PREFERRED", rationale: null },
+      ],
+    },
   ],
   filtered_out_total: 0,
 };
