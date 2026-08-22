@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -16,11 +17,17 @@ import { useEvidenceStore } from "@/lib/evidenceStore";
 import { useEnterpriseInsightReports } from "@/lib/queries";
 import styles from "./ask.module.css";
 
+interface ContextLink {
+  label: string;
+  href: string;
+}
+
 interface Turn {
   id: number;
   question: string;
   response?: AskResponse;
   error?: boolean;
+  contextLink?: ContextLink;
 }
 
 interface BusinessMapContext {
@@ -53,6 +60,10 @@ const SUGGESTIONS = [
   "Which custom implementations should be replaced by existing internal platforms?",
   "What are our best application retirement/consolidation candidates?",
   "What are the 10 engineering standardization initiatives with the largest enterprise payoff?",
+  "What share of our estate is analytically covered?",
+  "Which technologies were introduced into the estate in the last 90 days?",
+  "Which critical business capabilities have no application behind them?",
+  "Which accepted decisions have not been implemented?",
 ];
 
 const MAP_SUGGESTIONS = [
@@ -68,6 +79,16 @@ const PHASE2_ACTIONS: Partial<Record<string, { label: string; href: string }>> =
   modernization_blockers: { label: "Set runtime baselines", href: "/admin?tab=governance&area=eligibility" },
   custom_to_internal_platform: { label: "Govern platform replacements", href: "/admin?tab=governance&area=catalog" },
   internal_library_standards: { label: "Govern internal standards", href: "/admin?tab=governance&area=catalog" },
+  assurance_coverage: { label: "Connect a source", href: "/admin?tab=data" },
+  technology_introduction: { label: "Connect a source", href: "/admin?tab=data" },
+  business_dark_capability: { label: "Govern critical capabilities", href: "/business-map" },
+  decision_lag: { label: "Review modernization decisions", href: "/reviews" },
+};
+
+// Reports whose rows describe governed Business Map records rather than graph
+// facts keep a link back to the map they were read from.
+const REPORT_CONTEXT_LINKS: Partial<Record<string, ContextLink>> = {
+  business_dark_capability: { label: "Open the Business Map", href: "/business-map" },
 };
 
 function serializeBusinessMap(context: BusinessMapContext): string {
@@ -143,7 +164,10 @@ export default function AskPage() {
       return;
     }
     const id = nextId.current++;
-    setTurns([{ id, question: report.question, response: report.response }]);
+    setTurns([{
+      id, question: report.question, response: report.response,
+      contextLink: REPORT_CONTEXT_LINKS[report.key],
+    }]);
     setMode("ask");
     router.replace("/ask?view=ask", { scroll: false });
     requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
@@ -234,7 +258,11 @@ export default function AskPage() {
                     {turn.error ? (
                       <p className={styles.errorText}>Couldn’t reach the estate. Try again.</p>
                     ) : turn.response ? (
-                      <AnswerView response={turn.response} onCite={openEvidence} />
+                      <AnswerView
+                        response={turn.response}
+                        onCite={openEvidence}
+                        contextLink={turn.contextLink}
+                      />
                     ) : (
                       <p className={styles.thinking}>
                         <span className={styles.dot} />
@@ -364,9 +392,11 @@ function InsightOverview({
 function AnswerView({
   response,
   onCite,
+  contextLink,
 }: {
   response: AskResponse;
   onCite: (factId: string, label?: string) => void;
+  contextLink?: ContextLink;
 }) {
   const [showAllCitations, setShowAllCitations] = useState(false);
   const citationLimit = 12;
@@ -406,6 +436,12 @@ function AnswerView({
             </tbody>
           </table>
         </div>
+      ) : null}
+
+      {contextLink ? (
+        <Link className={styles.contextLink} href={contextLink.href}>
+          {contextLink.label} <span aria-hidden="true">→</span>
+        </Link>
       ) : null}
 
       {response.citations.length > 0 ? (

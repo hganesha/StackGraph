@@ -34,6 +34,10 @@ QUERY_KINDS = (
     "custom_to_internal_platform",
     "application_retirement_consolidation",
     "standardization_initiatives",
+    "assurance_coverage",
+    "technology_introduction",
+    "business_dark_capability",
+    "decision_lag",
 )
 
 ESTATE_QUERY_TOOL = ToolDefinition(
@@ -212,6 +216,10 @@ class AIAskOrchestrator:
             "custom_to_internal_platform": "custom implementations replace with existing internal platforms",
             "application_retirement_consolidation": "application retirement consolidation candidates",
             "standardization_initiatives": "top 10 engineering standardization initiatives enterprise payoff",
+            "assurance_coverage": "share of the estate that is analytically covered",
+            "technology_introduction": "technologies introduced into the estate in the last 90 days",
+            "business_dark_capability": "critical business capabilities with no application behind them",
+            "decision_lag": "accepted decisions not implemented decision lag",
         }
         return AskRequest(
             question=f"{prefixes[query_kind]}: {request.question}",

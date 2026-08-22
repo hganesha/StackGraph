@@ -397,6 +397,21 @@
   color: var(--sg-color-domain-intelligence-900);
   text-decoration: underline;
 }
+/* Business-map context carries the business domain tint. The domain palette is
+   fixed across themes, so the background is set alongside the text colour. */
+.contextLink {
+  align-self: flex-start;
+  padding: var(--sg-space-1) var(--sg-space-3);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-business-300);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-color-domain-business-50);
+  color: var(--sg-color-domain-business-800);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+.contextLink:hover {
+  background: var(--sg-color-domain-business-100);
+}
 .errorText {
   color: var(--sg-color-signal-danger-500);
 }

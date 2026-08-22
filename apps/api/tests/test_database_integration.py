@@ -277,7 +277,7 @@ async def exercise_read_models() -> None:
         assert technology_summary.ranked_items == []
         assert modernization.contract_version == "1.0.0"
         assert answer.result_kind == "TABLE"
-        assert insight_reports.total_reports == 10
+        assert insight_reports.total_reports == 14
         assert insight_reports.answerable_reports <= insight_reports.total_reports
         assert all(item.contract_version == "1.0.0" for item in enterprise_answers)
         answers_by_key = {report.key: report.response for report in insight_reports.reports}

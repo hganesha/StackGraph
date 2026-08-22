@@ -29,6 +29,21 @@ export default function HealthPage() {
   }, [data]);
 
   const distributions = useMemo(() => Object.entries(data?.distributions ?? {}), [data]);
+  const assurance = useMemo(
+    () => insightReports.data?.reports.find((report) => report.key === "assurance_coverage"),
+    [insightReports.data],
+  );
+  const assuranceDimensions = useMemo(
+    () => (assurance?.response.rows ?? []).slice(1).map((row) => ({
+      dimension: String(row.dimension ?? ""),
+      status: String(row.status ?? "NOT_EVALUATED"),
+      covered: Number(row.covered ?? 0),
+      inScope: Number(row.in_scope ?? 0),
+      scope: String(row.scope ?? ""),
+      detail: String(row.detail ?? ""),
+    })),
+    [assurance],
+  );
   const dataServices = useMemo(() => serviceStatus.data?.services.filter(
     (service) => service.category === "INGESTION" || service.category === "ENRICHMENT",
   ) ?? [], [serviceStatus.data]);
@@ -59,6 +74,50 @@ export default function HealthPage() {
         <StatTile label="Repositories scanned" value={`${cov.repositories_scanned}/${cov.repositories_total}`} hero sub={`${pct}% coverage`} icon={IconGitBranch} />
         <StatTile label="Facts with evidence" value={`${Math.round(cov.facts_with_evidence_ratio * 100)}%`} sub="of all facts" icon={IconFileDescription} />
         <StatTile label="Ranked items" value={data.ranked_items.length} sub="in the estate" icon={IconSortDescending} />
+      </section>
+
+      <section className={styles.coverage} aria-labelledby="assurance-coverage-heading">
+        <div className={styles.coverageHead}>
+          <div>
+            <span className={styles.coverageEyebrow}>Analytical assurance</span>
+            <h2 id="assurance-coverage-heading">Analytically covered estate</h2>
+            <p>
+              {assurance
+                ? assurance.status === "WAITING_FOR_DATA"
+                  ? "Coverage cannot be scored yet. Connect a source and complete one scan first."
+                  : assurance.response.text
+                : insightReports.isError
+                  ? "Assurance coverage is temporarily unavailable."
+                  : "Scoring how much of the estate StackGraph can reason over…"}
+            </p>
+          </div>
+          <div className={styles.coverageScore}>
+            <strong className="sg-mono">{assurance?.metric_value ?? "—"}</strong>
+            <span className={`${styles.coverageBadge} ${assurance ? styles[`coverage${assurance.status}`] : ""}`}>
+              {assurance ? assurance.status.replaceAll("_", " ").toLowerCase() : "evaluating"}
+            </span>
+          </div>
+        </div>
+
+        {assuranceDimensions.length > 0 ? (
+          <ul className={styles.coverageDimensions}>
+            {assuranceDimensions.map((dimension) => (
+              <li key={dimension.dimension} title={dimension.detail}>
+                <span className={styles.coverageDimensionName}>{dimension.dimension}</span>
+                <span className={`${styles.coverageDimensionCount} sg-mono`}>
+                  {dimension.covered}/{dimension.inScope} {dimension.scope.toLowerCase()}
+                </span>
+                <span className={`${styles.coverageBadge} ${styles[`coverage${dimension.status}`]}`}>
+                  {dimension.status.replaceAll("_", " ").toLowerCase()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <Link className={styles.adminLink} href="/ask">
+          Open coverage report <span aria-hidden="true">→</span>
+        </Link>
       </section>
 
       <section className={styles.insightReadiness} aria-labelledby="insight-readiness-heading">
