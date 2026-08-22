@@ -52,6 +52,8 @@ def _coverage_counters(**overrides: int | str) -> dict[str, Any]:
         "ecosystem_supported_repositories": 4, "available_repositories": 4,
         "covered_repositories": 4, "facts": 100, "evidenced_facts": 100,
         "connectors": 2, "healthy_connectors": 2,
+        "source_snapshotted_repositories": 4, "open_dead_letters": 0,
+        "quota_providers": 2, "healthy_quota_providers": 2,
         "unsupported_ecosystems": "", "analyzable_ecosystems": "NPM",
     }
     counters.update(overrides)
@@ -108,6 +110,7 @@ def test_assurance_coverage_scores_every_scan_dimension_separately() -> None:
     assert dimensions == [
         "Analytically covered estate", "Scan freshness", "Analyzable ecosystems",
         "Evidence completeness", "Connector health", "Repository availability",
+        "Published source snapshots", "Dead-letter backlog", "Connector quota",
     ]
     by_dimension = {row["dimension"]: row for row in result.rows}
     assert by_dimension["Analytically covered estate"]["coverage_percent"] == 50
@@ -119,6 +122,12 @@ def test_assurance_coverage_scores_every_scan_dimension_separately() -> None:
     assert by_dimension["Evidence completeness"]["covered"] == 90
     assert by_dimension["Connector health"]["covered"] == 1
     assert by_dimension["Repository availability"]["in_scope"] == 4
+    assert by_dimension["Published source snapshots"]["covered"] == 4
+    assert by_dimension["Dead-letter backlog"]["status"] == "COVERED"
+    assert by_dimension["Connector quota"]["covered"] == 2
+    assert "source_snapshot" in database.queries[0]
+    assert "dead_letter" in database.queries[0]
+    assert "connector_quota" in database.queries[0]
 
 
 def test_assurance_coverage_reports_no_rows_before_the_first_repository() -> None:
@@ -161,21 +170,25 @@ def test_technology_introduction_attributes_the_earliest_repository_and_evidence
     database = QueryStub(all_rows=[{
         "technology": "fastify", "technology_kind": "PackageVersion",
         "repository": "Checkout API", "fact_id": fact_id,
-        "first_observed_at": NOW - timedelta(days=12),
+        "first_seen_at": NOW - timedelta(days=12),
         "evidence_observed_at": NOW - timedelta(days=12, hours=2),
-        "repositories": 3,
+        "repositories": 3, "total_count": 73,
     }])
     result = asyncio.run(technology_introduction(database, tenant_id=TENANT))
 
     assert result.rows == [{
         "technology": "fastify", "kind": "PackageVersion",
         "first_repository": "Checkout API",
-        "first_observed_at": (NOW - timedelta(days=12)).isoformat(),
+        "first_seen_at": (NOW - timedelta(days=12)).isoformat(),
         "evidence_observed_at": (NOW - timedelta(days=12, hours=2)).isoformat(),
-        "repositories": 3,
+        "repositories": 3, "total_count": 73,
     }]
     assert [citation.fact_id for citation in result.citations] == [fact_id]
     assert database.params[0]["window_days"] == 90
+    assert "technology.first_seen_at" in database.queries[0]
+    assert "fact.system_to IS NULL" in database.queries[0]
+    assert "count(*) OVER()" in database.queries[0]
+    assert "73 technologies" in result.text
 
 
 def test_technology_introduction_reports_a_quiet_window_as_an_empty_table() -> None:
@@ -193,7 +206,7 @@ def test_business_dark_capability_carries_map_context_without_inventing_citation
         "lane": "Operations",
         "business_function": "Fulfilment", "business_process": "Order routing",
         "capability_key": "order-routing", "capability": "Order routing",
-        "criticality": 5, "owner": None, "maturity": 2,
+        "criticality": 5, "owner": None, "maturity": 2, "total_count": 81,
     }])
     result = asyncio.run(business_dark_capability(database, tenant_id=TENANT))
 
@@ -203,14 +216,15 @@ def test_business_dark_capability_carries_map_context_without_inventing_citation
         "business_map": "Enterprise value chain", "lane": "Operations",
         "business_function": "Fulfilment", "business_process": "Order routing",
         "owner": "unassigned", "business_map_key": "porter-2026",
-        "capability_key": "order-routing",
+        "capability_key": "order-routing", "total_count": 81,
     }]
     query = database.queries[0]
-    # Only governed map records are evaluated: active map, placed capability,
-    # graph-backed capability entity, and no assigned application.
+    # Every governed catalog capability is evaluated, including capabilities
+    # that have not yet been projected to a graph entity or map placement.
     assert "map.status='ACTIVE'" in query
-    assert "JOIN business_map_placement placement" in query
-    assert "capability.entity_id IS NOT NULL" in query
+    assert "LEFT JOIN LATERAL" in query
+    assert "capability.entity_id IS NOT NULL" not in query
+    assert "count(*) OVER()" in query
     assert "business_map_application_assignment" in query
     assert database.params[0]["minimum_criticality"] == 4
 
@@ -247,6 +261,8 @@ def test_decision_lag_requires_acceptance_elapsed_time_and_a_live_condition() ->
     assert "review.decision='ACCEPT'" in query
     assert "recommendation.stale_at IS NULL" in query
     assert "modernization_validation_outcome" in query
+    assert "fact.system_to IS NULL" in query
+    assert "current_supporting_fact_ids" in query
     assert database.params[0]["threshold_days"] == 30
 
 

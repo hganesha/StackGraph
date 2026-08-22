@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import Settings
 from app.auth import create_session_token
+from app.architecture_catalog import load_architecture_catalog
 from app.database import DatabaseReadiness
 from app.errors import APIError
 from app.main import create_app
@@ -122,6 +123,21 @@ class StubReadModels:
             coverage=Coverage(repositories_total=0, repositories_scanned=0, facts_with_evidence_ratio=0),
             page_info=PageInfo(has_next_page=False),
         )
+
+    async def architecture_taxonomy(self):
+        return load_architecture_catalog().taxonomy
+
+    async def architecture_reference_models(self):
+        return load_architecture_catalog().reference_models()
+
+    async def architecture_reference_model(self, key, *, version):
+        model = load_architecture_catalog().reference_model
+        if key != model.key or (version is not None and version != model.version):
+            raise APIError(404, "REFERENCE_MODEL_NOT_FOUND", "Not found.")
+        return model
+
+    async def canvas_templates(self):
+        return load_architecture_catalog().templates()
 
     async def ask(self, request: AskRequest, *, tenant_id):
         return AskResponse(text=request.question, citations=[], result_kind="UNSUPPORTED")
@@ -650,12 +666,13 @@ def test_estate_summary_forwards_domain_scope() -> None:
 
 
 def test_technology_hierarchy_is_exposed_before_dynamic_technology_route() -> None:
-    app, store = app_with_stubs()
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
     response = asyncio.run(request(app, "GET", "/api/v1/technologies/hierarchy"))
 
     assert response.status_code == 200
     assert response.json()["nodes"] == []
-    assert store.last_tenant_id is not None
+    assert store.last_tenant_id == tenant_id
 
 
 def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
@@ -666,6 +683,27 @@ def test_capability_taxonomy_is_exposed_on_versioned_path() -> None:
 
     assert response.status_code == 200
     assert response.json()["capabilities"][0]["key"] == "http-client"
+
+
+def test_architecture_catalog_endpoints_expose_versioned_canonical_artifacts() -> None:
+    app, _ = app_with_stubs()
+    taxonomy = asyncio.run(request(app, "GET", "/api/v1/canvas/taxonomy"))
+    reference_models = asyncio.run(request(app, "GET", "/api/v1/canvas/reference-models"))
+    reference_model = asyncio.run(request(
+        app, "GET", "/api/v1/canvas/reference-models/architecture.stackgraph.reference?version=1.0.0",
+    ))
+    templates = asyncio.run(request(app, "GET", "/api/v1/canvas/templates"))
+
+    assert taxonomy.status_code == 200
+    assert [domain["key"] for domain in taxonomy.json()["domains"]] == [
+        "experience", "application", "integration", "data", "platform", "delivery",
+    ]
+    assert reference_models.status_code == 200
+    assert reference_models.json()["models"][0]["taxonomy_content_hash"] == taxonomy.json()["content_hash"]
+    assert reference_model.status_code == 200
+    assert len(reference_model.json()["cells"]) == 43
+    assert templates.status_code == 200
+    assert templates.json()["templates"][0]["reference_model_key"] == "architecture.stackgraph.reference"
 
 
 def test_repository_detail_is_exposed_on_versioned_path() -> None:

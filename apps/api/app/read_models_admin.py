@@ -26,6 +26,10 @@ from stackgraph_ai.governance import (
 from stackgraph_ai.models import ModelMessage, ModelRequest
 from stackgraph_ai.providers import AnthropicAdapter, OpenAIAdapter, OpenRouterAdapter
 
+from app.architecture_catalog import (
+    load_architecture_catalog,
+    sha256_fingerprint as architecture_fingerprint,
+)
 from app.errors import APIError
 from app.deterministic_insights import METHOD_VERSION as DETERMINISTIC_METHOD_VERSION
 from app.deterministic_insights import RULE_CATALOG, list_deterministic_insights
@@ -33,6 +37,13 @@ from app.models import (
     AIProviderConfiguration,
     AIProviderConfigurationUpdateRequest,
     AIProviderConnectionTest,
+    ArchitectureProfileCreateRequest,
+    ArchitectureProfileDetail,
+    ArchitectureProfileList,
+    ArchitectureProfilePublishRequest,
+    ArchitectureProfileStateModel,
+    ArchitectureProfileSummary,
+    ArchitectureProfileUpdateRequest,
     Citation,
     Connector,
     ConnectorList,
@@ -180,6 +191,266 @@ def _decode_cursor(cursor: str | None, kind: str) -> dict[str, Any] | None:
 class AdminReadModelsMixin:
     database: Any
     credential_encryption_key: str
+
+    # --- Architecture profiles -------------------------------------------
+
+    async def list_architecture_profiles(
+        self, *, tenant_id: UUID | None,
+    ) -> ArchitectureProfileList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list architecture profiles.")
+        rows = await self.database.fetch_all(
+            """
+            SELECT * FROM tenant_architecture_profile
+            ORDER BY CASE status WHEN 'ACTIVE' THEN 0 WHEN 'DRAFT' THEN 1 ELSE 2 END,
+                     updated_at DESC,id DESC
+            """,
+            tenant_id=tenant_id,
+        )
+        return ArchitectureProfileList(
+            profiles=[self._architecture_profile_summary(row) for row in rows],
+        )
+
+    async def create_architecture_profile(
+        self, request: ArchitectureProfileCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to create an architecture profile.")
+        self._validate_architecture_profile_state(request.state)
+        state = request.state.model_dump(mode="json")
+        fingerprint = architecture_fingerprint(state)
+        try:
+            async with self.database.session(tenant_id) as connection:
+                cursor = await connection.execute(
+                    """
+                    INSERT INTO tenant_architecture_profile(
+                      tenant_id,profile_key,name,reference_model_key,reference_model_version,
+                      version,status,state,fingerprint,created_by,updated_by
+                    ) VALUES (%s,%s,%s,%s,%s,1,'DRAFT',%s::jsonb,%s,%s,%s)
+                    RETURNING *
+                    """,
+                    (
+                        tenant_id, request.profile_key, request.state.name,
+                        request.state.reference_model_key, request.state.reference_model_version,
+                        json.dumps(state), fingerprint, actor_key, actor_key,
+                    ),
+                )
+                row = await cursor.fetchone()
+                await self._write_architecture_profile_revision(
+                    connection, tenant_id=tenant_id, profile_id=row["id"], version=1,
+                    status="DRAFT", state=state, fingerprint=fingerprint, actor_key=actor_key,
+                )
+        except UniqueViolation as error:
+            raise APIError(
+                409, "ARCHITECTURE_PROFILE_EXISTS",
+                "An architecture profile with this key already exists.",
+                {"profile_key": request.profile_key},
+            ) from error
+        return self._architecture_profile_detail(row)
+
+    async def update_architecture_profile(
+        self, profile_id: UUID, request: ArchitectureProfileUpdateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update an architecture profile.")
+        self._validate_architecture_profile_state(request.state)
+        state = request.state.model_dump(mode="json")
+        fingerprint = architecture_fingerprint(state)
+        async with self.database.session(tenant_id) as connection:
+            existing = await self._lock_architecture_profile(connection, profile_id)
+            if existing["status"] != "DRAFT":
+                raise APIError(
+                    409, "ARCHITECTURE_PROFILE_NOT_EDITABLE",
+                    "Only draft architecture profiles can be edited.",
+                )
+            self._require_architecture_profile_version(existing, request.expected_version)
+            version = existing["version"] + 1
+            cursor = await connection.execute(
+                """
+                UPDATE tenant_architecture_profile
+                SET name=%s,reference_model_key=%s,reference_model_version=%s,
+                    version=%s,state=%s::jsonb,fingerprint=%s,updated_by=%s,updated_at=now()
+                WHERE id=%s RETURNING *
+                """,
+                (
+                    request.state.name, request.state.reference_model_key,
+                    request.state.reference_model_version, version, json.dumps(state),
+                    fingerprint, actor_key, profile_id,
+                ),
+            )
+            row = await cursor.fetchone()
+            await self._write_architecture_profile_revision(
+                connection, tenant_id=tenant_id, profile_id=profile_id, version=version,
+                status="DRAFT", state=state, fingerprint=fingerprint, actor_key=actor_key,
+            )
+        return self._architecture_profile_detail(row)
+
+    async def publish_architecture_profile(
+        self, profile_id: UUID, request: ArchitectureProfilePublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to publish an architecture profile.")
+        async with self.database.session(tenant_id) as connection:
+            existing = await self._lock_architecture_profile(connection, profile_id)
+            if existing["status"] != "DRAFT":
+                raise APIError(
+                    409, "ARCHITECTURE_PROFILE_NOT_PUBLISHABLE",
+                    "Only draft architecture profiles can be published.",
+                )
+            self._require_architecture_profile_version(existing, request.expected_version)
+            state = self._architecture_profile_state(existing["state"])
+            self._validate_architecture_profile_state(state)
+            active_cursor = await connection.execute(
+                """
+                SELECT * FROM tenant_architecture_profile
+                WHERE id<>%s AND reference_model_key=%s AND reference_model_version=%s
+                  AND status='ACTIVE'
+                FOR UPDATE
+                """,
+                (
+                    profile_id, existing["reference_model_key"],
+                    existing["reference_model_version"],
+                ),
+            )
+            for active in await active_cursor.fetchall():
+                archived_version = active["version"] + 1
+                await connection.execute(
+                    """
+                    UPDATE tenant_architecture_profile
+                    SET status='ARCHIVED',version=%s,updated_by=%s,updated_at=now()
+                    WHERE id=%s
+                    """,
+                    (archived_version, actor_key, active["id"]),
+                )
+                await self._write_architecture_profile_revision(
+                    connection, tenant_id=tenant_id, profile_id=active["id"],
+                    version=archived_version, status="ARCHIVED",
+                    state=self._json_object(active["state"]), fingerprint=active["fingerprint"],
+                    actor_key=actor_key,
+                )
+            version = existing["version"] + 1
+            cursor = await connection.execute(
+                """
+                UPDATE tenant_architecture_profile
+                SET status='ACTIVE',version=%s,updated_by=%s,updated_at=now()
+                WHERE id=%s RETURNING *
+                """,
+                (version, actor_key, profile_id),
+            )
+            row = await cursor.fetchone()
+            await self._write_architecture_profile_revision(
+                connection, tenant_id=tenant_id, profile_id=profile_id, version=version,
+                status="ACTIVE", state=state.model_dump(mode="json"),
+                fingerprint=existing["fingerprint"], actor_key=actor_key,
+            )
+        return self._architecture_profile_detail(row)
+
+    @staticmethod
+    def _json_object(value: Any) -> dict[str, Any]:
+        parsed = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(parsed, dict):
+            raise APIError(500, "INVALID_PERSISTED_PROFILE", "The stored architecture profile is invalid.")
+        return parsed
+
+    @classmethod
+    def _architecture_profile_state(cls, value: Any) -> ArchitectureProfileStateModel:
+        return ArchitectureProfileStateModel.model_validate(cls._json_object(value))
+
+    @staticmethod
+    def _architecture_profile_summary(row: dict[str, Any]) -> ArchitectureProfileSummary:
+        return ArchitectureProfileSummary(
+            id=row["id"], profile_key=row["profile_key"], name=row["name"],
+            reference_model_key=row["reference_model_key"],
+            reference_model_version=row["reference_model_version"],
+            version=row["version"], status=row["status"], fingerprint=row["fingerprint"],
+            created_at=row["created_at"], updated_at=row["updated_at"],
+        )
+
+    @classmethod
+    def _architecture_profile_detail(cls, row: dict[str, Any]) -> ArchitectureProfileDetail:
+        summary = cls._architecture_profile_summary(row)
+        return ArchitectureProfileDetail(
+            **summary.model_dump(), state=cls._architecture_profile_state(row["state"]),
+        )
+
+    @staticmethod
+    def _validate_architecture_profile_state(state: ArchitectureProfileStateModel) -> None:
+        catalog = load_architecture_catalog()
+        if (
+            state.reference_model_key != catalog.reference_model.key
+            or state.reference_model_version != catalog.reference_model.version
+        ):
+            raise APIError(
+                422, "ARCHITECTURE_REFERENCE_MODEL_MISMATCH",
+                "The profile must target the canonical reference-model key and version.",
+                {
+                    "expected_key": catalog.reference_model.key,
+                    "expected_version": catalog.reference_model.version,
+                },
+            )
+        unknown_cells = sorted(
+            {policy.cell_key for policy in state.cell_policies} - set(catalog.cells_by_key)
+        )
+        if unknown_cells:
+            raise APIError(
+                422, "ARCHITECTURE_PROFILE_UNKNOWN_CELL",
+                "The profile references unknown canonical cells.",
+                {"cell_keys": unknown_cells},
+            )
+        known_aspects = {aspect.key for aspect in catalog.taxonomy.aspects}
+        known_capabilities = {capability.key for capability in catalog.taxonomy.capabilities}
+        for extension in state.extension_cells:
+            unknown_aspects = sorted(set(extension.aspect_keys) - known_aspects)
+            if unknown_aspects:
+                raise APIError(
+                    422, "ARCHITECTURE_PROFILE_UNKNOWN_ASPECT",
+                    "An extension cell references unknown aspects.",
+                    {"cell_key": extension.key, "aspect_keys": unknown_aspects},
+                )
+            for binding in extension.bindings:
+                if binding.kind == "CAPABILITY":
+                    unknown = sorted(set(binding.keys) - known_capabilities)
+                    if unknown:
+                        raise APIError(
+                            422, "ARCHITECTURE_PROFILE_UNKNOWN_CAPABILITY",
+                            "An extension cell references unknown canonical capabilities.",
+                            {"cell_key": extension.key, "capability_keys": unknown},
+                        )
+
+    async def _lock_architecture_profile(self, connection: Any, profile_id: UUID) -> dict[str, Any]:
+        cursor = await connection.execute(
+            "SELECT * FROM tenant_architecture_profile WHERE id=%s FOR UPDATE", (profile_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise APIError(404, "ARCHITECTURE_PROFILE_NOT_FOUND", "The architecture profile was not found.")
+        return row
+
+    @staticmethod
+    def _require_architecture_profile_version(row: dict[str, Any], expected_version: int) -> None:
+        if row["version"] != expected_version:
+            raise APIError(
+                409, "VERSION_CONFLICT",
+                "The architecture profile changed before this operation was applied.",
+                {"expected_version": expected_version, "actual_version": row["version"]},
+            )
+
+    @staticmethod
+    async def _write_architecture_profile_revision(
+        connection: Any, *, tenant_id: UUID, profile_id: UUID, version: int,
+        status: str, state: dict[str, Any], fingerprint: str, actor_key: str,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO tenant_architecture_profile_revision(
+              tenant_id,profile_id,version,status,state,fingerprint,actor_key
+            ) VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s)
+            """,
+            (tenant_id, profile_id, version, status, json.dumps(state), fingerprint, actor_key),
+        )
+
     # --- Review queue ------------------------------------------------------
     # A read-only aggregation over the five reviewable sources. Each source is filtered to its
     # pending state, projected to a common shape, then keyset-paginated newest-first. Submitting
