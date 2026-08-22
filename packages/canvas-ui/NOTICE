@@ -1,0 +1,5 @@
+@stackgraph/canvas-ui renders the Architecture Canvas. It is a pure presentation
+package: no data fetching, no routing, no policy mutation, no evidence-drawer
+implementation, and no taxonomy inference (spec §9.1). It receives a complete,
+server-produced projection and never invents placement, absence, posture, or
+policy state.

@@ -1,0 +1,698 @@
+/*
+ * Architecture Canvas presentation.
+ *
+ * Two rules govern this file:
+ *  1. Every colour comes from a Strata token. There is no per-domain hue — domains
+ *     are read from label, icon, and position, which keeps the whole colour budget
+ *     available for signal.
+ *  2. Tone is never the only channel. Each tone class is paired with a rendered text
+ *     label in the component that applies it (spec §11.2).
+ */
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- tones ---- */
+
+.tone-neutral {
+  --canvas-tone-line: var(--sg-color-domain-enterprise-300);
+  --canvas-tone-fill: var(--sg-color-domain-enterprise-50);
+  --canvas-tone-ink: var(--sg-color-domain-enterprise-700);
+}
+.tone-positive {
+  --canvas-tone-line: var(--sg-color-domain-oss-400);
+  --canvas-tone-fill: var(--sg-color-domain-oss-50);
+  --canvas-tone-ink: var(--sg-color-domain-oss-700);
+}
+.tone-caution {
+  --canvas-tone-line: var(--sg-color-domain-business-400);
+  --canvas-tone-fill: var(--sg-color-domain-business-50);
+  --canvas-tone-ink: var(--sg-color-domain-business-700);
+}
+.tone-danger {
+  --canvas-tone-line: var(--sg-color-signal-danger-500);
+  --canvas-tone-fill: var(--sg-color-signal-danger-50);
+  --canvas-tone-ink: var(--sg-color-signal-danger-700);
+}
+.tone-quiet {
+  --canvas-tone-line: var(--sg-surface-border);
+  --canvas-tone-fill: var(--sg-surface-sunken);
+  --canvas-tone-ink: var(--sg-text-muted);
+}
+
+/* Dark mode: the 50-step fills are near-white and would invert the card. Swap to the
+   900 step so the tone reads as a tint of the card rather than a light panel. */
+:global(:root[data-theme="dark"]) .tone-neutral,
+:global(:root[data-theme="dark"]) .tone-positive,
+:global(:root[data-theme="dark"]) .tone-caution,
+:global(:root[data-theme="dark"]) .tone-danger {
+  --canvas-tone-fill: transparent;
+}
+:global(:root[data-theme="dark"]) .tone-neutral { --canvas-tone-ink: var(--sg-color-domain-enterprise-200); }
+:global(:root[data-theme="dark"]) .tone-positive { --canvas-tone-ink: var(--sg-color-domain-oss-200); }
+:global(:root[data-theme="dark"]) .tone-caution { --canvas-tone-ink: var(--sg-color-domain-business-200); }
+:global(:root[data-theme="dark"]) .tone-danger { --canvas-tone-ink: var(--sg-color-signal-danger-100); }
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .tone-neutral,
+  :global(:root:not([data-theme="light"])) .tone-positive,
+  :global(:root:not([data-theme="light"])) .tone-caution,
+  :global(:root:not([data-theme="light"])) .tone-danger {
+    --canvas-tone-fill: transparent;
+  }
+  :global(:root:not([data-theme="light"])) .tone-neutral { --canvas-tone-ink: var(--sg-color-domain-enterprise-200); }
+  :global(:root:not([data-theme="light"])) .tone-positive { --canvas-tone-ink: var(--sg-color-domain-oss-200); }
+  :global(:root:not([data-theme="light"])) .tone-caution { --canvas-tone-ink: var(--sg-color-domain-business-200); }
+  :global(:root:not([data-theme="light"])) .tone-danger { --canvas-tone-ink: var(--sg-color-signal-danger-100); }
+}
+
+/* ---- shell ---- */
+
+.canvas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--sg-space-6);
+  align-items: start;
+  inline-size: 100%;
+}
+.canvasStacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+.canvasMain {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-4);
+}
+.canvasCaption {
+  margin: 0;
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-secondary);
+}
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-6);
+  min-inline-size: 0;
+}
+.bandSlot {
+  min-inline-size: 0;
+}
+
+/* ---- band ---- */
+
+.band {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  min-inline-size: 0;
+}
+.bandHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sg-space-1) var(--sg-space-3);
+  align-items: baseline;
+  padding-block-end: var(--sg-space-2);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.bandTitle {
+  grid-column: 1;
+  margin: 0;
+  font-size: var(--sg-type-h3-size);
+  line-height: var(--sg-type-h3-line);
+  font-weight: var(--sg-type-h3-weight);
+  color: var(--sg-text-primary);
+}
+.bandQuestion {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+}
+.bandCounts {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+  white-space: nowrap;
+}
+.bandGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  min-inline-size: 0;
+}
+/* Each ARIA row lays out one row of the band's grid. Cells in a row stretch to a
+   common height; a short final row leaves its remaining tracks empty rather than
+   widening the cells it does have. */
+.bandRow {
+  display: grid;
+  grid-template-columns: repeat(var(--canvas-columns, 4), minmax(0, 1fr));
+  gap: var(--sg-space-3);
+  min-inline-size: 0;
+}
+
+/* ---- cell ---- */
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  min-inline-size: 0;
+  min-block-size: 132px;
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-inline-start: 3px solid var(--canvas-tone-line, var(--sg-surface-border));
+  border-radius: var(--sg-radius-card);
+  cursor: pointer;
+  transition: border-color var(--sg-motion-hover), box-shadow var(--sg-motion-hover),
+    opacity var(--sg-motion-hover);
+}
+.cell:hover {
+  border-color: var(--sg-surface-border-strong);
+  border-inline-start-color: var(--canvas-tone-line, var(--sg-surface-border-strong));
+}
+.cell:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 2px;
+}
+.cellSelected {
+  box-shadow: 0 0 0 2px var(--sg-color-domain-enterprise-500);
+  border-color: var(--sg-color-domain-enterprise-500);
+}
+.cellCompact {
+  min-block-size: 104px;
+  padding: var(--sg-space-2) var(--sg-space-3);
+}
+.cellDimmed {
+  opacity: 0.42;
+}
+.cellDimmed:hover,
+.cellDimmed:focus-within {
+  opacity: 1;
+}
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+
+/* Vacant states are dashed and calm. EMPTY is never alarming: an empty optional
+   concern is a correct result, and severity comes from policy (spec §11.2). */
+.cellState-EMPTY,
+.cellState-UNOBSERVED {
+  background: transparent;
+  border-style: dashed;
+  border-inline-start-style: solid;
+}
+.cellState-NOT_APPLICABLE {
+  background: var(--sg-surface-sunken);
+  border-style: dashed;
+  border-inline-start-style: solid;
+}
+.cellState-UNBOUND {
+  background: transparent;
+  border-style: dashed;
+  border-inline-start-color: var(--sg-surface-border);
+  color: var(--sg-text-muted);
+}
+.cellState-UNBOUND .cellTitle {
+  font-style: italic;
+  color: var(--sg-text-muted);
+}
+
+.cellHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sg-space-2);
+  min-inline-size: 0;
+}
+.cellGlyph {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-block-start: 1px;
+  color: var(--sg-text-muted);
+}
+.cellTitle {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--sg-type-body-size);
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--sg-text-primary);
+}
+.requiredFlag {
+  flex-shrink: 0;
+  padding: 1px var(--sg-space-1);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sg-text-secondary);
+}
+
+.cellStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  margin: 0;
+  min-inline-size: 0;
+}
+.statusDot {
+  inline-size: 8px;
+  block-size: 8px;
+  flex-shrink: 0;
+  border-radius: var(--sg-radius-pill);
+  background: var(--canvas-tone-line);
+}
+.statusLabel {
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--canvas-tone-ink, var(--sg-text-secondary));
+  overflow-wrap: anywhere;
+}
+
+.occupants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-inline-size: 0;
+}
+.overflow {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sg-space-2);
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}
+
+.cellVacant {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  flex: 1 1 auto;
+}
+.vacantReason {
+  margin: 0;
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-secondary);
+}
+.observationNote {
+  margin: 0;
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}
+
+.cellFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-2);
+  margin-block-start: auto;
+  padding-block-start: var(--sg-space-1);
+}
+.insightFlag {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-color-domain-business-700);
+}
+
+/* ---- occupant chip ---- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-1);
+  max-inline-size: 100%;
+  padding: 2px var(--sg-space-2);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-inline-start-width: 2px;
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-primary);
+  text-align: start;
+}
+/* WCAG 2.2 AA target size (2.5.8): an interactive chip must clear 24x24. The static
+   chip is not a target and keeps the tighter rhythm. */
+.chipButton {
+  min-block-size: 24px;
+  cursor: pointer;
+}
+.chipButton:hover {
+  border-color: var(--sg-surface-border-strong);
+}
+.chipButton:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 1px;
+}
+.chipTone-positive { border-inline-start-color: var(--sg-color-domain-oss-500); }
+.chipTone-neutral { border-inline-start-color: var(--sg-color-domain-enterprise-400); }
+.chipTone-caution { border-inline-start-color: var(--sg-color-domain-business-500); }
+.chipTone-danger { border-inline-start-color: var(--sg-color-signal-danger-500); }
+.chipTone-quiet { border-inline-start-color: var(--sg-surface-border-strong); }
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 14ch;
+}
+.chipPolicy {
+  flex-shrink: 0;
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--canvas-tone-ink, var(--sg-text-muted));
+}
+.chipAdoption {
+  flex-shrink: 0;
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  color: var(--sg-text-muted);
+}
+
+/* ---- posture meter ---- */
+
+.meter {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: var(--sg-space-2);
+}
+.meterTicks {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.meterTick {
+  inline-size: 3px;
+  background: var(--sg-surface-border);
+  border-radius: 1px;
+}
+.meterTickOn {
+  background: var(--canvas-tone-line, var(--sg-text-secondary));
+}
+.meterLabel {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  line-height: 14px;
+  color: var(--canvas-tone-ink, var(--sg-text-secondary));
+  white-space: nowrap;
+}
+
+/* ---- govern bar ---- */
+
+.governBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding-block-start: var(--sg-space-2);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.governAction {
+  min-block-size: 24px;
+  padding: 2px var(--sg-space-2);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-primary);
+  cursor: pointer;
+}
+.governAction:hover {
+  background: var(--sg-surface-sunken);
+}
+.governAction:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 1px;
+}
+.governSummary {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}
+
+/* ---- aspect rail ---- */
+
+.rail {
+  position: sticky;
+  inset-block-start: var(--sg-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+}
+.railAsBand {
+  position: static;
+}
+.railHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+}
+.railTitle {
+  margin: 0;
+  font-size: var(--sg-type-body-size);
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--sg-text-primary);
+}
+.railNote {
+  margin: 0;
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+}
+.railList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.railAsBand .railList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sg-space-2);
+}
+.railItem {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sg-space-2);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  text-align: start;
+  cursor: pointer;
+}
+.railItem:hover {
+  border-color: var(--sg-surface-border-strong);
+}
+.railItem:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 1px;
+}
+.railItemActive {
+  border-color: var(--sg-color-domain-enterprise-500);
+  box-shadow: inset 2px 0 0 0 var(--sg-color-domain-enterprise-500);
+}
+.railItemLabel {
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  font-weight: 600;
+  color: var(--sg-text-primary);
+}
+.railItemCounts {
+  font-family: var(--sg-font-evidence);
+  font-size: 11px;
+  color: var(--sg-text-muted);
+}
+
+/* ---- classification tray ---- */
+
+.tray {
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-surface-card);
+}
+.trayToggle {
+  inline-size: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-3);
+  background: none;
+  border: 0;
+  text-align: start;
+  cursor: pointer;
+}
+.trayToggle:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: -2px;
+}
+.trayTitle {
+  margin: 0;
+  font-size: var(--sg-type-body-size);
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--sg-text-primary);
+}
+.trayCount {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}
+.trayBody {
+  padding: 0 var(--sg-space-3) var(--sg-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+}
+.trayTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-1);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.trayTab {
+  min-block-size: 24px;
+  padding: var(--sg-space-1) var(--sg-space-2);
+  background: none;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+  cursor: pointer;
+}
+.trayTab:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: -2px;
+}
+.trayTabActive {
+  color: var(--sg-text-primary);
+  border-block-end-color: var(--sg-color-domain-enterprise-500);
+}
+.trayTabCount {
+  font-family: var(--sg-font-evidence);
+  color: var(--sg-text-muted);
+}
+.trayPanel {
+  max-block-size: 260px;
+  overflow-y: auto;
+}
+.trayPanel:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 2px;
+}
+.trayList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.trayRow {
+  inline-size: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 12rem) minmax(0, 1fr) auto;
+  gap: var(--sg-space-2);
+  align-items: baseline;
+  padding: var(--sg-space-2);
+  background: none;
+  border: 0;
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+  text-align: start;
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+}
+button.trayRow {
+  cursor: pointer;
+}
+button.trayRow:hover {
+  background: var(--sg-surface-sunken);
+}
+button.trayRow:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: -2px;
+}
+.trayRowName {
+  font-weight: 600;
+  color: var(--sg-text-primary);
+  overflow-wrap: anywhere;
+}
+.trayRowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-1);
+  font-family: var(--sg-font-evidence);
+  color: var(--sg-text-muted);
+}
+.trayRowReason {
+  color: var(--sg-text-secondary);
+}
+.trayLink {
+  min-block-size: 24px;
+  padding: 0 var(--sg-space-1);
+  background: none;
+  border: 0;
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--sg-color-domain-enterprise-600);
+  cursor: pointer;
+}
+.trayAction {
+  min-block-size: 24px;
+  padding: 2px var(--sg-space-2);
+  background: var(--sg-surface-base);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-primary);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .trayRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell {
+    transition: none;
+  }
+}

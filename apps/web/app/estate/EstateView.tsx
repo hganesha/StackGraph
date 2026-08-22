@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   IconAlertTriangle,
   IconApps,
@@ -18,6 +19,7 @@ import { useEstateSummary, useInfiniteEstateSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
+import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
 import styles from "./estate.module.css";
 
 const DOMAIN_ORDER: Namespace[] = [
@@ -124,6 +126,7 @@ function EstateDomainSection({
 
 export function EstateView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { query, setQuery, applyLens, reset } = useEstateQuery();
   const showAllDomains = query.domain === "ALL";
   const selectedDomain = query.domain as Namespace;
@@ -218,6 +221,9 @@ export function EstateView() {
     return otherEstate;
   };
   const hasMore = activeDomainEstates.some((estate) => estate.hasNextPage);
+  // The canvas is a peer view of the same estate, not a filter on the ranked list, so
+  // it reads its own URL param and leaves the filter query untouched.
+  const estateView = searchParams?.get("view") === "canvas" ? "canvas" : "ranked";
 
   return (
     <div className={styles.page}>
@@ -227,7 +233,28 @@ export function EstateView() {
           Every application, repository, service, and technology discovered across the connected
           repositories, grouped by domain and ranked by priority.
         </p>
+        <nav className={styles.viewSwitch} aria-label="Estate view">
+          {([
+            ["ranked", "Ranked list", "/estate"],
+            ["canvas", "Architecture canvas", "/estate?view=canvas"],
+          ] as const).map(([id, label, href]) =>
+            estateView === id ? (
+              <span key={id} aria-current="page" className={styles.activeView}>
+                {label}
+              </span>
+            ) : (
+              <Link key={id} href={href}>
+                {label}
+              </Link>
+            ),
+          )}
+        </nav>
       </header>
+
+      {estateView === "canvas" ? (
+        <ArchitectureWorkspace scope="ESTATE" variant="embedded" initialDensity="compact" />
+      ) : (
+        <>
 
       {isError ? (
         <div className={styles.notice} role="alert">
@@ -313,6 +340,8 @@ export function EstateView() {
           />
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }
