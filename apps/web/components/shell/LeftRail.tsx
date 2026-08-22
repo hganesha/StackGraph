@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import {
   IconActivityHeartbeat,
   IconApps,
+  IconBulb,
   IconChecklist,
   IconHierarchy3,
   IconInfoCircle,
   IconLayoutDashboard,
-  IconMessageQuestion,
   IconSettings,
   IconStack2,
   IconTrendingUp,
@@ -24,7 +24,7 @@ const PRIMARY = [
   { href: "/applications", label: "Applications", icon: IconApps },
   { href: "/technologies", label: "Technologies", icon: IconStack2 },
   { href: "/modernization", label: "Modernization", icon: IconTrendingUp },
-  { href: "/ask", label: "Ask", icon: IconMessageQuestion },
+  { href: "/ask", label: "Insights", icon: IconBulb },
 ];
 
 const SECONDARY = [

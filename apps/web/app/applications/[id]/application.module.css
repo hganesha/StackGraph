@@ -978,6 +978,12 @@
   border: 0;
 }
 
+.recommendationWorkspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-8);
+}
+
 @media (max-width: 900px) {
   .technologyLayout {
     grid-template-columns: minmax(0, 1fr);

@@ -1,8 +1,9 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: var(--sg-space-4);
-  max-inline-size: 820px;
+  gap: var(--sg-space-5);
+  inline-size: 100%;
+  max-inline-size: 1180px;
   margin-inline: auto;
 }
 .denied {
@@ -15,45 +16,128 @@
 }
 .head {
   display: flex;
-  flex-direction: column;
-  gap: var(--sg-space-1);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-5);
 }
 .title {
+  margin: 0;
   font-size: var(--sg-type-h1-size);
+  line-height: var(--sg-type-h1-line);
   font-weight: 500;
 }
 .subtitle {
+  margin: 0;
   color: var(--sg-text-secondary);
+}
+.pageEyebrow {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auditBadge {
+  flex: 0 0 auto;
+  padding: 5px var(--sg-space-3);
+  color: var(--sg-color-domain-enterprise-800);
+  background: var(--sg-color-domain-enterprise-100);
+  border-radius: var(--sg-radius-pill);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+
+.adminWorkspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sg-space-4);
 }
 
 .tabs {
   display: flex;
+  flex-direction: column;
   gap: var(--sg-space-1);
-  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
-  overflow-x: auto;
+  padding: var(--sg-space-2);
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
 }
 .tab {
-  padding: var(--sg-space-2) var(--sg-space-3);
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sg-space-2);
+  padding: 10px var(--sg-space-3);
   color: var(--sg-text-secondary);
   font-size: var(--sg-type-body-size);
-  white-space: nowrap;
-  border-block-end: 2px solid transparent;
-  margin-block-end: -1px;
+  text-align: start;
+  border: var(--sg-border-hairline) solid transparent;
+  border-radius: var(--sg-radius-control);
 }
 .tab:hover {
   color: var(--sg-text-primary);
+  background: color-mix(in srgb, var(--sg-surface-base) 65%, transparent);
 }
 .tabActive {
   color: var(--sg-text-primary);
+  background: var(--sg-surface-card);
+  border-color: var(--sg-surface-border);
+  box-shadow: var(--sg-shadow-raised, none);
+}
+.tabIcon {
+  margin-block-start: 1px;
+  color: var(--sg-text-muted);
+}
+.tabActive .tabIcon {
+  color: var(--sg-color-domain-enterprise-600);
+}
+.tabCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.tabCopy strong {
+  font-size: var(--sg-type-small-size);
   font-weight: 500;
-  border-block-end-color: var(--sg-color-domain-enterprise-500);
+}
+.tabCopy small {
+  color: var(--sg-text-muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .panel {
+  min-inline-size: 0;
   background: var(--sg-surface-card);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-card);
-  padding: var(--sg-space-5, var(--sg-space-6));
+  overflow: hidden;
+}
+.panelHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sg-space-5);
+  padding: var(--sg-space-4) var(--sg-space-5);
+  background: var(--sg-surface-sunken);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.panelHead h2 {
+  margin: 2px 0 0;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-h2-size, 20px);
+  font-weight: 500;
+}
+.panelHead p {
+  max-inline-size: 320px;
+  margin: 0;
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+  text-align: end;
+}
+.panelBody {
+  padding: var(--sg-space-5);
 }
 
 .section {
@@ -62,9 +146,54 @@
   gap: var(--sg-space-4);
 }
 .sectionNote {
+  margin: 0;
+  padding: var(--sg-space-3) var(--sg-space-4);
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-secondary);
   line-height: var(--sg-type-body-line);
+  background: var(--sg-surface-sunken);
+  border-inline-start: 3px solid var(--sg-color-domain-enterprise-500);
+  border-radius: var(--sg-radius-control);
+}
+.subtabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  padding: 6px;
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.subtab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-inline-size: 0;
+  padding: var(--sg-space-2) var(--sg-space-3);
+  color: var(--sg-text-secondary);
+  text-align: start;
+  border: var(--sg-border-hairline) solid transparent;
+  border-radius: calc(var(--sg-radius-control) - 2px);
+}
+.subtab:hover {
+  color: var(--sg-text-primary);
+}
+.subtab strong {
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+.subtab small {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+.subtabActive {
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-base);
+  border-color: var(--sg-surface-border);
+}
+.subtabPanel {
+  min-inline-size: 0;
 }
 .connectForm {
   display: flex;
@@ -131,13 +260,14 @@
 }
 .select,
 .input {
+  inline-size: 100%;
   padding: var(--sg-space-2) var(--sg-space-3);
   background: var(--sg-surface-base);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-control);
   color: var(--sg-text-primary);
   font-size: var(--sg-type-body-size);
-  max-inline-size: 420px;
+  max-inline-size: 520px;
 }
 .select:focus-visible,
 .input:focus-visible {
@@ -492,7 +622,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sg-space-3);
-  padding: var(--sg-space-4);
+  padding: var(--sg-space-5);
   background: var(--sg-surface-base);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
   border-radius: var(--sg-radius-control);
@@ -502,6 +632,9 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sg-space-3);
+}
+.governanceCardHead > div {
+  min-inline-size: 0;
 }
 .eyebrow {
   display: block;
@@ -548,6 +681,10 @@
   padding-block-start: var(--sg-space-3);
   border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
 }
+.governanceForm .input,
+.governanceForm .select {
+  max-inline-size: none;
+}
 .fieldGrid,
 .metricGrid {
   display: grid;
@@ -577,6 +714,7 @@
   font-family: var(--sg-font-evidence);
 }
 .textarea {
+  inline-size: 100%;
   min-block-size: 84px;
   resize: vertical;
   padding: var(--sg-space-2) var(--sg-space-3);
@@ -706,6 +844,127 @@
   font: inherit;
 }
 
+.phaseList,
+.phase,
+.ruleList {
+  display: flex;
+  flex-direction: column;
+}
+.phaseTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sg-space-2);
+}
+.phaseTab {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--sg-space-3);
+  padding: var(--sg-space-3);
+  color: var(--sg-text-secondary);
+  text-align: start;
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+}
+.phaseTab span {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.phaseTab strong {
+  grid-row: 2;
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+.phaseTab small {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--sg-text-muted);
+}
+.phaseTabActive {
+  background: var(--sg-surface-base);
+  border-color: var(--sg-color-domain-enterprise-500);
+  box-shadow: inset 3px 0 0 var(--sg-color-domain-enterprise-500);
+}
+.phaseList {
+  gap: var(--sg-space-4);
+}
+.phase,
+.ruleList {
+  gap: var(--sg-space-2);
+}
+.phaseHead,
+.ruleTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+}
+.phaseHead h3 {
+  margin: 2px 0 0;
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.phaseHead > span,
+.ruleFindingCount {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.ruleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, auto);
+  gap: var(--sg-space-4);
+  padding: var(--sg-space-4);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-sunken);
+}
+.ruleIdentity {
+  min-inline-size: 0;
+}
+.ruleIdentity p {
+  margin: var(--sg-space-1) 0;
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-body-line);
+}
+.ruleKey {
+  color: var(--sg-text-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.ruleControls {
+  display: grid;
+  grid-template-columns: auto minmax(105px, 1fr) minmax(90px, 0.7fr);
+  align-items: end;
+  gap: var(--sg-space-2);
+}
+.ruleControls .ghost {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+.ruleInputs {
+  margin-block-start: var(--sg-space-2);
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.ruleInputs summary {
+  cursor: pointer;
+}
+.ruleInputs ul {
+  margin-block: var(--sg-space-2) 0;
+  padding-inline-start: var(--sg-space-5);
+}
+.ruleError {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--sg-color-signal-danger-700);
+  font-size: var(--sg-type-small-size);
+}
+
 /* tenant code policies */
 .subheading {
   margin: 0;
@@ -775,7 +1034,55 @@
   text-underline-offset: 2px;
 }
 
+@media (max-width: 1120px) {
+  .adminWorkspace {
+    display: flex;
+    flex-direction: column;
+  }
+  .tabs {
+    inline-size: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    scroll-snap-type: inline mandatory;
+  }
+  .tab {
+    flex: 0 0 178px;
+    scroll-snap-align: start;
+  }
+  .panel {
+    inline-size: 100%;
+  }
+  .panelBody,
+  .governanceCard,
+  .ecosystemCard {
+    padding: var(--sg-space-4);
+  }
+  .ruleRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
+  .head {
+    flex-direction: column;
+    gap: var(--sg-space-3);
+  }
+  .panelHead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--sg-space-2);
+  }
+  .panelHead p {
+    max-inline-size: none;
+    text-align: start;
+  }
+  .subtabs {
+    display: flex;
+    overflow-x: auto;
+  }
+  .subtab {
+    flex: 0 0 150px;
+  }
   .select,
   .input {
     max-inline-size: 100%;
@@ -791,5 +1098,42 @@
   .technologyPolicyRow {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .ruleRow {
+    grid-template-columns: 1fr;
+  }
+  .ruleControls {
+    grid-template-columns: 1fr;
+  }
+  .ruleControls .ghost {
+    grid-column: auto;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .tabs,
+  .subtabs {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .tab,
+  .subtab {
+    flex: 1 1 calc(50% - 3px);
+    min-inline-size: 0;
+  }
+  .panelBody,
+  .panelHead,
+  .governanceCard,
+  .ecosystemCard {
+    padding: var(--sg-space-3);
+  }
+  .phaseTabs {
+    grid-template-columns: 1fr;
+  }
+  .metricGrid,
+  .admissionMetrics,
+  .thresholdRow {
+    grid-template-columns: 1fr;
   }
 }

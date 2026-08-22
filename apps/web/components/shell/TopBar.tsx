@@ -42,7 +42,7 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
       </div>
 
       {/* Ask your estate — the one global input, present on every screen (plan §3.1). Wired in P2. */}
-      <button className={styles.ask} type="button" aria-label="Ask your estate" onClick={() => router.push("/ask")}>
+      <button className={styles.ask} type="button" aria-label="Ask your estate" onClick={() => router.push("/ask?view=ask")}>
         <span className={styles.askLead} aria-hidden="true">
           <IconSearch size={16} stroke={1.5} />
         </span>

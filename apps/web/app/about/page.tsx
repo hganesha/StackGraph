@@ -6,7 +6,7 @@ import {
   IconChecklist,
   IconHierarchy3,
   IconLayoutDashboard,
-  IconMessageQuestion,
+  IconBulb,
   IconPlugConnected,
   IconScan,
   IconSitemap,
@@ -88,9 +88,9 @@ const STARTING_POINTS: Array<{ href: string; icon: Icon; title: string; body: st
   },
   {
     href: "/ask",
-    icon: IconMessageQuestion,
-    title: "Ask",
-    body: "Put a question to the estate in plain language and follow the citations behind the answer.",
+    icon: IconBulb,
+    title: "Insights",
+    body: "Standing evidence reports, plus a plain-language question box whose answers carry their citations.",
   },
 ];
 

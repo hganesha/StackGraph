@@ -7,7 +7,7 @@ const primaryRoutes = [
   ["/applications", "Applications", "Applications"],
   ["/technologies", "Technologies", "Technologies"],
   ["/modernization", "Modernization", "Modernization"],
-  ["/ask", "Ask your estate", "Ask"],
+  ["/ask", "Insights", "Insights"],
 ] as const;
 
 async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {

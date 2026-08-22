@@ -786,6 +786,18 @@
       "BusinessMapCapabilityNode": {
         "additionalProperties": false,
         "properties": {
+          "criticality": {
+            "default": 3,
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "title": "Criticality",
+            "type": "integer"
+          },
           "description": {
             "default": "",
             "title": "Description",
@@ -2419,6 +2431,521 @@
         "title": "Coverage",
         "type": "object"
       },
+      "DeterministicInsight": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_application_count": {
+            "minimum": 0.0,
+            "title": "Affected Application Count",
+            "type": "integer"
+          },
+          "affected_deployment_count": {
+            "minimum": 0.0,
+            "title": "Affected Deployment Count",
+            "type": "integer"
+          },
+          "affected_repositories": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Affected Repositories",
+            "type": "array"
+          },
+          "affected_repository_count": {
+            "minimum": 0.0,
+            "title": "Affected Repository Count",
+            "type": "integer"
+          },
+          "detected_at": {
+            "format": "date-time",
+            "title": "Detected At",
+            "type": "string"
+          },
+          "evidence_coverage": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Evidence Coverage",
+            "type": "number"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "VULNERABLE_DIRECT_DEPENDENCY",
+              "VULNERABLE_TRANSITIVE_DEPENDENCY",
+              "DEPRECATED_DEPENDENCY",
+              "UNUSED_DIRECT_DEPENDENCY",
+              "VERSION_FRAGMENTATION",
+              "CAPABILITY_DIVERSITY"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "priority_score": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Priority Score",
+            "type": "number"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeterministicInsightRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule_key": {
+            "minLength": 1,
+            "title": "Rule Key",
+            "type": "string"
+          },
+          "rule_version": {
+            "minLength": 1,
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "scope_entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Scope Entity Ids",
+            "type": "array"
+          },
+          "severity": {
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "INFO"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "stages": {
+            "$ref": "#/components/schemas/InsightImpactStages"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule_key",
+          "rule_version",
+          "kind",
+          "severity",
+          "title",
+          "summary",
+          "priority_score",
+          "evidence_coverage",
+          "subject",
+          "affected_repository_count",
+          "affected_application_count",
+          "affected_deployment_count",
+          "affected_repositories",
+          "scope_entity_ids",
+          "stages",
+          "supporting_fact_ids",
+          "missing_inputs",
+          "input_fingerprint",
+          "detected_at"
+        ],
+        "title": "DeterministicInsight",
+        "type": "object"
+      },
+      "DeterministicInsightGovernanceState": {
+        "additionalProperties": false,
+        "properties": {
+          "active_rule_count": {
+            "minimum": 0.0,
+            "title": "Active Rule Count",
+            "type": "integer"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "evidence_coverage": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Evidence Coverage",
+            "type": "number"
+          },
+          "finding_count": {
+            "minimum": 0.0,
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "last_evaluated_at": {
+            "format": "date-time",
+            "title": "Last Evaluated At",
+            "type": "string"
+          },
+          "method_version": {
+            "title": "Method Version",
+            "type": "string"
+          },
+          "needs_data_rule_count": {
+            "minimum": 0.0,
+            "title": "Needs Data Rule Count",
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/DeterministicInsightRuleSummary"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "method_version",
+          "rules",
+          "active_rule_count",
+          "needs_data_rule_count",
+          "finding_count",
+          "evidence_coverage",
+          "last_evaluated_at"
+        ],
+        "title": "DeterministicInsightGovernanceState",
+        "type": "object"
+      },
+      "DeterministicInsightList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "insights": {
+            "items": {
+              "$ref": "#/components/schemas/DeterministicInsight"
+            },
+            "title": "Insights",
+            "type": "array"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/DeterministicInsightSummary"
+          }
+        },
+        "required": [
+          "as_of",
+          "summary",
+          "insights",
+          "page_info"
+        ],
+        "title": "DeterministicInsightList",
+        "type": "object"
+      },
+      "DeterministicInsightRecommendation": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "UPGRADE",
+              "REMOVE",
+              "CONSOLIDATE",
+              "REPLACE",
+              "INVESTIGATE"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "estimated_effort": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "UNKNOWN"
+            ],
+            "title": "Estimated Effort",
+            "type": "string"
+          },
+          "rationale": {
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "title",
+          "rationale",
+          "estimated_effort"
+        ],
+        "title": "DeterministicInsightRecommendation",
+        "type": "object"
+      },
+      "DeterministicInsightRuleSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "configuration": {
+            "additionalProperties": true,
+            "title": "Configuration",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "finding_count": {
+            "minimum": 0.0,
+            "title": "Finding Count",
+            "type": "integer"
+          },
+          "minimum_repositories": {
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              1,
+              2,
+              3
+            ],
+            "title": "Phase",
+            "type": "integer"
+          },
+          "readiness": {
+            "enum": [
+              "ACTIVE",
+              "NEEDS_DATA"
+            ],
+            "title": "Readiness",
+            "type": "string"
+          },
+          "rule_key": {
+            "title": "Rule Key",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "INFO"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_key",
+          "name",
+          "description",
+          "phase",
+          "readiness",
+          "enabled",
+          "severity",
+          "minimum_repositories",
+          "configuration",
+          "version",
+          "finding_count",
+          "missing_inputs"
+        ],
+        "title": "DeterministicInsightRuleSummary",
+        "type": "object"
+      },
+      "DeterministicInsightRuleUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "configuration": {
+            "additionalProperties": true,
+            "title": "Configuration",
+            "type": "object"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "minimum_repositories": {
+            "default": 1,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Minimum Repositories",
+            "type": "integer"
+          },
+          "severity": {
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "INFO"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "severity"
+        ],
+        "title": "DeterministicInsightRuleUpdateRequest",
+        "type": "object"
+      },
+      "DeterministicInsightSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_repositories": {
+            "minimum": 0.0,
+            "title": "Affected Repositories",
+            "type": "integer"
+          },
+          "critical": {
+            "minimum": 0.0,
+            "title": "Critical",
+            "type": "integer"
+          },
+          "deployed": {
+            "minimum": 0.0,
+            "title": "Deployed",
+            "type": "integer"
+          },
+          "high": {
+            "minimum": 0.0,
+            "title": "High",
+            "type": "integer"
+          },
+          "runtime_observed": {
+            "minimum": 0.0,
+            "title": "Runtime Observed",
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "critical",
+          "high",
+          "affected_repositories",
+          "runtime_observed",
+          "deployed"
+        ],
+        "title": "DeterministicInsightSummary",
+        "type": "object"
+      },
       "DuplicateCapabilityCandidateSummary": {
         "additionalProperties": false,
         "properties": {
@@ -2723,6 +3250,148 @@
           "decision_fingerprint"
         ],
         "title": "EcosystemAdmissionSummary",
+        "type": "object"
+      },
+      "EnterpriseInsightReport": {
+        "additionalProperties": false,
+        "properties": {
+          "answerable": {
+            "title": "Answerable",
+            "type": "boolean"
+          },
+          "category": {
+            "enum": [
+              "ENTERPRISE_RISK",
+              "TECHNOLOGY_RATIONALIZATION",
+              "PORTFOLIO_DECISIONS"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "evidence_count": {
+            "minimum": 0.0,
+            "title": "Evidence Count",
+            "type": "integer"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "metric_label": {
+            "minLength": 1,
+            "title": "Metric Label",
+            "type": "string"
+          },
+          "metric_value": {
+            "minLength": 1,
+            "title": "Metric Value",
+            "type": "string"
+          },
+          "question": {
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "response": {
+            "$ref": "#/components/schemas/AskResponse"
+          },
+          "status": {
+            "enum": [
+              "ACTION_REQUIRED",
+              "WATCH",
+              "HEALTHY",
+              "WAITING_FOR_DATA"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "category",
+          "question",
+          "metric_value",
+          "metric_label",
+          "status",
+          "answerable",
+          "evidence_count",
+          "summary",
+          "response"
+        ],
+        "title": "EnterpriseInsightReport",
+        "type": "object"
+      },
+      "EnterpriseInsightReportList": {
+        "additionalProperties": false,
+        "properties": {
+          "answerable_reports": {
+            "minimum": 0.0,
+            "title": "Answerable Reports",
+            "type": "integer"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/EnterpriseInsightReport"
+            },
+            "minItems": 1,
+            "title": "Reports",
+            "type": "array"
+          },
+          "total_reports": {
+            "minimum": 1.0,
+            "title": "Total Reports",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "method_version",
+          "evaluated_at",
+          "answerable_reports",
+          "total_reports",
+          "reports"
+        ],
+        "title": "EnterpriseInsightReportList",
         "type": "object"
       },
       "EntitySummary": {
@@ -3508,6 +4177,157 @@
         "title": "IdentityReviewResult",
         "type": "object"
       },
+      "InsightImpactStages": {
+        "additionalProperties": false,
+        "properties": {
+          "business_critical": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Business Critical"
+          },
+          "deployed": {
+            "minimum": 0.0,
+            "title": "Deployed",
+            "type": "integer"
+          },
+          "externally_exposed": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Externally Exposed"
+          },
+          "present": {
+            "minimum": 0.0,
+            "title": "Present",
+            "type": "integer"
+          },
+          "production": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Production"
+          },
+          "referenced": {
+            "minimum": 0.0,
+            "title": "Referenced",
+            "type": "integer"
+          },
+          "runtime_observed": {
+            "minimum": 0.0,
+            "title": "Runtime Observed",
+            "type": "integer"
+          },
+          "statically_reachable": {
+            "minimum": 0.0,
+            "title": "Statically Reachable",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "present",
+          "referenced",
+          "statically_reachable",
+          "runtime_observed",
+          "deployed"
+        ],
+        "title": "InsightImpactStages",
+        "type": "object"
+      },
+      "InternalCatalogCandidateSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_call_sites": {
+            "minimum": 0.0,
+            "title": "Affected Call Sites",
+            "type": "integer"
+          },
+          "affected_files": {
+            "minimum": 0.0,
+            "title": "Affected Files",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "capability_definition_id": {
+            "format": "uuid",
+            "title": "Capability Definition Id",
+            "type": "string"
+          },
+          "component_entity_id": {
+            "format": "uuid",
+            "title": "Component Entity Id",
+            "type": "string"
+          },
+          "component_key": {
+            "title": "Component Key",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repository_name": {
+            "title": "Repository Name",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "component_entity_id",
+          "component_key",
+          "name",
+          "repository_name",
+          "capability_definition_id",
+          "capability",
+          "confidence",
+          "affected_call_sites",
+          "affected_files",
+          "supporting_fact_ids"
+        ],
+        "title": "InternalCatalogCandidateSummary",
+        "type": "object"
+      },
       "InternalCatalogComponentSummary": {
         "additionalProperties": false,
         "properties": {
@@ -4092,6 +4912,13 @@
               "$ref": "#/components/schemas/EcosystemAdmissionSummary"
             },
             "title": "Ecosystem Admissions",
+            "type": "array"
+          },
+          "internal_component_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/InternalCatalogCandidateSummary"
+            },
+            "title": "Internal Component Candidates",
             "type": "array"
           },
           "internal_components": {
@@ -7952,6 +8779,79 @@
         ]
       }
     },
+    "/admin/deterministic-insight-governance": {
+      "get": {
+        "operationId": "getDeterministicInsightGovernance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeterministicInsightGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Deterministic Insight Governance",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/deterministic-insight-governance/rules/{rule_key}": {
+      "put": {
+        "operationId": "updateDeterministicInsightRule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_key",
+            "required": true,
+            "schema": {
+              "title": "Rule Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeterministicInsightRuleUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeterministicInsightGovernanceState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Deterministic Insight Rule",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/admin/github/installations": {
       "post": {
         "operationId": "connectGitHubInstallation",
@@ -9840,6 +10740,107 @@
         "summary": "Review Identity Assertion",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/insights/deterministic": {
+      "get": {
+        "operationId": "listDeterministicInsights",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope_entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "rule_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 3,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeterministicInsightList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Deterministic Insights",
+        "tags": [
+          "intelligence"
+        ]
+      }
+    },
+    "/insights/reports": {
+      "get": {
+        "operationId": "listEnterpriseInsightReports",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnterpriseInsightReportList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Enterprise Insight Reports",
+        "tags": [
+          "intelligence"
         ]
       }
     },

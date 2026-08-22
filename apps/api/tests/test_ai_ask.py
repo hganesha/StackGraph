@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 
-from app.ai_ask import AIAskOrchestrator, ESTATE_QUERY_TOOL
+from app.ai_ask import AIAskOrchestrator, ESTATE_QUERY_TOOL, QUERY_KINDS
 from app.errors import APIError
 from app.models import AskRequest, AskResponse, Citation
 from stackgraph_ai.errors import ProviderRequestError
@@ -98,6 +98,37 @@ def test_ai_ask_selects_deterministic_tool_and_validates_explanation_citations()
     assert ai.calls[0][2]["tool_choice"] == "required"
     assert ai.calls[0][2]["route"] == "high-confidence"
     assert str(FACT_ID) in ai.calls[1][1]["query_result"]
+
+
+@pytest.mark.parametrize(
+    ("query_kind", "expected_prefix"),
+    [
+        ("systemic_dependency_risk", "systemic dependency risk top 20:"),
+        ("reachable_vulnerabilities", "reachable vulnerabilities in code-declared production Tier-1 applications:"),
+        ("duplicate_capability_implementations", "independently implemented same capability:"),
+        ("modernization_blockers", "unsupported dependency modernization blockers:"),
+        ("package_business_blast_radius", "package business capability blast radius:"),
+        ("technology_diversity", "package category unnecessary technology diversity:"),
+        ("internal_library_standards", "internal libraries enterprise standards:"),
+        ("custom_to_internal_platform", "custom implementations replace with existing internal platforms:"),
+        ("application_retirement_consolidation", "application retirement consolidation candidates:"),
+        ("standardization_initiatives", "top 10 engineering standardization initiatives enterprise payoff:"),
+    ],
+)
+def test_ai_ask_routes_enterprise_intelligence_queries_to_deterministic_templates(
+    query_kind: str, expected_prefix: str,
+) -> None:
+    deterministic = StubDeterministicAsk()
+    orchestrator = AIAskOrchestrator(
+        deterministic=deterministic,
+        ai=StubAI([selection(query_kind), explanation()]),
+    )
+
+    asyncio.run(orchestrator.ask(AskRequest(question="Enterprise question"), tenant_id=TENANT_ID))
+
+    assert deterministic.requests[0][0].question.startswith(expected_prefix)
+    assert query_kind in QUERY_KINDS
+    assert query_kind in ESTATE_QUERY_TOOL.input_schema["properties"]["query_kind"]["enum"]
 
 
 def test_ai_ask_integrates_real_catalog_and_provider_neutral_service() -> None:

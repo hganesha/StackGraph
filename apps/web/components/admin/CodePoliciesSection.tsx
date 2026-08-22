@@ -232,6 +232,7 @@ function EvaluationResults({ state }: { state: TenantCodePolicyState }) {
 
 export function CodePoliciesSection() {
   const [selectedKey, setSelectedKey] = useState(NEW_FUNCTION);
+  const [view, setView] = useState<"functions" | "evaluation">("functions");
   const policies = useQuery({
     queryKey: ["admin", "code-policies"],
     queryFn: () => stackGraphClient.getTenantCodePolicies(),
@@ -244,26 +245,60 @@ export function CodePoliciesSection() {
   const selected = state.functions.find((item) => item.function_key === selectedKey);
   return (
     <div className={styles.section}>
-      <p className={styles.sectionNote}>Define tenant-specific technology boundaries by code function. StackGraph’s curated function classification stays primary; custom functions provide a governed overlay for tenant-specific and unknown usage.</p>
-      <section className={styles.governanceCard} aria-labelledby="code-policy-editor-heading">
-        <div className={styles.governanceCardHead}>
-          <div>
-            <span className={styles.eyebrow}>Tenant policy</span>
-            <h2 id="code-policy-editor-heading" className={styles.cardTitle}>Function technology policy</h2>
-          </div>
-          <span className={styles.statusMuted}>{state.summary.governed_functions} governed</span>
-        </div>
-        <p className={styles.fingerprint} title={state.policy_set_fingerprint}>Policy set <span className="sg-mono">{shortFingerprint(state.policy_set_fingerprint)}</span></p>
-        <label className={styles.field}>
-          <span className={styles.label}>Function to govern</span>
-          <select className={styles.select} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
-            <option value={NEW_FUNCTION}>Create a custom function</option>
-            {state.functions.map((item) => <option key={item.function_key} value={item.function_key}>{item.name} · {item.source.toLowerCase()}{item.policy ? " · governed" : ""}</option>)}
-          </select>
-        </label>
-        <PolicyEditor key={selectedKey} state={state} selected={selected} onSaved={setSelectedKey} />
-      </section>
-      <EvaluationResults state={state} />
+      <p className={styles.sectionNote}>Define tenant-specific technology boundaries by code function, then evaluate the estate against the saved policy set. StackGraph’s curated classification stays primary; custom functions provide a governed overlay.</p>
+      <div className={styles.subtabs} role="tablist" aria-label="Code policy areas">
+        <button
+          id="code-policy-tab-functions"
+          className={`${styles.subtab} ${view === "functions" ? styles.subtabActive : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={view === "functions"}
+          aria-controls="code-policy-panel-functions"
+          onClick={() => setView("functions")}
+        >
+          <strong>Function policies</strong>
+          <small>{state.summary.governed_functions} governed</small>
+        </button>
+        <button
+          id="code-policy-tab-evaluation"
+          className={`${styles.subtab} ${view === "evaluation" ? styles.subtabActive : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={view === "evaluation"}
+          aria-controls="code-policy-panel-evaluation"
+          onClick={() => setView("evaluation")}
+        >
+          <strong>Repository alignment</strong>
+          <small>{state.summary.misaligned_repositories} misaligned</small>
+        </button>
+      </div>
+      <div
+        id={`code-policy-panel-${view}`}
+        className={styles.subtabPanel}
+        role="tabpanel"
+        aria-labelledby={`code-policy-tab-${view}`}
+      >
+        {view === "functions" ? (
+          <section className={styles.governanceCard} aria-labelledby="code-policy-editor-heading">
+            <div className={styles.governanceCardHead}>
+              <div>
+                <span className={styles.eyebrow}>Tenant policy</span>
+                <h2 id="code-policy-editor-heading" className={styles.cardTitle}>Function technology policy</h2>
+              </div>
+              <span className={styles.statusMuted}>{state.summary.governed_functions} governed</span>
+            </div>
+            <p className={styles.fingerprint} title={state.policy_set_fingerprint}>Policy set <span className="sg-mono">{shortFingerprint(state.policy_set_fingerprint)}</span></p>
+            <label className={styles.field}>
+              <span className={styles.label}>Function to govern</span>
+              <select className={styles.select} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
+                <option value={NEW_FUNCTION}>Create a custom function</option>
+                {state.functions.map((item) => <option key={item.function_key} value={item.function_key}>{item.name} · {item.source.toLowerCase()}{item.policy ? " · governed" : ""}</option>)}
+              </select>
+            </label>
+            <PolicyEditor key={selectedKey} state={state} selected={selected} onSaved={setSelectedKey} />
+          </section>
+        ) : <EvaluationResults state={state} />}
+      </div>
     </div>
   );
 }

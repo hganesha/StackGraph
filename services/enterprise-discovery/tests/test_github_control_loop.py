@@ -546,6 +546,9 @@ class GitHubControlLoopPersistenceTests(unittest.TestCase):
         self.assertEqual(promoted["target_key"], f"github:repo:{repository_id}")
         self.assertEqual(promoted["refresh_policy"]["repository_id"], repository_id)
         self.assertEqual(promoted["refresh_policy"]["default_branch"], "main")
+        self.assertEqual(promoted["refresh_policy"]["full_name"], "acme/billing")
+        self.assertEqual(promoted["refresh_policy"]["visibility"], "PRIVATE")
+        self.assertIs(promoted["refresh_policy"]["archived"], False)
         self.assertIsNotNone(promoted["last_success_at"])
 
 
