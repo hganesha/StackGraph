@@ -178,6 +178,52 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(profile_fact["object_value"]["languages"], ["Python"])
         self.assertEqual(profile_fact["assertion_class"], "INFERRED")
 
+    def test_custom_registry_manifest_emits_internal_package_publication(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".npmrc").write_text(
+                "@acme:registry=https://npm.acme.example/\n"
+            )
+            (root / "package.json").write_text(json.dumps({
+                "name": "@acme/billing-client",
+                "version": "2.4.0",
+                "dependencies": {},
+            }))
+
+            result = scan_repository(request(root))
+
+        publication = next(
+            fact for fact in result["facts"] if fact["predicate"] == "PUBLISHES"
+        )
+        self.assertEqual(publication["assertion_class"], "DECLARED")
+        self.assertEqual(publication["confidence"], 1)
+        self.assertEqual(publication["subject"]["type"], "Repository")
+        self.assertEqual(publication["object_entity"]["type"], "PackageVersion")
+        self.assertTrue(publication["object_entity"]["key"].startswith("registry:npm-"))
+        self.assertIn("pkg:npm/%40acme/billing-client@2.4.0", publication["object_entity"]["key"])
+        self.assertEqual(publication["properties"]["package_name"], "@acme/billing-client")
+        self.assertEqual(publication["properties"]["registry_source"], "NPMRC_SCOPE")
+        self.assertEqual(len(publication["evidence"]), 2)
+
+    def test_private_or_public_npm_manifest_is_not_an_internal_publication(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({
+                "name": "private-app", "version": "1.0.0", "private": True,
+            }))
+            private_result = scan_repository(request(root))
+            (root / "package.json").write_text(json.dumps({
+                "name": "public-library", "version": "1.0.0",
+            }))
+            public_result = scan_repository(request(root))
+
+        self.assertFalse(any(
+            fact["predicate"] == "PUBLISHES" for fact in private_result["facts"]
+        ))
+        self.assertFalse(any(
+            fact["predicate"] == "PUBLISHES" for fact in public_result["facts"]
+        ))
+
     def test_database_inference_correlates_psycopg_import_and_sanitized_config(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

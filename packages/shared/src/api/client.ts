@@ -376,7 +376,7 @@ const fixtureClient: StackGraphClient = {
     const definitions = [
       ["systemic_dependency_risk", "Systemic dependency risk", "ENTERPRISE_RISK", "87", "highest risk score", "ACTION_REQUIRED"],
       ["reachable_vulnerabilities", "Reachable Tier-1 vulnerabilities", "ENTERPRISE_RISK", "3", "reachable impact paths", "ACTION_REQUIRED"],
-      ["package_business_blast_radius", "Package blast radius · next", "ENTERPRISE_RISK", "4", "enterprise impact groups", "WATCH"],
+      ["package_business_blast_radius", "Largest package blast radius", "ENTERPRISE_RISK", "4", "enterprise impact groups", "WATCH"],
       ["duplicate_capability_implementations", "Duplicated capabilities", "TECHNOLOGY_RATIONALIZATION", "6", "duplicated capabilities", "WATCH"],
       ["technology_diversity", "Unnecessary technology diversity", "TECHNOLOGY_RATIONALIZATION", "2", "diverse package categories", "WATCH"],
       ["modernization_blockers", "Modernization blockers", "TECHNOLOGY_RATIONALIZATION", "5", "unsupported blockers", "ACTION_REQUIRED"],

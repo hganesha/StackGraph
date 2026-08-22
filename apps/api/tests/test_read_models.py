@@ -215,6 +215,36 @@ def test_modernization_blockers_include_runtime_baseline_evidence() -> None:
     }]
 
 
+def test_top_package_blast_radius_selects_mapped_package_without_hardcoded_name() -> None:
+    class PackageImpactDatabaseStub:
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            assert "selected_package" in query
+            assert "current_capability_application_relationship" in query
+            return [{
+                "package": "shared-core", "capability_id": UUID(
+                    "00000000-0000-4000-8000-000000000410"
+                ),
+                "capability": "Enterprise Architecture", "criticality": 3,
+                "repositories": 2, "applications": 2,
+                "repository_names": "Billing, Ledger",
+                "application_names": "Billing, Ledger", "fact_ids": [],
+            }]
+
+    result = asyncio.run(
+        ReadModelStore(PackageImpactDatabaseStub())._ask_top_package_business_blast_radius(
+            tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+        )
+    )
+
+    assert result.result_kind == "TABLE"
+    assert result.text.startswith("shared-core has the largest governed package blast radius")
+    assert result.rows == [{
+        "package": "shared-core", "business_capability": "Enterprise Architecture",
+        "criticality": 3, "repositories": 2, "applications": 2,
+        "repository_names": "Billing, Ledger", "application_names": "Billing, Ledger",
+    }]
+
+
 def test_repository_detail_surfaces_cited_revision_pinned_profile() -> None:
     repository_id = UUID("00000000-0000-4000-8000-000000000401")
     detail = asyncio.run(ReadModelStore(RepositoryDetailDatabaseStub()).repository_detail(

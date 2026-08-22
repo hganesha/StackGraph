@@ -16,11 +16,17 @@ from typing import Any, Iterable, Mapping
 from urllib.parse import quote, urlsplit
 
 from .github_snapshot import manifest_kind
-from .npm_resolution import NpmConfig, parse_npmrc, resolve_npm_dependency
+from .npm_resolution import (
+    PUBLIC_NPM_ORIGIN,
+    NpmConfig,
+    normalize_registry_origin,
+    parse_npmrc,
+    resolve_npm_dependency,
+)
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.5.0"
+SCANNER_VERSION = "1.6.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -383,6 +389,9 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies = _dedupe_dependencies(dependencies)
     runtime = _runtime_observations(contents, diagnostics)
     inventory_facts = _repository_profile_facts(scan_input, contents)
+    inventory_facts.extend(_internal_package_publication_facts(
+        scan_input, contents, diagnostics,
+    ))
     inventory_facts.extend(_application_boundary_facts(scan_input, contents))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
     pass_a_completed = time.monotonic()
@@ -1645,6 +1654,126 @@ def _repository_ref(scan_input: ScanInput) -> dict[str, str]:
         "key": scan_input.repository_key,
         "name": scan_input.repository_name,
     }
+
+
+def _internal_package_publication_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    """Emit tenant-scoped package publication facts from repository manifests.
+
+    A package is considered internal only when its publish registry is explicitly a
+    non-public npm registry. Package names alone are not enough evidence, and manifests
+    marked private are never treated as published libraries.
+    """
+    configs: dict[str, NpmConfig] = {}
+    for path, content in contents.items():
+        if PurePosixPath(path).name != ".npmrc":
+            continue
+        try:
+            configs[str(PurePosixPath(path).parent)] = parse_npmrc(
+                content.decode("utf-8", errors="replace"), config_path=path,
+            )
+        except ValueError as error:
+            diagnostics.append(Diagnostic(
+                "WARNING", "INTERNAL_PUBLICATION_CONFIG_SKIPPED", str(error), path,
+            ))
+
+    facts: list[dict[str, Any]] = []
+    for path in sorted(
+        value for value in contents if PurePosixPath(value).name == "package.json"
+    ):
+        document = _decode_json(contents[path], path, diagnostics)
+        if not isinstance(document, Mapping) or document.get("private") is True:
+            continue
+        raw_name = document.get("name")
+        raw_version = document.get("version")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            continue
+        if not isinstance(raw_version, str) or not raw_version.strip():
+            continue
+        package_name = normalize_package_name("npm", raw_name)
+        directory = str(PurePosixPath(path).parent)
+        config_path, config = _nearest_npm_config(configs, directory)
+        publish_config = document.get("publishConfig")
+        configured_registry = (
+            publish_config.get("registry") if isinstance(publish_config, Mapping) else None
+        )
+        try:
+            if isinstance(configured_registry, str) and configured_registry.strip():
+                registry_origin = normalize_registry_origin(configured_registry)
+                registry_source = "PUBLISH_CONFIG"
+            else:
+                scope = package_name.partition("/")[0] if package_name.startswith("@") else None
+                registry_origin = (
+                    config.scoped_registries.get(scope, config.default_registry)
+                    if scope else config.default_registry
+                )
+                registry_source = "NPMRC_SCOPE" if scope in config.scoped_registries else "NPMRC_DEFAULT"
+        except ValueError as error:
+            diagnostics.append(Diagnostic(
+                "WARNING", "INTERNAL_PUBLICATION_REGISTRY_SKIPPED", str(error), path,
+            ))
+            continue
+        if registry_origin == PUBLIC_NPM_ORIGIN:
+            continue
+
+        registry_key = f"npm-{hashlib.sha256(registry_origin.encode()).hexdigest()[:16]}"
+        encoded_name = quote(package_name, safe="/")
+        encoded_version = quote(raw_version.strip(), safe=".-_~+")
+        package_key = f"registry:{registry_key}:pkg:npm/{encoded_name}@{encoded_version}"
+        manifest_pointer = (
+            "/publishConfig/registry" if registry_source == "PUBLISH_CONFIG" else "/name"
+        )
+        evidence = [Evidence(
+            path, "PACKAGE_PUBLICATION_MANIFEST", content_hash(contents[path]),
+            {"path": path, "json_pointer": manifest_pointer},
+            sha256_key(package_name, raw_version.strip(), registry_origin),
+        )]
+        if registry_source.startswith("NPMRC") and config_path and config_path in contents:
+            evidence.append(Evidence(
+                config_path, "NPM_REGISTRY_CONFIG", content_hash(contents[config_path]),
+                {"path": config_path}, sha256_key(registry_origin),
+            ))
+        identity = {
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "predicate": "PUBLISHES",
+            "package": package_key,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key(identity),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "PUBLISHES",
+            "object_entity": {
+                "namespace": "TECHNOLOGY",
+                "type": "PackageVersion",
+                "key": package_key,
+                "name": f"{package_name} {raw_version.strip()}",
+            },
+            "assertion_class": "DECLARED",
+            "confidence": 1,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {
+                "ecosystem": "npm",
+                "package_name": package_name,
+                "version": raw_version.strip(),
+                "component_path": directory,
+                "internal": True,
+                "registry_key": registry_key,
+                "registry_origin": registry_origin,
+                "registry_source": registry_source,
+            },
+            "evidence": [_evidence_dict(item, scan_input) for item in evidence],
+        })
+    return facts
 
 
 @dataclass(frozen=True, slots=True)
