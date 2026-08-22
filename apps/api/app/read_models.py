@@ -989,6 +989,14 @@ class ReadModelStore(AdminReadModelsMixin):
             WHERE (
                 (e.namespace='ENTERPRISE' AND e.entity_type='Application'
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
+                OR (e.namespace='BUSINESS' AND e.entity_type='BusinessCapability'
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+                  AND EXISTS (
+                    SELECT 1
+                    FROM current_capability_application_relationship mapping
+                    WHERE mapping.tenant_id=e.tenant_id
+                      AND mapping.capability_entity_id=e.id
+                  ))
                 OR (e.namespace IN ('TECHNOLOGY','OSS') AND e.entity_type<>'Capability'
                   AND e.id IN (SELECT id FROM observed_technology))
               )

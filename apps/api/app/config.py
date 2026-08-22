@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     db_pool_min_size: int = Field(default=1, ge=1)
     db_pool_max_size: int = Field(default=5, ge=1)
     default_tenant_id: UUID | None = None
-    cors_allowed_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
     auth_mode: Literal["development", "signed_session", "oidc"] = "development"
     auth_session_secret: str | None = None
     auth_session_keys_json: str = ""

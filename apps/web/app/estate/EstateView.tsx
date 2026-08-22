@@ -29,8 +29,11 @@ const DOMAIN_ORDER: Namespace[] = [
 ];
 const PAGED_DOMAINS = DOMAIN_ORDER;
 
-const hrefFor = (domain: string, id: string) =>
-  domain === "TECHNOLOGY" || domain === "OSS" ? `/technologies/${id}` : `/applications/${id}`;
+const hrefFor = (domain: string, id: string) => {
+  if (domain === "BUSINESS") return "/business-map";
+  if (domain === "TECHNOLOGY" || domain === "OSS") return `/technologies/${id}`;
+  return `/applications/${id}`;
+};
 
 function EstateDomainSection({
   domain,
