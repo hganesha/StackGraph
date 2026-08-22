@@ -5,6 +5,7 @@ from uuid import UUID
 from app.deterministic_insights import RULE_CATALOG, _policies, _to_insight
 from app.insight_rule_expansion import (
     DEFAULT_STRONG_COPYLEFT_LICENSES,
+    DEFAULT_WEAK_COPYLEFT_LICENSES,
     expanded_rule_queries,
 )
 
@@ -48,6 +49,9 @@ def test_default_rule_configuration_is_available_without_stored_policy() -> None
     assert policies["oss.license-obligation"]["configuration"][
         "strong_copyleft_licenses"
     ] == list(DEFAULT_STRONG_COPYLEFT_LICENSES)
+    assert policies["oss.license-obligation"]["configuration"][
+        "weak_copyleft_licenses"
+    ] == list(DEFAULT_WEAK_COPYLEFT_LICENSES)
 
 
 def test_expanded_query_parameters_are_bounded_and_tenant_scoped() -> None:
@@ -63,10 +67,16 @@ def test_expanded_query_parameters_are_bounded_and_tenant_scoped() -> None:
 
     assert queries["supplychain.dependency-confusion"][1] == (TENANT_ID,)
     assert queries["oss.license-obligation"][1][0:2] == (TENANT_ID, TENANT_ID)
+    assert len(queries["oss.license-obligation"][1]) == 4
     assert queries["code.cross-repository-clone"][1] == (TENANT_ID, 2)
     assert queries["code.vendored-third-party"][1] == (TENANT_ID, 1000)
     assert "resolution.tenant_id=%s" in queries["supplychain.dependency-confusion"][0]
     assert "unit.tenant_id=%s" in queries["code.cross-repository-clone"][0]
+    assert "fact.predicate='DEPENDS_ON'" in queries["oss.license-obligation"][0]
+    assert "registry.ecosystem" in queries["oss.license-obligation"][0]
+    assert "current_capability_application_relationship" in queries["code.cross-repository-clone"][0]
+    assert "NOT EXISTS" in queries["code.vendored-third-party"][0]
+    assert "vendored_package_version" in queries["code.vendored-third-party"][0]
 
 
 def test_expanded_insight_preserves_evidence_and_applies_coverage_penalty() -> None:
@@ -106,6 +116,7 @@ def test_expanded_insight_preserves_evidence_and_applies_coverage_penalty() -> N
         "effort": "HIGH",
         "missing_inputs": ["Upstream origin is unknown."],
         "coverage_penalty": 2,
+        "risk_bonus": 4,
     }
 
     insight = _to_insight(row)
@@ -116,3 +127,4 @@ def test_expanded_insight_preserves_evidence_and_applies_coverage_penalty() -> N
     assert insight.summary == "1 repository contain vendored source."
     assert insight.evidence_coverage < 0.7
     assert "Upstream origin is unknown." in insight.missing_inputs
+    assert insight.priority_score > 50

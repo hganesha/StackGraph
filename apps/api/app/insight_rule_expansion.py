@@ -14,6 +14,19 @@ DEFAULT_STRONG_COPYLEFT_LICENSES = (
     "SSPL-1.0",
 )
 
+DEFAULT_WEAK_COPYLEFT_LICENSES = (
+    "CDDL-1.0",
+    "EPL-1.0",
+    "EPL-2.0",
+    "LGPL-2.0-only",
+    "LGPL-2.0-or-later",
+    "LGPL-2.1-only",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0-only",
+    "LGPL-3.0-or-later",
+    "MPL-2.0",
+)
+
 
 EXPANDED_RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
     {
@@ -37,8 +50,8 @@ EXPANDED_RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
         "name": "License obligation exposure",
         "phase": 1,
         "description": (
-            "Resolved dependencies outside the active license allow-list, or carrying a "
-            "conservative strong-copyleft classification when no allow-list exists."
+            "Current resolved or declared dependencies in any ingested ecosystem that sit "
+            "outside the active license allow-list or carry a copyleft classification."
         ),
         "severity": "HIGH",
         "readiness": "ACTIVE",
@@ -47,6 +60,7 @@ EXPANDED_RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
         ),
         "configuration": {
             "strong_copyleft_licenses": list(DEFAULT_STRONG_COPYLEFT_LICENSES),
+            "weak_copyleft_licenses": list(DEFAULT_WEAK_COPYLEFT_LICENSES),
         },
     },
     {
@@ -198,7 +212,58 @@ GROUP BY candidate.dependency_id,candidate.dependency_kind,candidate.package_nam
 """
 
 
-_LICENSE_OBLIGATION_SQL = _DEPENDENCY_CONTEXT_CTE + """
+_LICENSE_CONTEXT_CTE = """
+WITH license_context AS (
+  SELECT fact.id fact_id,fact.tenant_id,fact.subject_entity_id repository_id,
+         repository.name repository_name,fact.object_entity_id dependency_id,
+         dependency.name dependency_name,dependency.entity_type dependency_kind,
+         dependency.canonical_key dependency_key,
+         upper(coalesce(
+           nullif(substring(dependency.canonical_key from '^pkg:([^/]+)'),''),
+           registry.ecosystem,'UNKNOWN'
+         )) ecosystem,
+         coalesce(usage.referenced,false) referenced,
+         coalesce(usage.static_reachability,'UNKNOWN') static_reachability,
+         coalesce(usage.runtime_observed,'UNKNOWN') runtime_observed,
+         application.subject_entity_id application_id,
+         deployment.object_entity_id deployment_id,
+         fact.observed_at
+  FROM fact_assertion fact
+  JOIN entity repository ON repository.id=fact.subject_entity_id
+    AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+  JOIN entity dependency ON dependency.id=fact.object_entity_id
+    AND dependency.entity_type IN ('Package','PackageVersion')
+  LEFT JOIN dependency_usage_summary usage
+    ON usage.dependency_fact_assertion_id=fact.id
+  LEFT JOIN LATERAL (
+    SELECT package_registry.ecosystem
+    FROM package_registry_identity identity
+    JOIN package_registry ON package_registry.id=identity.package_registry_id
+    WHERE identity.entity_id=dependency.id
+      AND (identity.tenant_id IS NULL OR identity.tenant_id=fact.tenant_id)
+    ORDER BY identity.package_version DESC NULLS LAST,identity.id
+    LIMIT 1
+  ) registry ON true
+  LEFT JOIN fact_assertion application
+    ON application.object_entity_id=repository.id
+   AND application.predicate='IMPLEMENTED_BY' AND application.system_to IS NULL
+   AND application.tenant_id=fact.tenant_id
+   AND EXISTS (
+     SELECT 1 FROM entity application_entity
+     WHERE application_entity.id=application.subject_entity_id
+       AND application_entity.namespace='ENTERPRISE'
+       AND application_entity.entity_type='Application'
+   )
+  LEFT JOIN fact_assertion deployment
+    ON deployment.subject_entity_id=repository.id
+   AND deployment.predicate='DEPLOYED_AS' AND deployment.system_to IS NULL
+   AND deployment.tenant_id=fact.tenant_id
+  WHERE fact.tenant_id=%s AND fact.predicate='DEPENDS_ON' AND fact.system_to IS NULL
+)
+"""
+
+
+_LICENSE_OBLIGATION_SQL = _LICENSE_CONTEXT_CTE + """
 , active_policy AS (
   SELECT policy.id,policy.allowed_licenses
   FROM modernization_policy policy
@@ -213,8 +278,9 @@ _LICENSE_OBLIGATION_SQL = _DEPENDENCY_CONTEXT_CTE + """
              SELECT 1 FROM unnest(policy.allowed_licenses) allowed(value)
              WHERE lower(allowed.value)=lower(license.value)
            ) policy_violation,
-         lower(license.value)=ANY(%s::text[]) strong_obligation
-  FROM dependency_context context
+         lower(license.value)=ANY(%s::text[]) strong_obligation,
+         lower(license.value)=ANY(%s::text[]) weak_obligation
+  FROM license_context context
   JOIN fact_assertion metadata
     ON metadata.subject_entity_id=context.dependency_id
    AND metadata.predicate='HAS_PROPERTY' AND metadata.system_to IS NULL
@@ -230,8 +296,12 @@ _LICENSE_OBLIGATION_SQL = _DEPENDENCY_CONTEXT_CTE + """
 SELECT licensed.dependency_id subject_id,licensed.dependency_kind subject_kind,
        licensed.dependency_name subject_name,licensed.dependency_key subject_key,
        'LICENSE_OBLIGATION' kind,
-       licensed.dependency_name||' requires license review' title,
-       count(DISTINCT licensed.repository_id)||' repositories use this dependency under '||
+       licensed.dependency_name||' requires '||
+         CASE WHEN bool_or(licensed.strong_obligation) THEN 'strong-copyleft'
+              WHEN bool_or(licensed.weak_obligation) THEN 'copyleft'
+              ELSE 'policy compatibility' END||' review' title,
+       count(DISTINCT licensed.repository_id)||' repositories use this '||
+         min(licensed.ecosystem)||' dependency under '||
          string_agg(DISTINCT licensed.license,', ' ORDER BY licensed.license)||'.' summary,
        count(DISTINCT licensed.repository_id)::integer present,
        count(DISTINCT licensed.repository_id) FILTER (WHERE licensed.referenced)::integer referenced,
@@ -260,9 +330,11 @@ SELECT licensed.dependency_id subject_id,licensed.dependency_kind subject_kind,
            'License compatibility and distribution obligations require legal review.'
          ]::text[]
        END missing_inputs,
-       CASE WHEN bool_or(licensed.policy_defined) THEN 0 ELSE 1 END::integer coverage_penalty
+       CASE WHEN bool_or(licensed.policy_defined) THEN 0 ELSE 1 END::integer coverage_penalty,
+       CASE WHEN bool_or(licensed.strong_obligation) THEN 6
+            WHEN bool_or(licensed.weak_obligation) THEN 3 ELSE 1 END::numeric risk_bonus
 FROM licensed
-WHERE licensed.policy_violation OR licensed.strong_obligation
+WHERE licensed.policy_violation OR licensed.strong_obligation OR licensed.weak_obligation
 GROUP BY licensed.dependency_id,licensed.dependency_kind,licensed.dependency_name,
          licensed.dependency_key
 """
@@ -283,7 +355,8 @@ WITH clone_unit AS (
   HAVING count(DISTINCT repository_entity_id)>=2
 ), impacted AS (
   SELECT unit.*,application.subject_entity_id application_id,
-         deployment.object_entity_id deployment_id
+         deployment.object_entity_id deployment_id,
+         mapping.capability_entity_id capability_id
   FROM clone_unit unit
   JOIN repeated USING(structural_fingerprint)
   LEFT JOIN fact_assertion application
@@ -300,6 +373,8 @@ WITH clone_unit AS (
     ON deployment.subject_entity_id=unit.repository_entity_id
    AND deployment.predicate='DEPLOYED_AS' AND deployment.system_to IS NULL
    AND deployment.tenant_id=unit.tenant_id
+  LEFT JOIN current_capability_application_relationship mapping
+    ON mapping.application_entity_id=application.subject_entity_id
 )
 SELECT md5(impacted.structural_fingerprint)::uuid subject_id,'CodeClone' subject_kind,
        min(impacted.qualified_name)||' structural clone' subject_name,
@@ -308,7 +383,8 @@ SELECT md5(impacted.structural_fingerprint)::uuid subject_id,'CodeClone' subject
        'The same code structure appears in '||
          count(DISTINCT impacted.repository_entity_id)||' repositories' title,
        count(DISTINCT impacted.repository_entity_id)||' repositories contain '||
-         count(DISTINCT impacted.id)||' code units with the same structural fingerprint.' summary,
+         count(DISTINCT impacted.id)||' code units with the same structural fingerprint across '||
+         count(DISTINCT impacted.capability_id)||' governed business capabilities.' summary,
        count(DISTINCT impacted.repository_entity_id)::integer present,
        count(DISTINCT impacted.repository_entity_id)::integer referenced,
        0::integer reachable,0::integer runtime,
@@ -316,6 +392,7 @@ SELECT md5(impacted.structural_fingerprint)::uuid subject_id,'CodeClone' subject
        count(DISTINCT impacted.application_id)::integer applications,
        array_remove(array_agg(DISTINCT impacted.repository_entity_id),NULL)||
          array_remove(array_agg(DISTINCT impacted.application_id),NULL)||
+         array_remove(array_agg(DISTINCT impacted.capability_id),NULL)||
          array_remove(array_agg(DISTINCT impacted.deployment_id),NULL) scope_ids,
        jsonb_agg(DISTINCT jsonb_build_object(
          'id',impacted.repository_entity_id,'kind','Repository','name',impacted.repository_name
@@ -329,20 +406,53 @@ SELECT md5(impacted.structural_fingerprint)::uuid subject_id,'CodeClone' subject
          'Structural identity does not establish behavioral or business equivalence.',
          'Code-unit runtime execution is not observed.'
        ]::text[] missing_inputs,
-       1::integer coverage_penalty
+       1::integer coverage_penalty,
+       least(6,count(DISTINCT impacted.capability_id)*1.5)::numeric risk_bonus
 FROM impacted
 GROUP BY impacted.structural_fingerprint
 """
 
 
 _VENDORED_SOURCE_SQL = """
-WITH impacted AS (
-  SELECT unit.*,repository.name repository_name,
-         application.subject_entity_id application_id,
-         deployment.object_entity_id deployment_id
+WITH classified AS (
+  SELECT unit.*,repository.name repository_name,repository.canonical_key repository_key,
+         nullif(unit_fact.object_value->>'vendored_package_key','') upstream_key,
+         nullif(unit_fact.object_value->>'vendored_package_version','') upstream_version,
+         nullif(unit_fact.object_value->>'vendored_identity_source','') identity_source
   FROM code_implementation_summary unit
+  JOIN fact_assertion unit_fact ON unit_fact.id=unit.fact_assertion_id
+    AND unit_fact.system_to IS NULL
   JOIN entity repository ON repository.id=unit.repository_entity_id
     AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+  WHERE unit.tenant_id=%s AND unit.vendored
+), unmanaged AS (
+  SELECT classified.*
+  FROM classified
+  WHERE classified.upstream_key IS NULL OR NOT EXISTS (
+    SELECT 1
+    FROM fact_assertion dependency
+    JOIN entity package ON package.id=dependency.object_entity_id
+    LEFT JOIN package_registry_identity identity ON identity.entity_id=package.id
+    WHERE dependency.tenant_id=classified.tenant_id
+      AND dependency.subject_entity_id=classified.repository_entity_id
+      AND dependency.predicate='DEPENDS_ON' AND dependency.system_to IS NULL
+      AND (
+        (classified.upstream_version IS NOT NULL AND (
+          package.canonical_key=classified.upstream_key||'@'||classified.upstream_version
+          OR identity.purl=classified.upstream_key||'@'||classified.upstream_version
+        )) OR (classified.upstream_version IS NULL AND (
+          package.canonical_key=classified.upstream_key
+          OR package.canonical_key LIKE classified.upstream_key||'@%%'
+          OR identity.purl=classified.upstream_key
+          OR identity.purl LIKE classified.upstream_key||'@%%'
+        ))
+      )
+  )
+), impacted AS (
+  SELECT unit.*,
+         application.subject_entity_id application_id,
+         deployment.object_entity_id deployment_id
+  FROM unmanaged unit
   LEFT JOIN fact_assertion application
     ON application.object_entity_id=unit.repository_entity_id
    AND application.predicate='IMPLEMENTED_BY' AND application.system_to IS NULL
@@ -357,14 +467,26 @@ WITH impacted AS (
     ON deployment.subject_entity_id=unit.repository_entity_id
    AND deployment.predicate='DEPLOYED_AS' AND deployment.system_to IS NULL
    AND deployment.tenant_id=unit.tenant_id
-  WHERE unit.tenant_id=%s AND unit.vendored
 )
-SELECT impacted.repository_entity_id subject_id,'Repository' subject_kind,
-       impacted.repository_name subject_name,repository.canonical_key subject_key,
+SELECT CASE WHEN impacted.upstream_key IS NULL THEN impacted.repository_entity_id
+            ELSE md5(impacted.repository_entity_id::text||':'||impacted.upstream_key)::uuid END subject_id,
+       CASE WHEN impacted.upstream_key IS NULL THEN 'Repository' ELSE 'VendoredPackage' END subject_kind,
+       coalesce(impacted.upstream_key,impacted.repository_name||' unidentified vendored source') subject_name,
+       CASE WHEN impacted.upstream_key IS NULL THEN impacted.repository_key
+            ELSE 'vendored:'||impacted.repository_entity_id::text||':'||impacted.upstream_key END subject_key,
        'VENDORED_SOURCE_OUTSIDE_MANAGEMENT' kind,
-       impacted.repository_name||' contains vendored source' title,
+       CASE WHEN impacted.upstream_key IS NULL
+         THEN impacted.repository_name||' contains unidentified vendored source'
+         ELSE impacted.upstream_key||coalesce('@'||impacted.upstream_version,'')||
+           ' is copied into '||impacted.repository_name||' without a matching dependency'
+       END title,
        count(DISTINCT impacted.id)||
-         ' scanner-classified vendored code units are stored in-tree outside manifest-level dependency governance.' summary,
+         CASE WHEN impacted.upstream_key IS NULL
+           THEN ' scanner-classified vendored code units have no deterministically identifiable upstream package.'
+           ELSE ' scanner-classified vendored code units map to '||impacted.upstream_key||
+             coalesce(' version '||impacted.upstream_version,' with an unknown version')||
+             ' and have no matching current DEPENDS_ON declaration.'
+         END summary,
        1::integer present,1::integer referenced,0::integer reachable,0::integer runtime,
        count(DISTINCT impacted.deployment_id)::integer deployed,
        count(DISTINCT impacted.application_id)::integer applications,
@@ -379,14 +501,24 @@ SELECT impacted.repository_entity_id subject_id,'Repository' subject_kind,
        'INVESTIGATE' action,'Move vendored source under governed dependency management' recommendation_title,
        'Establish the upstream origin and version first, then replace the copied source with a patchable dependency where safe.' recommendation_rationale,
        'HIGH' effort,
-       ARRAY[
-         'Vendored path classification does not establish third-party origin or upstream version.',
+       CASE WHEN impacted.upstream_key IS NULL THEN ARRAY[
+         'The scanner could not infer an upstream package identity from repository metadata or path.',
          'Copied source is outside manifest-level vulnerability and release tracking.'
-       ]::text[] missing_inputs,
-       2::integer coverage_penalty
+       ]::text[]
+       WHEN impacted.upstream_version IS NULL THEN ARRAY[
+         'The upstream package identity is known but its copied version is not declared.',
+         'No matching current DEPENDS_ON declaration exists for the inferred package identity.'
+       ]::text[]
+       ELSE ARRAY[
+         'No matching current DEPENDS_ON declaration exists for the metadata-backed package identity and version.',
+         'Source equivalence to the named upstream release still requires checksum validation.'
+       ]::text[] END missing_inputs,
+       CASE WHEN impacted.upstream_key IS NULL THEN 3
+            WHEN impacted.upstream_version IS NULL THEN 1 ELSE 0 END::integer coverage_penalty,
+       CASE WHEN impacted.upstream_key IS NULL THEN 0 ELSE 2 END::numeric risk_bonus
 FROM impacted
-JOIN entity repository ON repository.id=impacted.repository_entity_id
-GROUP BY impacted.repository_entity_id,impacted.repository_name,repository.canonical_key
+GROUP BY impacted.repository_entity_id,impacted.repository_name,impacted.repository_key,
+         impacted.upstream_key,impacted.upstream_version,impacted.identity_source
 HAVING count(DISTINCT impacted.id)>=%s
 """
 
@@ -404,6 +536,14 @@ def expanded_rule_queries(
         for value in configured_licenses
         if str(value).strip()
     ) or tuple(value.lower() for value in DEFAULT_STRONG_COPYLEFT_LICENSES)
+    configured_weak_licenses = license_configuration.get(
+        "weak_copyleft_licenses", DEFAULT_WEAK_COPYLEFT_LICENSES,
+    )
+    weak_licenses = tuple(
+        str(value).strip().lower()
+        for value in configured_weak_licenses
+        if str(value).strip()
+    ) or tuple(value.lower() for value in DEFAULT_WEAK_COPYLEFT_LICENSES)
     clone_minimum_lines = _bounded_integer(
         policies["code.cross-repository-clone"]["configuration"].get("minimum_lines"),
         default=6,
@@ -427,7 +567,7 @@ def expanded_rule_queries(
         (
             "oss.license-obligation",
             _LICENSE_OBLIGATION_SQL,
-            (tenant_id, tenant_id, list(strong_licenses)),
+            (tenant_id, tenant_id, list(strong_licenses), list(weak_licenses)),
         ),
         (
             "code.cross-repository-clone",

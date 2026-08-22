@@ -586,6 +586,32 @@ class RepositoryScannerTests(unittest.TestCase):
 
         self.assertEqual(fingerprint(first_result), fingerprint(second_result))
 
+    def test_vendored_code_carries_upstream_package_identity_when_metadata_exists(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            package_root = root / "vendor" / "@acme" / "payments"
+            package_root.mkdir(parents=True)
+            (package_root / "package.json").write_text(json.dumps({
+                "name": "@acme/payments", "version": "2.4.1",
+            }))
+            (package_root / "index.js").write_text(
+                "export function authorizePayment() { return true; }\n"
+            )
+
+            result = scan_repository(request(root))
+
+        summary = next(
+            fact["object_value"] for fact in result["facts"]
+            if fact.get("object_value", {}).get("qualified_name") == "authorizePayment"
+        )
+        self.assertTrue(summary["vendored"])
+        self.assertEqual(summary["vendored_package_key"], "pkg:npm/%40acme/payments")
+        self.assertEqual(summary["vendored_package_version"], "2.4.1")
+        self.assertEqual(
+            summary["vendored_identity_source"],
+            "vendor/@acme/payments/package.json",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

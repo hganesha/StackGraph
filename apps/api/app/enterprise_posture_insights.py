@@ -49,14 +49,14 @@ POSTURE_INSIGHT_REPORTS: tuple[dict[str, str], ...] = (
         "key": TECHNOLOGY_INTRODUCTION, "title": "Technologies introduced",
         "category": "TECHNOLOGY_RATIONALIZATION", "metric_label": "technologies introduced (90 days)",
         "question": "Which technologies were introduced into the estate in the last 90 days?",
-        "populated_status": "WATCH", "metric_field": "row_count",
+        "populated_status": "WATCH", "metric_field": "total_count",
         "empty_requires_data": "true",
     },
     {
         "key": BUSINESS_DARK_CAPABILITY, "title": "Dark business capabilities",
         "category": "PORTFOLIO_DECISIONS", "metric_label": "critical capabilities without applications",
         "question": "Which critical business capabilities have no application behind them?",
-        "populated_status": "ACTION_REQUIRED", "metric_field": "row_count",
+        "populated_status": "ACTION_REQUIRED", "metric_field": "total_count",
         "empty_requires_data": "true",
     },
     {
@@ -137,12 +137,20 @@ WITH analyzable_ecosystem AS (
          target.id target_id,target.last_success_at,
          coalesce(target.enabled,true) enabled,
          coalesce((target.refresh_policy->>'archived')::boolean,false) archived,
-         freshness.status freshness_status,freshness.expected_by
+         freshness.status freshness_status,freshness.expected_by,
+         snapshot.id source_snapshot_id
   FROM repository
   LEFT JOIN ingest_target target
     ON target.target_key=repository.canonical_key
    AND target.tenant_id=%(tenant_id)s AND target.target_kind='REPOSITORY'
   LEFT JOIN freshness_state freshness ON freshness.ingest_target_id=target.id
+  LEFT JOIN LATERAL (
+    SELECT published.id
+    FROM source_snapshot published
+    WHERE published.ingest_target_id=target.id AND published.status='PUBLISHED'
+    ORDER BY published.published_at DESC NULLS LAST,published.observed_at DESC,published.id
+    LIMIT 1
+  ) snapshot ON true
   ORDER BY repository.repository_id,target.last_success_at DESC NULLS LAST,target.id
 ), repository_state AS (
   SELECT repository_target.*,coalesce(failure.failed,false) run_failed
@@ -197,6 +205,7 @@ WITH analyzable_ecosystem AS (
          END fresh,
          coalesce(repository_ecosystem.unsupported_ecosystems,0)=0 ecosystem_supported,
          coalesce(repository_evidence.evidenced_facts,0)>0 evidenced,
+         repository_state.source_snapshot_id IS NOT NULL source_snapshotted,
          NOT (
            (repository_state.target_id IS NOT NULL
              AND (NOT repository_state.enabled OR repository_state.archived))
@@ -215,8 +224,11 @@ SELECT
   (SELECT count(*) FILTER (WHERE ecosystem_supported)::integer FROM coverage)
     ecosystem_supported_repositories,
   (SELECT count(*) FILTER (WHERE available)::integer FROM coverage) available_repositories,
+  (SELECT count(*) FILTER (WHERE source_snapshotted)::integer FROM coverage)
+    source_snapshotted_repositories,
   (SELECT count(*) FILTER (
      WHERE scanned AND fresh AND ecosystem_supported AND evidenced AND available
+       AND source_snapshotted
    )::integer FROM coverage) covered_repositories,
   (SELECT count(*)::integer FROM fact_evidence) facts,
   (SELECT count(*) FILTER (WHERE evidenced)::integer FROM fact_evidence) evidenced_facts,
@@ -224,6 +236,15 @@ SELECT
   (SELECT count(*)::integer FROM connector
     WHERE connector.tenant_id=%(tenant_id)s
       AND connector.status='CONNECTED' AND connector.last_error IS NULL) healthy_connectors,
+  (SELECT count(*)::integer FROM dead_letter
+    WHERE dead_letter.tenant_id=%(tenant_id)s AND dead_letter.replayed_at IS NULL)
+    open_dead_letters,
+  (SELECT count(*)::integer FROM connector_quota
+    WHERE connector_quota.tenant_id=%(tenant_id)s) quota_providers,
+  (SELECT count(*)::integer FROM connector_quota
+    WHERE connector_quota.tenant_id=%(tenant_id)s AND connector_quota.status='OK'
+      AND (connector_quota.backoff_until IS NULL OR connector_quota.backoff_until<=now()))
+    healthy_quota_providers,
   (SELECT coalesce(string_agg(ecosystem,', ' ORDER BY ecosystem),'') FROM (
      SELECT DISTINCT ecosystem FROM classified_ecosystem WHERE NOT analyzable
    ) unsupported) unsupported_ecosystems,
@@ -304,13 +325,37 @@ async def assurance_coverage(
             "run since the last success and no errored freshness state."
         ),
     ))
+    rows.append(_coverage_row(
+        "Published source snapshots", "Repositories",
+        _int(row.get("source_snapshotted_repositories")), repositories,
+        detail="Repositories backed by a published immutable source snapshot.",
+    ))
+    open_dead_letters = _int(row.get("open_dead_letters"))
+    rows.append(_coverage_row(
+        "Dead-letter backlog", "Ingestion queue", int(open_dead_letters == 0), 1,
+        detail=(
+            "No unreplayed ingestion failures remain in the dead-letter queue."
+            if open_dead_letters == 0 else
+            f"{open_dead_letters} ingestion failures remain unreplayed in the dead-letter queue."
+        ),
+    ))
+    quota_providers = _int(row.get("quota_providers"))
+    rows.append(_coverage_row(
+        "Connector quota", "Providers", _int(row.get("healthy_quota_providers")),
+        quota_providers,
+        detail=(
+            "Observed providers are neither throttled, exhausted, nor under backoff."
+            if quota_providers else "No provider quota state has been observed yet."
+        ),
+    ))
 
     percent = rows[0]["coverage_percent"]
     return AskResponse(
         text=(
             f"{percent}% of the {repositories} repositories in this estate are analytically "
             "covered. Scan freshness, analyzable ecosystems, evidence completeness, connector "
-            "health, and repository availability are scored separately so a gap can be "
+            "health, repository availability, published snapshots, dead-letter backlog, and "
+            "provider quota are scored separately so a gap can be "
             "attributed to the dimension that caused it."
         ),
         citations=[], result_kind="TABLE", rows=rows,
@@ -344,7 +389,10 @@ def assurance_report_presentation(rows: list[Mapping[str, Any]]) -> tuple[str, s
     actionable = {
         str(row.get("dimension")) for row in rows[1:]
         if str(row.get("status")) in {"GAP", "PARTIAL"}
-        and str(row.get("dimension")) in {"Connector health", "Repository availability"}
+        and str(row.get("dimension")) in {
+            "Connector health", "Repository availability", "Published source snapshots",
+            "Dead-letter backlog", "Connector quota",
+        }
     }
     if actionable:
         status = "ACTION_REQUIRED"
@@ -367,36 +415,35 @@ WITH repository_fact AS (
   WHERE fact.tenant_id=%(tenant_id)s
     AND fact.predicate IN ('DEPENDS_ON','USES','RUNS_ON')
     AND fact.object_entity_id IS NOT NULL
-), first_observation AS (
-  SELECT technology_id,min(observed_at) first_observed_at
-  FROM repository_fact GROUP BY technology_id
-  HAVING min(observed_at)>=now()-make_interval(days=>%(window_days)s)
+    AND fact.system_to IS NULL
 ), introduction AS (
-  SELECT DISTINCT ON (first_observation.technology_id)
-         first_observation.technology_id,first_observation.first_observed_at,
+  SELECT DISTINCT ON (technology.id)
+         technology.id technology_id,technology.first_seen_at,
          repository_fact.fact_id,repository_fact.repository_id
-  FROM first_observation
-  JOIN repository_fact
-    ON repository_fact.technology_id=first_observation.technology_id
-   AND repository_fact.observed_at=first_observation.first_observed_at
-  ORDER BY first_observation.technology_id,repository_fact.observed_at,
+  FROM entity technology
+  JOIN repository_fact ON repository_fact.technology_id=technology.id
+  WHERE (technology.tenant_id IS NULL OR technology.tenant_id=%(tenant_id)s)
+    AND technology.namespace IN ('TECHNOLOGY','OSS')
+    AND technology.first_seen_at>=now()-make_interval(days=>%(window_days)s)
+  ORDER BY technology.id,repository_fact.observed_at,
            repository_fact.repository_id,repository_fact.fact_id
 )
 SELECT technology.name technology,technology.entity_type technology_kind,
-       repository.name repository,introduction.first_observed_at,
+       repository.name repository,introduction.first_seen_at,
        introduction.fact_id,
        coalesce(
          (SELECT min(evidence.observed_at) FROM evidence
            WHERE evidence.fact_assertion_id=introduction.fact_id),
-         introduction.first_observed_at
+         introduction.first_seen_at
        ) evidence_observed_at,
        (SELECT count(DISTINCT spread.repository_id)::integer
           FROM repository_fact spread
-         WHERE spread.technology_id=introduction.technology_id) repositories
+         WHERE spread.technology_id=introduction.technology_id) repositories,
+       count(*) OVER()::integer total_count
 FROM introduction
 JOIN entity technology ON technology.id=introduction.technology_id
 JOIN entity repository ON repository.id=introduction.repository_id
-ORDER BY introduction.first_observed_at DESC,technology.name
+ORDER BY introduction.first_seen_at DESC,technology.name
 LIMIT %(row_limit)s
 """
 
@@ -416,25 +463,27 @@ async def technology_introduction(
     )
     citations = [Citation(
         fact_id=row["fact_id"],
-        label=f"First observed · {row['technology']}",
+        label=f"First seen · {row['technology']}",
         href=f"/api/v1/facts/{row['fact_id']}/evidence",
     ) for row in rows if row.get("fact_id")]
     result_rows = [{
         "technology": row["technology"],
         "kind": row["technology_kind"],
         "first_repository": row["repository"],
-        "first_observed_at": _timestamp(row["first_observed_at"]),
+        "first_seen_at": _timestamp(row["first_seen_at"]),
         "evidence_observed_at": _timestamp(row["evidence_observed_at"]),
         "repositories": _int(row.get("repositories")),
+        "total_count": _int(row.get("total_count")),
     } for row in rows]
+    total_count = _int(rows[0].get("total_count")) if rows else 0
     return AskResponse(
         text=(
-            f"{len(result_rows)} technolog{'y was' if len(result_rows) == 1 else 'ies were'} "
-            f"first observed in the estate within the last "
-            f"{TECHNOLOGY_INTRODUCTION_WINDOW_DAYS} days. Each introduction is attributed to "
-            "the earliest observed repository and the earliest evidence timestamp behind it."
+            f"{total_count} technolog{'y was' if total_count == 1 else 'ies were'} "
+            f"first seen in the estate within the last {TECHNOLOGY_INTRODUCTION_WINDOW_DAYS} "
+            f"days. {'The top 50 are shown. ' if total_count > len(result_rows) else ''}"
+            "Each introduction is attributed to its earliest current repository fact and evidence."
             if result_rows else
-            f"No technology was first observed in the estate in the last "
+            f"No technology was first seen in the estate in the last "
             f"{TECHNOLOGY_INTRODUCTION_WINDOW_DAYS} days. Everything currently in the graph "
             "was already present before that window."
         ),
@@ -449,18 +498,22 @@ SELECT map.map_key business_map_key,map.title business_map,lane.label lane,
        business_function.name business_function,process.name business_process,
        capability.capability_key,capability.name capability,
        capability.criticality::integer criticality,capability.owner,
-       placement.maturity::integer maturity
+       placement.maturity::integer maturity,count(*) OVER()::integer total_count
 FROM business_map_capability capability
 JOIN business_map map ON map.id=capability.business_map_id
 JOIN business_map_process process ON process.id=capability.business_map_process_id
 JOIN business_map_function business_function
   ON business_function.id=process.business_map_function_id
-JOIN business_map_placement placement
-  ON placement.business_map_capability_id=capability.id
+LEFT JOIN LATERAL (
+  SELECT candidate.maturity,candidate.lane_id
+  FROM business_map_placement candidate
+  WHERE candidate.business_map_capability_id=capability.id
+  ORDER BY candidate.updated_at DESC,candidate.id
+  LIMIT 1
+) placement ON true
 LEFT JOIN business_map_lane lane ON lane.id=placement.lane_id
 WHERE capability.tenant_id=%(tenant_id)s
   AND map.status='ACTIVE'
-  AND capability.entity_id IS NOT NULL
   AND capability.criticality>=%(minimum_criticality)s
   AND NOT EXISTS (
     SELECT 1 FROM business_map_application_assignment assignment
@@ -495,13 +548,16 @@ async def business_dark_capability(
         "owner": row.get("owner") or "unassigned",
         "business_map_key": row["business_map_key"],
         "capability_key": row["capability_key"],
+        "total_count": _int(row.get("total_count")),
     } for row in rows]
+    total_count = _int(rows[0].get("total_count")) if rows else 0
     return AskResponse(
         text=(
-            f"{len(result_rows)} governed capabilit"
-            f"{'y is' if len(result_rows) == 1 else 'ies are'} rated criticality "
+            f"{total_count} governed capabilit"
+            f"{'y is' if total_count == 1 else 'ies are'} rated criticality "
             f"{DARK_CAPABILITY_MINIMUM_CRITICALITY} or higher on an active business map with no "
-            "application assigned to them. These are curated map decisions, so they carry "
+            f"application assigned. {'The top 50 are shown. ' if total_count > len(result_rows) else ''}"
+            "These are curated map decisions, so they carry "
             "business-map context instead of fact citations."
             if result_rows else
             f"Every governed capability rated criticality "
@@ -519,7 +575,7 @@ async def business_dark_capability(
 _DECISION_LAG_SQL = """
 SELECT recommendation.title,recommendation.action,
        recommendation.objective,recommendation.estimated_effort,
-       recommendation.supporting_fact_ids,
+       current_support.current_supporting_fact_ids supporting_fact_ids,
        repository.name repository,
        accepted.accepted_at,
        floor(extract(epoch FROM now()-accepted.accepted_at)/86400)::integer days_since_acceptance
@@ -530,6 +586,11 @@ JOIN LATERAL (
   FROM modernization_recommendation_review review
   WHERE review.modernization_recommendation_id=recommendation.id AND review.decision='ACCEPT'
 ) accepted ON accepted.accepted_at IS NOT NULL
+JOIN LATERAL (
+  SELECT array_agg(fact.id ORDER BY fact.id) current_supporting_fact_ids
+  FROM fact_assertion fact
+  WHERE fact.id=ANY(recommendation.supporting_fact_ids) AND fact.system_to IS NULL
+) current_support ON cardinality(current_support.current_supporting_fact_ids)>0
 WHERE recommendation.tenant_id=%(tenant_id)s
   AND recommendation.review_state='ACCEPTED'
   AND recommendation.stale_at IS NULL
@@ -582,7 +643,7 @@ async def decision_lag(
             f"{len(result_rows)} accepted decision"
             f"{'' if len(result_rows) == 1 else 's'} passed "
             f"{DECISION_LAG_THRESHOLD_DAYS} days without a reported validation outcome while "
-            "the condition that produced them is still current."
+            "at least one supporting fact remains current."
             if result_rows else
             f"No accepted decision has been waiting longer than "
             f"{DECISION_LAG_THRESHOLD_DAYS} days without a reported validation outcome."
@@ -610,10 +671,7 @@ SELECT
   EXISTS(
     SELECT 1 FROM business_map_capability capability
     JOIN business_map map ON map.id=capability.business_map_id
-    JOIN business_map_placement placement
-      ON placement.business_map_capability_id=capability.id
     WHERE capability.tenant_id=%(tenant_id)s AND map.status='ACTIVE'
-      AND capability.entity_id IS NOT NULL
       AND capability.criticality>=%(minimum_criticality)s
   ) critical_capability_governed,
   EXISTS(

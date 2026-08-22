@@ -26,6 +26,38 @@ from app.read_models import (
 NOW = datetime(2026, 8, 19, 14, 10, tzinfo=UTC)
 
 
+def test_structural_clone_candidates_feed_enterprise_library_standards() -> None:
+    fact_id = UUID("00000000-0000-4000-8000-0000000007d1")
+
+    class LibraryCandidateDatabase:
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            if "FROM modernization_internal_component component" in query:
+                return []
+            if "WITH repeated AS" in query:
+                assert "current_capability_application_relationship" in query
+                return [{
+                    "structural_fingerprint": "sha256:" + "a" * 64,
+                    "name": "shared_retry_policy",
+                    "repositories": 4,
+                    "capabilities": 3,
+                    "critical_repositories": 2,
+                    "fact_ids": [fact_id],
+                }]
+            if "LEFT JOIN evidence" in query:
+                return []
+            raise AssertionError(f"unexpected query: {query}")
+
+    result = asyncio.run(ReadModelStore(
+        LibraryCandidateDatabase()
+    )._ask_internal_library_standards(tenant_id=None))
+
+    assert result.rows[0]["internal_library"] == "shared_retry_policy"
+    assert result.rows[0]["capability"] == "3 mapped business capabilities"
+    assert result.rows[0]["governance_status"] == "CANDIDATE"
+    assert result.rows[0]["standardization_score"] == 90
+    assert "remain governance candidates" in result.text
+
+
 class EstateDatabaseStub:
     def __init__(self) -> None:
         self.queries: list[str] = []

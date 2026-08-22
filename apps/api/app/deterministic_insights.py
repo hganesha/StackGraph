@@ -251,6 +251,7 @@ def _to_insight(
     if business_critical is None:
         missing.append("No governed capability criticality is mapped to the affected applications.")
     coverage_penalty = max(0, min(6, int(row.get("coverage_penalty") or 0)))
+    risk_bonus = max(0.0, min(10.0, float(row.get("risk_bonus") or 0)))
     known_dimensions = max(1, 7 - coverage_penalty + int(business_critical is not None))
     coverage = min(1.0, known_dimensions / 9)
     severity = str(policy["severity"])
@@ -258,12 +259,14 @@ def _to_insight(
     priority = min(100.0, _SEVERITY_BASE[severity] + breadth + min(6.0, referenced * 0.8)
                    + min(8.0, reachable * 1.2) + min(8.0, runtime * 2.0)
                    + min(4.0, deployed) + min(4.0, production * 2.0)
-                   + min(6.0, exposed * 3.0) + min(6.0, (business_critical or 0) * 2.0))
+                   + min(6.0, exposed * 3.0) + min(6.0, (business_critical or 0) * 2.0)
+                   + risk_bonus)
     fingerprint_payload = {
         "rule": row["rule_key"], "rule_version": METHOD_VERSION,
         "subject": str(row["subject_id"]), "facts": [str(value) for value in fact_ids],
         "policy_version": policy["version"],
-        "counts": [present, referenced, reachable, runtime, deployed, production, exposed, business_critical],
+        "counts": [present, referenced, reachable, runtime, deployed, production, exposed,
+                   business_critical, risk_bonus],
     }
     canonical = json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":"))
     digest = hashlib.sha256(canonical.encode()).hexdigest()

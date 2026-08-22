@@ -2545,6 +2545,14 @@ class ReadModelStore(AdminReadModelsMixin):
                 SELECT 1 FROM modernization_internal_component
                 WHERE tenant_id=%s AND review_state='APPROVED' AND status='APPROVED'
               ) internal_catalog_governed,
+              EXISTS(
+                SELECT 1
+                FROM code_implementation_summary unit
+                WHERE unit.tenant_id=%s AND NOT unit.vendored
+                  AND unit.line_end-unit.line_start+1>=6
+                GROUP BY unit.structural_fingerprint
+                HAVING count(DISTINCT unit.repository_entity_id)>=2
+              ) internal_clone_candidate,
               (
                 EXISTS(
                   SELECT 1 FROM assessment lifecycle
@@ -2580,7 +2588,7 @@ class ReadModelStore(AdminReadModelsMixin):
                   AND target.enabled
               ),false) archive_covered
             """,
-            (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
+            (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
         ) or {}
         capability_mapped = bool(row.get("capability_mapped"))
         internal_catalog_governed = bool(row.get("internal_catalog_governed"))
@@ -2589,7 +2597,9 @@ class ReadModelStore(AdminReadModelsMixin):
             "package_business_blast_radius": capability_mapped,
             "modernization_blockers": bool(row.get("lifecycle_covered")),
             "custom_to_internal_platform": internal_catalog_governed,
-            "internal_library_standards": internal_catalog_governed,
+            "internal_library_standards": (
+                internal_catalog_governed or bool(row.get("internal_clone_candidate"))
+            ),
             "application_retirement_consolidation": (
                 capability_mapped and bool(row.get("archive_covered"))
             ),
@@ -3593,7 +3603,7 @@ class ReadModelStore(AdminReadModelsMixin):
         )
 
     async def _ask_internal_library_standards(self, *, tenant_id: UUID | None) -> AskResponse:
-        rows = await self.database.fetch_all(
+        governed_rows = await self.database.fetch_all(
             """
             WITH criticality AS (
               SELECT application_link.object_entity_id repository_id,
@@ -3651,6 +3661,48 @@ class ReadModelStore(AdminReadModelsMixin):
             """,
             (tenant_id, tenant_id, tenant_id, tenant_id), tenant_id=tenant_id,
         )
+        clone_rows = await self.database.fetch_all(
+            """
+            WITH repeated AS (
+              SELECT structural_fingerprint
+              FROM code_implementation_summary
+              WHERE tenant_id=%s AND NOT vendored
+                AND line_end-line_start+1>=6
+              GROUP BY structural_fingerprint
+              HAVING count(DISTINCT repository_entity_id)>=2
+            ), candidate AS (
+              SELECT unit.*,repository.name repository_name,
+                     application.subject_entity_id application_id,
+                     mapping.capability_entity_id capability_id,
+                     mapping.criticality
+              FROM code_implementation_summary unit
+              JOIN repeated USING(structural_fingerprint)
+              JOIN entity repository ON repository.id=unit.repository_entity_id
+                AND repository.namespace='ENTERPRISE'
+                AND repository.entity_type='Repository'
+              LEFT JOIN fact_assertion application
+                ON application.object_entity_id=unit.repository_entity_id
+               AND application.tenant_id=unit.tenant_id
+               AND application.predicate='IMPLEMENTED_BY'
+               AND application.system_to IS NULL
+              LEFT JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application.subject_entity_id
+              WHERE unit.tenant_id=%s
+            )
+            SELECT structural_fingerprint,min(qualified_name) name,
+                   count(DISTINCT repository_entity_id)::integer repositories,
+                   count(DISTINCT capability_id)::integer capabilities,
+                   count(DISTINCT repository_entity_id) FILTER
+                     (WHERE criticality>=4)::integer critical_repositories,
+                   array_agg(DISTINCT fact_assertion_id) fact_ids
+            FROM candidate
+            GROUP BY structural_fingerprint
+            ORDER BY capabilities DESC,repositories DESC,name
+            LIMIT 50
+            """,
+            (tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        rows = list(governed_rows) + list(clone_rows)
         fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
         citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
         result_rows = [{
@@ -3670,11 +3722,28 @@ class ReadModelStore(AdminReadModelsMixin):
             "code_deployable_repositories": int(row["code_production_repositories"]),
             "critical_repositories": int(row["critical_repositories"]),
             "owner": row.get("owner"), "security_status": row["security_status"],
-        } for row in rows]
+            "governance_status": "APPROVED",
+        } for row in governed_rows]
+        result_rows.extend({
+            "internal_library": row["name"], "version": "—",
+            "capability": f"{int(row['capabilities'])} mapped business capabilities",
+            "standardization_score": min(
+                90,
+                int(row["repositories"]) * 12
+                + int(row["capabilities"]) * 10
+                + int(row["critical_repositories"]) * 10,
+            ),
+            "repositories": int(row["repositories"]),
+            "reachable_repositories": 0,
+            "code_deployable_repositories": 0,
+            "critical_repositories": int(row["critical_repositories"]),
+            "owner": None, "security_status": "REVIEW_REQUIRED",
+            "governance_status": "CANDIDATE",
+        } for row in clone_rows)
         result_rows.sort(key=lambda row: (-row["standardization_score"], row["internal_library"]))
         return AskResponse(
             text=(
-                f"I ranked {len(rows)} governed internal libraries as enterprise-standard candidates using adoption, reachability, code-declared deployability, criticality, ownership, and security status."
+                f"I ranked {len(result_rows)} enterprise-library candidates. Approved components use adoption, reachability, code-declared deployability, criticality, ownership, and security status; structural clones add repository and business-capability breadth but remain governance candidates."
                 if rows else "I found no adopted, approved internal component to rank. Govern candidates in Admin → Governance → Modernization before StackGraph recommends them as enterprise standards."
             ),
             citations=citations, result_kind="TABLE", rows=result_rows,
