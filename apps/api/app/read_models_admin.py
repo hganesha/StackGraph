@@ -1325,8 +1325,14 @@ class AdminReadModelsMixin:
                 readiness=definition["readiness"],
                 enabled=bool(policy["enabled"] if policy else definition["readiness"] == "ACTIVE"),
                 severity=policy["severity"] if policy else definition["severity"],
-                minimum_repositories=int(policy["minimum_repositories"] if policy else 1),
-                configuration=dict(policy["configuration"] if policy else {}),
+                minimum_repositories=int(
+                    policy["minimum_repositories"]
+                    if policy else definition.get("minimum_repositories", 1)
+                ),
+                configuration={
+                    **dict(definition.get("configuration") or {}),
+                    **dict(policy["configuration"] if policy else {}),
+                },
                 version=int(policy["version"] if policy else 0),
                 finding_count=finding_counts[definition["key"]],
                 missing_inputs=list(definition["missing"]),
