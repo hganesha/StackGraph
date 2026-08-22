@@ -331,6 +331,52 @@ def test_application_technologies_group_by_catalog_domain_and_capability() -> No
     assert unknown.category is None
 
 
+def test_application_data_resources_use_deterministic_infrastructure_groups() -> None:
+    usage_fact = UUID("00000000-0000-4000-8000-000000000309")
+    redis_id = UUID("00000000-0000-4000-8000-000000000310")
+    groups = _group_application_technologies([{
+        "id": redis_id,
+        "namespace": "TECHNOLOGY",
+        "entity_type": "Database",
+        "canonical_key": "stackgraph:database:redis-valkey",
+        "name": "Redis / Valkey",
+        "properties": {},
+        "usage_fact_ids": [usage_fact],
+        "usage_confidence": Decimal("0.96"),
+        "usage_assertion_classes": ["DECLARED", "INFERRED"],
+        "usage_property_sets": [{
+            "resource_kind": "DATABASE",
+            "engine": "redis",
+            "inference_method": "CORRELATED_REPOSITORY_EVIDENCE",
+            "signal_kinds": ["DEPENDENCY_DECLARATION", "SOURCE_REFERENCE"],
+            "package_dependencies": ["npm:ioredis"],
+            "config_keys": ["REDIS_URL"],
+            "source_referenced": True,
+            "limitations": ["runtime connectivity requires deployment corroboration"],
+        }],
+    }], [])
+
+    assert [group.domain.key for group in groups] == ["data"]
+    assert groups[0].domain.name == "Data infrastructure"
+    cache_group = groups[0].functions[0]
+    assert cache_group.function.key == "caches"
+    assert cache_group.function.name == "Caches"
+    usage = cache_group.technologies[0]
+    assert usage.classification == "DETERMINISTIC"
+    assert usage.confidence == pytest.approx(0.96)
+    assert usage.category and usage.category.name == "Caches"
+    assert usage.resource_details is not None
+    assert usage.resource_details.resource_kind == "CACHE"
+    assert usage.resource_details.engine == "redis"
+    assert usage.resource_details.assertion_class == "DECLARED"
+    assert usage.resource_details.signal_kinds == [
+        "DEPENDENCY_DECLARATION", "SOURCE_REFERENCE",
+    ]
+    assert usage.resource_details.config_keys == ["REDIS_URL"]
+    assert usage.resource_details.source_referenced is True
+    assert usage.citations[0].fact_id == usage_fact
+
+
 def test_technology_catalog_profile_combines_oss_metadata_and_curated_classification() -> None:
     package_id = UUID("00000000-0000-4000-8000-000000000211")
     catalog_id = UUID("00000000-0000-4000-8000-000000000212")

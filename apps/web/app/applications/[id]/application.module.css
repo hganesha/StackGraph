@@ -546,7 +546,8 @@
 }
 
 .technologySelect:hover {
-  color: var(--sg-color-domain-oss-600);
+  color: var(--sg-text-primary);
+  text-decoration: underline;
 }
 
 .quietValue {
@@ -622,6 +623,24 @@
 .inspectorFacts dd {
   color: var(--sg-text-primary);
   overflow-wrap: anywhere;
+}
+
+.detectionLimitations {
+  margin-block-start: var(--sg-space-4);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+
+.detectionLimitations summary {
+  color: var(--sg-text-muted);
+  cursor: pointer;
+}
+
+.detectionLimitations ul {
+  display: grid;
+  gap: var(--sg-space-1);
+  margin-block-start: var(--sg-space-2);
+  padding-inline-start: var(--sg-space-5);
 }
 
 .inspectorEvidence {

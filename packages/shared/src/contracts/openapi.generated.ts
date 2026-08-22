@@ -83,12 +83,26 @@ export interface ApplicationTechnologyGroup {
   functions: Array<ApplicationTechnologyFunction>;
 }
 
+export interface ApplicationTechnologyResourceDetails {
+  assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
+  config_keys?: Array<string>;
+  engine: string;
+  inference_method?: string | null;
+  limitations?: Array<string>;
+  package_dependencies?: Array<string>;
+  providers?: Array<string>;
+  resource_kind: "DATABASE" | "CACHE" | "OBJECT_STORAGE";
+  signal_kinds?: Array<string>;
+  source_referenced?: boolean;
+}
+
 export interface ApplicationTechnologyUsage {
   category?: TaxonomySummary | null;
   citations: Array<Citation>;
-  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  classification: "CURATED" | "CATALOG_MATCH" | "DETERMINISTIC" | "UNCLASSIFIED";
   confidence: number;
   confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  resource_details?: ApplicationTechnologyResourceDetails | null;
   technology: EntitySummary;
 }
 
@@ -361,7 +375,7 @@ export interface Citation {
 
 export interface CodePolicyTechnologySummary {
   category_key?: string | null;
-  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  classification: "CURATED" | "CATALOG_MATCH" | "DETERMINISTIC" | "UNCLASSIFIED";
   detected_repository_count: number;
   domain_key?: string | null;
   technology: EntitySummary;
@@ -1240,7 +1254,7 @@ export interface TechnologyCatalogProfile {
   catalog_technology?: EntitySummary | null;
   category?: TaxonomySummary | null;
   citations: Array<Citation>;
-  classification: "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+  classification: "CURATED" | "CATALOG_MATCH" | "DETERMINISTIC" | "UNCLASSIFIED";
   dependents?: number | null;
   domain?: TaxonomySummary | null;
   ecosystem?: string | null;

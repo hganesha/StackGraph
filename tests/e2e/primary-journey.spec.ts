@@ -80,6 +80,26 @@ test("explicit light and dark themes remain accessible", async ({ page }) => {
   await expectNoSeriousAccessibilityViolations(page);
 });
 
+test("application technology embeds deterministic data infrastructure evidence", async ({ page }) => {
+  await page.goto("/applications/00000000-0000-4000-8000-000000000201");
+  await expect(page.getByRole("heading", { level: 1, name: "Billing API" })).toBeVisible();
+
+  await page.getByRole("button", { name: /Data infrastructure/ }).click();
+  await page.getByRole("button", { name: /^Databases/ }).click();
+  await page.getByRole("button", { name: "PostgreSQL" }).click();
+
+  const inspector = page.getByRole("complementary", { name: "Inspecting PostgreSQL" });
+  await expect(inspector).toContainText("Repository evidence");
+  await expect(inspector).toContainText("Database");
+  await expect(inspector).toContainText("postgresql");
+  await expect(inspector).toContainText("Dependency Declaration");
+  await expect(inspector).toContainText("pypi:psycopg");
+  await expect(inspector).toContainText("DATABASE_URL");
+  await expect(inspector.getByRole("button", { name: /Repository database evidence/ })).toBeVisible();
+  await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
 test("live source failure is announced without losing the application shell", async ({ page }) => {
   test.skip(process.env.E2E_DATA_SOURCE !== "live", "requires the live API client");
   await page.route("**/api/v1/estate**", async (route) => {

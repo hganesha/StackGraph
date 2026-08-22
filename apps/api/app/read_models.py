@@ -35,6 +35,7 @@ from app.models import (
     ApplicationRepositoryDependencyHierarchy,
     ApplicationTechnologyFunction,
     ApplicationTechnologyGroup,
+    ApplicationTechnologyResourceDetails,
     ApplicationTechnologyUsage,
     AIProviderConfiguration,
     AIProviderConfigurationUpdateRequest,
@@ -343,8 +344,9 @@ _TECHNOLOGY_DOMAIN_ORDER = {
     "frontend": 0,
     "middleware": 1,
     "backend": 2,
-    "deployment": 3,
-    "unclassified": 4,
+    "data": 3,
+    "deployment": 4,
+    "unclassified": 5,
 }
 _CLASSIFIABLE_TECHNOLOGY_DOMAINS = frozenset(_TECHNOLOGY_DOMAIN_ORDER) - {"unclassified"}
 
@@ -602,6 +604,86 @@ def _technology_catalog_profiles(
     return profiles
 
 
+def _application_resource_details(
+    technology_row: Mapping[str, Any],
+) -> tuple[ApplicationTechnologyResourceDetails | None, tuple[str, str]]:
+    raw_property_sets = technology_row.get("usage_property_sets")
+    property_sets = (
+        [value for value in raw_property_sets if isinstance(value, Mapping)]
+        if isinstance(raw_property_sets, list) else []
+    )
+    if not property_sets and isinstance(technology_row.get("usage_properties"), Mapping):
+        property_sets = [technology_row["usage_properties"]]
+
+    resource_sets = [
+        value for value in property_sets
+        if str(value.get("resource_kind") or "").upper() in {"DATABASE", "STORAGE"}
+    ]
+    entity_type = str(technology_row.get("entity_type") or "")
+    if not resource_sets and entity_type not in {"Database", "Storage"}:
+        return None, ("", "")
+
+    def strings(key: str) -> list[str]:
+        return sorted({
+            str(item)
+            for properties in resource_sets
+            for item in (properties.get(key) if isinstance(properties.get(key), list) else [])
+            if str(item).strip()
+        })
+
+    engine = next((
+        str(properties["engine"]).strip()
+        for properties in resource_sets
+        if isinstance(properties.get("engine"), str) and str(properties["engine"]).strip()
+    ), str(technology_row.get("name") or "unknown").strip())
+    raw_kind = next((
+        str(properties.get("resource_kind") or "").upper()
+        for properties in resource_sets
+        if properties.get("resource_kind")
+    ), entity_type.upper())
+    canonical_key = str(technology_row.get("canonical_key") or "").casefold()
+    if raw_kind == "STORAGE" or entity_type == "Storage":
+        resource_kind = "OBJECT_STORAGE"
+        category = ("object-storage", "Object storage")
+    elif engine.casefold() in {"redis", "valkey"} or "redis-valkey" in canonical_key:
+        resource_kind = "CACHE"
+        category = ("caches", "Caches")
+    else:
+        resource_kind = "DATABASE"
+        category = ("databases", "Databases")
+
+    assertion_classes = {
+        str(value).upper()
+        for value in (technology_row.get("usage_assertion_classes") or [])
+        if str(value).upper() in {
+            "DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED",
+        }
+    }
+    assertion_class = next(
+        (value for value in (
+            "CURATED", "DECLARED", "OBSERVED", "EXTERNAL_MEASURED", "INFERRED",
+        ) if value in assertion_classes),
+        "INFERRED",
+    )
+    inference_method = next((
+        str(properties["inference_method"])
+        for properties in resource_sets
+        if isinstance(properties.get("inference_method"), str)
+    ), None)
+    return ApplicationTechnologyResourceDetails(
+        resource_kind=resource_kind,
+        engine=engine,
+        providers=strings("providers"),
+        signal_kinds=strings("signal_kinds"),
+        package_dependencies=strings("package_dependencies"),
+        config_keys=strings("config_keys"),
+        source_referenced=any(bool(value.get("source_referenced")) for value in resource_sets),
+        inference_method=inference_method,
+        assertion_class=assertion_class,
+        limitations=strings("limitations"),
+    ), category
+
+
 def _group_application_technologies(
     technology_rows: list[dict[str, Any]],
     catalog_rows: list[dict[str, Any]],
@@ -611,43 +693,63 @@ def _group_application_technologies(
     grouped: dict[tuple[str, str], dict[str, Any]] = {}
     for technology_row in technology_rows:
         technology_id = UUID(str(technology_row["id"]))
-        resolved, is_direct_catalog = _resolve_technology_catalog_entry(
-            technology_row, catalog_by_id, catalog_by_key,
-        )
-        direct = resolved if is_direct_catalog else None
-        properties = resolved["row"].get("properties", {}) if resolved else {}
-        domain_key = str(properties.get("domain_id") or "unclassified")
-        if domain_key not in _CLASSIFIABLE_TECHNOLOGY_DOMAINS:
-            resolved = None
-            domain_key = "unclassified"
-
         usage_confidence = _number(technology_row.get("usage_confidence"), 1.0)
-        classification = "UNCLASSIFIED"
-        classification_factor = 0.0
-        if resolved is not None:
-            classification = "CURATED" if direct is not None else "CATALOG_MATCH"
-            classification_factor = 1.0 if direct is not None else 0.85
-        domain_name = (
-            str(properties.get("domain_name") or _taxonomy_name(domain_key))
-            if resolved else "Unclassified"
-        )
-        category = None
-        if resolved is not None and properties.get("category_id"):
-            category_key = str(properties["category_id"])
+        resource_details, resource_category = _application_resource_details(technology_row)
+        resolved = None
+        if resource_details is not None:
+            direct = None
+            properties: dict[str, Any] = {}
+            domain_key = "data"
+            domain_name = "Data infrastructure"
+            classification = "DETERMINISTIC"
+            classification_factor = 1.0
             category = TaxonomySummary(
-                key=category_key,
-                name=str(properties.get("category_name") or _taxonomy_name(category_key)),
+                key=resource_category[0], name=resource_category[1],
             )
-
-        capabilities = list(resolved["capabilities"]) if resolved else []
-        if not capabilities:
             capabilities = [{
-                "capability_key": category.key if category else "unclassified",
-                "capability_name": category.name if category else "Function not yet classified",
-                "capability_summary": None,
+                "capability_key": category.key,
+                "capability_name": category.name,
+                "capability_summary": "Detected from repository code and infrastructure evidence.",
                 "classification_fact_id": None,
-                "classification_confidence": classification_factor,
+                "classification_confidence": 1.0,
             }]
+        else:
+            resolved, is_direct_catalog = _resolve_technology_catalog_entry(
+                technology_row, catalog_by_id, catalog_by_key,
+            )
+            direct = resolved if is_direct_catalog else None
+            properties = resolved["row"].get("properties", {}) if resolved else {}
+            domain_key = str(properties.get("domain_id") or "unclassified")
+            if domain_key not in _CLASSIFIABLE_TECHNOLOGY_DOMAINS:
+                resolved = None
+                domain_key = "unclassified"
+
+            classification = "UNCLASSIFIED"
+            classification_factor = 0.0
+            if resolved is not None:
+                classification = "CURATED" if direct is not None else "CATALOG_MATCH"
+                classification_factor = 1.0 if direct is not None else 0.85
+            domain_name = (
+                str(properties.get("domain_name") or _taxonomy_name(domain_key))
+                if resolved else "Unclassified"
+            )
+            category = None
+            if resolved is not None and properties.get("category_id"):
+                category_key = str(properties["category_id"])
+                category = TaxonomySummary(
+                    key=category_key,
+                    name=str(properties.get("category_name") or _taxonomy_name(category_key)),
+                )
+
+            capabilities = list(resolved["capabilities"]) if resolved else []
+            if not capabilities:
+                capabilities = [{
+                    "capability_key": category.key if category else "unclassified",
+                    "capability_name": category.name if category else "Function not yet classified",
+                    "capability_summary": None,
+                    "classification_fact_id": None,
+                    "classification_confidence": classification_factor,
+                }]
 
         for capability in capabilities:
             function_key = str(capability.get("capability_key") or "unclassified")
@@ -680,6 +782,7 @@ def _group_application_technologies(
                 classification=classification,
                 confidence=confidence,
                 confidence_label=_confidence_label(confidence),
+                resource_details=resource_details,
                 citations=citations,
             )
 
@@ -5155,8 +5258,11 @@ class ReadModelStore(AdminReadModelsMixin):
             """
             WITH direct AS (
               SELECT r.fact_assertion_id,r.relationship_type,r.confidence,
+                     fact.properties relationship_properties,
+                     fact.assertion_class,
                      CASE WHEN r.source_entity_id=%s THEN r.target_entity_id ELSE r.source_entity_id END id
               FROM current_relationship r
+              JOIN fact_assertion fact ON fact.id=r.fact_assertion_id
               WHERE r.source_entity_id=%s OR r.target_entity_id=%s
             ), repositories AS (
               SELECT d.id FROM direct d JOIN entity e ON e.id=d.id
@@ -5164,15 +5270,19 @@ class ReadModelStore(AdminReadModelsMixin):
                 AND d.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
             ), repository_related AS (
               SELECT r.fact_assertion_id,r.relationship_type,r.confidence,
+                     fact.properties relationship_properties,
+                     fact.assertion_class,
                      CASE WHEN r.source_entity_id=repositories.id
                        THEN r.target_entity_id ELSE r.source_entity_id END id
               FROM repositories JOIN current_relationship r
                 ON r.source_entity_id=repositories.id OR r.target_entity_id=repositories.id
+              JOIN fact_assertion fact ON fact.id=r.fact_assertion_id
               WHERE r.relationship_type IN (
                 'DEPENDS_ON','USES','RUNS_ON','DEPLOYED_AS','BUILT_ON','HAS_VERSION'
               )
             ), selected AS (
-              SELECT d.id,1 depth,d.fact_assertion_id,d.confidence
+              SELECT d.id,1 depth,d.fact_assertion_id,d.confidence,
+                     d.relationship_properties,d.assertion_class
               FROM direct d JOIN entity e ON e.id=d.id
               WHERE (
                 e.namespace='BUSINESS'
@@ -5188,13 +5298,19 @@ class ReadModelStore(AdminReadModelsMixin):
                 AND d.relationship_type IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
               )
               UNION ALL
-              SELECT rr.id,2,rr.fact_assertion_id,rr.confidence
+              SELECT rr.id,2,rr.fact_assertion_id,rr.confidence,
+                     rr.relationship_properties,rr.assertion_class
               FROM repository_related rr JOIN entity e ON e.id=rr.id
               WHERE e.namespace IN ('TECHNOLOGY','OSS','DEPLOYMENT')
             )
             SELECT e.*,min(selected.depth) depth,
                    array_agg(DISTINCT selected.fact_assertion_id) usage_fact_ids,
                    max(selected.confidence) usage_confidence,
+                   array_agg(DISTINCT selected.relationship_properties)
+                     FILTER (WHERE selected.relationship_properties<>'{}'::jsonb)
+                     usage_property_sets,
+                   array_agg(DISTINCT selected.assertion_class)
+                     usage_assertion_classes,
                    coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at
             FROM selected JOIN entity e ON e.id=selected.id
             GROUP BY e.id ORDER BY min(selected.depth),e.namespace,e.entity_type,e.name,e.id
