@@ -23,6 +23,7 @@ from stackgraph_ai.governance import (
 )
 
 from app.age_graph import AgeGraphReader, AgeTopology
+from app.architecture_catalog import load_architecture_catalog, sha256_fingerprint
 from app.database import Database
 from app.deterministic_insights import invalidate_deterministic_insight_cache
 from app.deterministic_insights import list_deterministic_insights
@@ -67,6 +68,27 @@ from app.models import (
     BusinessMapSharedGroup,
     BusinessMapStateModel,
     BusinessMapSummary,
+    ArchitectureProfileStateModel,
+    ArchitectureReferenceModel,
+    ArchitectureReferenceModelList,
+    ArchitectureTaxonomyResponse,
+    CanvasCellComparisonModel,
+    CanvasCellMeasuresModel,
+    CanvasCellProjectionModel,
+    CanvasClassificationTrayItemModel,
+    CanvasClassificationTrayModel,
+    CanvasComparison,
+    CanvasComparisonRequest,
+    CanvasComparisonSummaryModel,
+    CanvasOccupantModel,
+    CanvasProjection,
+    CanvasProjectionSelectorModel,
+    CanvasProjectionSummaryModel,
+    CanvasTemplateList,
+    CellExpectationModel,
+    CellObservationStatusModel,
+    MeasureResultModel,
+    TenantCellPolicyModel,
     CapabilityDefinitionModel,
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
@@ -148,6 +170,11 @@ from app.models import (
 
 CONTRACT_VERSION = "1.0.0"
 MAX_GRAPH_NODES = 50
+CANVAS_PROJECTION_METHOD_VERSION = "architecture-canvas-projection/v1"
+CANVAS_COMPARISON_METHOD_VERSION = "architecture-canvas-comparison/v1"
+CANVAS_OBSERVATION_METHOD_VERSION = "architecture-observation/v1"
+CANVAS_MEASURE_METHOD_VERSION = "architecture-measures/v1"
+CANVAS_CLASSIFICATION_TRAY_LIMIT = 200
 logger = logging.getLogger(__name__)
 
 # The DB stores uppercase enums; the API contract and UI use the workspace's kebab form.
@@ -822,6 +849,225 @@ def _group_application_technologies(
     ]
 
 
+def _canvas_policy_applies(
+    policy: TenantCellPolicyModel,
+    scope: str,
+    subject_id: UUID | None,
+    as_of: datetime,
+) -> bool:
+    if policy.effective_from is not None and as_of < policy.effective_from:
+        return False
+    if policy.effective_to is not None and as_of >= policy.effective_to:
+        return False
+    selector = policy.scope_selector
+    scoped = bool(selector.application_ids or selector.repository_ids or selector.tags)
+    if not scoped:
+        return True
+    if selector.tags:
+        return False  # Tag-scoped profiles remain inactive until tag facts are projected.
+    if scope == "APPLICATION":
+        return subject_id in selector.application_ids
+    if scope == "REPOSITORY":
+        return subject_id in selector.repository_ids
+    return False
+
+
+def _canvas_policy_status(
+    technology_id: UUID,
+    policy: TenantCellPolicyModel | None,
+    subject_id: UUID | None,
+    as_of: datetime,
+) -> str:
+    if policy is None:
+        return "UNGOVERNED"
+    if subject_id is not None and any(
+        subject_id in exception.subject_ids
+        and (exception.effective_from is None or as_of >= exception.effective_from)
+        and (exception.effective_to is None or as_of < exception.effective_to)
+        for exception in policy.exceptions
+    ):
+        return "EXEMPTED"
+    if technology_id in policy.preferred_technology_ids:
+        return "PREFERRED"
+    if technology_id in policy.allowed_technology_ids:
+        return "ALLOWED"
+    if technology_id in policy.discouraged_technology_ids:
+        return "DISCOURAGED"
+    if technology_id in policy.prohibited_technology_ids:
+        return "PROHIBITED"
+    return "UNGOVERNED"
+
+
+def _canvas_measure_result(
+    *,
+    value: float | None,
+    status: str,
+    inputs: list[str],
+    supporting_fact_ids: list[UUID],
+    method: str,
+) -> MeasureResultModel:
+    return MeasureResultModel(
+        value=value,
+        status=status,
+        inputs=inputs,
+        supporting_fact_ids=list(dict.fromkeys(supporting_fact_ids)),
+        method_version=method,
+    )
+
+
+def _canvas_cell_measures(
+    *,
+    state: str,
+    expectation: CellExpectationModel,
+    policy: TenantCellPolicyModel | None,
+    occupants: list[CanvasOccupantModel],
+    observation: CellObservationStatusModel,
+) -> CanvasCellMeasuresModel:
+    fact_ids = [citation.fact_id for item in occupants for citation in item.citations]
+    eligible_values: list[float] = []
+    missing_inputs: list[str] = []
+
+    if expectation.applicability == "NOT_APPLICABLE" or state == "NOT_APPLICABLE":
+        coverage = _canvas_measure_result(
+            value=None, status="NOT_APPLICABLE", inputs=["cell applicability"],
+            supporting_fact_ids=[], method="architecture-coverage/v1",
+        )
+    elif state in {"UNOBSERVED", "UNBOUND"}:
+        status = "NOT_CONFIGURED" if state == "UNBOUND" else "INSUFFICIENT_DATA"
+        coverage = _canvas_measure_result(
+            value=None, status=status,
+            inputs=["effective expectation", "observation completeness"],
+            supporting_fact_ids=[], method="architecture-coverage/v1",
+        )
+        missing_inputs.extend(observation.missing_inputs or ["observation completeness"])
+    elif expectation.minimum_implementations in (None, 0):
+        coverage = _canvas_measure_result(
+            value=None, status="NOT_CONFIGURED",
+            inputs=["minimum implementation expectation"],
+            supporting_fact_ids=fact_ids, method="architecture-coverage/v1",
+        )
+    else:
+        minimum = expectation.minimum_implementations
+        assert minimum is not None and minimum > 0
+        coverage_value = min(100.0, 100.0 * len(occupants) / minimum)
+        coverage = _canvas_measure_result(
+            value=coverage_value, status="ELIGIBLE",
+            inputs=[f"minimum implementations: {minimum}", f"observed implementations: {len(occupants)}"],
+            supporting_fact_ids=fact_ids, method="architecture-coverage/v1",
+        )
+        eligible_values.append(coverage_value)
+
+    diversity = len({item.technology.id for item in occupants})
+    if expectation.applicability == "NOT_APPLICABLE":
+        standardisation = _canvas_measure_result(
+            value=None, status="NOT_APPLICABLE", inputs=["cell applicability"],
+            supporting_fact_ids=[], method="architecture-standardisation/v1",
+        )
+    elif observation.observed_subjects < 3:
+        standardisation = _canvas_measure_result(
+            value=None, status="INSUFFICIENT_DATA",
+            inputs=[f"observed subjects: {observation.observed_subjects}", "minimum subjects: 3"],
+            supporting_fact_ids=fact_ids, method="architecture-standardisation/v1",
+        )
+        missing_inputs.append("at least three observed subjects for standardisation")
+    elif expectation.allowed_diversity is None:
+        standardisation = _canvas_measure_result(
+            value=None, status="NOT_CONFIGURED", inputs=["allowed diversity expectation"],
+            supporting_fact_ids=fact_ids, method="architecture-standardisation/v1",
+        )
+    else:
+        excess = max(0, diversity - expectation.allowed_diversity)
+        standardisation_value = max(0.0, 100.0 - 25.0 * excess)
+        standardisation = _canvas_measure_result(
+            value=standardisation_value, status="ELIGIBLE",
+            inputs=[
+                f"unique implementations: {diversity}",
+                f"allowed diversity: {expectation.allowed_diversity}",
+            ],
+            supporting_fact_ids=fact_ids, method="architecture-standardisation/v1",
+        )
+        eligible_values.append(standardisation_value)
+
+    currency = _canvas_measure_result(
+        value=None, status="NOT_CONFIGURED",
+        inputs=["version and lifecycle attribution"], supporting_fact_ids=fact_ids,
+        method="architecture-currency/v1",
+    )
+    risk = _canvas_measure_result(
+        value=None, status="NOT_CONFIGURED",
+        inputs=["cell-attributed deterministic insights"], supporting_fact_ids=fact_ids,
+        method="architecture-risk/v1",
+    )
+
+    if expectation.applicability == "NOT_APPLICABLE":
+        conformance = _canvas_measure_result(
+            value=None, status="NOT_APPLICABLE", inputs=["cell applicability"],
+            supporting_fact_ids=[], method="architecture-conformance/v1",
+        )
+    elif policy is None:
+        conformance = _canvas_measure_result(
+            value=None, status="NOT_CONFIGURED", inputs=["tenant cell policy"],
+            supporting_fact_ids=fact_ids, method="architecture-conformance/v1",
+        )
+    elif state == "UNOBSERVED":
+        conformance = _canvas_measure_result(
+            value=None, status="INSUFFICIENT_DATA", inputs=["observation completeness"],
+            supporting_fact_ids=fact_ids, method="architecture-conformance/v1",
+        )
+    else:
+        prohibited = sum(item.policy_status == "PROHIBITED" for item in occupants)
+        discouraged = sum(item.policy_status == "DISCOURAGED" for item in occupants)
+        required_absent = (
+            expectation.applicability == "REQUIRED"
+            and len(occupants) < (expectation.minimum_implementations or 1)
+        )
+        conformance_value = max(
+            0.0,
+            100.0 - prohibited * 100.0 - discouraged * 25.0 - (100.0 if required_absent else 0.0),
+        )
+        conformance = _canvas_measure_result(
+            value=conformance_value, status="ELIGIBLE",
+            inputs=[
+                f"prohibited in use: {prohibited}",
+                f"discouraged in use: {discouraged}",
+                f"required but absent: {str(required_absent).lower()}",
+            ],
+            supporting_fact_ids=fact_ids, method="architecture-conformance/v1",
+        )
+        eligible_values.append(conformance_value)
+
+    overall = sum(eligible_values) / len(eligible_values) if len(eligible_values) >= 2 else None
+    posture_band = None
+    if overall is not None:
+        if overall >= 85:
+            posture_band = "STRONG"
+        elif overall >= 65:
+            posture_band = "ADEQUATE"
+        elif overall >= 40:
+            posture_band = "WEAK"
+        else:
+            posture_band = "AT_RISK"
+    confidence = min((item.confidence for item in occupants), default=0.0)
+    if observation.in_scope_subjects:
+        confidence = min(
+            confidence if occupants else 1.0,
+            observation.observed_subjects / observation.in_scope_subjects,
+        )
+    return CanvasCellMeasuresModel(
+        posture_band=posture_band,
+        overall_score=overall,
+        coverage=coverage,
+        standardisation=standardisation,
+        currency=currency,
+        risk=risk,
+        conformance=conformance,
+        confidence=confidence,
+        confidence_label=_confidence_label(confidence),
+        method_version=CANVAS_MEASURE_METHOD_VERSION,
+        missing_inputs=list(dict.fromkeys(missing_inputs)),
+    )
+
+
 def _encode_cursor(kind: str, **values: Any) -> str:
     payload = json.dumps(
         {"v": 1, "kind": kind, **values},
@@ -1135,6 +1381,906 @@ class ReadModelStore(AdminReadModelsMixin):
             assessments=assessments,
             recommendations=recommendations,
             freshness=_freshness(application.get("observed_at")),
+        )
+
+    async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse:
+        return load_architecture_catalog().taxonomy
+
+    async def architecture_reference_models(self) -> ArchitectureReferenceModelList:
+        return load_architecture_catalog().reference_models()
+
+    async def architecture_reference_model(
+        self, key: str, *, version: str | None,
+    ) -> ArchitectureReferenceModel:
+        model = load_architecture_catalog().reference_model
+        if key != model.key or (version is not None and version != model.version):
+            raise APIError(404, "REFERENCE_MODEL_NOT_FOUND", "The architecture reference model was not found.")
+        return model
+
+    async def canvas_templates(self) -> CanvasTemplateList:
+        return load_architecture_catalog().templates()
+
+    async def _canvas_policy_state(
+        self,
+        *,
+        tenant_id: UUID | None,
+    ) -> tuple[ArchitectureProfileStateModel | None, str | None, list[str]]:
+        if tenant_id is None:
+            return None, None, []
+        row = await self.database.fetch_one(
+            """
+            SELECT state,fingerprint
+            FROM tenant_architecture_profile
+            WHERE tenant_id=%s AND status='ACTIVE'
+              AND reference_model_key='architecture.stackgraph.reference'
+              AND reference_model_version='1.0.0'
+            ORDER BY updated_at DESC,id DESC LIMIT 1
+            """,
+            (tenant_id,),
+            tenant_id=tenant_id,
+        )
+        if row is not None:
+            return (
+                ArchitectureProfileStateModel.model_validate(row["state"]),
+                str(row["fingerprint"]),
+                [],
+            )
+
+        legacy_rows = await self.database.fetch_all(
+            """
+            SELECT function_key,allowed_technology_ids,prohibited_technology_ids,
+                   policy_fingerprint
+            FROM tenant_code_policy
+            WHERE tenant_id=%s
+            ORDER BY function_key
+            """,
+            (tenant_id,),
+            tenant_id=tenant_id,
+        )
+        if not legacy_rows:
+            return None, None, []
+
+        catalog = load_architecture_catalog()
+        capability_cells = {
+            key: cell.key
+            for cell in catalog.reference_model.cells
+            for binding in cell.bindings
+            if binding.kind == "CAPABILITY"
+            for key in binding.keys
+        }
+        aggregated: dict[str, dict[str, set[UUID]]] = {}
+        unresolved: list[str] = []
+        for legacy in legacy_rows:
+            canonical = catalog.canonical_capability_key(str(legacy["function_key"]))
+            cell_key = capability_cells.get(canonical or "")
+            if cell_key is None:
+                unresolved.append(str(legacy["function_key"]))
+                continue
+            decisions = aggregated.setdefault(cell_key, {"allowed": set(), "prohibited": set()})
+            decisions["allowed"].update(UUID(str(item)) for item in legacy["allowed_technology_ids"])
+            decisions["prohibited"].update(
+                UUID(str(item)) for item in legacy["prohibited_technology_ids"]
+            )
+        policies = []
+        for cell_key, decisions in sorted(aggregated.items()):
+            prohibited = decisions["prohibited"]
+            policies.append(TenantCellPolicyModel(
+                cell_key=cell_key,
+                applicability="OPTIONAL",
+                minimum_implementations=0,
+                allowed_technology_ids=sorted(decisions["allowed"] - prohibited, key=str),
+                prohibited_technology_ids=sorted(prohibited, key=str),
+                rationale="Migrated read-only from tenant code policy v1.",
+            ))
+        state = ArchitectureProfileStateModel(
+            name="Legacy code-policy overlay",
+            reference_model_key=catalog.reference_model.key,
+            reference_model_version=catalog.reference_model.version,
+            cell_policies=policies,
+        )
+        fingerprint = sha256_fingerprint({
+            "source": "tenant-code-policy/v1",
+            "policies": [
+                {
+                    "function_key": str(item["function_key"]),
+                    "fingerprint": str(item["policy_fingerprint"]),
+                }
+                for item in legacy_rows
+            ],
+        })
+        return state, fingerprint, unresolved
+
+    async def _canvas_scope_technology_rows(
+        self,
+        *,
+        scope: str,
+        subject_id: UUID | None,
+        tenant_id: UUID | None,
+    ) -> list[dict[str, Any]]:
+        if tenant_id is None:
+            return []
+        return await self.database.fetch_all(
+            """
+            WITH scoped_repositories AS (
+              SELECT repository.id
+              FROM entity repository
+              WHERE repository.tenant_id=%s
+                AND repository.namespace='ENTERPRISE'
+                AND repository.entity_type='Repository'
+                AND (
+                  %s='ESTATE'
+                  OR (%s='REPOSITORY' AND repository.id=%s)
+                  OR (%s='APPLICATION' AND EXISTS (
+                    SELECT 1
+                    FROM current_relationship relationship
+                    JOIN entity application ON application.id=CASE
+                      WHEN relationship.source_entity_id=repository.id
+                        THEN relationship.target_entity_id
+                      ELSE relationship.source_entity_id END
+                    WHERE (relationship.source_entity_id=repository.id
+                           OR relationship.target_entity_id=repository.id)
+                      AND relationship.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                      AND application.namespace='ENTERPRISE'
+                      AND application.entity_type='Application'
+                      AND application.id=%s
+                  ))
+                )
+            ), repository_applications AS (
+              SELECT DISTINCT repository.id repository_id,application.id application_id
+              FROM scoped_repositories repository
+              JOIN current_relationship relationship
+                ON relationship.source_entity_id=repository.id
+                OR relationship.target_entity_id=repository.id
+              JOIN entity application ON application.id=CASE
+                WHEN relationship.source_entity_id=repository.id
+                  THEN relationship.target_entity_id
+                ELSE relationship.source_entity_id END
+              WHERE relationship.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+            )
+            SELECT technology.*,
+                   array_agg(DISTINCT dependency.id) usage_fact_ids,
+                   max(dependency.confidence) usage_confidence,
+                   array_agg(DISTINCT dependency.properties)
+                     FILTER (WHERE dependency.properties<>'{}'::jsonb) usage_property_sets,
+                   array_agg(DISTINCT dependency.assertion_class) usage_assertion_classes,
+                   count(DISTINCT repository.id)::integer adoption_repositories,
+                   count(DISTINCT repository_applications.application_id)::integer adoption_applications,
+                   0::integer adoption_deployments
+            FROM scoped_repositories repository
+            JOIN fact_assertion dependency
+              ON dependency.subject_entity_id=repository.id
+             AND dependency.system_to IS NULL
+             AND dependency.predicate IN ('DEPENDS_ON','USES','RUNS_ON','BUILT_ON','HAS_VERSION')
+            JOIN entity technology ON technology.id=dependency.object_entity_id
+            LEFT JOIN repository_applications
+              ON repository_applications.repository_id=repository.id
+            WHERE technology.namespace IN ('TECHNOLOGY','OSS')
+              AND technology.entity_type<>'Capability'
+            GROUP BY technology.id
+            ORDER BY technology.name,technology.id
+            """,
+            (
+                tenant_id,
+                scope,
+                scope,
+                subject_id,
+                scope,
+                subject_id,
+            ),
+            tenant_id=tenant_id,
+        )
+
+    async def _canvas_scope_deployment_rows(
+        self,
+        *,
+        scope: str,
+        subject_id: UUID | None,
+        tenant_id: UUID | None,
+    ) -> list[dict[str, Any]]:
+        if tenant_id is None:
+            return []
+        return await self.database.fetch_all(
+            """
+            WITH scoped_repositories AS (
+              SELECT repository.id
+              FROM entity repository
+              WHERE repository.tenant_id=%s
+                AND repository.namespace='ENTERPRISE'
+                AND repository.entity_type='Repository'
+                AND (
+                  %s='ESTATE'
+                  OR (%s='REPOSITORY' AND repository.id=%s)
+                  OR (%s='APPLICATION' AND EXISTS (
+                    SELECT 1 FROM current_relationship relationship
+                    WHERE (
+                      (relationship.source_entity_id=%s AND relationship.target_entity_id=repository.id)
+                      OR (relationship.target_entity_id=%s AND relationship.source_entity_id=repository.id)
+                    )
+                      AND relationship.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                  ))
+                )
+            ), scoped_applications AS (
+              SELECT DISTINCT application.id
+              FROM scoped_repositories repository
+              JOIN current_relationship relationship
+                ON relationship.source_entity_id=repository.id
+                OR relationship.target_entity_id=repository.id
+              JOIN entity application ON application.id=CASE
+                WHEN relationship.source_entity_id=repository.id
+                  THEN relationship.target_entity_id
+                ELSE relationship.source_entity_id END
+              WHERE relationship.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+              UNION
+              SELECT %s::uuid WHERE %s='APPLICATION'
+            ), scope_entities AS (
+              SELECT id FROM scoped_repositories
+              UNION SELECT id FROM scoped_applications
+            ), direct_deployment AS (
+              SELECT deployment.id,deployment_fact.id fact_id,deployment_fact.confidence
+              FROM scope_entities scoped
+              JOIN fact_assertion deployment_fact
+                ON deployment_fact.system_to IS NULL
+               AND (deployment_fact.subject_entity_id=scoped.id
+                    OR deployment_fact.object_entity_id=scoped.id)
+              JOIN entity deployment ON deployment.id=CASE
+                WHEN deployment_fact.subject_entity_id=scoped.id
+                  THEN deployment_fact.object_entity_id
+                ELSE deployment_fact.subject_entity_id END
+              WHERE deployment.namespace='DEPLOYMENT'
+            ), expanded_deployment AS (
+              SELECT * FROM direct_deployment
+              UNION ALL
+              SELECT related.id,relationship.id,relationship.confidence
+              FROM direct_deployment direct
+              JOIN fact_assertion relationship
+                ON relationship.system_to IS NULL
+               AND (relationship.subject_entity_id=direct.id
+                    OR relationship.object_entity_id=direct.id)
+              JOIN entity related ON related.id=CASE
+                WHEN relationship.subject_entity_id=direct.id
+                  THEN relationship.object_entity_id
+                ELSE relationship.subject_entity_id END
+              WHERE related.namespace='DEPLOYMENT'
+            )
+            SELECT deployment.*,
+                   array_agg(DISTINCT expanded.fact_id) usage_fact_ids,
+                   max(expanded.confidence) usage_confidence,
+                   count(DISTINCT deployment.id)::integer adoption_deployments
+            FROM expanded_deployment expanded
+            JOIN entity deployment ON deployment.id=expanded.id
+            GROUP BY deployment.id
+            ORDER BY deployment.entity_type,deployment.name,deployment.id
+            """,
+            (
+                tenant_id,
+                scope,
+                scope,
+                subject_id,
+                scope,
+                subject_id,
+                subject_id,
+                subject_id,
+                scope,
+            ),
+            tenant_id=tenant_id,
+        )
+
+    async def _canvas_scope_observation(
+        self,
+        *,
+        scope: str,
+        subject_id: UUID | None,
+        tenant_id: UUID | None,
+    ) -> dict[str, int]:
+        if tenant_id is None:
+            return {"in_scope": 0, "observed": 0, "fresh": 0}
+        row = await self.database.fetch_one(
+            """
+            SELECT count(*)::integer in_scope,
+                   count(*) FILTER (WHERE repository.last_seen_at IS NOT NULL)::integer observed,
+                   count(*) FILTER (
+                     WHERE repository.last_seen_at >= now()-interval '7 days'
+                   )::integer fresh
+            FROM entity repository
+            WHERE repository.tenant_id=%s
+              AND repository.namespace='ENTERPRISE'
+              AND repository.entity_type='Repository'
+              AND (
+                %s='ESTATE'
+                OR (%s='REPOSITORY' AND repository.id=%s)
+                OR (%s='APPLICATION' AND EXISTS (
+                  SELECT 1 FROM current_relationship relationship
+                  WHERE (
+                    (relationship.source_entity_id=%s AND relationship.target_entity_id=repository.id)
+                    OR (relationship.target_entity_id=%s AND relationship.source_entity_id=repository.id)
+                  )
+                    AND relationship.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+                ))
+              )
+            """,
+            (tenant_id, scope, scope, subject_id, scope, subject_id, subject_id),
+            tenant_id=tenant_id,
+        ) or {}
+        return {
+            "in_scope": int(row.get("in_scope") or 0),
+            "observed": int(row.get("observed") or 0),
+            "fresh": int(row.get("fresh") or 0),
+        }
+
+    async def canvas_projection(
+        self,
+        selector: CanvasProjectionSelectorModel,
+        *,
+        tenant_id: UUID | None,
+        reference_model_key: str,
+        template_key: str,
+    ) -> CanvasProjection:
+        as_of = datetime.now(UTC)
+        catalog = load_architecture_catalog()
+        if reference_model_key != catalog.reference_model.key:
+            raise APIError(404, "REFERENCE_MODEL_NOT_FOUND", "The architecture reference model was not found.")
+        if template_key != catalog.template.key:
+            raise APIError(404, "CANVAS_TEMPLATE_NOT_FOUND", "The canvas template was not found.")
+
+        scope = selector.scope
+        subject_id = selector.subject_id
+        subject = None
+        if scope == "APPLICATION":
+            assert subject_id is not None
+            subject = _entity(await self._get_entity(
+                subject_id, tenant_id, namespace="ENTERPRISE", entity_type="Application",
+            ))
+        elif scope == "REPOSITORY":
+            assert subject_id is not None
+            subject = _entity(await self._get_entity(
+                subject_id, tenant_id, namespace="ENTERPRISE", entity_type="Repository",
+            ))
+
+        profile_state, profile_fingerprint, unresolved_policy_keys = await self._canvas_policy_state(
+            tenant_id=tenant_id,
+        )
+        policies = {
+            policy.cell_key: policy
+            for policy in (profile_state.cell_policies if profile_state else [])
+            if _canvas_policy_applies(policy, scope, subject_id, as_of)
+        }
+        cells_by_key = catalog.cells_by_key
+        capability_cells: dict[str, str] = {}
+        category_cells: dict[str, str] = {}
+        resource_cells: dict[str, str] = {}
+        entity_type_cells: dict[str, str] = {}
+        for cell in catalog.reference_model.cells:
+            for binding in cell.bindings:
+                target = {
+                    "CAPABILITY": capability_cells,
+                    "CATEGORY": category_cells,
+                    "RESOURCE_KIND": resource_cells,
+                    "ENTITY_TYPE": entity_type_cells,
+                }.get(binding.kind)
+                if target is not None:
+                    for key in binding.keys:
+                        target[key] = cell.key
+
+        observation_counts = (
+            {"in_scope": 0, "observed": 0, "fresh": 0}
+            if scope == "TARGET"
+            else await self._canvas_scope_observation(
+                scope=scope, subject_id=subject_id, tenant_id=tenant_id,
+            )
+        )
+        technology_rows: list[dict[str, Any]] = []
+        deployment_rows: list[dict[str, Any]] = []
+        if scope != "TARGET":
+            technology_rows = await self._canvas_scope_technology_rows(
+                scope=scope, subject_id=subject_id, tenant_id=tenant_id,
+            )
+            deployment_rows = await self._canvas_scope_deployment_rows(
+                scope=scope, subject_id=subject_id, tenant_id=tenant_id,
+            )
+
+        has_resource_evidence = False
+        grouped = []
+        row_by_id = {UUID(str(row["id"])): row for row in technology_rows}
+        if technology_rows:
+            catalog_rows = await self._technology_classification_catalog(tenant_id)
+            grouped = _group_application_technologies(technology_rows, catalog_rows)
+            has_resource_evidence = any(
+                usage.resource_details is not None
+                for group in grouped
+                for function in group.functions
+                for usage in function.technologies
+            )
+
+        supported_sensors = set()
+        if observation_counts["observed"]:
+            supported_sensors.update({"REPOSITORY_DEPENDENCY", "REPOSITORY_CODE"})
+        if has_resource_evidence:
+            supported_sensors.add("REPOSITORY_RESOURCE")
+        if deployment_rows:
+            supported_sensors.add("DEPLOYMENT")
+
+        occupant_buckets: dict[str, dict[UUID, dict[str, Any]]] = defaultdict(dict)
+        tray_items: dict[tuple[UUID, str], CanvasClassificationTrayItemModel] = {}
+
+        def add_occupant(
+            cell_key: str,
+            *,
+            technology: EntitySummary,
+            placement_key: str,
+            classification: str,
+            confidence: float,
+            citations: list[Citation],
+            adoption_applications: int,
+            adoption_repositories: int,
+            adoption_deployments: int,
+            policy_reference: str | None = None,
+        ) -> None:
+            bucket = occupant_buckets[cell_key].setdefault(technology.id, {
+                "technology": technology,
+                "placement_keys": set(),
+                "classification": classification,
+                "confidence": confidence,
+                "citations": {},
+                "adoption_applications": adoption_applications,
+                "adoption_repositories": adoption_repositories,
+                "adoption_deployments": adoption_deployments,
+                "policy_reference": policy_reference,
+            })
+            bucket["placement_keys"].add(placement_key)
+            bucket["confidence"] = min(bucket["confidence"], confidence)
+            for citation in citations:
+                bucket["citations"][citation.fact_id] = citation
+            bucket["adoption_applications"] = max(
+                bucket["adoption_applications"], adoption_applications,
+            )
+            bucket["adoption_repositories"] = max(
+                bucket["adoption_repositories"], adoption_repositories,
+            )
+            bucket["adoption_deployments"] = max(
+                bucket["adoption_deployments"], adoption_deployments,
+            )
+
+        if scope == "TARGET":
+            technology_ids = {
+                technology_id
+                for policy in policies.values()
+                for technology_id in (
+                    *policy.preferred_technology_ids,
+                    *policy.allowed_technology_ids,
+                    *policy.discouraged_technology_ids,
+                    *policy.prohibited_technology_ids,
+                )
+            }
+            technology_entities = {}
+            if technology_ids:
+                rows = await self.database.fetch_all(
+                    "SELECT * FROM entity WHERE id=ANY(%s::uuid[]) ORDER BY name,id",
+                    (list(technology_ids),),
+                    tenant_id=tenant_id,
+                )
+                technology_entities = {UUID(str(row["id"])): _entity(row) for row in rows}
+            for cell_key, policy in policies.items():
+                if cell_key not in cells_by_key:
+                    continue
+                for technology_id in technology_ids & {
+                    *policy.preferred_technology_ids,
+                    *policy.allowed_technology_ids,
+                    *policy.discouraged_technology_ids,
+                    *policy.prohibited_technology_ids,
+                }:
+                    technology = technology_entities.get(technology_id)
+                    if technology is None:
+                        technology = EntitySummary(
+                            id=technology_id,
+                            kind="Technology",
+                            name=f"Unresolved technology {technology_id}",
+                        )
+                        tray_items[(technology_id, "UNRESOLVED_POLICY")] = (
+                            CanvasClassificationTrayItemModel(
+                                entity=technology,
+                                reason="UNRESOLVED_POLICY",
+                                detail=f"The active policy references a technology that is not visible: {technology_id}.",
+                                citations=[],
+                            )
+                        )
+                    add_occupant(
+                        cell_key,
+                        technology=technology,
+                        placement_key=f"policy:{cell_key}",
+                        classification="CURATED",
+                        confidence=1.0,
+                        citations=[],
+                        adoption_applications=0,
+                        adoption_repositories=0,
+                        adoption_deployments=0,
+                        policy_reference=profile_fingerprint,
+                    )
+        else:
+            for group in grouped:
+                for function in group.functions:
+                    canonical = catalog.canonical_capability_key(function.function.key)
+                    for usage in function.technologies:
+                        row = row_by_id[usage.technology.id]
+                        cell_keys: dict[str, str] = {}
+                        if usage.resource_details is not None:
+                            cell_key = resource_cells.get(usage.resource_details.resource_kind)
+                            if cell_key:
+                                cell_keys[cell_key] = f"resource:{usage.resource_details.resource_kind}"
+                        if canonical:
+                            cell_key = capability_cells.get(canonical)
+                            if cell_key:
+                                cell_keys[cell_key] = f"capability:{canonical}"
+                        if not cell_keys and usage.category is not None:
+                            cell_key = category_cells.get(usage.category.key)
+                            if cell_key:
+                                cell_keys[cell_key] = f"category:{usage.category.key}"
+                        entity_type = str(row.get("entity_type") or usage.technology.kind)
+                        entity_cell = entity_type_cells.get(entity_type)
+                        if entity_cell:
+                            cell_keys[entity_cell] = f"entity-type:{entity_type}"
+                        if not cell_keys:
+                            key = (usage.technology.id, "UNCLASSIFIED")
+                            tray_items[key] = CanvasClassificationTrayItemModel(
+                                entity=usage.technology,
+                                reason="UNCLASSIFIED",
+                                detail=(
+                                    f"No canonical architecture binding resolved function "
+                                    f"{function.function.key!r} and category "
+                                    f"{usage.category.key if usage.category else 'none'!r}."
+                                ),
+                                citations=usage.citations,
+                            )
+                            continue
+                        for cell_key, placement_key in cell_keys.items():
+                            add_occupant(
+                                cell_key,
+                                technology=usage.technology,
+                                placement_key=placement_key,
+                                classification=usage.classification,
+                                confidence=usage.confidence,
+                                citations=usage.citations,
+                                adoption_applications=int(row.get("adoption_applications") or 0),
+                                adoption_repositories=int(row.get("adoption_repositories") or 0),
+                                adoption_deployments=int(row.get("adoption_deployments") or 0),
+                            )
+
+            for row in deployment_rows:
+                entity_type = str(row["entity_type"])
+                cell_key = entity_type_cells.get(entity_type)
+                fact_ids = [UUID(str(value)) for value in row.get("usage_fact_ids") or []]
+                citations = [Citation(
+                    fact_id=fact_id,
+                    label="Deployment evidence",
+                    href=f"/api/v1/facts/{fact_id}/evidence",
+                ) for fact_id in fact_ids]
+                deployment = _entity(row)
+                if cell_key is None or not citations:
+                    tray_items[(deployment.id, "UNCLASSIFIED")] = CanvasClassificationTrayItemModel(
+                        entity=deployment,
+                        reason="UNCLASSIFIED",
+                        detail=f"Deployment entity type {entity_type!r} has no canonical canvas binding.",
+                        citations=citations,
+                    )
+                    continue
+                add_occupant(
+                    cell_key,
+                    technology=deployment,
+                    placement_key=f"entity-type:{entity_type}",
+                    classification="DETERMINISTIC",
+                    confidence=_number(row.get("usage_confidence"), 1.0),
+                    citations=citations,
+                    adoption_applications=1 if scope == "APPLICATION" else 0,
+                    adoption_repositories=1 if scope == "REPOSITORY" else 0,
+                    adoption_deployments=int(row.get("adoption_deployments") or 1),
+                )
+
+        for function_key in unresolved_policy_keys:
+            unresolved_id = uuid5(NAMESPACE_URL, f"stackgraph:unresolved-policy:{function_key}")
+            tray_items[(unresolved_id, "UNRESOLVED_POLICY")] = CanvasClassificationTrayItemModel(
+                entity=EntitySummary(
+                    id=unresolved_id,
+                    kind="PolicyFunction",
+                    name=function_key,
+                    canonical_key=f"tenant-code-function:{function_key}",
+                ),
+                reason="UNRESOLVED_POLICY",
+                detail="The legacy tenant code-policy function does not map to a canonical architecture cell.",
+                citations=[],
+            )
+
+        projected_cells: list[CanvasCellProjectionModel] = []
+        for definition in catalog.reference_model.cells:
+            policy = policies.get(definition.key)
+            expectation = CellExpectationModel(
+                applicability=policy.applicability if policy else definition.default_expectation.applicability,
+                minimum_implementations=(
+                    policy.minimum_implementations if policy else definition.default_expectation.minimum_implementations
+                ),
+                maximum_implementations=(
+                    policy.maximum_implementations if policy else definition.default_expectation.maximum_implementations
+                ),
+                allowed_diversity=(
+                    policy.allowed_diversity if policy else definition.default_expectation.allowed_diversity
+                ),
+            )
+            required = set(definition.required_sensor_kinds)
+            missing_sensors = sorted(required - supported_sensors)
+            if scope == "TARGET":
+                observation_status = "NOT_APPLICABLE"
+                missing_inputs: list[str] = []
+            elif not supported_sensors & required:
+                observation_status = "MISSING"
+                missing_inputs = [f"missing sensor: {sensor}" for sensor in missing_sensors]
+            elif (
+                missing_sensors
+                or observation_counts["observed"] < observation_counts["in_scope"]
+                or observation_counts["fresh"] < observation_counts["observed"]
+            ):
+                observation_status = "PARTIAL"
+                missing_inputs = [f"missing sensor: {sensor}" for sensor in missing_sensors]
+                if observation_counts["observed"] < observation_counts["in_scope"]:
+                    missing_inputs.append("unscanned repositories in scope")
+                if observation_counts["fresh"] < observation_counts["observed"]:
+                    missing_inputs.append("stale repository evidence")
+            else:
+                observation_status = "COMPLETE"
+                missing_inputs = []
+            observation = CellObservationStatusModel(
+                required_sensor_kinds=definition.required_sensor_kinds,
+                supported_sensor_kinds=sorted(supported_sensors & required),
+                in_scope_subjects=observation_counts["in_scope"],
+                observed_subjects=observation_counts["observed"],
+                fresh_subjects=observation_counts["fresh"],
+                status=observation_status,
+                missing_inputs=missing_inputs,
+                method_version=CANVAS_OBSERVATION_METHOD_VERSION,
+                input_fingerprint=sha256_fingerprint({
+                    "cell": definition.key,
+                    "scope": scope,
+                    "subject": str(subject_id) if subject_id else None,
+                    "required": sorted(required),
+                    "supported": sorted(supported_sensors),
+                    "counts": observation_counts,
+                }),
+            )
+            occupants = []
+            for value in occupant_buckets.get(definition.key, {}).values():
+                technology_id = value["technology"].id
+                occupants.append(CanvasOccupantModel(
+                    technology=value["technology"],
+                    placement_keys=sorted(value["placement_keys"]),
+                    classification=value["classification"],
+                    confidence=value["confidence"],
+                    confidence_label=_confidence_label(value["confidence"]),
+                    adoption_applications=value["adoption_applications"],
+                    adoption_repositories=value["adoption_repositories"],
+                    adoption_deployments=value["adoption_deployments"],
+                    policy_status=_canvas_policy_status(technology_id, policy, subject_id, as_of),
+                    citations=list(value["citations"].values()),
+                    policy_reference=value["policy_reference"],
+                ))
+            occupants.sort(key=lambda item: (
+                -item.adoption_repositories,
+                item.technology.name.lower(),
+                str(item.technology.id),
+            ))
+            unbound = all(binding.kind == "UNBOUND" for binding in definition.bindings)
+            if expectation.applicability == "NOT_APPLICABLE":
+                state = "NOT_APPLICABLE"
+                state_reason = "The effective tenant policy marks this concern not applicable."
+            elif occupants:
+                state = "POPULATED"
+                state_reason = f"{len(occupants)} evidenced implementation(s) resolved to this cell."
+            elif scope == "TARGET":
+                state = "UNBOUND" if unbound else "EMPTY"
+                state_reason = (
+                    next(binding.reason for binding in definition.bindings if binding.kind == "UNBOUND")
+                    if unbound else "No target technology decision is configured for this cell."
+                )
+            elif unbound:
+                state = "UNBOUND"
+                state_reason = next(
+                    binding.reason for binding in definition.bindings if binding.kind == "UNBOUND"
+                ) or "StackGraph does not bind this concern."
+            elif observation.status == "COMPLETE" and definition.absence_assertable:
+                state = "EMPTY"
+                state_reason = "Required evidence is complete and no implementation was found."
+            else:
+                state = "UNOBSERVED"
+                state_reason = "; ".join(observation.missing_inputs) or (
+                    "The available sensors cannot safely assert absence for this concern."
+                )
+            measures = _canvas_cell_measures(
+                state=state,
+                expectation=expectation,
+                policy=policy,
+                occupants=occupants,
+                observation=observation,
+            )
+            citations = list({
+                citation.fact_id: citation
+                for occupant in occupants
+                for citation in occupant.citations
+            }.values())
+            projected_cells.append(CanvasCellProjectionModel(
+                cell_key=definition.key,
+                state=state,
+                state_reason=state_reason,
+                occupants=occupants,
+                occupant_total=len(occupants),
+                unique_technology_total=len({item.technology.id for item in occupants}),
+                observation=observation,
+                expectation=expectation,
+                measures=measures,
+                policy=policy,
+                insight_refs=[],
+                citations=citations,
+            ))
+
+        sorted_tray_items = sorted(
+            tray_items.values(),
+            key=lambda item: (item.reason, item.entity.name.lower(), str(item.entity.id)),
+        )
+        tray = CanvasClassificationTrayModel(
+            items=sorted_tray_items[:CANVAS_CLASSIFICATION_TRAY_LIMIT],
+            total_count=len(sorted_tray_items),
+            truncated=len(sorted_tray_items) > CANVAS_CLASSIFICATION_TRAY_LIMIT,
+            unclassified_count=sum(item.reason == "UNCLASSIFIED" for item in tray_items.values()),
+            ambiguous_count=sum(item.reason == "AMBIGUOUS" for item in tray_items.values()),
+            unresolved_policy_count=sum(
+                item.reason == "UNRESOLVED_POLICY" for item in tray_items.values()
+            ),
+            filtered_count=sum(item.reason == "FILTERED" for item in tray_items.values()),
+        )
+        unique_technologies = {
+            occupant.technology.id
+            for cell in projected_cells
+            for occupant in cell.occupants
+        }
+        summary = CanvasProjectionSummaryModel(
+            populated_cells=sum(cell.state == "POPULATED" for cell in projected_cells),
+            empty_cells=sum(cell.state == "EMPTY" for cell in projected_cells),
+            not_applicable_cells=sum(cell.state == "NOT_APPLICABLE" for cell in projected_cells),
+            unobserved_cells=sum(cell.state == "UNOBSERVED" for cell in projected_cells),
+            unbound_cells=sum(cell.state == "UNBOUND" for cell in projected_cells),
+            governed_cells=sum(cell.policy is not None for cell in projected_cells),
+            cells_with_violations=sum(
+                any(item.policy_status == "PROHIBITED" for item in cell.occupants)
+                or (
+                    cell.expectation.applicability == "REQUIRED"
+                    and cell.state == "EMPTY"
+                )
+                for cell in projected_cells
+            ),
+            strong=sum(cell.measures and cell.measures.posture_band == "STRONG" for cell in projected_cells),
+            adequate=sum(cell.measures and cell.measures.posture_band == "ADEQUATE" for cell in projected_cells),
+            weak=sum(cell.measures and cell.measures.posture_band == "WEAK" for cell in projected_cells),
+            at_risk=sum(cell.measures and cell.measures.posture_band == "AT_RISK" for cell in projected_cells),
+            unique_technologies=len(unique_technologies),
+            technology_cell_placements=sum(len(cell.occupants) for cell in projected_cells),
+        )
+        input_fingerprint = sha256_fingerprint({
+            "method": CANVAS_PROJECTION_METHOD_VERSION,
+            "reference_model": catalog.reference_model.content_hash,
+            "template": catalog.template.content_hash,
+            "profile": profile_fingerprint,
+            "scope": scope,
+            "subject": str(subject_id) if subject_id else None,
+            "fact_ids": sorted({
+                str(citation.fact_id)
+                for cell in projected_cells
+                for citation in cell.citations
+            }),
+            "states": [(cell.cell_key, cell.state) for cell in projected_cells],
+        })
+        return CanvasProjection(
+            as_of=as_of,
+            method_version=CANVAS_PROJECTION_METHOD_VERSION,
+            taxonomy_key=catalog.taxonomy.key,
+            taxonomy_version=catalog.taxonomy.version,
+            taxonomy_content_hash=catalog.taxonomy.content_hash,
+            reference_model_key=catalog.reference_model.key,
+            reference_model_version=catalog.reference_model.version,
+            reference_model_content_hash=catalog.reference_model.content_hash,
+            template_key=catalog.template.key,
+            template_version=catalog.template.version,
+            tenant_profile_fingerprint=profile_fingerprint,
+            scope=scope,
+            subject=subject,
+            cells=projected_cells,
+            classification_tray=tray,
+            summary=summary,
+            input_fingerprint=input_fingerprint,
+        )
+
+    async def canvas_comparison(
+        self,
+        request: CanvasComparisonRequest,
+        *,
+        tenant_id: UUID | None,
+    ) -> CanvasComparison:
+        actual = await self.canvas_projection(
+            request.actual,
+            tenant_id=tenant_id,
+            reference_model_key=request.reference_model_key,
+            template_key=request.template_key,
+        )
+        baseline = await self.canvas_projection(
+            request.baseline,
+            tenant_id=tenant_id,
+            reference_model_key=request.reference_model_key,
+            template_key=request.template_key,
+        )
+        baseline_by_key = {cell.cell_key: cell for cell in baseline.cells}
+        comparisons = []
+        for actual_cell in actual.cells:
+            baseline_cell = baseline_by_key.get(actual_cell.cell_key)
+            if baseline_cell is None:
+                raise APIError(
+                    409,
+                    "INCOMPATIBLE_CANVAS_PROJECTIONS",
+                    "The projections do not contain the same canonical cells.",
+                )
+            preferred = sum(item.policy_status == "PREFERRED" for item in actual_cell.occupants)
+            allowed = sum(item.policy_status == "ALLOWED" for item in actual_cell.occupants)
+            discouraged = sum(item.policy_status == "DISCOURAGED" for item in actual_cell.occupants)
+            prohibited = sum(item.policy_status == "PROHIBITED" for item in actual_cell.occupants)
+            ungoverned = sum(item.policy_status == "UNGOVERNED" for item in actual_cell.occupants)
+            unevaluable = actual_cell.state in {"UNOBSERVED", "UNBOUND"}
+            required_absent = (
+                not unevaluable
+                and actual_cell.expectation.applicability == "REQUIRED"
+                and len(actual_cell.occupants) < (
+                    actual_cell.expectation.minimum_implementations or 1
+                )
+            )
+            comparisons.append(CanvasCellComparisonModel(
+                cell_key=actual_cell.cell_key,
+                actual_state=actual_cell.state,
+                baseline_state=baseline_cell.state,
+                preferred_in_use=preferred,
+                allowed_in_use=allowed,
+                discouraged_in_use=discouraged,
+                prohibited_in_use=prohibited,
+                required_but_absent=required_absent,
+                ungoverned_in_use=ungoverned,
+                unevaluable=unevaluable,
+            ))
+        summary = CanvasComparisonSummaryModel(
+            compared_cells=len(comparisons),
+            aligned_cells=sum(
+                not item.unevaluable
+                and not item.required_but_absent
+                and item.prohibited_in_use == 0
+                and item.discouraged_in_use == 0
+                for item in comparisons
+            ),
+            cells_with_violations=sum(
+                item.prohibited_in_use > 0 or item.required_but_absent
+                for item in comparisons
+            ),
+            required_but_absent_cells=sum(item.required_but_absent for item in comparisons),
+            ungoverned_cells=sum(item.ungoverned_in_use > 0 for item in comparisons),
+            unevaluable_cells=sum(item.unevaluable for item in comparisons),
+        )
+        input_fingerprint = sha256_fingerprint({
+            "method": CANVAS_COMPARISON_METHOD_VERSION,
+            "kind": request.comparison_kind,
+            "actual": actual.input_fingerprint,
+            "baseline": baseline.input_fingerprint,
+        })
+        return CanvasComparison(
+            comparison_kind=request.comparison_kind,
+            actual_projection_fingerprint=actual.input_fingerprint,
+            baseline_projection_fingerprint=baseline.input_fingerprint,
+            cells=comparisons,
+            summary=summary,
+            method_version=CANVAS_COMPARISON_METHOD_VERSION,
+            input_fingerprint=input_fingerprint,
         )
 
     async def repository_detail(

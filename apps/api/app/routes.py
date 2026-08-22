@@ -19,6 +19,14 @@ from app.models import (
     AIProviderConnectionTest,
     AskRequest,
     AskResponse,
+    ArchitectureProfileCreateRequest,
+    ArchitectureProfileDetail,
+    ArchitectureProfileList,
+    ArchitectureProfilePublishRequest,
+    ArchitectureProfileUpdateRequest,
+    ArchitectureReferenceModel,
+    ArchitectureReferenceModelList,
+    ArchitectureTaxonomyResponse,
     BusinessMapCreateRequest,
     BusinessMapDetail,
     BusinessMapList,
@@ -29,6 +37,12 @@ from app.models import (
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
     CapabilityFootprintList,
+    CanvasComparison,
+    CanvasComparisonRequest,
+    CanvasProjection,
+    CanvasProjectionScope,
+    CanvasProjectionSelectorModel,
+    CanvasTemplateList,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     DeterministicInsightList,
@@ -100,6 +114,19 @@ class ReadModelsProtocol(Protocol):
         namespaces: list[str] | None = None,
     ) -> EstateSummary: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
+    async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse: ...
+    async def architecture_reference_models(self) -> ArchitectureReferenceModelList: ...
+    async def architecture_reference_model(
+        self, key: str, *, version: str | None,
+    ) -> ArchitectureReferenceModel: ...
+    async def canvas_templates(self) -> CanvasTemplateList: ...
+    async def canvas_projection(
+        self, selector: CanvasProjectionSelectorModel, *, tenant_id: UUID | None,
+        reference_model_key: str, template_key: str,
+    ) -> CanvasProjection: ...
+    async def canvas_comparison(
+        self, request: CanvasComparisonRequest, *, tenant_id: UUID | None,
+    ) -> CanvasComparison: ...
     async def repository_detail(self, repository_id: UUID, *, tenant_id: UUID | None) -> RepositoryDetail: ...
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
     async def technology_estate_hierarchy(self, *, tenant_id: UUID | None) -> TechnologyEstateHierarchy: ...
@@ -211,6 +238,21 @@ class ReadModelsProtocol(Protocol):
     async def business_map_revisions(
         self, map_id: UUID, *, tenant_id: UUID | None,
     ) -> BusinessMapRevisionList: ...
+    async def list_architecture_profiles(
+        self, *, tenant_id: UUID | None,
+    ) -> ArchitectureProfileList: ...
+    async def create_architecture_profile(
+        self, request: ArchitectureProfileCreateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail: ...
+    async def update_architecture_profile(
+        self, profile_id: UUID, request: ArchitectureProfileUpdateRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail: ...
+    async def publish_architecture_profile(
+        self, profile_id: UUID, request: ArchitectureProfilePublishRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ArchitectureProfileDetail: ...
     async def review_queue(
         self, *, tenant_id: UUID | None, item_types: list[ReviewQueueItemType] | None,
         repository_id: UUID | None, cursor: str | None, limit: int,
@@ -673,6 +715,119 @@ async def get_session(request: Request) -> SessionInfo:
 
 
 @router.get(
+    "/canvas/taxonomy", response_model=ArchitectureTaxonomyResponse,
+    response_model_exclude_none=True, operation_id="getArchitectureTaxonomy",
+    tags=["architecture-canvas"],
+)
+async def get_architecture_taxonomy(request: Request) -> ArchitectureTaxonomyResponse:
+    principal = await _principal(request)
+    _require(principal, "view")
+    return await _store(request).architecture_taxonomy()
+
+
+@router.get(
+    "/canvas/reference-models", response_model=ArchitectureReferenceModelList,
+    response_model_exclude_none=True, operation_id="listArchitectureReferenceModels",
+    tags=["architecture-canvas"],
+)
+async def list_architecture_reference_models(request: Request) -> ArchitectureReferenceModelList:
+    principal = await _principal(request)
+    _require(principal, "view")
+    return await _store(request).architecture_reference_models()
+
+
+@router.get(
+    "/canvas/reference-models/{key}", response_model=ArchitectureReferenceModel,
+    response_model_exclude_none=True, operation_id="getArchitectureReferenceModel",
+    tags=["architecture-canvas"],
+)
+async def get_architecture_reference_model(
+    key: str, request: Request, version: str | None = None,
+) -> ArchitectureReferenceModel:
+    principal = await _principal(request)
+    _require(principal, "view")
+    return await _store(request).architecture_reference_model(key, version=version)
+
+
+@router.get(
+    "/canvas/templates", response_model=CanvasTemplateList,
+    response_model_exclude_none=True, operation_id="listCanvasTemplates",
+    tags=["architecture-canvas"],
+)
+async def list_canvas_templates(request: Request) -> CanvasTemplateList:
+    principal = await _principal(request)
+    _require(principal, "view")
+    return await _store(request).canvas_templates()
+
+
+@router.get(
+    "/canvas/projection", response_model=CanvasProjection,
+    response_model_exclude_none=True, operation_id="getCanvasProjection",
+    tags=["architecture-canvas"],
+)
+async def get_canvas_projection(
+    request: Request,
+    scope: CanvasProjectionScope = Query(default="ESTATE"),
+    subject_id: UUID | None = None,
+    reference_model_key: str = "architecture.stackgraph.reference",
+    template_key: str = "canvas.stackgraph.reference",
+) -> CanvasProjection:
+    principal = await _principal(request)
+    _require(principal, "view")
+    if scope == "TARGET":
+        raise APIError(
+            400, "TARGET_PROJECTION_REQUIRES_REVIEW",
+            "Use the target-projection endpoint for governed target state.",
+        )
+    if scope in {"APPLICATION", "REPOSITORY"} and subject_id is None:
+        raise APIError(
+            422, "CANVAS_SUBJECT_REQUIRED",
+            "Application and repository canvas projections require subject_id.",
+        )
+    if scope == "ESTATE" and subject_id is not None:
+        raise APIError(
+            422, "CANVAS_SUBJECT_NOT_ALLOWED",
+            "Estate canvas projections do not accept subject_id.",
+        )
+    selector = CanvasProjectionSelectorModel(scope=scope, subject_id=subject_id)
+    return await _store(request).canvas_projection(
+        selector, tenant_id=principal.tenant_id,
+        reference_model_key=reference_model_key, template_key=template_key,
+    )
+
+
+@router.get(
+    "/canvas/target-projection", response_model=CanvasProjection,
+    response_model_exclude_none=True, operation_id="getTargetCanvasProjection",
+    tags=["architecture-canvas"],
+)
+async def get_target_canvas_projection(
+    request: Request,
+    reference_model_key: str = "architecture.stackgraph.reference",
+    template_key: str = "canvas.stackgraph.reference",
+) -> CanvasProjection:
+    principal = await _principal(request)
+    _require(principal, "review")
+    return await _store(request).canvas_projection(
+        CanvasProjectionSelectorModel(scope="TARGET"), tenant_id=principal.tenant_id,
+        reference_model_key=reference_model_key, template_key=template_key,
+    )
+
+
+@router.post(
+    "/canvas/comparisons", response_model=CanvasComparison,
+    response_model_exclude_none=True, operation_id="compareCanvasProjections",
+    tags=["architecture-canvas"],
+)
+async def compare_canvas_projections(
+    body: CanvasComparisonRequest, request: Request,
+) -> CanvasComparison:
+    principal = await _principal(request)
+    _require(principal, "review")
+    return await _store(request).canvas_comparison(body, tenant_id=principal.tenant_id)
+
+
+@router.get(
     "/business-maps", response_model=BusinessMapList,
     response_model_exclude_none=True, operation_id="listBusinessMaps", tags=["business-map"],
 )
@@ -742,6 +897,58 @@ async def list_business_map_revisions(id: UUID, request: Request) -> BusinessMap
     principal = await _principal(request)
     _require(principal, "view")
     return await _store(request).business_map_revisions(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/admin/architecture-profiles", response_model=ArchitectureProfileList,
+    response_model_exclude_none=True, operation_id="listArchitectureProfiles", tags=["admin"],
+)
+async def list_architecture_profiles(request: Request) -> ArchitectureProfileList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).list_architecture_profiles(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/admin/architecture-profiles", response_model=ArchitectureProfileDetail, status_code=201,
+    response_model_exclude_none=True, operation_id="createArchitectureProfile", tags=["admin"],
+)
+async def create_architecture_profile(
+    body: ArchitectureProfileCreateRequest, request: Request,
+) -> ArchitectureProfileDetail:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).create_architecture_profile(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.put(
+    "/admin/architecture-profiles/{id}", response_model=ArchitectureProfileDetail,
+    response_model_exclude_none=True, operation_id="updateArchitectureProfile", tags=["admin"],
+)
+async def update_architecture_profile(
+    id: UUID, body: ArchitectureProfileUpdateRequest, request: Request,
+) -> ArchitectureProfileDetail:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_architecture_profile(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/admin/architecture-profiles/{id}/publish", response_model=ArchitectureProfileDetail,
+    response_model_exclude_none=True, operation_id="publishArchitectureProfile", tags=["admin"],
+)
+async def publish_architecture_profile(
+    id: UUID, body: ArchitectureProfilePublishRequest, request: Request,
+) -> ArchitectureProfileDetail:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).publish_architecture_profile(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
 
 
 @router.get(
