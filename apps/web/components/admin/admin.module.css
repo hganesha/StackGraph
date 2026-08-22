@@ -179,6 +179,19 @@
 .subtab:hover {
   color: var(--sg-text-primary);
 }
+.subtabLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  min-inline-size: 0;
+}
+.subtabLabel svg {
+  flex: none;
+  color: var(--sg-text-muted);
+}
+.subtabActive .subtabLabel svg {
+  color: var(--sg-text-secondary);
+}
 .subtab strong {
   font-size: var(--sg-type-small-size);
   font-weight: 500;

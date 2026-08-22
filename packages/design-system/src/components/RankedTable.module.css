@@ -28,7 +28,8 @@
   text-align: end;
 }
 .hDomain {
-  inline-size: 4rem;
+  /* Sized for the glyph + two-letter code badge plus cell padding. */
+  inline-size: 5.5rem;
 }
 .hConf {
   inline-size: 10rem;

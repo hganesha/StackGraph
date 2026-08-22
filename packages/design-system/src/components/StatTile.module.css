@@ -9,10 +9,17 @@
   min-inline-size: 0;
 }
 .label {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+.icon {
+  flex: none;
+  color: var(--sg-text-muted);
 }
 .value {
   font-size: var(--sg-type-h2-size);

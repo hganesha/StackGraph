@@ -1,15 +1,20 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+// [route, page <h1>, left-rail link label] — the rail label is not always the heading.
 const primaryRoutes = [
-  ["/estate", "Software Estate"],
-  ["/applications", "Applications"],
-  ["/technologies", "Technologies"],
-  ["/modernization", "Modernization"],
-  ["/ask", "Ask your estate"],
+  ["/estate", "Software Estate", "Estate"],
+  ["/applications", "Applications", "Applications"],
+  ["/technologies", "Technologies", "Technologies"],
+  ["/modernization", "Modernization", "Modernization"],
+  ["/ask", "Insights", "Insights"],
 ] as const;
 
 async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
+  // On a soft navigation Next swaps the head asynchronously, so <title> can be
+  // momentarily empty. Settle it first or axe reports a spurious document-title
+  // violation on the slower engines.
+  await expect(page).toHaveTitle(/.+/);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
@@ -36,11 +41,12 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
   await skip.press("Enter");
   await expect(page.locator("main#main")).toBeVisible();
 
-  for (const [route, heading] of primaryRoutes) {
+  for (const [route, heading, navLabel] of primaryRoutes) {
     if (testInfo.project.name === "mobile") {
       await page.goto(route);
     } else {
-      await page.getByRole("link", { name: heading === "Ask your estate" ? "Ask" : heading }).click();
+      // Exact: "Estate" would otherwise also match the "Estate Health" rail item.
+      await page.getByRole("link", { name: navLabel, exact: true }).click();
     }
     await expect(page).toHaveURL(new RegExp(`${route.replace("/", "\\/")}$`));
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -78,6 +84,19 @@ test("explicit light and dark themes remain accessible", async ({ page }) => {
     "rgb(180, 178, 170)",
   );
   await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("the about surface introduces the product and stays accessible", async ({ page }) => {
+  await page.goto("/about");
+  await expect(page.getByRole("heading", { level: 1, name: "About StackGraph" })).toBeVisible();
+  // Every namespace is described, so the domain glyphs always have a text label beside them.
+  for (const domain of ["Business", "Enterprise", "Technology", "OSS", "Deployment", "Intelligence"]) {
+    await expect(page.getByRole("heading", { level: 3, name: new RegExp(`^${domain}`) })).toBeVisible();
+  }
+  await expectNoSeriousAccessibilityViolations(page);
+  await page.getByRole("link", { name: /Software Estate/ }).click();
+  await expect(page).toHaveURL(/\/estate$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Software Estate" })).toBeVisible();
 });
 
 test("live source failure is announced without losing the application shell", async ({ page }) => {

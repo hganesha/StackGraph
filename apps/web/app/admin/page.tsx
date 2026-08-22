@@ -4,9 +4,16 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   IconBrain,
+  IconDatabase,
+  IconFileCode,
   IconPlugConnected,
+  IconRefresh,
   IconScale,
+  IconServer2,
+  IconSparkles,
+  IconTrendingUp,
   IconUsers,
+  type Icon,
 } from "@tabler/icons-react";
 import { useCan } from "@/lib/session";
 import { ConnectionsSection } from "@/components/admin/ConnectionsSection";
@@ -19,7 +26,7 @@ import { ServicesSection } from "@/components/admin/ServicesSection";
 import styles from "@/components/admin/admin.module.css";
 
 const TABS = [
-  { key: "data", label: "Data & sources", description: "Connections and refresh", icon: IconPlugConnected },
+  { key: "data", label: "Data & sources", description: "Connections and refresh", icon: IconDatabase },
   { key: "intelligence", label: "Intelligence", description: "AI models and services", icon: IconBrain },
   { key: "governance", label: "Policies & rules", description: "Modernization and code policy", icon: IconScale },
   { key: "access", label: "People & access", description: "Members and roles", icon: IconUsers },
@@ -28,18 +35,18 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 const DATA_VIEWS = [
-  { key: "connections", label: "Connections", detail: "Sources and repositories" },
-  { key: "scan", label: "Scan & refresh", detail: "Cadence, quotas, and rescans" },
+  { key: "connections", label: "Connections", detail: "Sources and repositories", icon: IconPlugConnected },
+  { key: "scan", label: "Scan & refresh", detail: "Cadence, quotas, and rescans", icon: IconRefresh },
 ] as const;
 
 const INTELLIGENCE_VIEWS = [
-  { key: "ai", label: "AI provider", detail: "Models and data residency" },
-  { key: "services", label: "Worker services", detail: "Queues and processing state" },
+  { key: "ai", label: "AI provider", detail: "Models and data residency", icon: IconSparkles },
+  { key: "services", label: "Worker services", detail: "Queues and processing state", icon: IconServer2 },
 ] as const;
 
 const GOVERNANCE_VIEWS = [
-  { key: "modernization", label: "Modernization", detail: "Rules, eligibility, and calibration" },
-  { key: "code", label: "Code policies", detail: "Function technology boundaries" },
+  { key: "modernization", label: "Modernization", detail: "Rules, eligibility, and calibration", icon: IconTrendingUp },
+  { key: "code", label: "Code policies", detail: "Function technology boundaries", icon: IconFileCode },
 ] as const;
 
 function SectionTabs({
@@ -51,27 +58,33 @@ function SectionTabs({
 }: {
   scope: string;
   label: string;
-  items: readonly { key: string; label: string; detail: string }[];
+  items: readonly { key: string; label: string; detail: string; icon: Icon }[];
   active: string;
   onChange: (key: string) => void;
 }) {
   return (
     <div className={styles.subtabs} role="tablist" aria-label={label}>
-      {items.map((item) => (
-        <button
-          key={item.key}
-          id={`${scope}-tab-${item.key}`}
-          className={`${styles.subtab} ${active === item.key ? styles.subtabActive : ""}`}
-          type="button"
-          role="tab"
-          aria-selected={active === item.key}
-          aria-controls={`${scope}-panel-${item.key}`}
-          onClick={() => onChange(item.key)}
-        >
-          <strong>{item.label}</strong>
-          <small>{item.detail}</small>
-        </button>
-      ))}
+      {items.map((item) => {
+        const Glyph = item.icon;
+        return (
+          <button
+            key={item.key}
+            id={`${scope}-tab-${item.key}`}
+            className={`${styles.subtab} ${active === item.key ? styles.subtabActive : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={active === item.key}
+            aria-controls={`${scope}-panel-${item.key}`}
+            onClick={() => onChange(item.key)}
+          >
+            <span className={styles.subtabLabel}>
+              <Glyph size={15} stroke={1.5} aria-hidden="true" />
+              <strong>{item.label}</strong>
+            </span>
+            <small>{item.detail}</small>
+          </button>
+        );
+      })}
     </div>
   );
 }

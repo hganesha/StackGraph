@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useMemo, useState } from "react";
+import { IconCategory, IconChecklist } from "@tabler/icons-react";
 import type { FormEvent } from "react";
 import {
   ApiRequestError,
@@ -256,7 +257,10 @@ export function CodePoliciesSection() {
           aria-controls="code-policy-panel-functions"
           onClick={() => setView("functions")}
         >
-          <strong>Function policies</strong>
+          <span className={styles.subtabLabel}>
+            <IconCategory size={15} stroke={1.5} aria-hidden="true" />
+            <strong>Function policies</strong>
+          </span>
           <small>{state.summary.governed_functions} governed</small>
         </button>
         <button
@@ -268,7 +272,10 @@ export function CodePoliciesSection() {
           aria-controls="code-policy-panel-evaluation"
           onClick={() => setView("evaluation")}
         >
-          <strong>Repository alignment</strong>
+          <span className={styles.subtabLabel}>
+            <IconChecklist size={15} stroke={1.5} aria-hidden="true" />
+            <strong>Repository alignment</strong>
+          </span>
           <small>{state.summary.misaligned_repositories} misaligned</small>
         </button>
       </div>

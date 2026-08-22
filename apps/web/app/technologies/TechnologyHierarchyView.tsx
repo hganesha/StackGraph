@@ -257,7 +257,7 @@ export function TechnologyHierarchyView() {
     <div className={styles.page}>
       <header className={styles.head}>
         <div>
-          <h1 className={styles.title}>Technologies in your estate</h1>
+          <h1 className={styles.title}>Technologies</h1>
           <p className={styles.subtitle}>
             Manifest technologies and their resolved dependencies, limited to connected repositories.
           </p>

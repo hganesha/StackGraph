@@ -155,10 +155,10 @@ export default function AskPage() {
         <h1 className={styles.title}>Insights</h1>
         <p className={styles.subtitle}>
           {mode === "overview"
-            ? "Persistent, evidence-backed reports for enterprise risk, rationalization, and portfolio decisions."
+            ? "Standing reports on enterprise risk, rationalization, and portfolio decisions, rebuilt from current graph facts."
             : businessMapContext
-              ? "Ask across the current business map and the evidence already in your estate."
-              : "Answered from your facts, text-first, always cited, and never generated from model memory."}
+              ? "Questions are answered against the attached business map and the evidence already in your estate."
+              : "Answers are built from facts already recorded in your estate, and each one carries the citations it was drawn from."}
         </p>
         <div className={styles.modeTabs} role="tablist" aria-label="Insight views">
           <button
@@ -294,7 +294,7 @@ function InsightOverview({
 }) {
   if (loading) {
     return (
-      <div className={styles.reportLoading} aria-label="Loading enterprise insight reports">
+      <div className={styles.reportLoading} role="status" aria-label="Loading enterprise insight reports">
         {Array.from({ length: 6 }, (_, index) => <span key={index} />)}
       </div>
     );
