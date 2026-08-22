@@ -99,7 +99,9 @@ class TaxonomySummary(ContractModel):
     summary: str | None = None
 
 
-TechnologyClassification = Literal["CURATED", "CATALOG_MATCH", "UNCLASSIFIED"]
+TechnologyClassification = Literal[
+    "CURATED", "CATALOG_MATCH", "DETERMINISTIC", "UNCLASSIFIED",
+]
 
 
 class TechnologyCatalogProfile(ContractModel):
@@ -123,12 +125,28 @@ class TechnologyCatalogProfile(ContractModel):
     citations: list[Citation] = Field(min_length=1)
 
 
+class ApplicationTechnologyResourceDetails(ContractModel):
+    resource_kind: Literal["DATABASE", "CACHE", "OBJECT_STORAGE"]
+    engine: str = Field(min_length=1)
+    providers: list[str] = Field(default_factory=list)
+    signal_kinds: list[str] = Field(default_factory=list)
+    package_dependencies: list[str] = Field(default_factory=list)
+    config_keys: list[str] = Field(default_factory=list)
+    source_referenced: bool = False
+    inference_method: str | None = None
+    assertion_class: Literal[
+        "DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED",
+    ]
+    limitations: list[str] = Field(default_factory=list)
+
+
 class ApplicationTechnologyUsage(ContractModel):
     technology: EntitySummary
     category: TaxonomySummary | None = None
     classification: TechnologyClassification
     confidence: float = Field(ge=0, le=1)
     confidence_label: ConfidenceLabel
+    resource_details: ApplicationTechnologyResourceDetails | None = None
     citations: list[Citation] = Field(min_length=1)
 
 

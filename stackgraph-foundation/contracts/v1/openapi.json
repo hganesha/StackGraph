@@ -514,6 +514,94 @@
         "title": "ApplicationTechnologyGroup",
         "type": "object"
       },
+      "ApplicationTechnologyResourceDetails": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_class": {
+            "enum": [
+              "DECLARED",
+              "OBSERVED",
+              "INFERRED",
+              "CURATED",
+              "EXTERNAL_MEASURED"
+            ],
+            "title": "Assertion Class",
+            "type": "string"
+          },
+          "config_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Config Keys",
+            "type": "array"
+          },
+          "engine": {
+            "minLength": 1,
+            "title": "Engine",
+            "type": "string"
+          },
+          "inference_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference Method"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "package_dependencies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Package Dependencies",
+            "type": "array"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "resource_kind": {
+            "enum": [
+              "DATABASE",
+              "CACHE",
+              "OBJECT_STORAGE"
+            ],
+            "title": "Resource Kind",
+            "type": "string"
+          },
+          "signal_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Signal Kinds",
+            "type": "array"
+          },
+          "source_referenced": {
+            "default": false,
+            "title": "Source Referenced",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resource_kind",
+          "engine",
+          "assertion_class"
+        ],
+        "title": "ApplicationTechnologyResourceDetails",
+        "type": "object"
+      },
       "ApplicationTechnologyUsage": {
         "additionalProperties": false,
         "properties": {
@@ -539,6 +627,7 @@
             "enum": [
               "CURATED",
               "CATALOG_MATCH",
+              "DETERMINISTIC",
               "UNCLASSIFIED"
             ],
             "title": "Classification",
@@ -558,6 +647,16 @@
             ],
             "title": "Confidence Label",
             "type": "string"
+          },
+          "resource_details": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicationTechnologyResourceDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "technology": {
             "$ref": "#/components/schemas/EntitySummary"
@@ -2093,6 +2192,7 @@
             "enum": [
               "CURATED",
               "CATALOG_MATCH",
+              "DETERMINISTIC",
               "UNCLASSIFIED"
             ],
             "title": "Classification",
@@ -7629,6 +7729,7 @@
             "enum": [
               "CURATED",
               "CATALOG_MATCH",
+              "DETERMINISTIC",
               "UNCLASSIFIED"
             ],
             "title": "Classification",

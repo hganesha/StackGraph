@@ -109,7 +109,7 @@ export interface TaxonomySummary {
   summary?: string;
 }
 
-export type TechnologyClassification = "CURATED" | "CATALOG_MATCH" | "UNCLASSIFIED";
+export type TechnologyClassification = "CURATED" | "CATALOG_MATCH" | "DETERMINISTIC" | "UNCLASSIFIED";
 
 export interface TechnologyCatalogProfile {
   summary?: string | null;
@@ -138,7 +138,21 @@ export interface ApplicationTechnologyUsage {
   classification: TechnologyClassification;
   confidence: Confidence;
   confidence_label: ConfidenceLabel;
+  resource_details?: ApplicationTechnologyResourceDetails | null;
   citations: Citation[];
+}
+
+export interface ApplicationTechnologyResourceDetails {
+  resource_kind: "DATABASE" | "CACHE" | "OBJECT_STORAGE";
+  engine: string;
+  providers: string[];
+  signal_kinds: string[];
+  package_dependencies: string[];
+  config_keys: string[];
+  source_referenced: boolean;
+  inference_method?: string | null;
+  assertion_class: AssertionClass;
+  limitations: string[];
 }
 
 export interface ApplicationTechnologyFunction {

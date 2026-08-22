@@ -47,7 +47,19 @@ function sourceCount(citations: Citation[]): string {
 function classificationLabel(classification: ApplicationTechnologyUsage["classification"]): string {
   if (classification === "CURATED") return "Curated catalog";
   if (classification === "CATALOG_MATCH") return "Exact catalog match";
+  if (classification === "DETERMINISTIC") return "Repository evidence";
   return "Needs classification";
+}
+
+function readableValue(value: string): string {
+  return value
+    .toLocaleLowerCase()
+    .replaceAll("_", " ")
+    .replace(/(^|\s)\S/g, (character) => character.toLocaleUpperCase());
+}
+
+function valueList(values: string[]): string {
+  return values.map(readableValue).join(", ");
 }
 
 function matchesQuery(item: TechnologyItem, query: string): boolean {
@@ -58,6 +70,11 @@ function matchesQuery(item: TechnologyItem, query: string): boolean {
     item.usage.category?.name,
     item.domain.name,
     item.function.name,
+    item.usage.resource_details?.engine,
+    ...(item.usage.resource_details?.providers ?? []),
+    ...(item.usage.resource_details?.signal_kinds ?? []),
+    ...(item.usage.resource_details?.package_dependencies ?? []),
+    ...(item.usage.resource_details?.config_keys ?? []),
   ]
     .filter(Boolean)
     .join(" ")
@@ -139,6 +156,7 @@ function TechnologyInspector({
   }
 
   const citations = uniqueCitations(item.usage.citations);
+  const resource = item.usage.resource_details;
 
   return (
     <aside className={styles.technologyInspector} aria-label={`Inspecting ${item.usage.technology.name}`}>
@@ -168,7 +186,40 @@ function TechnologyInspector({
             </dd>
           </>
         ) : null}
+        {resource ? (
+          <>
+            <dt>Resource type</dt>
+            <dd>{readableValue(resource.resource_kind)}</dd>
+            <dt>Engine</dt>
+            <dd className="sg-mono">{resource.engine}</dd>
+            <dt>Evidence class</dt>
+            <dd>{readableValue(resource.assertion_class)}</dd>
+            {resource.providers.length > 0 ? (
+              <><dt>Providers</dt><dd>{valueList(resource.providers)}</dd></>
+            ) : null}
+            {resource.signal_kinds.length > 0 ? (
+              <><dt>Detection signals</dt><dd>{valueList(resource.signal_kinds)}</dd></>
+            ) : null}
+            {resource.package_dependencies.length > 0 ? (
+              <><dt>Client packages</dt><dd className="sg-mono">{resource.package_dependencies.join(", ")}</dd></>
+            ) : null}
+            {resource.config_keys.length > 0 ? (
+              <><dt>Configuration keys</dt><dd className="sg-mono">{resource.config_keys.join(", ")}</dd></>
+            ) : null}
+            <dt>Source referenced</dt>
+            <dd>{resource.source_referenced ? "Observed in source" : "Not observed in source"}</dd>
+          </>
+        ) : null}
       </dl>
+
+      {resource?.limitations.length ? (
+        <details className={styles.detectionLimitations}>
+          <summary>Detection limitations</summary>
+          <ul>
+            {resource.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
+          </ul>
+        </details>
+      ) : null}
 
       <section className={styles.inspectorEvidence} aria-labelledby="technology-evidence-heading">
         <div className={styles.inspectorSectionHead}>
