@@ -22,6 +22,7 @@ ENVIRONMENT_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,126}$")
 REFERENCE_SCHEMES = {
     "env",
     "github-app",
+    "tenant-secret",
     "vault",
     "aws-secrets",
     "gcp-secrets",
@@ -534,6 +535,35 @@ def resolve_environment_credential(
     if value is None or not value.strip():
         raise ValueError(f"credential reference is not available in the runtime: {variable}")
     return value.strip()
+
+
+def resolve_tenant_secret_credential(
+    credential_reference: str,
+    *,
+    database_url: str,
+    tenant_id: UUID,
+    encryption_key: str,
+) -> str:
+    """Resolve a tenant token without exposing it through an API or connector row."""
+    validate_credential_reference(credential_reference)
+    parsed = urlsplit(credential_reference)
+    if parsed.scheme != "tenant-secret" or parsed.netloc != "github-token" or parsed.path not in {"", "/"}:
+        raise ValueError("tenant secret credential reference is invalid")
+    if not encryption_key:
+        raise ValueError("STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY is required for tenant secrets")
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        row = connection.execute(
+            """
+            SELECT pgp_sym_decrypt(ciphertext,%s)::text token
+            FROM tenant_secret
+            WHERE tenant_id=%s AND secret_kind='GITHUB_TOKEN'
+            ORDER BY updated_at DESC,id DESC LIMIT 1
+            """,
+            (encryption_key, tenant_id),
+        ).fetchone()
+    if row is None or not str(row["token"]).strip():
+        raise ValueError("the tenant GitHub token is not configured")
+    return str(row["token"]).strip()
 
 
 def as_json(value: object) -> dict[str, Any]:

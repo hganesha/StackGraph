@@ -450,7 +450,8 @@ CREATE TABLE projection_outbox (
 CREATE TABLE dead_letter(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid REFERENCES tenant(id),source_kind text NOT NULL,source_id text NOT NULL,error_class text NOT NULL,error_detail jsonb NOT NULL,replay_metadata jsonb NOT NULL DEFAULT '{}',failed_at timestamptz NOT NULL DEFAULT now(),replayed_at timestamptz,replay_run_id uuid REFERENCES ingest_run(id));
 CREATE TABLE freshness_state(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid REFERENCES tenant(id),ingest_target_id uuid NOT NULL REFERENCES ingest_target(id) ON DELETE CASCADE,expected_by timestamptz,last_observed_at timestamptz,last_source_revision text,status text NOT NULL CHECK(status IN ('FRESH','STALE','UNKNOWN','ERROR')),limitations jsonb NOT NULL DEFAULT '[]',updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(ingest_target_id));
 
-CREATE TABLE tenant_secret(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),secret_kind text NOT NULL CHECK(secret_kind IN ('AI_PROVIDER_KEY')),ciphertext bytea NOT NULL,fingerprint text NOT NULL CHECK(length(fingerprint)=4),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE tenant_secret(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),secret_kind text NOT NULL CHECK(secret_kind IN ('AI_PROVIDER_KEY','GITHUB_TOKEN')),ciphertext bytea NOT NULL,fingerprint text NOT NULL CHECK(length(fingerprint)=4),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX uq_tenant_secret_github_token ON tenant_secret(tenant_id,secret_kind) WHERE secret_kind='GITHUB_TOKEN';
 CREATE TABLE tenant_ai_configuration(tenant_id uuid PRIMARY KEY REFERENCES tenant(id),provider text NOT NULL CHECK(provider IN ('openrouter','openai','anthropic')),model text NOT NULL DEFAULT '',credential_secret_id uuid REFERENCES tenant_secret(id) ON DELETE SET NULL,enabled boolean NOT NULL DEFAULT true,test_status text NOT NULL DEFAULT 'NOT_TESTED' CHECK(test_status IN ('NOT_TESTED','SUCCEEDED','FAILED')),tested_at timestamptz,last_error text,updated_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
 
 -- Business Map persistence (migration 009). Catalog rows (function/process/capability) carry a
@@ -713,5 +714,6 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('020_tenant_code_policies.sql','c78098a3eb691070831f3448d8cdc0ad46597087c10041f3e4823b3591b2a108'), -- gitleaks:allow; migration checksum, not a credential
  ('021_deterministic_insight_governance.sql','741451035d0b49df9f8187185f0524fed8b88101d83ba17e03e890deb7192d87'), -- gitleaks:allow; migration checksum, not a credential
  ('022_deterministic_insight_indexes.sql','b0e13c29673c0eccf72f8617d2b7dcf5555b23b6efee101ce72794d6eb2acaaf'), -- gitleaks:allow; migration checksum, not a credential
- ('023_phase2_code_context.sql','c119f0aaf866a6b27b1529c626a6edebb8f7856364052777153b42b35af525e9'); -- gitleaks:allow; migration checksum, not a credential
+ ('023_phase2_code_context.sql','c119f0aaf866a6b27b1529c626a6edebb8f7856364052777153b42b35af525e9'), -- gitleaks:allow; migration checksum, not a credential
+ ('024_tenant_github_token.sql','6fd0c1bcc1a04eb9b31ecf0ec05855276b74c7c7e0f1883b73713c81ab22abb5'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

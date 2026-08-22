@@ -23,11 +23,12 @@ const PROVIDER_LABELS = {
 } as const;
 
 /** Connections — onboarding home (plan §11.2A). The UI registers authorized App installations
- *  and stores only a credential reference; it never accepts or displays a raw token. */
+ *  and stores encrypted credentials through write-only controls; it never displays a raw token. */
 export function ConnectionsSection() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [repository, setRepository] = useState("");
+  const [githubToken, setGitHubToken] = useState("");
   const [installationId, setInstallationId] = useState("");
   const [installationName, setInstallationName] = useState("");
   const [manualBindingAcknowledged, setManualBindingAcknowledged] = useState(false);
@@ -42,6 +43,25 @@ export function ConnectionsSection() {
     queryFn: () => stackGraphClient.listAvailableGitHubRepositories(),
     enabled: showForm && connectionMode === "repository",
     staleTime: 30_000,
+  });
+  const tokenConfiguration = useQuery({
+    queryKey: ["admin", "github", "token"],
+    queryFn: () => stackGraphClient.getGitHubTokenConfiguration(),
+    enabled: showForm && connectionMode === "repository",
+  });
+  const saveToken = useMutation({
+    mutationFn: () => stackGraphClient.updateGitHubToken({ token: githubToken }),
+    onSuccess: async () => {
+      setGitHubToken("");
+      await queryClient.invalidateQueries({ queryKey: ["admin", "github"] });
+    },
+  });
+  const removeToken = useMutation({
+    mutationFn: () => stackGraphClient.removeGitHubToken(),
+    onSuccess: async () => {
+      setRepository("");
+      await queryClient.invalidateQueries({ queryKey: ["admin", "github"] });
+    },
   });
   const connect = useMutation({
     mutationFn: () => stackGraphClient.connectGitHubRepository({ repository: repository.trim() }),
@@ -96,8 +116,8 @@ export function ConnectionsSection() {
   return (
     <div className={styles.section}>
       <p className={styles.sectionNote}>
-        Connect source and registry providers. StackGraph stores only a credential reference — never a raw token,
-        PAT, or password. Read-only scopes are requested.
+        Connect source and registry providers. Tokens are accepted only through write-only controls, encrypted at
+        rest, and never displayed. Read-only scopes are requested.
       </p>
 
       <button type="button" className={styles.primaryWide} onClick={() => setShowForm((open) => !open)}>
@@ -193,6 +213,49 @@ export function ConnectionsSection() {
               </label>
             </>
           ) : (
+            <>
+            <label className={styles.field}>
+              <span className={styles.label}>GitHub token</span>
+              <input
+                className={styles.input}
+                type="password"
+                value={githubToken}
+                onChange={(event) => setGitHubToken(event.target.value)}
+                placeholder={tokenConfiguration.data?.configured ? "Enter a replacement token" : "github_pat_…"}
+                minLength={8}
+                maxLength={8192}
+                autoComplete="new-password"
+              />
+              <span className={styles.help}>
+                {tokenConfiguration.isLoading
+                  ? "Checking token configuration…"
+                  : tokenConfiguration.data?.configured
+                    ? `A ${tokenConfiguration.data.source === "TENANT_SECRET" ? "workspace" : "deployment"} token ending in ${tokenConfiguration.data.fingerprint ?? "••••"} is configured.`
+                    : "No GitHub token is configured. Use a fine-grained, read-only token."}
+              </span>
+              <span className={styles.repositoryPickerActions}>
+                <button
+                  type="button"
+                  className={styles.primary}
+                  disabled={saveToken.isPending || githubToken.trim().length < 8}
+                  onClick={() => saveToken.mutate()}
+                >
+                  {saveToken.isPending ? "Saving token…" : tokenConfiguration.data?.configured ? "Replace token" : "Save token"}
+                </button>
+                {tokenConfiguration.data?.source === "TENANT_SECRET" ? (
+                  <button
+                    type="button"
+                    className={styles.linkButton}
+                    disabled={removeToken.isPending}
+                    onClick={() => removeToken.mutate()}
+                  >
+                    {removeToken.isPending ? "Removing…" : "Remove token"}
+                  </button>
+                ) : null}
+              </span>
+              {saveToken.isError ? <span className={styles.error} role="alert">{errorMessage(saveToken.error)}</span> : null}
+              {removeToken.isError ? <span className={styles.error} role="alert">{errorMessage(removeToken.error)}</span> : null}
+            </label>
             <label className={styles.field}>
               <span className={styles.label}>Repository</span>
               <select
@@ -212,7 +275,7 @@ export function ConnectionsSection() {
                   {availableRepositories.isLoading || availableRepositories.isFetching
                     ? "Loading repositories…"
                     : availableRepositories.data?.token_configured === false
-                      ? "GITHUB_TOKEN is not configured"
+                      ? "Save a GitHub token above"
                       : availableRepositories.data?.repositories.length === 0
                         ? "No unconnected repositories available"
                         : "Select a repository…"}
@@ -227,7 +290,7 @@ export function ConnectionsSection() {
               </select>
               <span className={styles.help}>
                 {availableRepositories.data?.token_configured === false
-                  ? "Set GITHUB_TOKEN in the API and pipeline environment, then restart the services."
+                  ? "Save a read-only GitHub token above, then choose a repository."
                   : "Only repositories visible to GITHUB_TOKEN and not already in StackGraph are shown."}
               </span>
               <span className={styles.repositoryPickerActions}>
@@ -245,6 +308,7 @@ export function ConnectionsSection() {
                 <span className={styles.error} role="alert">{errorMessage(availableRepositories.error)}</span>
               ) : null}
             </label>
+            </>
           )}
           <div className={styles.residency}>
             <span className={styles.residencyLabel}>Credential boundary</span>
@@ -252,7 +316,7 @@ export function ConnectionsSection() {
               {connectionMode === "installation" ? (
                 <>The worker mints short-lived installation tokens from the deployment’s GitHub App key. Neither the key nor tokens enter this form or the database.</>
               ) : (
-                <>Set <span className="sg-mono">GITHUB_TOKEN</span> in the API and pipeline environment. StackGraph saves only <span className="sg-mono">env://GITHUB_TOKEN</span>.</>
+                <>Tokens entered here are encrypted at rest, accepted write-only, and resolved by the scan worker through an opaque workspace secret reference.</>
               )}
             </span>
           </div>

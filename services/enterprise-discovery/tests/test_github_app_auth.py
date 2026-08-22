@@ -4,6 +4,8 @@ import base64
 import json
 import unittest
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
+from uuid import UUID
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -116,6 +118,27 @@ class GitHubAppAuthenticationTests(unittest.TestCase):
                 },
                 broker=broker,
             )
+
+    def test_runtime_resolver_supports_encrypted_tenant_token_reference(self) -> None:
+        tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+        with patch(
+            "stackgraph_discovery.github_installation_store.resolve_tenant_secret_credential",
+            return_value="github-token-from-database",
+        ) as resolve:
+            value = resolve_runtime_credential(
+                "tenant-secret://github-token",
+                database_url="postgresql://database/stackgraph",
+                tenant_id=tenant_id,
+                credential_encryption_key="encryption-key-with-at-least-32-chars",
+            )
+
+        self.assertEqual(value, "github-token-from-database")
+        resolve.assert_called_once_with(
+            "tenant-secret://github-token",
+            database_url="postgresql://database/stackgraph",
+            tenant_id=tenant_id,
+            encryption_key="encryption-key-with-at-least-32-chars",
+        )
 
 
 def _decode_segment(value: str) -> dict[str, object]:

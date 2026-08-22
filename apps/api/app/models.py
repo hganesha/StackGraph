@@ -1365,6 +1365,24 @@ class GitHubRepositoryOptionList(ContractModel):
     truncated: bool = False
 
 
+class GitHubTokenConfiguration(ContractModel):
+    """Write-only tenant GitHub token status.
+
+    The token value is encrypted at rest and is never returned by the API.
+    """
+
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    configured: bool = False
+    fingerprint: str | None = None
+    source: Literal["TENANT_SECRET", "ENVIRONMENT", "NONE"] = "NONE"
+    updated_by: str | None = None
+    updated_at: datetime | None = None
+
+
+class GitHubTokenUpdateRequest(ContractModel):
+    token: str = Field(min_length=8, max_length=8192)
+
+
 class GitHubInstallationConnectRequest(ContractModel):
     """Bind an already-authorized GitHub App installation to this tenant.
 

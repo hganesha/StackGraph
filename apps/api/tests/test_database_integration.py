@@ -797,10 +797,30 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                               "external_account_key": "acme", "scopes": ["repo:read"],
                               "credential_reference": "vault://gh/acme"},
                     )
+                    github_token_saved = await client.put(
+                        "/admin/github/token",
+                        json={"token": "integration-github-token-9012"},
+                    )
+                    github_token_read = await client.get("/admin/github/token")
                     repository = await client.post(
                         "/admin/github/repositories",
                         json={"repository": "acme/billing"},
                     )
+                    with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
+                        configure_tenant(connection)
+                        github_secret = connection.execute(
+                            """
+                            SELECT encode(secret.ciphertext,'hex') ciphertext,
+                                   pgp_sym_decrypt(secret.ciphertext,%s)::text plaintext,
+                                   account.credential_reference
+                            FROM tenant_secret secret
+                            JOIN connector_account account
+                              ON account.tenant_id=secret.tenant_id
+                             AND account.external_account_key='github:repository:acme/billing'
+                            WHERE secret.tenant_id=%s AND secret.secret_kind='GITHUB_TOKEN'
+                            """,
+                            ("stackgraph-local-development-credential-key", tenant_id),
+                        ).fetchone()
                     installation = await client.post(
                         "/admin/github/installations",
                         json={
@@ -894,29 +914,40 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
                         encryption_key="stackgraph-local-development-credential-key",
                     )
                     ai_removed = await client.delete("/admin/ai-configuration/key")
+                    github_token_removed = await client.delete("/admin/github/token")
                     governance = await client.get("/admin/modernization-governance")
                     ecosystem = await client.put(
                         "/admin/modernization-governance/ecosystems/PYPI",
                         json={"minimum_repositories": 1, "minimum_dependency_share": 0.01},
                     )
                     return (
-                        member, members, connector, repository, installation,
+                        member, members, connector, github_token_saved, github_token_read,
+                        github_secret, repository, installation,
                         hosted_setup, hosted_installation, hosted_replay, policy,
                         rescan_a, rescan_b, status, services, raw, ai_saved, ai_read,
-                        tenant_ai, ai_removed, governance, ecosystem,
+                        tenant_ai, ai_removed, github_token_removed, governance, ecosystem,
                     )
 
         (
-            member, members, connector, repository, installation,
+            member, members, connector, github_token_saved, github_token_read,
+            github_secret, repository, installation,
             hosted_setup, hosted_installation, hosted_replay, policy, rescan_a,
             rescan_b, status, services, raw, ai_saved, ai_read, tenant_ai, ai_removed,
-            governance, ecosystem,
+            github_token_removed, governance, ecosystem,
         ) = asyncio.run(exercise())
 
         assert member.status_code == 201 and member.json()["role"] == "review"
         assert members.status_code == 200 and len(members.json()["members"]) == 1
         assert connector.status_code == 201 and connector.json()["provider"] == "GITHUB_APP"
         assert "credential_reference" not in connector.json()  # never surfaced
+        assert github_token_saved.status_code == 200
+        assert github_token_saved.json()["fingerprint"] == "9012"
+        assert "token" not in github_token_saved.json()
+        assert github_token_read.json()["source"] == "TENANT_SECRET"
+        assert github_secret is not None
+        assert "integration-github-token-9012" not in github_secret["ciphertext"]
+        assert github_secret["plaintext"] == "integration-github-token-9012"
+        assert github_secret["credential_reference"] == "tenant-secret://github-token"
         assert repository.status_code == 201
         assert repository.json()["external_account_key"] == "github:repository:acme/billing"
         assert installation.status_code == 201
@@ -952,6 +983,8 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert tenant_ai.openrouter_api_key == "integration-secret-5678"
         assert ai_removed.json()["key_configured"] is False
         assert ai_removed.json()["enrichment_status"] == "DISABLED"
+        assert github_token_removed.json()["configured"] is False
+        assert github_token_removed.json()["source"] == "NONE"
         assert governance.status_code == 200
         assert [item["ecosystem"] for item in governance.json()["ecosystem_admissions"]] == [
             "PYPI", "MAVEN", "CARGO", "NUGET",

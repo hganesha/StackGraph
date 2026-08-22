@@ -676,6 +676,19 @@ export interface GitHubRepositoryOptionList {
   truncated?: boolean;
 }
 
+export interface GitHubTokenConfiguration {
+  configured?: boolean;
+  contract_version?: "1.0.0";
+  fingerprint?: string | null;
+  source?: "TENANT_SECRET" | "ENVIRONMENT" | "NONE";
+  updated_at?: string | null;
+  updated_by?: string | null;
+}
+
+export interface GitHubTokenUpdateRequest {
+  token: string;
+}
+
 export interface GraphEdge {
   assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
   citation_fact_ids: Array<string>;

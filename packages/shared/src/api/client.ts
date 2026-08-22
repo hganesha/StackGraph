@@ -65,6 +65,8 @@ import type {
   ConnectorRegisterRequest,
   GitHubRepositoryConnectRequest,
   GitHubRepositoryOptionList,
+  GitHubTokenConfiguration,
+  GitHubTokenUpdateRequest,
   GitHubInstallationConnectRequest,
   GitHubInstallationSetupRequest,
   GitHubInstallationSetupResponse,
@@ -163,6 +165,9 @@ export interface StackGraphClient {
   listConnectors(): Promise<ConnectorList>;
   registerConnector(body: ConnectorRegisterRequest): Promise<Connector>;
   listAvailableGitHubRepositories(): Promise<GitHubRepositoryOptionList>;
+  getGitHubTokenConfiguration(): Promise<GitHubTokenConfiguration>;
+  updateGitHubToken(body: GitHubTokenUpdateRequest): Promise<GitHubTokenConfiguration>;
+  removeGitHubToken(): Promise<GitHubTokenConfiguration>;
   connectGitHubRepository(body: GitHubRepositoryConnectRequest): Promise<Connector>;
   connectGitHubInstallation(body: GitHubInstallationConnectRequest): Promise<Connector>;
   startGitHubInstallationSetup(body: GitHubInstallationSetupRequest): Promise<GitHubInstallationSetupResponse>;
@@ -215,6 +220,10 @@ let adminAIConfiguration: AIProviderConfiguration = {
   contract_version: "1.0.0", provider: "anthropic", model: "", enabled: true,
   key_configured: false, test_status: "NOT_TESTED", enrichment_status: "DISABLED",
   pending_enrichment_jobs: 0, running_enrichment_jobs: 0, failed_enrichment_jobs: 0,
+};
+let adminGitHubTokenConfiguration: GitHubTokenConfiguration = {
+  contract_version: "1.0.0", configured: true, fingerprint: "demo",
+  source: "ENVIRONMENT",
 };
 let adminModernizationGovernance = clone(
   modernizationGovernance as ModernizationGovernanceState,
@@ -643,6 +652,29 @@ const fixtureClient: StackGraphClient = {
         { full_name: "acme/public-design-system", visibility: "public" as const, archived: false, default_branch: "main" },
       ].filter((repository) => !connected.has(repository.full_name.toLowerCase())),
     };
+  },
+  async getGitHubTokenConfiguration() {
+    await delay();
+    return clone(adminGitHubTokenConfiguration);
+  },
+  async updateGitHubToken(body) {
+    await delay();
+    adminGitHubTokenConfiguration = {
+      contract_version: "1.0.0",
+      configured: true,
+      fingerprint: body.token.slice(-4),
+      source: "TENANT_SECRET",
+      updated_by: "fixture-admin",
+      updated_at: new Date().toISOString(),
+    };
+    return clone(adminGitHubTokenConfiguration);
+  },
+  async removeGitHubToken() {
+    await delay();
+    adminGitHubTokenConfiguration = {
+      contract_version: "1.0.0", configured: false, source: "NONE",
+    };
+    return clone(adminGitHubTokenConfiguration);
   },
   async connectGitHubInstallation(body) {
     return this.registerConnector({
@@ -1146,6 +1178,10 @@ const liveClient: StackGraphClient = {
   registerConnector: (body) =>
     req("/admin/connectors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listAvailableGitHubRepositories: () => req("/admin/github/repositories/available"),
+  getGitHubTokenConfiguration: () => req("/admin/github/token"),
+  updateGitHubToken: (body) =>
+    req("/admin/github/token", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  removeGitHubToken: () => req("/admin/github/token", { method: "DELETE" }),
   connectGitHubRepository: (body) =>
     req("/admin/github/repositories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   connectGitHubInstallation: (body) =>

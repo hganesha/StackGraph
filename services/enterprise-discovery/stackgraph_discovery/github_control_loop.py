@@ -329,7 +329,14 @@ def _reconcile_installation(database_url: str, claimed: ClaimedRun) -> str:
     _renew_lease(database_url, claimed)
     installation_id = _required_policy_string(claimed.refresh_policy, "installation_id")
     token = resolve_runtime_credential(
-        claimed.credential_reference, installation_id=installation_id,
+        claimed.credential_reference,
+        installation_id=installation_id,
+        database_url=database_url,
+        tenant_id=claimed.tenant_id,
+        credential_encryption_key=os.getenv(
+            "STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY",
+            "stackgraph-local-development-credential-key",
+        ),
     )
     client = _client(token)
     snapshot = InstallationRepositoryDiscovery(client).discover(installation_id)
@@ -354,10 +361,42 @@ def _acquire_scan_publish(
     if not direct_repository and repository_id is None:
         raise ValueError("refresh policy repository_id must be a non-empty string")
     full_name = _required_policy_string(policy, "full_name")
-    token = resolve_runtime_credential(
-        claimed.credential_reference, installation_id=installation_id,
-    )
     previous_revision = _previous_revision(database_url, claimed.target_id)
+    if (
+        previous_revision is not None
+        and repository_id is not None
+        and not _scanner_snapshot_exists(database_url, claimed.target_id, previous_revision)
+    ):
+        try:
+            request, raw_observation = _cached_scanner_request(
+                claimed,
+                repository_id=repository_id,
+                source_revision=previous_revision,
+                snapshot_root=snapshot_root,
+            )
+        except FileNotFoundError:
+            # The durable source artifact may have been aged out. In that case the
+            # provider is the only safe way to materialize the revision again.
+            pass
+        else:
+            _renew_lease(database_url, claimed)
+            return _scan_publish_request(
+                database_url,
+                claimed,
+                request=request,
+                raw_observation=raw_observation,
+                source_revision=previous_revision,
+            )
+    token = resolve_runtime_credential(
+        claimed.credential_reference,
+        installation_id=installation_id,
+        database_url=database_url,
+        tenant_id=claimed.tenant_id,
+        credential_encryption_key=os.getenv(
+            "STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY",
+            "stackgraph-local-development-credential-key",
+        ),
+    )
     _renew_lease(database_url, claimed)
     result = GitHubRepositoryAcquirer(_client(token)).acquire(
         full_name,

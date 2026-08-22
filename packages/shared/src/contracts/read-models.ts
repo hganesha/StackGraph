@@ -1074,6 +1074,20 @@ export interface GitHubRepositoryOptionList {
   truncated: boolean;
 }
 
+export interface GitHubTokenConfiguration {
+  contract_version: "1.0.0";
+  configured: boolean;
+  fingerprint?: string | null;
+  source: "TENANT_SECRET" | "ENVIRONMENT" | "NONE";
+  updated_by?: string | null;
+  updated_at?: string | null;
+}
+
+export interface GitHubTokenUpdateRequest {
+  /** Write-only GitHub token; the API never returns this value. */
+  token: string;
+}
+
 export interface GitHubInstallationConnectRequest {
   /** Public GitHub App installation identifier; no credential material crosses the browser. */
   installation_id: string;

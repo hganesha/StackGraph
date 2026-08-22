@@ -60,6 +60,7 @@ from app.models import (
     ConnectorList,
     GitHubRepositoryOption,
     GitHubRepositoryOptionList,
+    GitHubTokenConfiguration,
     ScanPolicy,
     ScanStatus,
     ServiceStatus,
@@ -383,6 +384,26 @@ class StubReadModels:
                 full_name="acme/platform", visibility="private", default_branch="main",
             )],
         )
+
+    async def get_github_token_configuration(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return GitHubTokenConfiguration(
+            configured=True, fingerprint="1234", source="TENANT_SECRET",
+            updated_by="operator", updated_at=NOW,
+        )
+
+    async def update_github_token(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return GitHubTokenConfiguration(
+            configured=True, fingerprint=request.token[-4:], source="TENANT_SECRET",
+            updated_by=actor_key, updated_at=NOW,
+        )
+
+    async def remove_github_token(self, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return GitHubTokenConfiguration(configured=False, source="NONE")
 
     async def connect_github_installation(self, request, *, tenant_id, actor_key):
         self.last_tenant_id = tenant_id
@@ -1075,6 +1096,9 @@ def test_admin_routes_require_admin_capability() -> None:
         ("POST", "/api/v1/admin/members", {"actor_key": "x", "role": "view"}),
         ("GET", "/api/v1/admin/connectors", None),
         ("GET", "/api/v1/admin/github/repositories/available", None),
+        ("GET", "/api/v1/admin/github/token", None),
+        ("PUT", "/api/v1/admin/github/token", {"token": "github-token"}),
+        ("DELETE", "/api/v1/admin/github/token", None),
         ("GET", "/api/v1/admin/modernization-governance", None),
         (
             "PUT", "/api/v1/admin/modernization-governance/ecosystems/PYPI",
@@ -1224,6 +1248,29 @@ def test_available_github_repositories_are_admin_visible() -> None:
         "default_branch": "main",
     }]
     assert store.last_tenant_id == TENANT
+
+
+def test_github_token_is_write_only_and_forwards_actor() -> None:
+    app, store = _signed_app()
+    authorization = {"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"}
+    saved = asyncio.run(request(
+        app, "PUT", "/api/v1/admin/github/token",
+        headers=authorization,
+        json={"token": "github-secret-5678"},
+    ))
+    read = asyncio.run(request(
+        app, "GET", "/api/v1/admin/github/token", headers=authorization,
+    ))
+    removed = asyncio.run(request(
+        app, "DELETE", "/api/v1/admin/github/token", headers=authorization,
+    ))
+
+    assert saved.status_code == 200
+    assert saved.json()["fingerprint"] == "5678"
+    assert "token" not in saved.json()
+    assert read.status_code == 200 and read.json()["source"] == "TENANT_SECRET"
+    assert removed.status_code == 200 and removed.json()["configured"] is False
+    assert store.last_actor_key == "operator"
 
 
 def test_connect_github_installation_queues_reconciliation() -> None:

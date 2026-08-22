@@ -76,6 +76,8 @@ from app.models import (
     ConnectorRegisterRequest,
     GitHubRepositoryConnectRequest,
     GitHubRepositoryOptionList,
+    GitHubTokenConfiguration,
+    GitHubTokenUpdateRequest,
     ConnectorUpdateRequest,
     GitHubInstallationConnectRequest,
     GitHubInstallationSetupRequest,
@@ -233,6 +235,15 @@ class ReadModelsProtocol(Protocol):
     async def list_available_github_repositories(
         self, *, tenant_id: UUID | None,
     ) -> GitHubRepositoryOptionList: ...
+    async def get_github_token_configuration(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubTokenConfiguration: ...
+    async def update_github_token(
+        self, request: GitHubTokenUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> GitHubTokenConfiguration: ...
+    async def remove_github_token(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> GitHubTokenConfiguration: ...
     async def connect_github_installation(
         self, request: GitHubInstallationConnectRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> Connector: ...
@@ -847,6 +858,42 @@ async def list_available_github_repositories(request: Request) -> GitHubReposito
     _require(principal, "admin")
     return await _store(request).list_available_github_repositories(
         tenant_id=principal.tenant_id,
+    )
+
+
+@router.get(
+    "/admin/github/token", response_model=GitHubTokenConfiguration,
+    response_model_exclude_none=True, operation_id="getGitHubTokenConfiguration", tags=["admin"],
+)
+async def get_github_token_configuration(request: Request) -> GitHubTokenConfiguration:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).get_github_token_configuration(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/admin/github/token", response_model=GitHubTokenConfiguration,
+    response_model_exclude_none=True, operation_id="updateGitHubToken", tags=["admin"],
+)
+async def update_github_token(
+    body: GitHubTokenUpdateRequest, request: Request,
+) -> GitHubTokenConfiguration:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_github_token(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.delete(
+    "/admin/github/token", response_model=GitHubTokenConfiguration,
+    response_model_exclude_none=True, operation_id="removeGitHubToken", tags=["admin"],
+)
+async def remove_github_token(request: Request) -> GitHubTokenConfiguration:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).remove_github_token(
+        tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

@@ -72,6 +72,10 @@ class EstateDatabaseStub:
 
 
 class GitHubRepositoryDatabaseStub:
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        assert "secret_kind='GITHUB_TOKEN'" in query
+        return None
+
     async def fetch_all(self, query, params=None, *, tenant_id=None):
         assert "target.target_kind='REPOSITORY'" in query
         return [{"repository_name": "acme/already-connected"}]
@@ -715,13 +719,16 @@ def test_available_github_repositories_filter_connected_estate_repositories() ->
     assert result.repositories[0].archived is True
 
 
-def test_available_github_repositories_report_unconfigured_token_without_database_access() -> None:
-    class UnexpectedDatabase:
+def test_available_github_repositories_report_unconfigured_token() -> None:
+    class UnconfiguredDatabase:
+        async def fetch_one(self, *args, **kwargs):
+            return None
+
         async def fetch_all(self, *args, **kwargs):
-            raise AssertionError("database should not be queried without a token")
+            raise AssertionError("connected repositories should not be queried without a token")
 
     with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
-        result = asyncio.run(ReadModelStore(UnexpectedDatabase()).list_available_github_repositories(
+        result = asyncio.run(ReadModelStore(UnconfiguredDatabase()).list_available_github_repositories(
             tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
         ))
 

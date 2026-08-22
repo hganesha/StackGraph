@@ -343,6 +343,7 @@ services:
     restart: unless-stopped
     environment:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
       STACKGRAPH_EVIDENCE_STORE_ROOT: /evidence
       STACKGRAPH_EVIDENCE_S3_BUCKET: ${STACKGRAPH_EVIDENCE_S3_BUCKET:-}
       STACKGRAPH_EVIDENCE_S3_PREFIX: ${STACKGRAPH_EVIDENCE_S3_PREFIX:-stackgraph-evidence}

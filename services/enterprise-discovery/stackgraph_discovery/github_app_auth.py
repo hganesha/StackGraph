@@ -12,6 +12,7 @@ from typing import Any, Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+from uuid import UUID
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -199,13 +200,29 @@ def resolve_runtime_credential(
     installation_id: str | None = None,
     environment: Mapping[str, str] | None = None,
     broker: GitHubAppTokenBroker | None = None,
+    database_url: str | None = None,
+    tenant_id: UUID | None = None,
+    credential_encryption_key: str | None = None,
 ) -> str:
-    from .github_installation_store import resolve_environment_credential, validate_credential_reference
+    from .github_installation_store import (
+        resolve_environment_credential,
+        resolve_tenant_secret_credential,
+        validate_credential_reference,
+    )
 
     validate_credential_reference(credential_reference)
     parsed = urlsplit(credential_reference)
     if parsed.scheme == "env":
         return resolve_environment_credential(credential_reference, environment)
+    if parsed.scheme == "tenant-secret":
+        if database_url is None or tenant_id is None or credential_encryption_key is None:
+            raise ValueError("database URL, tenant ID, and encryption key are required for tenant secrets")
+        return resolve_tenant_secret_credential(
+            credential_reference,
+            database_url=database_url,
+            tenant_id=tenant_id,
+            encryption_key=credential_encryption_key,
+        )
     if parsed.scheme != "github-app":
         raise ValueError("this runtime can resolve only env:// or github-app:// references")
     if installation_id is None:

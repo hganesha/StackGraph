@@ -42,6 +42,8 @@ from app.models import (
     GitHubRepositoryConnectRequest,
     GitHubRepositoryOption,
     GitHubRepositoryOptionList,
+    GitHubTokenConfiguration,
+    GitHubTokenUpdateRequest,
     MemberInviteRequest,
     MemberUpdateRequest,
     ModernizationGovernanceState,
@@ -489,6 +491,12 @@ class AdminReadModelsMixin:
         if tenant_id is None:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to connect GitHub.")
         self._reject_raw_secret(request.credential_reference)
+        _token, token_source = await self._github_token(tenant_id)
+        credential_reference = (
+            "tenant-secret://github-token"
+            if token_source == "TENANT_SECRET"
+            else request.credential_reference
+        )
         owner, name = request.repository.split("/", 1)
         full_name = f"{owner}/{name}"
         normalized_name = full_name.lower()
@@ -551,7 +559,7 @@ class AdminReadModelsMixin:
                     tenant_id,
                     source["id"],
                     external_account_key,
-                    request.credential_reference,
+                    credential_reference,
                     json.dumps(scopes),
                 ),
             )
@@ -601,7 +609,7 @@ class AdminReadModelsMixin:
                     tenant_id,
                     full_name,
                     external_account_key,
-                    request.credential_reference,
+                    credential_reference,
                     scopes,
                     json.dumps({
                         "connection_mode": "DIRECT_REPOSITORY",
@@ -640,7 +648,7 @@ class AdminReadModelsMixin:
     ) -> GitHubRepositoryOptionList:
         if tenant_id is None:
             raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to list GitHub repositories.")
-        token = os.getenv("GITHUB_TOKEN", "").strip()
+        token, _source = await self._github_token(tenant_id)
         if not token:
             return GitHubRepositoryOptionList(token_configured=False, repositories=[])
 
@@ -742,6 +750,158 @@ class AdminReadModelsMixin:
             repositories=sorted(repositories.values(), key=lambda repository: repository.full_name.lower()),
             truncated=truncated,
         )
+
+    async def get_github_token_configuration(
+        self, *, tenant_id: UUID | None,
+    ) -> GitHubTokenConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to read GitHub configuration.")
+        row = await self.database.fetch_one(
+            """
+            SELECT fingerprint,created_by,updated_at
+            FROM tenant_secret
+            WHERE secret_kind='GITHUB_TOKEN'
+            ORDER BY updated_at DESC,id DESC LIMIT 1
+            """,
+            tenant_id=tenant_id,
+        )
+        if row is not None:
+            return GitHubTokenConfiguration(
+                configured=True,
+                fingerprint=row["fingerprint"],
+                source="TENANT_SECRET",
+                updated_by=row["created_by"],
+                updated_at=row["updated_at"],
+            )
+        environment_token = os.getenv("GITHUB_TOKEN", "").strip()
+        return GitHubTokenConfiguration(
+            configured=bool(environment_token),
+            fingerprint=environment_token[-4:] if environment_token else None,
+            source="ENVIRONMENT" if environment_token else "NONE",
+        )
+
+    async def update_github_token(
+        self,
+        request: GitHubTokenUpdateRequest,
+        *,
+        tenant_id: UUID | None,
+        actor_key: str,
+    ) -> GitHubTokenConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update GitHub configuration.")
+        token = request.token.strip()
+        if not token:
+            raise APIError(422, "GITHUB_TOKEN_EMPTY", "The GitHub token cannot be empty.")
+        credential_reference = "tenant-secret://github-token"
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                "DELETE FROM tenant_secret WHERE secret_kind='GITHUB_TOKEN'",
+            )
+            cursor = await connection.execute(
+                """
+                INSERT INTO tenant_secret(
+                  tenant_id,secret_kind,ciphertext,fingerprint,created_by
+                ) VALUES (
+                  %s,'GITHUB_TOKEN',
+                  pgp_sym_encrypt(%s,%s,'cipher-algo=aes256'),%s,%s
+                ) RETURNING fingerprint,created_by,updated_at
+                """,
+                (tenant_id, token, self.credential_encryption_key, token[-4:], actor_key),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            await connection.execute(
+                """
+                UPDATE connector_account
+                SET credential_reference=%s,status='ACTIVE',updated_at=now()
+                WHERE external_account_key LIKE 'github:repository:%%'
+                """,
+                (credential_reference,),
+            )
+            await connection.execute(
+                """
+                UPDATE connector
+                SET credential_reference=%s,status='CONNECTED',last_error=NULL,updated_at=now()
+                WHERE provider='GITHUB_APP'
+                  AND external_account_key LIKE 'github:repository:%%'
+                """,
+                (credential_reference,),
+            )
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="github_token.update",
+                target_kind="tenant_github_configuration",
+                target_id=tenant_id,
+                detail={"key_rotated": True, "fingerprint": token[-4:]},
+            )
+        return GitHubTokenConfiguration(
+            configured=True,
+            fingerprint=row["fingerprint"],
+            source="TENANT_SECRET",
+            updated_by=row["created_by"],
+            updated_at=row["updated_at"],
+        )
+
+    async def remove_github_token(
+        self, *, tenant_id: UUID | None, actor_key: str,
+    ) -> GitHubTokenConfiguration:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant ID is required to update GitHub configuration.")
+        environment_token = os.getenv("GITHUB_TOKEN", "").strip()
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                "DELETE FROM tenant_secret WHERE secret_kind='GITHUB_TOKEN'",
+            )
+            replacement = "env://GITHUB_TOKEN"
+            await connection.execute(
+                """
+                UPDATE connector_account
+                SET credential_reference=%s,status=%s,updated_at=now()
+                WHERE external_account_key LIKE 'github:repository:%%'
+                """,
+                (replacement, "ACTIVE" if environment_token else "DISABLED"),
+            )
+            await connection.execute(
+                """
+                UPDATE connector
+                SET credential_reference=%s,status=%s,updated_at=now()
+                WHERE provider='GITHUB_APP'
+                  AND external_account_key LIKE 'github:repository:%%'
+                """,
+                (replacement, "CONNECTED" if environment_token else "NEEDS_REAUTH"),
+            )
+            await self._write_admin_audit(
+                connection,
+                tenant_id=tenant_id,
+                actor_key=actor_key,
+                action="github_token.remove",
+                target_kind="tenant_github_configuration",
+                target_id=tenant_id,
+                detail={"environment_fallback": bool(environment_token)},
+            )
+        return GitHubTokenConfiguration(
+            configured=bool(environment_token),
+            fingerprint=environment_token[-4:] if environment_token else None,
+            source="ENVIRONMENT" if environment_token else "NONE",
+        )
+
+    async def _github_token(self, tenant_id: UUID) -> tuple[str, str]:
+        row = await self.database.fetch_one(
+            """
+            SELECT pgp_sym_decrypt(ciphertext,%s)::text AS token
+            FROM tenant_secret
+            WHERE secret_kind='GITHUB_TOKEN'
+            ORDER BY updated_at DESC,id DESC LIMIT 1
+            """,
+            (self.credential_encryption_key,),
+            tenant_id=tenant_id,
+        )
+        if row is not None and str(row["token"]).strip():
+            return str(row["token"]).strip(), "TENANT_SECRET"
+        environment_token = os.getenv("GITHUB_TOKEN", "").strip()
+        return environment_token, "ENVIRONMENT" if environment_token else "NONE"
 
     async def connect_github_installation(
         self,

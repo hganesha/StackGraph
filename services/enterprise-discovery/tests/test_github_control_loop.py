@@ -19,6 +19,7 @@ try:
     from stackgraph_discovery.github_client import ApiResult
     from stackgraph_discovery.github_control_loop import (
         MAX_ATTEMPTS,
+        ClaimedRun,
         _acquire_scan_publish,
         _fail_run,
         _policy_int,
@@ -47,6 +48,64 @@ DATABASE_URL = os.environ.get("STACKGRAPH_TEST_DATABASE_URL")
 
 @unittest.skipUnless(psycopg, "PostgreSQL runtime dependency is unavailable")
 class GitHubControlLoopUnitTests(unittest.TestCase):
+    def test_scanner_upgrade_replays_cached_revision_without_provider_credential(self) -> None:
+        claimed = ClaimedRun(
+            run_id=uuid4(),
+            target_id=uuid4(),
+            tenant_id=uuid4(),
+            tenant_key="scanner-upgrade",
+            target_kind="REPOSITORY",
+            target_key="github:repo:1234",
+            refresh_policy={
+                "provider": "github",
+                "installation_id": "9876",
+                "repository_id": "1234",
+                "owner": "acme",
+                "name": "billing",
+                "full_name": "acme/billing",
+            },
+            credential_reference="env://MISSING_GITHUB_TOKEN",
+            attempt=1,
+            lease_owner="scanner-upgrade-test",
+            lease_seconds=300,
+        )
+        request = {"scanner_contract_version": "1.0.0"}
+        raw_observation = {"contract_version": "1.0.0"}
+
+        with patch(
+            "stackgraph_discovery.github_control_loop._previous_revision",
+            return_value="cached-revision",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._scanner_snapshot_exists",
+            return_value=False,
+        ), patch(
+            "stackgraph_discovery.github_control_loop._cached_scanner_request",
+            return_value=(request, raw_observation),
+        ), patch(
+            "stackgraph_discovery.github_control_loop._renew_lease",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._scan_publish_request",
+            return_value="replayed-with-current-scanner",
+        ) as publish, patch(
+            "stackgraph_discovery.github_control_loop.resolve_runtime_credential",
+        ) as resolve:
+            result = _acquire_scan_publish(
+                "postgresql://database/stackgraph",
+                claimed,
+                snapshot_root=Path("/snapshots"),
+                evidence_root=Path("/evidence"),
+            )
+
+        self.assertEqual(result, "replayed-with-current-scanner")
+        resolve.assert_not_called()
+        publish.assert_called_once_with(
+            "postgresql://database/stackgraph",
+            claimed,
+            request=request,
+            raw_observation=raw_observation,
+            source_revision="cached-revision",
+        )
+
     def test_retry_policy_honors_provider_and_exponential_delays(self) -> None:
         self.assertEqual(_retry_delay(GitHubTransportError("network"), 3), 8)
         self.assertEqual(
