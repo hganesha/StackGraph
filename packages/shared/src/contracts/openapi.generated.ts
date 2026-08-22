@@ -107,6 +107,134 @@ export interface ApplicationTechnologyUsage {
   technology: EntitySummary;
 }
 
+export interface ArchitectureAspectModel {
+  definition: string;
+  key: string;
+  label: string;
+}
+
+export interface ArchitectureCapabilityModel {
+  aliases?: Array<string>;
+  concern_key: string;
+  definition: string;
+  key: string;
+  name: string;
+}
+
+export interface ArchitectureCellDefinitionModel {
+  absence_assertable?: boolean;
+  aspect_keys?: Array<string>;
+  bindings: Array<CanvasBindingModel>;
+  concern_key: string;
+  default_expectation: CellExpectationModel;
+  definition: string;
+  key: string;
+  label: string;
+  observation_rule_key: string;
+  required_sensor_kinds: Array<string>;
+}
+
+export interface ArchitectureConcernModel {
+  definition: string;
+  domain_key: "experience" | "application" | "integration" | "data" | "platform" | "delivery";
+  key: string;
+  label: string;
+  order: number;
+}
+
+export interface ArchitectureDomainModel {
+  definition: string;
+  key: "experience" | "application" | "integration" | "data" | "platform" | "delivery";
+  label: string;
+  order: number;
+  question: string;
+}
+
+export interface ArchitectureProfileCreateRequest {
+  profile_key: string;
+  state: ArchitectureProfileStateModel;
+}
+
+export interface ArchitectureProfileDetail {
+  created_at: string;
+  fingerprint: string;
+  id: string;
+  name: string;
+  profile_key: string;
+  reference_model_key: string;
+  reference_model_version: string;
+  state: ArchitectureProfileStateModel;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  updated_at: string;
+  version: number;
+}
+
+export interface ArchitectureProfileList {
+  contract_version?: "1.0.0";
+  profiles: Array<ArchitectureProfileSummary>;
+}
+
+export interface ArchitectureProfilePublishRequest {
+  expected_version: number;
+}
+
+export interface ArchitectureProfileStateModel {
+  cell_policies?: Array<TenantCellPolicyModel>;
+  extension_cells?: Array<TenantExtensionCellModel>;
+  name: string;
+  reference_model_key: string;
+  reference_model_version: string;
+}
+
+export interface ArchitectureProfileSummary {
+  created_at: string;
+  fingerprint: string;
+  id: string;
+  name: string;
+  profile_key: string;
+  reference_model_key: string;
+  reference_model_version: string;
+  status: "DRAFT" | "ACTIVE" | "ARCHIVED";
+  updated_at: string;
+  version: number;
+}
+
+export interface ArchitectureProfileUpdateRequest {
+  expected_version: number;
+  state: ArchitectureProfileStateModel;
+}
+
+export interface ArchitectureReferenceModel {
+  cells: Array<ArchitectureCellDefinitionModel>;
+  content_hash: string;
+  contract_version?: "1.0.0";
+  description: string;
+  key: string;
+  name: string;
+  taxonomy_content_hash: string;
+  taxonomy_key: string;
+  taxonomy_version: string;
+  version: string;
+}
+
+export interface ArchitectureReferenceModelList {
+  contract_version?: "1.0.0";
+  models: Array<ArchitectureReferenceModel>;
+}
+
+export interface ArchitectureTaxonomyResponse {
+  aspects: Array<ArchitectureAspectModel>;
+  capabilities: Array<ArchitectureCapabilityModel>;
+  concerns: Array<ArchitectureConcernModel>;
+  content_hash: string;
+  contract_version?: "1.0.0";
+  description: string;
+  domains: Array<ArchitectureDomainModel>;
+  key: string;
+  name: string;
+  version: string;
+}
+
 export interface AskRequest {
   context_entity_ids?: Array<string> | null;
   question: string;
@@ -297,6 +425,197 @@ export interface CalibrationObservedMetrics {
   validation_success?: number | null;
 }
 
+export interface CanvasBandLayoutModel {
+  cells: Array<CanvasCellLayoutModel>;
+  columns: number;
+  domain_key: "experience" | "application" | "integration" | "data" | "platform" | "delivery";
+  order: number;
+}
+
+export interface CanvasBindingModel {
+  keys?: Array<string>;
+  kind: "CAPABILITY" | "CATEGORY" | "RESOURCE_KIND" | "ENTITY_TYPE" | "ARCHITECTURE_ROLE" | "UNBOUND";
+  reason?: string | null;
+}
+
+export interface CanvasCellComparisonModel {
+  actual_state: "POPULATED" | "EMPTY" | "NOT_APPLICABLE" | "UNOBSERVED" | "UNBOUND";
+  allowed_in_use: number;
+  baseline_state: "POPULATED" | "EMPTY" | "NOT_APPLICABLE" | "UNOBSERVED" | "UNBOUND";
+  cell_key: string;
+  discouraged_in_use: number;
+  preferred_in_use: number;
+  prohibited_in_use: number;
+  required_but_absent: boolean;
+  unevaluable: boolean;
+  ungoverned_in_use: number;
+}
+
+export interface CanvasCellLayoutModel {
+  cell_key: string;
+  span?: 1 | 2 | 3;
+}
+
+export interface CanvasCellMeasuresModel {
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  conformance: MeasureResultModel;
+  coverage: MeasureResultModel;
+  currency: MeasureResultModel;
+  method_version: string;
+  missing_inputs: Array<string>;
+  overall_score?: number | null;
+  posture_band?: "STRONG" | "ADEQUATE" | "WEAK" | "AT_RISK" | null;
+  risk: MeasureResultModel;
+  standardisation: MeasureResultModel;
+}
+
+export interface CanvasCellProjectionModel {
+  cell_key: string;
+  citations: Array<Citation>;
+  expectation: CellExpectationModel;
+  insight_refs: Array<string>;
+  measures?: CanvasCellMeasuresModel | null;
+  observation: CellObservationStatusModel;
+  occupant_total: number;
+  occupants: Array<CanvasOccupantModel>;
+  policy?: TenantCellPolicyModel | null;
+  state: "POPULATED" | "EMPTY" | "NOT_APPLICABLE" | "UNOBSERVED" | "UNBOUND";
+  state_reason: string;
+  unique_technology_total: number;
+}
+
+export interface CanvasClassificationTrayItemModel {
+  citations: Array<Citation>;
+  detail: string;
+  entity: EntitySummary;
+  reason: "UNCLASSIFIED" | "AMBIGUOUS" | "UNRESOLVED_POLICY" | "FILTERED";
+}
+
+export interface CanvasClassificationTrayModel {
+  ambiguous_count: number;
+  filtered_count: number;
+  items: Array<CanvasClassificationTrayItemModel>;
+  total_count: number;
+  truncated: boolean;
+  unclassified_count: number;
+  unresolved_policy_count: number;
+}
+
+export interface CanvasComparison {
+  actual_projection_fingerprint: string;
+  baseline_projection_fingerprint: string;
+  cells: Array<CanvasCellComparisonModel>;
+  comparison_kind: "ACTUAL_TO_TARGET" | "ACTUAL_TO_ACTUAL";
+  contract_version?: "1.0.0";
+  input_fingerprint: string;
+  method_version: string;
+  summary: CanvasComparisonSummaryModel;
+}
+
+export interface CanvasComparisonRequest {
+  actual: CanvasProjectionSelectorModel;
+  baseline: CanvasProjectionSelectorModel;
+  comparison_kind: "ACTUAL_TO_TARGET" | "ACTUAL_TO_ACTUAL" | "TIME_TO_TIME";
+  reference_model_key?: string;
+  template_key?: string;
+}
+
+export interface CanvasComparisonSummaryModel {
+  aligned_cells: number;
+  cells_with_violations: number;
+  compared_cells: number;
+  required_but_absent_cells: number;
+  unevaluable_cells: number;
+  ungoverned_cells: number;
+}
+
+export interface CanvasOccupantModel {
+  adoption_applications: number;
+  adoption_deployments: number;
+  adoption_repositories: number;
+  citations?: Array<Citation>;
+  classification: "CURATED" | "CATALOG_MATCH" | "DETERMINISTIC" | "UNCLASSIFIED";
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  placement_keys: Array<string>;
+  policy_reference?: string | null;
+  policy_status: "PREFERRED" | "ALLOWED" | "DISCOURAGED" | "PROHIBITED" | "EXEMPTED" | "UNGOVERNED";
+  technology: EntitySummary;
+}
+
+export interface CanvasPolicyExceptionModel {
+  effective_from?: string | null;
+  effective_to?: string | null;
+  key: string;
+  rationale: string;
+  subject_ids: Array<string>;
+}
+
+export interface CanvasProjection {
+  as_of: string;
+  cells: Array<CanvasCellProjectionModel>;
+  classification_tray: CanvasClassificationTrayModel;
+  contract_version?: "1.0.0";
+  input_fingerprint: string;
+  method_version: string;
+  reference_model_content_hash: string;
+  reference_model_key: string;
+  reference_model_version: string;
+  scope: "ESTATE" | "APPLICATION" | "REPOSITORY" | "TARGET";
+  subject?: EntitySummary | null;
+  summary: CanvasProjectionSummaryModel;
+  taxonomy_content_hash: string;
+  taxonomy_key: string;
+  taxonomy_version: string;
+  template_key: string;
+  template_version: string;
+  tenant_profile_fingerprint?: string | null;
+}
+
+export interface CanvasProjectionSelectorModel {
+  scope: "ESTATE" | "APPLICATION" | "REPOSITORY" | "TARGET";
+  subject_id?: string | null;
+}
+
+export interface CanvasProjectionSummaryModel {
+  adequate: number;
+  at_risk: number;
+  cells_with_violations: number;
+  empty_cells: number;
+  governed_cells: number;
+  not_applicable_cells: number;
+  populated_cells: number;
+  strong: number;
+  technology_cell_placements: number;
+  unbound_cells: number;
+  unique_technologies: number;
+  unobserved_cells: number;
+  weak: number;
+}
+
+export interface CanvasScopeSelectorModel {
+  application_ids?: Array<string>;
+  repository_ids?: Array<string>;
+  tags?: Array<string>;
+}
+
+export interface CanvasTemplateList {
+  contract_version?: "1.0.0";
+  templates: Array<CanvasTemplateModel>;
+}
+
+export interface CanvasTemplateModel {
+  bands: Array<CanvasBandLayoutModel>;
+  content_hash: string;
+  contract_version?: "1.0.0";
+  key: string;
+  name: string;
+  reference_model_key: string;
+  reference_model_version: string;
+  version: string;
+}
+
 export interface CapabilityDefinitionModel {
   aliases?: Array<string>;
   description: string;
@@ -366,6 +685,25 @@ export interface CapabilityTaxonomyResponse {
   key: string;
   name: string;
   version: string;
+}
+
+export interface CellExpectationModel {
+  allowed_diversity?: number | null;
+  applicability?: "REQUIRED" | "RECOMMENDED" | "OPTIONAL" | "NOT_APPLICABLE";
+  maximum_implementations?: number | null;
+  minimum_implementations?: number | null;
+}
+
+export interface CellObservationStatusModel {
+  fresh_subjects: number;
+  in_scope_subjects: number;
+  input_fingerprint: string;
+  method_version: string;
+  missing_inputs: Array<string>;
+  observed_subjects: number;
+  required_sensor_kinds: Array<string>;
+  status: "COMPLETE" | "PARTIAL" | "MISSING" | "NOT_APPLICABLE";
+  supported_sensor_kinds: Array<string>;
 }
 
 export interface Citation {
@@ -799,6 +1137,14 @@ export interface InternalUsage {
   application_count: number;
   repositories?: Array<EntitySummary> | null;
   repository_count: number;
+}
+
+export interface MeasureResultModel {
+  inputs: Array<string>;
+  method_version: string;
+  status: "ELIGIBLE" | "INSUFFICIENT_DATA" | "NOT_APPLICABLE" | "NOT_CONFIGURED";
+  supporting_fact_ids: Array<string>;
+  value?: number | null;
 }
 
 export interface MemberInviteRequest {
@@ -1322,6 +1668,24 @@ export interface TechnologyEstateHierarchyNode {
   technology: EntitySummary;
 }
 
+export interface TenantCellPolicyModel {
+  allowed_diversity?: number | null;
+  allowed_technology_ids?: Array<string>;
+  applicability?: "REQUIRED" | "RECOMMENDED" | "OPTIONAL" | "NOT_APPLICABLE";
+  cell_key: string;
+  discouraged_technology_ids?: Array<string>;
+  effective_from?: string | null;
+  effective_to?: string | null;
+  exceptions?: Array<CanvasPolicyExceptionModel>;
+  maximum_implementations?: number | null;
+  minimum_implementations?: number | null;
+  owner?: string | null;
+  preferred_technology_ids?: Array<string>;
+  prohibited_technology_ids?: Array<string>;
+  rationale?: string;
+  scope_selector?: CanvasScopeSelectorModel;
+}
+
 export interface TenantCodeFunctionPolicySummary {
   allowed_technology_ids: Array<string>;
   id: string;
@@ -1368,6 +1732,16 @@ export interface TenantCodePolicySummary {
   governed_functions: number;
   misaligned_repositories: number;
   stale_repositories: number;
+}
+
+export interface TenantExtensionCellModel {
+  aspect_keys?: Array<string>;
+  bindings: Array<CanvasBindingModel>;
+  default_expectation: CellExpectationModel;
+  definition: string;
+  domain_key: "experience" | "application" | "integration" | "data" | "platform" | "delivery";
+  key: string;
+  label: string;
 }
 
 export interface TenantMember {
