@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { IconFileDescription, IconGitBranch, IconSortDescending } from "@tabler/icons-react";
 import { StatTile, Skeleton } from "@stackgraph/design-system";
 import { formatRelative } from "@stackgraph/shared";
 import {
@@ -49,15 +50,15 @@ export default function HealthPage() {
       <header className={styles.head}>
         <h1 className={styles.title}>Estate Health</h1>
         <p className={styles.subtitle}>
-          Coverage, freshness, and enrichment — the trust telemetry behind every number. Updated{" "}
+          Scan coverage, fact freshness, and enrichment progress across the estate. Updated{" "}
           {formatRelative(data.as_of)}.
         </p>
       </header>
 
       <section className={styles.tiles} aria-label="Coverage">
-        <StatTile label="Repositories scanned" value={`${cov.repositories_scanned}/${cov.repositories_total}`} hero sub={`${pct}% coverage`} />
-        <StatTile label="Facts with evidence" value={`${Math.round(cov.facts_with_evidence_ratio * 100)}%`} sub="of all facts" />
-        <StatTile label="Ranked items" value={data.ranked_items.length} sub="in the estate" />
+        <StatTile label="Repositories scanned" value={`${cov.repositories_scanned}/${cov.repositories_total}`} hero sub={`${pct}% coverage`} icon={IconGitBranch} />
+        <StatTile label="Facts with evidence" value={`${Math.round(cov.facts_with_evidence_ratio * 100)}%`} sub="of all facts" icon={IconFileDescription} />
+        <StatTile label="Ranked items" value={data.ranked_items.length} sub="in the estate" icon={IconSortDescending} />
       </section>
 
       <section className={styles.insightReadiness} aria-labelledby="insight-readiness-heading">

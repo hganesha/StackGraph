@@ -52,6 +52,9 @@
   font-weight: 500;
 }
 .typeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-1);
   padding: 2px var(--sg-space-2);
   border-radius: var(--sg-radius-pill);
   background: var(--sg-color-domain-intelligence-100);
@@ -83,6 +86,9 @@
   background: var(--sg-surface-card);
   border: var(--sg-border-hairline) dashed var(--sg-surface-border-strong);
   border-radius: var(--sg-radius-card);
+}
+.empty svg {
+  color: var(--sg-text-muted);
 }
 .emptyTitle {
   font-weight: 500;

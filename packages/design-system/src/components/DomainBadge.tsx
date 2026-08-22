@@ -1,4 +1,5 @@
 import type { Namespace } from "@stackgraph/shared";
+import { DomainIcon } from "./DomainIcon";
 import styles from "./DomainBadge.module.css";
 
 const META: Record<Namespace, { code: string; family: string; label: string }> = {
@@ -11,10 +12,17 @@ const META: Record<Namespace, { code: string; family: string; label: string }> =
 };
 
 /**
- * Domain badge — mono two-letter code on a 100-tint fill with 800-tint text.
- * Text label is ALWAYS present: color is never the only signal (accessibility + B/W print).
+ * Domain badge — mono glyph + two-letter code on a 100-tint fill with 800-tint text.
+ * Text code is ALWAYS present: neither color nor icon is ever the only signal
+ * (accessibility + B/W print). Pass `showIcon={false}` to drop the glyph in dense rows.
  */
-export function DomainBadge({ namespace }: { namespace: Namespace }) {
+export function DomainBadge({
+  namespace,
+  showIcon = true,
+}: {
+  namespace: Namespace;
+  showIcon?: boolean;
+}) {
   const m = META[namespace];
   return (
     <span
@@ -27,6 +35,7 @@ export function DomainBadge({ namespace }: { namespace: Namespace }) {
       aria-label={m.label}
       title={m.label}
     >
+      {showIcon ? <DomainIcon namespace={namespace} size={13} stroke={1.75} className={styles.glyph} /> : null}
       {m.code}
     </span>
   );

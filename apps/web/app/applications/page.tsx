@@ -6,7 +6,7 @@ export default function ApplicationsPage() {
     <Suspense>
       <DomainList
         title="Applications"
-        subtitle="Every application in the estate, ranked. Open one for business context, viability, and evidence."
+        subtitle="Applications discovered across the connected repositories, ranked by priority. Open one for its business context, viability, and evidence."
         domains={["ENTERPRISE"]}
         hrefBase="/applications"
         emptyTitle="No applications have been modeled yet."

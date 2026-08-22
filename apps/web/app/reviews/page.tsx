@@ -1,17 +1,27 @@
 "use client";
 
+import {
+  IconAlertTriangle,
+  IconCopy,
+  IconInboxOff,
+  IconLink,
+  IconSparkles,
+  IconTrendingUp,
+  type Icon,
+} from "@tabler/icons-react";
 import { ConfidenceChip, Skeleton, confidenceLabel } from "@stackgraph/design-system";
 import type { ReviewQueueItem } from "@stackgraph/shared";
 import { useReviewQueue } from "@/lib/queries";
 import { UncertainBridge } from "@/components/reviews/UncertainBridge";
 import styles from "./reviews.module.css";
 
-const typeLabels: Record<ReviewQueueItem["item_type"], string> = {
-  IDENTITY_ASSERTION: "Identity",
-  CAPABILITY_INFERENCE: "Capability",
-  DUPLICATE_CAPABILITY: "Duplicate",
-  MODERNIZATION_CANDIDATE: "Candidate",
-  MODERNIZATION_RECOMMENDATION: "Recommendation",
+/** Each finding type carries a mono glyph beside its always-present text label. */
+const typeMeta: Record<ReviewQueueItem["item_type"], { label: string; icon: Icon }> = {
+  IDENTITY_ASSERTION: { label: "Identity", icon: IconLink },
+  CAPABILITY_INFERENCE: { label: "Capability", icon: IconSparkles },
+  DUPLICATE_CAPABILITY: { label: "Duplicate", icon: IconCopy },
+  MODERNIZATION_CANDIDATE: { label: "Candidate", icon: IconTrendingUp },
+  MODERNIZATION_RECOMMENDATION: { label: "Recommendation", icon: IconTrendingUp },
 };
 
 function identityLabels(title: string): [string, string] {
@@ -27,7 +37,7 @@ export default function ReviewsPage() {
       <header className={styles.head}>
         <h1 className={styles.title}>Reviews</h1>
         <p className={styles.subtitle}>
-          Evidence-backed identity, capability, duplication, and modernization findings awaiting a human decision.
+          Identity, capability, duplication, and modernization findings that need a human decision.
         </p>
       </header>
 
@@ -43,11 +53,13 @@ export default function ReviewsPage() {
         </div>
       ) : isError || !data ? (
         <div className={styles.empty} role="alert">
+          <IconAlertTriangle size={22} stroke={1.5} aria-hidden="true" />
           <p className={styles.emptyTitle}>The review queue could not be loaded.</p>
           <p className={styles.emptyBody}>Check the API connection, then reload this page.</p>
         </div>
       ) : data.items.length === 0 ? (
         <div className={styles.empty}>
+          <IconInboxOff size={22} stroke={1.5} aria-hidden="true" />
           <p className={styles.emptyTitle}>Nothing needs review.</p>
           <p className={styles.emptyBody}>All current findings are confirmed, rejected, or not applicable.</p>
         </div>
@@ -55,10 +67,14 @@ export default function ReviewsPage() {
         <ul className={styles.list}>
           {data.items.map((item) => {
             const [sourceLabel, targetLabel] = identityLabels(item.title);
+            const TypeIcon = typeMeta[item.item_type].icon;
             return (
               <li key={`${item.item_type}:${item.item_id}`} className={styles.item}>
                 <div className={styles.itemHead}>
-                  <span className={styles.typeLabel}>{typeLabels[item.item_type]}</span>
+                  <span className={styles.typeLabel}>
+                    <TypeIcon size={13} stroke={1.75} aria-hidden="true" />
+                    {typeMeta[item.item_type].label}
+                  </span>
                   <span className={styles.itemLabel}>{item.title}</span>
                   <span className={styles.confidence}>
                     <ConfidenceChip label={confidenceLabel(item.confidence)} value={item.confidence} />

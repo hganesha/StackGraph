@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import {
   IconActivityHeartbeat,
   IconApps,
-  IconChecklist,
   IconBulb,
+  IconChecklist,
   IconHierarchy3,
+  IconInfoCircle,
   IconLayoutDashboard,
   IconSettings,
   IconStack2,
@@ -31,7 +32,10 @@ const SECONDARY = [
   { href: "/health", label: "Estate Health", icon: IconActivityHeartbeat },
 ];
 
-const ADMIN = [{ href: "/admin", label: "Admin", icon: IconSettings }];
+const ADMIN = [
+  { href: "/about", label: "About", icon: IconInfoCircle },
+  { href: "/admin", label: "Admin", icon: IconSettings },
+];
 
 export function LeftRail({
   open = false,
