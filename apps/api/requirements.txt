@@ -1,7 +1,7 @@
 fastapi==0.141.1
 httpx==0.28.1
 jsonschema==4.25.1
-PyJWT[crypto]==2.10.1
+PyJWT[crypto]==2.13.0
 psycopg[binary,pool]==3.3.4
 pydantic-settings==2.15.0
 sentry-sdk[fastapi]==2.35.0

@@ -1,5 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+overrides:
+  postcss: 8.5.26
+  sharp: 0.35.0
 allowBuilds:
   sharp: false
