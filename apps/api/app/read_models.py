@@ -975,7 +975,9 @@ class ReadModelStore(AdminReadModelsMixin):
             SELECT e.*, coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at,
                    p.id priority_id,p.score priority_score,p.confidence priority_confidence,p.method_version priority_method,
                    v.score viability_score,v.confidence viability_confidence,v.method_version viability_method,
-                   dependency.dependency_tier
+                   dependency.dependency_tier,
+                   parent_application.id parent_application_id,
+                   parent_application.name parent_application_name
             FROM entity e
             LEFT JOIN LATERAL (
               SELECT * FROM assessment a WHERE a.subject_entity_id=e.id AND a.status='CURRENT' AND lower(a.dimension)='priority'
@@ -986,6 +988,21 @@ class ReadModelStore(AdminReadModelsMixin):
               ORDER BY a.valid_from DESC LIMIT 1
             ) v ON true
             LEFT JOIN observed_technology dependency ON dependency.id=e.id
+            LEFT JOIN LATERAL (
+              SELECT application.id,application.name
+              FROM current_relationship relationship
+              JOIN entity application
+                ON application.id=relationship.source_entity_id
+               AND application.tenant_id=relationship.tenant_id
+               AND application.namespace='ENTERPRISE'
+               AND application.entity_type='Application'
+              WHERE e.entity_type='Service'
+                AND relationship.tenant_id=e.tenant_id
+                AND relationship.relationship_type IN ('CONTAINS','IMPLEMENTED_BY')
+                AND relationship.target_entity_id=e.id
+              ORDER BY application.name,application.id
+              LIMIT 1
+            ) parent_application ON true
             WHERE (
                 (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service')
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
@@ -1053,6 +1070,8 @@ class ReadModelStore(AdminReadModelsMixin):
                     ),
                     viability=viability,
                     summary=(row.get("properties") or {}).get("summary"),
+                    parent_application_id=row.get("parent_application_id"),
+                    parent_application_name=row.get("parent_application_name"),
                     dependency_tier=(
                         int(row["dependency_tier"])
                         if row.get("dependency_tier") is not None else None

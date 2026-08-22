@@ -1077,6 +1077,8 @@ export interface RankedItem {
   id: string;
   kind: string;
   name: string;
+  parent_application_id?: string | null;
+  parent_application_name?: string | null;
   priority: Score;
   summary?: string | null;
   viability?: Score | null;

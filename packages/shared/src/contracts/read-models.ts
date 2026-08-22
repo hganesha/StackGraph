@@ -66,6 +66,9 @@ export interface RankedItem {
   priority: Score;
   viability?: Score;
   summary?: string;
+  /** Owning application for an enterprise Service item. */
+  parent_application_id?: UUID;
+  parent_application_name?: string;
   /** Technology estate tier: 1 is direct; 2 is transitive through another library. */
   dependency_tier?: 1 | 2;
   freshness: Freshness;

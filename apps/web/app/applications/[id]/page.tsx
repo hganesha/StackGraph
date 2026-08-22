@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
@@ -23,13 +23,29 @@ function EmptyPanel({ children }: { children: string }) {
   return <p className={styles.emptyPanel}>{children}</p>;
 }
 
-export default function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ApplicationPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
   const { id } = use(params);
-  const [activeTab, setActiveTab] = useState<ApplicationTab>("technology");
+  const requestedTabValue = use(searchParams).tab;
+  const requestedTab = typeof requestedTabValue === "string" ? requestedTabValue : undefined;
+  const [activeTab, setActiveTab] = useState<ApplicationTab>(
+    TABS.some((tab) => tab.id === requestedTab) ? requestedTab as ApplicationTab : "overview",
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["application", id],
     queryFn: () => stackGraphClient.getApplication(id),
   });
+
+  useEffect(() => {
+    if (data && activeTab === "overview" && window.location.hash === "#services") {
+      requestAnimationFrame(() => document.getElementById("services")?.scrollIntoView({ block: "start" }));
+    }
+  }, [activeTab, data]);
 
   if (isLoading || !data) {
     return (
@@ -150,7 +166,7 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
               ) : <EmptyPanel>No repositories are linked yet.</EmptyPanel>}
             </section>
 
-            <section className={styles.overviewSection} aria-labelledby="services-heading">
+            <section id="services" className={styles.overviewSection} aria-labelledby="services-heading">
               <h2 id="services-heading">Services</h2>
               {data.services.length > 0 ? (
                 <ul className={`${styles.entityList} sg-mono`}>

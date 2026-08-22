@@ -1264,7 +1264,7 @@
   list-style: none;
 }
 
-.capabilityApplications li {
+.capabilityApplications > li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
@@ -1274,7 +1274,11 @@
   background: var(--sg-surface-sunken);
 }
 
-.capabilityApplications a {
+.capabilityApplicationBody {
+  min-inline-size: 0;
+}
+
+.capabilityApplicationLink {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1284,17 +1288,17 @@
   color: var(--sg-text-secondary);
 }
 
-.capabilityApplications a:hover {
+.capabilityApplicationLink:hover {
   color: var(--sg-text-primary);
 }
 
-.capabilityApplications a > span:first-child {
+.capabilityApplicationLink > span:first-child {
   color: var(--sg-color-domain-enterprise-700);
   font-family: var(--sg-font-evidence);
   font-size: 9px;
 }
 
-.capabilityApplications strong {
+.capabilityApplicationLink strong {
   overflow: hidden;
   font-size: 11px;
   font-weight: 500;
@@ -1302,7 +1306,7 @@
   white-space: nowrap;
 }
 
-.capabilityApplications li > button {
+.capabilityApplications > li > button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1310,9 +1314,54 @@
   color: var(--sg-text-muted);
 }
 
-.capabilityApplications li > button:hover {
+.capabilityApplications > li > button:hover {
   background: var(--sg-surface-card);
   color: var(--sg-color-signal-danger-700);
+}
+
+.capabilityServiceInventory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  padding: 0 var(--sg-space-2) var(--sg-space-2);
+}
+
+.capabilityServiceInventory > span {
+  color: var(--sg-text-muted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.capabilityServiceInventory ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capabilityServiceInventory p {
+  margin: 0;
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+
+.capabilityServiceInventory a {
+  display: inline-flex;
+  padding: 2px 6px;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: 999px;
+  color: var(--sg-text-secondary);
+  background: var(--sg-surface-card);
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+}
+
+.capabilityServiceInventory a:hover {
+  color: var(--sg-color-domain-enterprise-700);
+  border-color: var(--sg-color-domain-enterprise-300);
 }
 
 .noCapabilityApplications {

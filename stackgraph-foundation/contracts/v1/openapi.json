@@ -6598,6 +6598,29 @@
             "title": "Name",
             "type": "string"
           },
+          "parent_application_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Application Id"
+          },
+          "parent_application_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Application Name"
+          },
           "priority": {
             "$ref": "#/components/schemas/Score"
           },

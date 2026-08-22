@@ -346,10 +346,27 @@ export function useBusinessMap() {
   );
 
   const estateApplications = useMemo(
-    () => (estateApplicationsQuery.data?.ranked_items ?? [])
-      .filter((item) => item.domain === "ENTERPRISE" && item.kind === "Application")
-      .map((item) => ({ id: item.id, name: item.name }))
-      .sort((left, right) => left.name.localeCompare(right.name)),
+    () => {
+      const items = estateApplicationsQuery.data?.ranked_items ?? [];
+      const servicesByApplication = new Map<string, Array<{ id: string; name: string }>>();
+      for (const item of items) {
+        if (item.kind !== "Service" || !item.parent_application_id) continue;
+        const current = servicesByApplication.get(item.parent_application_id) ?? [];
+        current.push({ id: item.id, name: item.name });
+        servicesByApplication.set(item.parent_application_id, current);
+      }
+      for (const services of servicesByApplication.values()) {
+        services.sort((left, right) => left.name.localeCompare(right.name));
+      }
+      return items
+        .filter((item) => item.domain === "ENTERPRISE" && item.kind === "Application")
+        .map((item) => ({
+          id: item.id,
+          name: item.name,
+          services: servicesByApplication.get(item.id) ?? [],
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name));
+    },
     [estateApplicationsQuery.data?.ranked_items],
   );
 

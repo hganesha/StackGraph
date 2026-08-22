@@ -763,6 +763,10 @@ function CapabilityPanel({
   editing: boolean;
 }) {
   const [applicationId, setApplicationId] = useState("");
+  const estateApplicationsById = useMemo(
+    () => new Map(controller.estateApplications.map((application) => [application.id, application])),
+    [controller.estateApplications],
+  );
   const placement = controller.map.placements.find((item) => item.capabilityId === controller.selectedCapabilityId);
   const capability = placement ? controller.capabilityById.get(placement.capabilityId) : null;
   const owner = placement ? controller.map.catalog.find((fn) => fn.id === placement.sourceFunctionId) : null;
@@ -853,25 +857,44 @@ function CapabilityPanel({
           </div>
           {assignedApplications.length > 0 ? (
             <ul className={styles.capabilityApplications}>
-              {assignedApplications.map((application) => (
-                <li key={application.applicationId}>
-                  <Link href={`/applications/${application.applicationId}`}>
-                    <span aria-hidden="true">ENT</span>
-                    <strong>{application.applicationName}</strong>
-                    <span aria-hidden="true">→</span>
-                  </Link>
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label={`Unlink ${application.applicationName}`}
-                      title="Unlink application"
-                      onClick={() => controller.unassignApplication(capability.id, application.applicationId)}
-                    >
-                      <IconX size={14} />
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+              {assignedApplications.map((application) => {
+                const services = estateApplicationsById.get(application.applicationId)?.services ?? [];
+                return (
+                  <li key={application.applicationId}>
+                    <div className={styles.capabilityApplicationBody}>
+                      <Link className={styles.capabilityApplicationLink} href={`/applications/${application.applicationId}`}>
+                        <span aria-hidden="true">ENT</span>
+                        <strong>{application.applicationName}</strong>
+                        <span aria-hidden="true">→</span>
+                      </Link>
+                      <div className={styles.capabilityServiceInventory}>
+                        <span>{services.length} {services.length === 1 ? "service" : "services"}</span>
+                        {services.length > 0 ? (
+                          <ul>
+                            {services.map((service) => (
+                              <li key={service.id}>
+                                <Link href={`/applications/${application.applicationId}?tab=overview#services`}>
+                                  {service.name}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : <p>No inferred service boundaries.</p>}
+                      </div>
+                    </div>
+                    {editing ? (
+                      <button
+                        type="button"
+                        aria-label={`Unlink ${application.applicationName}`}
+                        title="Unlink application"
+                        onClick={() => controller.unassignApplication(capability.id, application.applicationId)}
+                      >
+                        <IconX size={14} />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           ) : <p className={styles.noCapabilityApplications}>No applications linked to this capability.</p>}
           {editing ? (

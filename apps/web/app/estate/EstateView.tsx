@@ -31,7 +31,11 @@ const PAGED_DOMAINS = DOMAIN_ORDER;
 
 const hrefFor = (item: RankedItem) => {
   if (item.domain === "BUSINESS") return "/business-map";
-  if (item.kind === "Service") return "/applications";
+  if (item.kind === "Service") {
+    return item.parent_application_id
+      ? `/applications/${item.parent_application_id}?tab=overview#services`
+      : "/applications?view=services";
+  }
   if (item.domain === "TECHNOLOGY" || item.domain === "OSS") return `/technologies/${item.id}`;
   return `/applications/${item.id}`;
 };

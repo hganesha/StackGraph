@@ -35,6 +35,8 @@
         "priority": {"$ref": "#/$defs/score"},
         "viability": {"$ref": "#/$defs/score"},
         "summary": {"type": "string"},
+        "parent_application_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "parent_application_name": {"type": "string", "minLength": 1},
         "dependency_tier": {"type": "integer", "minimum": 1, "maximum": 2},
         "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
         "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}}

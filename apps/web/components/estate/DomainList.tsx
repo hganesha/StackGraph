@@ -17,6 +17,8 @@ export function DomainList({
   subtitle,
   domains,
   hrefBase,
+  kinds,
+  linkServicesToParent = false,
   emptyTitle = "No matching items.",
   emptyBody,
 }: {
@@ -24,6 +26,8 @@ export function DomainList({
   subtitle: string;
   domains: Namespace[];
   hrefBase: string;
+  kinds?: string[];
+  linkServicesToParent?: boolean;
   emptyTitle?: string;
   emptyBody?: string;
 }) {
@@ -32,12 +36,21 @@ export function DomainList({
   const { query, setQuery, applyLens, reset } = useEstateQuery();
 
   const scoped = useMemo(
-    () => (data ? data.ranked_items.filter((i) => domains.includes(i.domain)) : []),
-    [data, domains],
+    () => (data ? data.ranked_items.filter((i) => (
+      domains.includes(i.domain) && (!kinds || kinds.includes(i.kind))
+    )) : []),
+    [data, domains, kinds],
   );
   const items = useMemo(
     () => applyEstateQuery(scoped, { ...query, domain: "ALL" }),
     [scoped, query],
+  );
+  const hrefFor = (item: (typeof items)[number]) => (
+    linkServicesToParent && item.kind === "Service"
+      ? item.parent_application_id
+        ? `/applications/${item.parent_application_id}?tab=overview#services`
+        : "/applications?view=services"
+      : `${hrefBase}/${item.id}`
   );
 
   return (
@@ -78,8 +91,8 @@ export function DomainList({
         <RankedTable
           caption={`${items.length} items · sorted by ${query.sort}`}
           items={items}
-          renderRowHref={(item) => `${hrefBase}/${item.id}`}
-          onOpen={(item) => router.push(`${hrefBase}/${item.id}`)}
+          renderRowHref={hrefFor}
+          onOpen={(item) => router.push(hrefFor(item))}
         />
       )}
     </div>

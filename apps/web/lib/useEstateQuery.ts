@@ -30,7 +30,10 @@ export function useEstateQuery(): {
 
   const write = useCallback(
     (next: EstateQuery) => {
-      const sp = new URLSearchParams();
+      const sp = new URLSearchParams(params?.toString() ?? "");
+      for (const key of ["domain", "confidence", "freshness", "sort", "dir", "q", "lens"]) {
+        sp.delete(key);
+      }
       // Only serialize non-default values to keep URLs clean.
       if (next.domain !== DEFAULT_QUERY.domain) sp.set("domain", next.domain);
       if (next.confidence !== DEFAULT_QUERY.confidence) sp.set("confidence", next.confidence);
@@ -42,7 +45,7 @@ export function useEstateQuery(): {
       const qs = sp.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [router, pathname],
+    [params, router, pathname],
   );
 
   const setQuery = useCallback(

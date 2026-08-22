@@ -639,6 +639,8 @@ def test_golden_billing_vertical_slice() -> None:
             item for item in summary["ranked_items"] if item["id"] == SERVICE_ID
         )
         assert service_summary["kind"] == "Service"
+        assert service_summary["parent_application_id"] == APPLICATION_ID
+        assert service_summary["parent_application_name"] == "Billing API"
 
         application = responses["applicationDetail"].json()
         assert {item["id"] for item in application["business_context"]} == {CAPABILITY_ID}

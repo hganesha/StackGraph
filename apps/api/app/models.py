@@ -57,6 +57,8 @@ class RankedItem(ContractModel):
     priority: Score
     viability: Score | None = None
     summary: str | None = None
+    parent_application_id: UUID | None = None
+    parent_application_name: str | None = None
     dependency_tier: int | None = Field(default=None, ge=1, le=2)
     freshness: Freshness
     citations: list[Citation] | None = None

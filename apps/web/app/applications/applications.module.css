@@ -1,0 +1,39 @@
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-4);
+}
+
+.inventoryTabs {
+  display: flex;
+  gap: var(--sg-space-1);
+  max-inline-size: 1100px;
+  inline-size: 100%;
+  margin-inline: auto;
+  padding: 3px;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-sunken);
+}
+
+.inventoryTabs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 32px;
+  padding-inline: var(--sg-space-3);
+  border-radius: 4px;
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+}
+
+.inventoryTabs a:hover {
+  color: var(--sg-text-primary);
+}
+
+.inventoryTabs .activeTab {
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-card);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
