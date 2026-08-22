@@ -1,0 +1,195 @@
+{
+  "contract_version": "1.0.0",
+  "key": "canvas.stackgraph.reference",
+  "version": "1.0.0",
+  "name": "Reference layout",
+  "reference_model_key": "architecture.stackgraph.reference",
+  "reference_model_version": "1.0.0",
+  "content_hash": "sha256:48d1d1b1201d36ef06c2d295b87de1facb1d824dc28cbf33d3fe99503517fba1",
+  "bands": [
+    {
+      "domain_key": "experience",
+      "order": 0,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.experience.ui-rendering"
+        },
+        {
+          "cell_key": "cell.experience.web-framework"
+        },
+        {
+          "cell_key": "cell.experience.client-navigation"
+        },
+        {
+          "cell_key": "cell.experience.state-consumption"
+        },
+        {
+          "cell_key": "cell.experience.forms-validation"
+        },
+        {
+          "cell_key": "cell.experience.design-system"
+        },
+        {
+          "cell_key": "cell.experience.channels"
+        }
+      ]
+    },
+    {
+      "domain_key": "application",
+      "order": 1,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.application.service-api"
+        },
+        {
+          "cell_key": "cell.application.domain-logic"
+        },
+        {
+          "cell_key": "cell.application.persistence-adapter"
+        },
+        {
+          "cell_key": "cell.application.outbound-clients"
+        },
+        {
+          "cell_key": "cell.application.background-jobs"
+        },
+        {
+          "cell_key": "cell.application.workflow-execution"
+        },
+        {
+          "cell_key": "cell.application.runtime-framework"
+        }
+      ]
+    },
+    {
+      "domain_key": "integration",
+      "order": 2,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.integration.edge-gateway"
+        },
+        {
+          "cell_key": "cell.integration.api-contract"
+        },
+        {
+          "cell_key": "cell.integration.service-connectivity"
+        },
+        {
+          "cell_key": "cell.integration.message-routing"
+        },
+        {
+          "cell_key": "cell.integration.event-stream"
+        },
+        {
+          "cell_key": "cell.integration.stream-processing"
+        },
+        {
+          "cell_key": "cell.integration.integration-orchestration"
+        }
+      ]
+    },
+    {
+      "domain_key": "data",
+      "order": 3,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.data.relational-store"
+        },
+        {
+          "cell_key": "cell.data.nonrelational-store"
+        },
+        {
+          "cell_key": "cell.data.cache-session"
+        },
+        {
+          "cell_key": "cell.data.search-retrieval"
+        },
+        {
+          "cell_key": "cell.data.object-storage"
+        },
+        {
+          "cell_key": "cell.data.analytical-store"
+        },
+        {
+          "cell_key": "cell.data.data-processing"
+        },
+        {
+          "cell_key": "cell.data.data-movement"
+        }
+      ]
+    },
+    {
+      "domain_key": "platform",
+      "order": 4,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.platform.language-runtime"
+        },
+        {
+          "cell_key": "cell.platform.container-runtime"
+        },
+        {
+          "cell_key": "cell.platform.compute-target"
+        },
+        {
+          "cell_key": "cell.platform.orchestration"
+        },
+        {
+          "cell_key": "cell.platform.managed-compute"
+        },
+        {
+          "cell_key": "cell.platform.network-ingress"
+        },
+        {
+          "cell_key": "cell.platform.platform-services"
+        }
+      ]
+    },
+    {
+      "domain_key": "delivery",
+      "order": 5,
+      "columns": 4,
+      "cells": [
+        {
+          "cell_key": "cell.delivery.source-build"
+        },
+        {
+          "cell_key": "cell.delivery.automated-testing"
+        },
+        {
+          "cell_key": "cell.delivery.ci-cd"
+        },
+        {
+          "cell_key": "cell.delivery.infrastructure-as-code"
+        },
+        {
+          "cell_key": "cell.delivery.config-secrets"
+        },
+        {
+          "cell_key": "cell.delivery.release-management"
+        },
+        {
+          "cell_key": "cell.delivery.telemetry"
+        },
+        {
+          "cell_key": "cell.delivery.incident-ops"
+        }
+      ]
+    }
+  ],
+  "aspect_rail": [
+    "security-privacy",
+    "identity-access",
+    "governance-compliance",
+    "reliability-resilience",
+    "observability",
+    "developer-experience",
+    "cost-efficiency",
+    "data-governance"
+  ]
+}

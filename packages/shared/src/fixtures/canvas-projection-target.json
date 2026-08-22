@@ -1,0 +1,5347 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-08-22T09:00:00.000Z",
+  "method_version": "architecture-canvas/v1",
+  "taxonomy_key": "stackgraph.technical-taxonomy",
+  "taxonomy_version": "2.0.0",
+  "taxonomy_content_hash": "sha256:78b266adb22c7b5715e436a6e5942564453d783cf1e6b4474c0fcf988e0a63e6",
+  "reference_model_key": "architecture.stackgraph.reference",
+  "reference_model_version": "1.0.0",
+  "reference_model_content_hash": "sha256:283168e57dc065da5a1f585e761301c80825f30b23c70452eb61f16a4282f621",
+  "template_key": "canvas.stackgraph.reference",
+  "template_version": "1.0.0",
+  "tenant_profile_fingerprint": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+  "scope": "TARGET",
+  "subject": null,
+  "cells": [
+    {
+      "cell_key": "cell.experience.ui-rendering",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "aa521c45-1959-408c-83e4-03c4b2425013",
+            "kind": "Technology",
+            "name": "React",
+            "canonical_key": "stackgraph:technology:react"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "e8e29282-a2fd-4f34-81ab-36b3c2257a54",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "25c26943-76a2-44ab-8a69-62ce6b092d61",
+            "kind": "Technology",
+            "name": "Vue",
+            "canonical_key": "stackgraph:technology:vue"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "3aabe433-3769-46ca-84d0-21994cbb9630",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.experience.ui-rendering",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:ae2c536144e3f787407dabae38ecbd23fe6e24aacbc08cede6919e439e09eb45"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "aa521c45-1959-408c-83e4-03c4b2425013",
+              "kind": "Technology",
+              "name": "React",
+              "canonical_key": "stackgraph:technology:react"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "25c26943-76a2-44ab-8a69-62ce6b092d61",
+              "kind": "Technology",
+              "name": "Vue",
+              "canonical_key": "stackgraph:technology:vue"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [
+          {
+            "id": "60153097-46ff-40c5-8ce0-a60e20056e98",
+            "scope_selector": {
+              "application_ids": [],
+              "description": "Acquired Helios storefront, until migration completes"
+            },
+            "rationale": "Vue remains in place until the Helios storefront migration lands.",
+            "owner": "platform-architecture",
+            "effective_from": "2026-04-01T00:00:00.000Z",
+            "effective_to": "2026-12-31T00:00:00.000Z"
+          }
+        ],
+        "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:828f2c5a351ba6bc2f86590d0a23bd47abc8062f944cf22585d43c573d46a583"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "3eb498d8-0ddd-4429-8422-eda77cb3669f",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.web-framework",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "f42aef47-78e4-4878-8cca-a66819af5420",
+            "kind": "Technology",
+            "name": "Next.js",
+            "canonical_key": "stackgraph:technology:next-js"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "5e08b1bc-d549-495b-86ed-8f22395ac4c6",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.experience.web-framework",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:a4fe129331496be6341d8824159fb0ba2cfbc74ef0ae5ab8b984270ff31386bc"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 1,
+        "allowed_diversity": 1,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "f42aef47-78e4-4878-8cca-a66819af5420",
+              "kind": "Technology",
+              "name": "Next.js",
+              "canonical_key": "stackgraph:technology:next-js"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:8a8c0933819f0f1c4dff802105b764145941f5e2c327d5395eab29f58bac4f68"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "c8c68e95-146d-42a5-80c0-b2b51be97f90",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.client-navigation",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "f42aef47-78e4-4878-8cca-a66819af5420",
+            "kind": "Technology",
+            "name": "Next.js",
+            "canonical_key": "stackgraph:technology:next-js"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "677e0bc5-7901-44da-8012-cb1f81434bc1",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.experience.client-navigation",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:f941c4e0b036631877533fb5f357b2e45297b1e45ab58ecef14fb591fe6ef716"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 1,
+        "allowed_diversity": 1,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "f42aef47-78e4-4878-8cca-a66819af5420",
+              "kind": "Technology",
+              "name": "Next.js",
+              "canonical_key": "stackgraph:technology:next-js"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:62eaf01ccb8594f62eff8411379b9eb64ced2e1ced86d1ffdc92bddc9ba60538"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "f688c5e0-7d39-409d-8a64-bf17e784a540",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.state-consumption",
+      "state": "POPULATED",
+      "state_reason": "4 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808",
+            "kind": "Technology",
+            "name": "TanStack Query",
+            "canonical_key": "stackgraph:technology:tanstack-query"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "bcc3e1f1-75dc-44d9-8433-f63c4577feb7",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "5cb21413-4718-4548-8dd0-aea5da0e91e9",
+            "kind": "Technology",
+            "name": "Zustand",
+            "canonical_key": "stackgraph:technology:zustand"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "c997bf32-defa-4e25-81f9-cf6c1f3b49bc",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "d8982a6a-8943-4042-8bfc-4329005bee11",
+            "kind": "Technology",
+            "name": "Redux",
+            "canonical_key": "stackgraph:technology:redux"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "c7ba9ea7-032b-4f1e-8e7e-6439ec906cde",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79",
+            "kind": "Technology",
+            "name": "MobX",
+            "canonical_key": "stackgraph:technology:mobx"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PROHIBITED",
+          "citations": [
+            {
+              "fact_id": "9c796373-e99c-48dc-8651-823e2b74c5c2",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 4,
+      "unique_technology_total": 4,
+      "observation": {
+        "rule_key": "observation.experience.state-consumption",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:7bc5a2baa22ed252842d46be995fb0ad272816c431f2fa002600493599a55c02"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "Zustand for client state, TanStack Query for server state. Redux is being retired; MobX is prohibited.",
+        "owner": "frontend-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808",
+              "kind": "Technology",
+              "name": "TanStack Query",
+              "canonical_key": "stackgraph:technology:tanstack-query"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "5cb21413-4718-4548-8dd0-aea5da0e91e9",
+              "kind": "Technology",
+              "name": "Zustand",
+              "canonical_key": "stackgraph:technology:zustand"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "d8982a6a-8943-4042-8bfc-4329005bee11",
+              "kind": "Technology",
+              "name": "Redux",
+              "canonical_key": "stackgraph:technology:redux"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79",
+              "kind": "Technology",
+              "name": "MobX",
+              "canonical_key": "stackgraph:technology:mobx"
+            },
+            "decision": "PROHIBITED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": "Zustand for client state, TanStack Query for server state. Redux is being retired; MobX is prohibited.",
+        "owner": "frontend-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [
+          "client-state-management"
+        ],
+        "fingerprint": "sha256:c2bc7ebc77c4963ef43b698d09abbec63f4b65de9f1d626093a6f0da7c18ba32"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "8a6e8c90-67c0-48eb-8cd7-cc7690ce4a78",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.forms-validation",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "2d65b2fe-ad4e-49d9-82ad-cea0477acaca",
+            "kind": "Technology",
+            "name": "Zod",
+            "canonical_key": "stackgraph:technology:zod"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "6bc18665-91ad-47a4-8708-adca11596e0d",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.experience.forms-validation",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:daa7774025328cc129dce5472f8fcaf4131470fc578173cc25ca73d540339724"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "2d65b2fe-ad4e-49d9-82ad-cea0477acaca",
+              "kind": "Technology",
+              "name": "Zod",
+              "canonical_key": "stackgraph:technology:zod"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:a0d9d0e98f8df0ecefc20b6b39066b6742a3a1795c9f4d7682cdac0976767988"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "667eacfe-0c20-4708-8ccc-5a86992b97e9",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.design-system",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "b5148661-e634-4a53-86d1-642cfd7329fd",
+            "kind": "Technology",
+            "name": "Tailwind CSS",
+            "canonical_key": "stackgraph:technology:tailwind-css"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "549504e0-b6e1-421a-8406-d5cbc11fb5d0",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "22d230ad-b956-4a15-8289-bfd967f5fcaa",
+            "kind": "Technology",
+            "name": "Radix UI",
+            "canonical_key": "stackgraph:technology:radix-ui"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "4e6474ba-ecb3-49c4-8684-4062b3db841c",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.experience.design-system",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:d33f236bbe8bce062d69e2552e4245e2b9d7db850fa97124c4bb11b825336937"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "b5148661-e634-4a53-86d1-642cfd7329fd",
+              "kind": "Technology",
+              "name": "Tailwind CSS",
+              "canonical_key": "stackgraph:technology:tailwind-css"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "22d230ad-b956-4a15-8289-bfd967f5fcaa",
+              "kind": "Technology",
+              "name": "Radix UI",
+              "canonical_key": "stackgraph:technology:radix-ui"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:4a6e28bca6c92fbd310950ccb45fdbd8a9f729724f5586fdf22a05b0867f2693"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "3853f3b9-3fb9-406e-833e-89975071b8f6",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.experience.channels",
+      "state": "NOT_APPLICABLE",
+      "state_reason": "The active profile marks this concern not applicable for this scope.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.experience.channels",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:c6e2beab003781185bdaa0ab6c09a027b7245e2e0e49a483b0dd76545007d840"
+      },
+      "expectation": {
+        "applicability": "NOT_APPLICABLE",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "TENANT_PROFILE",
+        "scope_selector": {
+          "description": "Web-only product line"
+        },
+        "rationale": "This product line ships web only; native channels are out of scope.",
+        "owner": "platform-architecture",
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.application.service-api",
+      "state": "POPULATED",
+      "state_reason": "3 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "3938ba19-c483-4e8b-820f-8c4c28fe28d5",
+            "kind": "Technology",
+            "name": "FastAPI",
+            "canonical_key": "stackgraph:technology:fastapi"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "e47bda72-64ce-4a7e-8eed-cf029a0914a5",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "2712c40e-d538-47dc-89fe-a73c873dad1f",
+            "kind": "Technology",
+            "name": "Express",
+            "canonical_key": "stackgraph:technology:express"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "c553a185-3ee9-40bb-8f50-c9edd84559df",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "d2aa2088-606d-4edb-84a5-a116588da1eb",
+            "kind": "Technology",
+            "name": "Flask",
+            "canonical_key": "stackgraph:technology:flask"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "7158e280-4314-4c02-8281-2d0306580e9c",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 3,
+      "unique_technology_total": 3,
+      "observation": {
+        "rule_key": "observation.application.service-api",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:c237ded77b299e2366c2978245b532cab841836674a40071ecf6494bf0698108"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "3938ba19-c483-4e8b-820f-8c4c28fe28d5",
+              "kind": "Technology",
+              "name": "FastAPI",
+              "canonical_key": "stackgraph:technology:fastapi"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "2712c40e-d538-47dc-89fe-a73c873dad1f",
+              "kind": "Technology",
+              "name": "Express",
+              "canonical_key": "stackgraph:technology:express"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "d2aa2088-606d-4edb-84a5-a116588da1eb",
+              "kind": "Technology",
+              "name": "Flask",
+              "canonical_key": "stackgraph:technology:flask"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:c9020d8f1ed24617925ce754d4892ead94c2f03a213b4a7592e8589df2344e50"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "7a0d6814-308a-49d7-8960-2abe15f99a8f",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.application.domain-logic",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.application.domain-logic",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:3b5e27636dc377b5aa5a0895809b18169c07ef72776cea97d62b3b6954340896"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.application.persistence-adapter",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "1cf97174-4b75-4505-8ae7-2139d8496dbf",
+            "kind": "Technology",
+            "name": "SQLAlchemy",
+            "canonical_key": "stackgraph:technology:sqlalchemy"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "96b82ecb-497e-4a3a-8fc1-2028584e57f9",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "0a1bba05-00cf-491d-86db-fff7b46af9e6",
+            "kind": "Technology",
+            "name": "Prisma",
+            "canonical_key": "stackgraph:technology:prisma"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "6118c063-7fdb-416f-8283-134f8a6e8623",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.application.persistence-adapter",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:4fc4dfef96b48a89139d0e51d609bbade85e3274e551412d1074c2a135369924"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "1cf97174-4b75-4505-8ae7-2139d8496dbf",
+              "kind": "Technology",
+              "name": "SQLAlchemy",
+              "canonical_key": "stackgraph:technology:sqlalchemy"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "0a1bba05-00cf-491d-86db-fff7b46af9e6",
+              "kind": "Technology",
+              "name": "Prisma",
+              "canonical_key": "stackgraph:technology:prisma"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:c7620d64ea5f03456bd278ee6431961a06e90cf05346afca1111a1427bf441b9"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "3989c0df-371c-4f03-8794-7c4e21e6b959",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.application.outbound-clients",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "4d15b328-ef1f-4e43-8f2f-1379b111d483",
+            "kind": "Technology",
+            "name": "httpx",
+            "canonical_key": "stackgraph:technology:httpx"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "f8a8df47-f34c-4c53-8042-b820b137efb9",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "a5211ab1-1ce6-4cfa-8153-57d0427261a1",
+            "kind": "Technology",
+            "name": "requests",
+            "canonical_key": "stackgraph:technology:requests"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "8bbb3073-2dcd-4294-8409-8edea239da0b",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.application.outbound-clients",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:5b7212195fe09c6ad1ee9af279f8a66240ea7e6b28d98b63284900a15b999e8a"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "4d15b328-ef1f-4e43-8f2f-1379b111d483",
+              "kind": "Technology",
+              "name": "httpx",
+              "canonical_key": "stackgraph:technology:httpx"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "a5211ab1-1ce6-4cfa-8153-57d0427261a1",
+              "kind": "Technology",
+              "name": "requests",
+              "canonical_key": "stackgraph:technology:requests"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:5c729b0ef0803111ad1c72df558b51a8f4eca625c01672e9e5ce97628df63c88"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "9cecb69c-274f-49cc-88ed-453a04da5c20",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.application.background-jobs",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "325b99af-8440-4c1a-8d2f-29fd751271c6",
+            "kind": "Technology",
+            "name": "Celery",
+            "canonical_key": "stackgraph:technology:celery"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "0410521f-a698-4abe-81fd-bdfe5daa4a8c",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.application.background-jobs",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:208ef6009e84e42bf470bc14e6c5ce1215b4de0a0c7987e70e77c5c1ec80ffb2"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "325b99af-8440-4c1a-8d2f-29fd751271c6",
+              "kind": "Technology",
+              "name": "Celery",
+              "canonical_key": "stackgraph:technology:celery"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:5b76254d22e1b31ff760fa5b803f439542d8092f8f6e2a3d6b30d91ce5056412"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "a5facc4b-6768-43a1-87aa-580fbd0aff81",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.application.workflow-execution",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.application.workflow-execution",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:1dc5fd88aaff103569bd0fc5799e5101011290c904a2528329bcb28a3f4cdd3c"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.application.runtime-framework",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+            "kind": "Technology",
+            "name": "Python 3.12",
+            "canonical_key": "stackgraph:technology:python-3-12"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "3d423ef8-692d-4480-816e-8f58f73edfb8",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "52b24fc0-6359-41eb-8338-8d6fd84acd21",
+            "kind": "Technology",
+            "name": "Node.js 22",
+            "canonical_key": "stackgraph:technology:node-js-22"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "0f367e73-0613-4f8d-8c18-3f38dec98967",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.application.runtime-framework",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "lockfile-resolution",
+          "code-context"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "lockfile-resolution",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "lockfile-resolution"
+            }
+          },
+          {
+            "sensor_kind": "code-context",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "code-context"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:aa1e1a7bb4b9bf0c96222fc03a45ccb01af7b00e1ba9ed15b1675e20dcdceeaa"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+              "kind": "Technology",
+              "name": "Python 3.12",
+              "canonical_key": "stackgraph:technology:python-3-12"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "52b24fc0-6359-41eb-8338-8d6fd84acd21",
+              "kind": "Technology",
+              "name": "Node.js 22",
+              "canonical_key": "stackgraph:technology:node-js-22"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:3b2c8d4112735a239fb35c7c53b743674aaa954b1799879986ca5656ee131fb1"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "9c98a0d5-3685-449f-8ce5-053530ce0717",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.integration.edge-gateway",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "3135c623-3dba-47b5-8e89-9fa9be8d1a7d",
+            "kind": "Technology",
+            "name": "NGINX",
+            "canonical_key": "stackgraph:technology:nginx"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "e3b81d36-61ec-4b9e-8821-07d391c02a23",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.integration.edge-gateway",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:24ed7f57dc07823b1c7b35cc366e1bd6f5f799d99aac9e52f4f4c8b0888f4dae"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "NGINX terminates edge traffic. Kong was introduced without review and is unresolved.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "3135c623-3dba-47b5-8e89-9fa9be8d1a7d",
+              "kind": "Technology",
+              "name": "NGINX",
+              "canonical_key": "stackgraph:technology:nginx"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": "NGINX terminates edge traffic. Kong was introduced without review and is unresolved.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:5cbed6893e0d3b816a19177e3a959e30149ce3f439a6846f743259e19dab324e"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "eb3ab22d-1974-41df-841f-045f8c73d29f",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.integration.api-contract",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "ec1c9de0-cfa0-46b4-87a0-11a9a120b435",
+            "kind": "Technology",
+            "name": "OpenAPI",
+            "canonical_key": "stackgraph:technology:openapi"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "693fde2f-6e06-408f-8973-b9d0d8c6328f",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "d44b530e-3e51-4dac-86cd-ff0cfd6c1b34",
+            "kind": "Technology",
+            "name": "Protobuf",
+            "canonical_key": "stackgraph:technology:protobuf"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "7711b9a1-1cde-46af-8c71-18c77441bd4d",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.integration.api-contract",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:15995ac200830ea83a3da713b50e0426f82cb03b6c8506542998bc1c04a98757"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "ec1c9de0-cfa0-46b4-87a0-11a9a120b435",
+              "kind": "Technology",
+              "name": "OpenAPI",
+              "canonical_key": "stackgraph:technology:openapi"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "d44b530e-3e51-4dac-86cd-ff0cfd6c1b34",
+              "kind": "Technology",
+              "name": "Protobuf",
+              "canonical_key": "stackgraph:technology:protobuf"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:373dbfd68b99a1bbcfa51294f85daa790bccff9cf852787e9b61318dd7c8156e"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "2aa0a685-ff74-4035-8c05-59edbc3e5d47",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.integration.service-connectivity",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.integration.service-connectivity",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:ac0716f56aa8b99b8d91bb63936608bba01bd085982b7f5f7ce046a3c9c80c9e"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.integration.message-routing",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
+            "kind": "Technology",
+            "name": "Redis",
+            "canonical_key": "stackgraph:technology:redis"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "da45cc87-9d8b-42fe-8e8c-de32933e6cb6",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "77d2f2b6-47d0-432e-8b95-0388a2264898",
+            "kind": "Technology",
+            "name": "RabbitMQ",
+            "canonical_key": "stackgraph:technology:rabbitmq"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "f21fa011-3e2b-49a0-8931-9ec4d1ab5d07",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.integration.message-routing",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:362e45bab78aa86d23eb0c60436656fe28dd2575315c317a35dee8586dc95b05"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
+              "kind": "Technology",
+              "name": "Redis",
+              "canonical_key": "stackgraph:technology:redis"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "77d2f2b6-47d0-432e-8b95-0388a2264898",
+              "kind": "Technology",
+              "name": "RabbitMQ",
+              "canonical_key": "stackgraph:technology:rabbitmq"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:0b429a310a6638288be50d05346763f44d11fe001dcd02b9b992751413f48583"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "6d7da8a4-5d17-426f-89ce-c9f5abc088eb",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.integration.event-stream",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "48e61093-1d1d-47bb-8b9f-bc008858c3f9",
+            "kind": "Technology",
+            "name": "Apache Kafka",
+            "canonical_key": "stackgraph:technology:apache-kafka"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "5416d071-5b03-4ed6-8853-8c4a3cb58e68",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.integration.event-stream",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:3f72d0297b2fe7394c9a25252b257242acd7ff1571f1beaec18e894775be73e9"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "48e61093-1d1d-47bb-8b9f-bc008858c3f9",
+              "kind": "Technology",
+              "name": "Apache Kafka",
+              "canonical_key": "stackgraph:technology:apache-kafka"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:7f684767aff8a2da2d278a32f18b0ec83b381a9b6925e036156a4b95654fc496"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "f7082796-1f02-4b8b-875e-c42d685b6a38",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.integration.stream-processing",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.integration.stream-processing",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:fa49788727b041eebbd4923c0e2b985e138dbad1bc45fa06969715debd523314"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.integration.integration-orchestration",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.integration.integration-orchestration",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:83421116cd1244972466626a6d66ce4170614550e95b4bccdde61e909c8e78cd"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.data.relational-store",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "b2119897-839f-4f28-8e1a-e89b2e9184ac",
+            "kind": "Technology",
+            "name": "PostgreSQL",
+            "canonical_key": "stackgraph:technology:postgresql"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "32306674-9429-45c1-8952-18b4ca6e79fa",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "b2466522-252b-44ca-88c2-4fbd8baefc58",
+            "kind": "Technology",
+            "name": "MySQL",
+            "canonical_key": "stackgraph:technology:mysql"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "a25d28b6-061f-4b09-8e5b-49b86f483ea4",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.data.relational-store",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:84606610e4363a4ae14b3953b89a4227430565af9d10cb0ddfa372edb57176dc"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "PostgreSQL is the standard relational engine across all environments.",
+        "owner": "data-platform",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "b2119897-839f-4f28-8e1a-e89b2e9184ac",
+              "kind": "Technology",
+              "name": "PostgreSQL",
+              "canonical_key": "stackgraph:technology:postgresql"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "b2466522-252b-44ca-88c2-4fbd8baefc58",
+              "kind": "Technology",
+              "name": "MySQL",
+              "canonical_key": "stackgraph:technology:mysql"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": "PostgreSQL is the standard relational engine across all environments.",
+        "owner": "data-platform",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:cbe96cff3f04e8570c2d9860a74948bb8f88fccfaa928c5a3183e522ac147869"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "5f94e03b-80a7-4c92-8195-d20a8a77ceb1",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.data.nonrelational-store",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.data.nonrelational-store",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:bd6441cb4bfc1dc6ce1e32c835711fec7f8b7a79123b650963e97ba23a2e4541"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.data.cache-session",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
+            "kind": "Technology",
+            "name": "Redis",
+            "canonical_key": "stackgraph:technology:redis"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "ce31775f-50ab-4094-8e3a-7ab6f974dd9a",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.data.cache-session",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:b6a4b879649213fd3ef705c8dd5879a6f0a3c1c44eb01613536504bfcf920bd1"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
+              "kind": "Technology",
+              "name": "Redis",
+              "canonical_key": "stackgraph:technology:redis"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:74c64380000b3ddc588190b390e63866fb2e374351e9f853e7fc7b59807c33ca"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "94171256-5463-459e-8b3e-4a27538307a1",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.data.search-retrieval",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "feafeec5-3a2c-44d6-8308-d735a514f2c2",
+            "kind": "Technology",
+            "name": "pgvector",
+            "canonical_key": "stackgraph:technology:pgvector"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "57c0dfa1-72e6-4c5e-890f-98dcddfe46bc",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.data.search-retrieval",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:8572252edb7c20a84e4311be1eec8b2050e10af1c172344a19899bbd01a8047b"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "feafeec5-3a2c-44d6-8308-d735a514f2c2",
+              "kind": "Technology",
+              "name": "pgvector",
+              "canonical_key": "stackgraph:technology:pgvector"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:377221964c3380ee57d7249139211d704c7f5cc4071f9c8a3d874ff8967c1b66"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "74fe8a64-de9d-46d5-858d-aae768189467",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.data.object-storage",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "7df6ab50-b8e5-4044-8894-99d0835d2aaf",
+            "kind": "Technology",
+            "name": "Amazon S3",
+            "canonical_key": "stackgraph:technology:amazon-s3"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "c35d3907-0b09-431c-80f0-510a941182b4",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.data.object-storage",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:56a9762c55c2f82d3735b0cbac359f1de963fded32fe4653282b96ed6b76c9b8"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "7df6ab50-b8e5-4044-8894-99d0835d2aaf",
+              "kind": "Technology",
+              "name": "Amazon S3",
+              "canonical_key": "stackgraph:technology:amazon-s3"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:c0fd7e4a44280efd141ab79854ac50cbc0bf99598ef38965a042beff7d93123a"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "eb0fe63c-07f8-48e4-816b-9b93c4686794",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.data.analytical-store",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.data.analytical-store",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:e75a89492165d617f3d5a7043b5bb8cfcbbd489da5ef2f9da84659b6bb4b5ef8"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.data.data-processing",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.data.data-processing",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:cd8d56f3808aed6da5f2473f7ece33d0f62d7f5739829cc7319f72315ed6866f"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.data.data-movement",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.data.data-movement",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "runtime-observation"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "runtime-observation",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "runtime-observation"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:64082bd650a4008acfe1c70e52a33ae88150e4c891ca9471e3723ada3facc999"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.platform.language-runtime",
+      "state": "POPULATED",
+      "state_reason": "3 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+            "kind": "Technology",
+            "name": "Python 3.12",
+            "canonical_key": "stackgraph:technology:python-3-12"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "460bc434-0d1b-4940-8bf8-68603d476546",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "52b24fc0-6359-41eb-8338-8d6fd84acd21",
+            "kind": "Technology",
+            "name": "Node.js 22",
+            "canonical_key": "stackgraph:technology:node-js-22"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "130b95ca-6fc2-4d85-8677-b4ff4e7165b0",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "714dc6b6-8195-4cfb-879a-15d317feba32",
+            "kind": "Technology",
+            "name": "Go 1.22",
+            "canonical_key": "stackgraph:technology:go-1-22"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "5e439ede-4aad-4209-8d78-cbde6e2564d9",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 3,
+      "unique_technology_total": 3,
+      "observation": {
+        "rule_key": "observation.platform.language-runtime",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:cb91f6d4b9ceee259baf4eee115c83050069e2c2e7ac3e66ee3e8386c69cd4bb"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+              "kind": "Technology",
+              "name": "Python 3.12",
+              "canonical_key": "stackgraph:technology:python-3-12"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "52b24fc0-6359-41eb-8338-8d6fd84acd21",
+              "kind": "Technology",
+              "name": "Node.js 22",
+              "canonical_key": "stackgraph:technology:node-js-22"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "714dc6b6-8195-4cfb-879a-15d317feba32",
+              "kind": "Technology",
+              "name": "Go 1.22",
+              "canonical_key": "stackgraph:technology:go-1-22"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:b1e920171eb6c0df101993f36d1eddc7ef20a0d60977d29ce0f6fe240567442e"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "2a2c503d-4743-4327-8c59-2302fe4b67f6",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.platform.container-runtime",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "0f2c73b7-20b1-476f-8029-d6fe5aeb8aa3",
+            "kind": "Technology",
+            "name": "Docker",
+            "canonical_key": "stackgraph:technology:docker"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "3bf33581-a6a4-4f4d-85f3-fdc573d9dbd6",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.platform.container-runtime",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:4bc32e9d108c9105d3c87d5b3204821fe8909b1550d7fd3c0ffac54e424a7050"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 1,
+        "allowed_diversity": 1,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "0f2c73b7-20b1-476f-8029-d6fe5aeb8aa3",
+              "kind": "Technology",
+              "name": "Docker",
+              "canonical_key": "stackgraph:technology:docker"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:eef52f021116f62d50efc026cb7e7825c4fe900eb352a6db755ecb63bfd1f7c0"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "8f297722-7c88-4f95-8b7b-02bebff477b7",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.platform.compute-target",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.platform.compute-target",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:2863602682449782e8da53969c84286df6d1543266896d9c860e42c943d8a91b"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.platform.orchestration",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "bd36f220-05ce-4502-8e32-b376e63dba46",
+            "kind": "Technology",
+            "name": "Kubernetes",
+            "canonical_key": "stackgraph:technology:kubernetes"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "8334fbfc-da22-4dc8-872c-e7cf17fb628c",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.platform.orchestration",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:c792dc428445fba4146d3fa8011779df5c0b3206445892b7c3e4479bd5917ca9"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "bd36f220-05ce-4502-8e32-b376e63dba46",
+              "kind": "Technology",
+              "name": "Kubernetes",
+              "canonical_key": "stackgraph:technology:kubernetes"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:0fa28d6a9be2b77ebdcc3c28537b1916216531c524c2d7316142a3c2891fd915"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "01578bdb-c1fd-4338-807c-0bb4a2acdf14",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.platform.managed-compute",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.platform.managed-compute",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:034f32ba3faa27d66ebc44bb0477a853c94411d8f1fc50989e4849683c753d69"
+      },
+      "expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": null,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.platform.network-ingress",
+      "state": "POPULATED",
+      "state_reason": "1 governed technology decision.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "7ae40ed6-8918-441e-8a7d-d92e2d6b3262",
+            "kind": "Technology",
+            "name": "NGINX Ingress",
+            "canonical_key": "stackgraph:technology:nginx-ingress"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "8a0f32d2-3cb9-4e4f-8aaa-b1cc153c7ce2",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 1,
+      "unique_technology_total": 1,
+      "observation": {
+        "rule_key": "observation.platform.network-ingress",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:ebe4b651eed9c62edfdbfe4c2ce243d68b60e71cffd09220abd540757df6ba6a"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "7ae40ed6-8918-441e-8a7d-d92e2d6b3262",
+              "kind": "Technology",
+              "name": "NGINX Ingress",
+              "canonical_key": "stackgraph:technology:nginx-ingress"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:c0e53919868f9d861724ed5a9547c2919270a0b5f2886f90987d328b3a22dbe4"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "5ce82a6b-bdc1-451f-8027-de8a9115871b",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.platform.platform-services",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "067fd1c5-2daa-44e4-8bfa-8ef11375b073",
+            "kind": "Technology",
+            "name": "Amazon RDS",
+            "canonical_key": "stackgraph:technology:amazon-rds"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "208a81c8-3697-4422-85f3-f90f09dfbf47",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "44017caf-7192-4bf4-822e-8de42ad37cbe",
+            "kind": "Technology",
+            "name": "Amazon ElastiCache",
+            "canonical_key": "stackgraph:technology:amazon-elasticache"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "46047545-1c9e-434b-8c71-ea948a48eec6",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.platform.platform-services",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "supported_sensor_kinds": [
+          "infrastructure-config",
+          "deployment-manifest"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "infrastructure-config",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "infrastructure-config"
+            }
+          },
+          {
+            "sensor_kind": "deployment-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "deployment-manifest"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:14e7c160ce0cd487785a9717e1a565aa4fb29cdcb901fe4501773fad945a20e6"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": null,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "067fd1c5-2daa-44e4-8bfa-8ef11375b073",
+              "kind": "Technology",
+              "name": "Amazon RDS",
+              "canonical_key": "stackgraph:technology:amazon-rds"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "44017caf-7192-4bf4-822e-8de42ad37cbe",
+              "kind": "Technology",
+              "name": "Amazon ElastiCache",
+              "canonical_key": "stackgraph:technology:amazon-elasticache"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:c33c02ed7e9154d25326cdcbc18d337db6554abe4028c48bd36f44dd5c22d6ff"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "9411d662-c585-4eb9-8029-4d1a6b77ff75",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.delivery.source-build",
+      "state": "POPULATED",
+      "state_reason": "3 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "1e290632-da22-46aa-8a52-3a1d45a59a5e",
+            "kind": "Technology",
+            "name": "pnpm",
+            "canonical_key": "stackgraph:technology:pnpm"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "7393ff1a-40ed-4eda-8cac-7010506a220b",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "045b7f8f-1cb0-4bfe-8203-ad3affa1c5bd",
+            "kind": "Technology",
+            "name": "uv",
+            "canonical_key": "stackgraph:technology:uv"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "085fd355-b670-4181-8490-671c85e43f50",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "6312e278-b781-4c2a-8b54-715006b6ccf8",
+            "kind": "Technology",
+            "name": "Vite",
+            "canonical_key": "stackgraph:technology:vite"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "05b08ec3-2968-4b0a-8c80-49234cf9f26f",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 3,
+      "unique_technology_total": 3,
+      "observation": {
+        "rule_key": "observation.delivery.source-build",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:cf461ab4788cdad8898990e9fb20b1064002f5c6a4c8f34386e751fb27edaa63"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "1e290632-da22-46aa-8a52-3a1d45a59a5e",
+              "kind": "Technology",
+              "name": "pnpm",
+              "canonical_key": "stackgraph:technology:pnpm"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "045b7f8f-1cb0-4bfe-8203-ad3affa1c5bd",
+              "kind": "Technology",
+              "name": "uv",
+              "canonical_key": "stackgraph:technology:uv"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "6312e278-b781-4c2a-8b54-715006b6ccf8",
+              "kind": "Technology",
+              "name": "Vite",
+              "canonical_key": "stackgraph:technology:vite"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:3473d396a5f91d546da655aaac1dcc6b32cc2f80cd50cff6ac8653d7a8e1d79a"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "d3f735e4-3d1b-476b-841a-b452c9368b61",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.delivery.automated-testing",
+      "state": "POPULATED",
+      "state_reason": "3 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "a08bde64-fb20-4aaf-8b51-5fb0a3363fb0",
+            "kind": "Technology",
+            "name": "Playwright",
+            "canonical_key": "stackgraph:technology:playwright"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "568c8b0b-8faa-4337-8d22-4744c436bdc4",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "1fb760e6-30f7-4e9e-8a44-8c0c2dd45be0",
+            "kind": "Technology",
+            "name": "pytest",
+            "canonical_key": "stackgraph:technology:pytest"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "21daa14a-0689-4fc6-8e12-9843e3b543b8",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "214fae5f-b479-4b82-8c85-4e2f4c2f3eb1",
+            "kind": "Technology",
+            "name": "Jest",
+            "canonical_key": "stackgraph:technology:jest"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "DISCOURAGED",
+          "citations": [
+            {
+              "fact_id": "33bb23f9-1392-4ea3-8aad-854fa1b83684",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 3,
+      "unique_technology_total": 3,
+      "observation": {
+        "rule_key": "observation.delivery.automated-testing",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:04013aadc0e37a006022fdaa3b5c6b83669f782533f1a5a555681247b6bf8dab"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 4,
+        "allowed_diversity": 4,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "a08bde64-fb20-4aaf-8b51-5fb0a3363fb0",
+              "kind": "Technology",
+              "name": "Playwright",
+              "canonical_key": "stackgraph:technology:playwright"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "1fb760e6-30f7-4e9e-8a44-8c0c2dd45be0",
+              "kind": "Technology",
+              "name": "pytest",
+              "canonical_key": "stackgraph:technology:pytest"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "214fae5f-b479-4b82-8c85-4e2f4c2f3eb1",
+              "kind": "Technology",
+              "name": "Jest",
+              "canonical_key": "stackgraph:technology:jest"
+            },
+            "decision": "DISCOURAGED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": null,
+        "owner": null,
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:a1b2c66c5cb6942773587641a1b4ab5ba8c52a1c4898fce95d57500293c7518a"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "06401b5e-2afd-4833-8928-69b8c4873388",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.delivery.ci-cd",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.delivery.ci-cd",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:dc001d0a362e2ee4384f105e6e157998c4fe60960bf3e26f4dc46516cbaf9e80"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.delivery.infrastructure-as-code",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.delivery.infrastructure-as-code",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:3798721209893e1d8958117dcfffc3def498dbb505489079939d3e62df5bc746"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.delivery.config-secrets",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.delivery.config-secrets",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:4e4bcfe70fa13de163d2a28a37943aae14ee1fe202a36e436dd464c12fa321c4"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.delivery.release-management",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.delivery.release-management",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:7fb01f052b4b004ba992abd6c53875991dac13ea5b25843c6c130d8947932f79"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    },
+    {
+      "cell_key": "cell.delivery.telemetry",
+      "state": "POPULATED",
+      "state_reason": "2 governed technology decisions.",
+      "occupants": [
+        {
+          "technology": {
+            "id": "305dfe02-7869-4fee-8d87-0e7c3c2b60c8",
+            "kind": "Technology",
+            "name": "OpenTelemetry",
+            "canonical_key": "stackgraph:technology:opentelemetry"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "PREFERRED",
+          "citations": [
+            {
+              "fact_id": "6d4146ad-2c9d-4b13-82e3-efba988d7fe0",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "e89e1e5a-5a6b-4c63-8209-24a95266d338",
+            "kind": "Technology",
+            "name": "Prometheus",
+            "canonical_key": "stackgraph:technology:prometheus"
+          },
+          "placement_keys": [],
+          "classification": "CURATED",
+          "confidence": 1,
+          "confidence_label": "HIGH",
+          "adoption": {
+            "applications": 0,
+            "repositories": 0,
+            "deployments": 0
+          },
+          "policy_status": "ALLOWED",
+          "citations": [
+            {
+              "fact_id": "853e3da7-ed2c-410b-8603-4adae6094913",
+              "label": "Tenant architecture profile decision"
+            }
+          ]
+        }
+      ],
+      "occupant_total": 2,
+      "unique_technology_total": 2,
+      "observation": {
+        "rule_key": "observation.delivery.telemetry",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:1fc5f307dbdd8e0c7fd4cc476e399b1c9e770df0d78fcdc996469cc553891d69"
+      },
+      "expectation": {
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "source": "TENANT_PROFILE",
+        "scope_selector": null,
+        "rationale": "OpenTelemetry is the standard instrumentation layer; Prometheus remains allowed for infrastructure metrics.",
+        "owner": "observability-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": {
+        "governed": true,
+        "profile_id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+        "profile_version": 3,
+        "decisions": [
+          {
+            "technology": {
+              "id": "305dfe02-7869-4fee-8d87-0e7c3c2b60c8",
+              "kind": "Technology",
+              "name": "OpenTelemetry",
+              "canonical_key": "stackgraph:technology:opentelemetry"
+            },
+            "decision": "PREFERRED",
+            "rationale": null
+          },
+          {
+            "technology": {
+              "id": "e89e1e5a-5a6b-4c63-8209-24a95266d338",
+              "kind": "Technology",
+              "name": "Prometheus",
+              "canonical_key": "stackgraph:technology:prometheus"
+            },
+            "decision": "ALLOWED",
+            "rationale": null
+          }
+        ],
+        "exceptions": [],
+        "rationale": "OpenTelemetry is the standard instrumentation layer; Prometheus remains allowed for infrastructure metrics.",
+        "owner": "observability-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "migrated_function_keys": [],
+        "fingerprint": "sha256:ea79099207d0ac670b7e98b5f00f14865422375a3fe8b9e5eb0763b210dfd29a"
+      },
+      "insight_refs": [],
+      "citations": [
+        {
+          "fact_id": "35d8b757-e13e-4894-82ab-9b17e73a579b",
+          "label": "Tenant architecture profile"
+        }
+      ]
+    },
+    {
+      "cell_key": "cell.delivery.incident-ops",
+      "state": "EMPTY",
+      "state_reason": "No target decision has been recorded for this concern.",
+      "occupants": [],
+      "occupant_total": 0,
+      "unique_technology_total": 0,
+      "observation": {
+        "rule_key": "observation.delivery.incident-ops",
+        "status": "COMPLETE",
+        "required_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "supported_sensor_kinds": [
+          "dependency-manifest",
+          "repository-file-tree"
+        ],
+        "sensors": [
+          {
+            "sensor_kind": "dependency-manifest",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "dependency-manifest"
+            }
+          },
+          {
+            "sensor_kind": "repository-file-tree",
+            "supported": true,
+            "last_observed_at": "2026-08-22T04:15:00.000Z",
+            "freshness": {
+              "observed_at": "2026-08-22T04:15:00.000Z",
+              "status": "FRESH",
+              "source_key": "repository-file-tree"
+            }
+          }
+        ],
+        "subjects_in_scope": 0,
+        "subjects_observed": 0,
+        "freshness_status": "FRESH",
+        "unsupported_ecosystems": [],
+        "missing_inputs": [],
+        "method_version": "architecture-canvas/v1",
+        "input_fingerprint": "sha256:4a23c4bba8868e194ab9e137ef2f5ec29dedf3e2cdbacddc0924843c311fd9c1"
+      },
+      "expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "source": "REFERENCE_MODEL",
+        "scope_selector": null,
+        "rationale": null,
+        "owner": null,
+        "effective_from": null,
+        "effective_to": null
+      },
+      "measures": null,
+      "policy": null,
+      "insight_refs": [],
+      "citations": []
+    }
+  ],
+  "classification_tray": {
+    "unclassified_technologies": [
+      {
+        "technology": {
+          "id": "10a45927-21bd-4aca-82d2-b549ea96a049",
+          "kind": "Technology",
+          "name": "internal-billing-sdk",
+          "canonical_key": "stackgraph:technology:internal-billing-sdk"
+        },
+        "reason": "No catalog match and no capability inference above the confidence floor.",
+        "ecosystem": "PYPI",
+        "citations": [
+          {
+            "fact_id": "3043f9c3-553c-49a9-8e40-ee68fa04e022",
+            "label": "Declared in pyproject.toml"
+          }
+        ]
+      },
+      {
+        "technology": {
+          "id": "d4a91110-feca-4ca1-875d-27c0a23ed082",
+          "kind": "Technology",
+          "name": "acme-telemetry-shim",
+          "canonical_key": "stackgraph:technology:acme-telemetry-shim"
+        },
+        "reason": "Private registry package; no public metadata available.",
+        "ecosystem": "NPM",
+        "citations": [
+          {
+            "fact_id": "0462339e-287b-4eeb-8e7c-27ce24d54586",
+            "label": "Declared in package.json"
+          }
+        ]
+      },
+      {
+        "technology": {
+          "id": "51041988-a411-41a3-8db8-63fd2d2d65a1",
+          "kind": "Technology",
+          "name": "legacy-soap-bridge",
+          "canonical_key": "stackgraph:technology:legacy-soap-bridge"
+        },
+        "reason": "Ecosystem MAVEN is not yet analyzable.",
+        "ecosystem": "MAVEN",
+        "citations": [
+          {
+            "fact_id": "c4120a5e-7100-4031-842f-840ffc1496ed",
+            "label": "Declared in pom.xml"
+          }
+        ]
+      }
+    ],
+    "ambiguous_observations": [
+      {
+        "technology": {
+          "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
+          "kind": "Technology",
+          "name": "Redis",
+          "canonical_key": "stackgraph:technology:redis"
+        },
+        "candidate_cell_keys": [
+          "cell.data.cache-session",
+          "cell.integration.message-routing"
+        ],
+        "reason": "Cache and task-queue capabilities are both evidenced; the placements are not mutually exclusive but the adoption counts must not be double-counted.",
+        "citations": [
+          {
+            "fact_id": "725d6c30-d39d-4f97-8131-393907498a1a",
+            "label": "Redis client and broker configuration observed"
+          }
+        ]
+      },
+      {
+        "technology": {
+          "id": "3135c623-3dba-47b5-8e89-9fa9be8d1a7d",
+          "kind": "Technology",
+          "name": "NGINX",
+          "canonical_key": "stackgraph:technology:nginx"
+        },
+        "candidate_cell_keys": [
+          "cell.integration.edge-gateway",
+          "cell.platform.network-ingress"
+        ],
+        "reason": "Reverse-proxy and ingress-controller roles both match the observed configuration.",
+        "citations": [
+          {
+            "fact_id": "25a81c82-a079-48c7-8e5f-9aa28d8c4344",
+            "label": "NGINX configuration observed in two deployments"
+          }
+        ]
+      }
+    ],
+    "unresolved_policies": [
+      {
+        "policy_key": "tenant-design-tokens",
+        "label": "Tenant design tokens",
+        "source": "CUSTOM",
+        "reason": "Custom governed function has no mapping to a canonical cell or tenant extension cell.",
+        "technology_count": 2
+      },
+      {
+        "policy_key": "legacy-reporting-stack",
+        "label": "Legacy reporting stack",
+        "source": "CUSTOM",
+        "reason": "Migrated from code policies; awaiting an architecture-cell decision.",
+        "technology_count": 4
+      }
+    ],
+    "filtered_out_total": 0
+  },
+  "summary": {
+    "cells_total": 44,
+    "by_state": {
+      "POPULATED": 27,
+      "EMPTY": 16,
+      "NOT_APPLICABLE": 1,
+      "UNOBSERVED": 0,
+      "UNBOUND": 0
+    },
+    "by_posture_band": {
+      "STRONG": 0,
+      "ADEQUATE": 0,
+      "WEAK": 0,
+      "AT_RISK": 0,
+      "UNSCORED": 27
+    },
+    "by_policy_status": {
+      "PREFERRED": 24,
+      "ALLOWED": 16,
+      "DISCOURAGED": 7,
+      "PROHIBITED": 1,
+      "UNGOVERNED": 0
+    },
+    "unique_technologies": 44,
+    "placements_total": 48,
+    "governed_cells": 27,
+    "unmapped_observations": 3,
+    "ambiguous_observations": 2,
+    "unresolved_policies": 2
+  },
+  "input_fingerprint": "sha256:2276758a61900f8536e061ff634e8170e566311a389c2d4a4584be7c48d85d4f"
+}

@@ -13,6 +13,7 @@ import {
   IconSettings,
   IconStack2,
   IconTrendingUp,
+  IconLayoutGrid,
   type Icon,
 } from "@tabler/icons-react";
 import styles from "./LeftRail.module.css";
@@ -23,6 +24,7 @@ const PRIMARY = [
   { href: "/business-map", label: "Business Map", icon: IconHierarchy3 },
   { href: "/applications", label: "Applications", icon: IconApps },
   { href: "/technologies", label: "Technologies", icon: IconStack2 },
+  { href: "/architecture", label: "Architecture", icon: IconLayoutGrid },
   { href: "/modernization", label: "Modernization", icon: IconTrendingUp },
   { href: "/ask", label: "Insights", icon: IconBulb },
 ];

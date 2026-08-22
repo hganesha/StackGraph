@@ -84,7 +84,24 @@ import type {
   RescanJob,
   RescanJobList,
   Namespace,
+  EntitySummary,
 } from "../contracts/read-models";
+import type {
+  ArchitectureReferenceModel,
+  ArchitectureReferenceModelList,
+  CanvasCellProjection,
+  CanvasComparison,
+  CanvasComparisonRequest,
+  CanvasPolicyDecision,
+  CanvasProjection,
+  CanvasScope,
+  CanvasTemplate,
+  CanvasTemplateList,
+  TenantArchitectureProfile,
+  TenantArchitectureProfileCreateRequest,
+  TenantArchitectureProfileList,
+  TenantArchitectureProfileUpdateRequest,
+} from "../contracts/canvas";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
 // The golden fixture is contracts/v1/fixtures/estate-summary.json.
@@ -110,6 +127,21 @@ import modernizationScenario from "../fixtures/modernization-scenario.json";
 import modernizationGovernance from "../fixtures/modernization-governance.json";
 import deterministicInsights from "../fixtures/deterministic-insights.json";
 import deterministicInsightGovernance from "../fixtures/deterministic-insight-governance.json";
+
+export interface CanvasProjectionParams {
+  scope: CanvasScope;
+  subjectId?: string;
+  referenceModelKey?: string;
+  referenceModelVersion?: string;
+  templateKey?: string;
+  asOf?: string;
+}
+
+export interface CanvasTargetProjectionParams {
+  referenceModelKey?: string;
+  templateKey?: string;
+  profileId?: string;
+}
 
 export interface EstateSummaryParams {
   cursor?: string;
@@ -194,6 +226,21 @@ export interface StackGraphClient {
   updateServiceControl(serviceKey: string, body: ServiceControlRequest): Promise<ServiceStatus>;
   requestRescan(body: RescanRequest): Promise<RescanJob>;
   listRescans(cursor?: string, limit?: number): Promise<RescanJobList>;
+
+  // ── Architecture Canvas ──────────────────────────────────────────────────
+  listCanvasReferenceModels(): Promise<ArchitectureReferenceModelList>;
+  getCanvasReferenceModel(key: string, version?: string): Promise<ArchitectureReferenceModel>;
+  listCanvasTemplates(referenceModelKey?: string): Promise<CanvasTemplateList>;
+  // The list returns summaries, so the geometry the renderer needs is fetched by key.
+  // GET /canvas/templates/{key} is an addition to the spec's §10.2 route table.
+  getCanvasTemplate(key: string, version?: string): Promise<CanvasTemplate>;
+  getCanvasProjection(params: CanvasProjectionParams): Promise<CanvasProjection>;
+  getCanvasTargetProjection(params?: CanvasTargetProjectionParams): Promise<CanvasProjection>;
+  createCanvasComparison(body: CanvasComparisonRequest): Promise<CanvasComparison>;
+  listArchitectureProfiles(): Promise<TenantArchitectureProfileList>;
+  createArchitectureProfile(body: TenantArchitectureProfileCreateRequest): Promise<TenantArchitectureProfile>;
+  updateArchitectureProfile(id: string, body: TenantArchitectureProfileUpdateRequest): Promise<TenantArchitectureProfile>;
+  publishArchitectureProfile(id: string): Promise<TenantArchitectureProfile>;
 }
 
 /** Simulated latency so loading/skeleton states are exercised in fixture mode. */
@@ -336,6 +383,167 @@ const summarize = (m: BusinessMapDetail): BusinessMapSummary => ({
   created_at: m.created_at,
   updated_at: m.updated_at,
 });
+
+
+// ─── Architecture Canvas fixture state ───────────────────────────────────────
+// The canvas fixtures are an order of magnitude larger than every other fixture in
+// this file, so they load through dynamic import() and land in their own async chunk
+// rather than the shared-by-all bundle the perf budget guards. Golden mode mutates
+// the profile and re-derives the target projection in place, so the govern-mode
+// editing loop is fully exercisable without a backend.
+
+interface CanvasFixtureBundle {
+  referenceModel: ArchitectureReferenceModel;
+  template: CanvasTemplate;
+  estate: CanvasProjection;
+  application: CanvasProjection;
+  target: CanvasProjection;
+  comparison: CanvasComparison;
+  profile: TenantArchitectureProfile;
+}
+
+let canvasBundle: Promise<CanvasFixtureBundle> | null = null;
+
+function loadCanvasFixtures(): Promise<CanvasFixtureBundle> {
+  canvasBundle ??= Promise.all([
+    import("../fixtures/canvas-reference-model.json"),
+    import("../fixtures/canvas-template.json"),
+    import("../fixtures/canvas-projection-estate.json"),
+    import("../fixtures/canvas-projection-application.json"),
+    import("../fixtures/canvas-projection-target.json"),
+    import("../fixtures/canvas-comparison.json"),
+    import("../fixtures/canvas-architecture-profile.json"),
+  ]).then(([model, template, estate, application, target, comparison, profile]) => ({
+    referenceModel: clone(model.default as unknown as ArchitectureReferenceModel),
+    template: clone(template.default as unknown as CanvasTemplate),
+    estate: clone(estate.default as unknown as CanvasProjection),
+    application: clone(application.default as unknown as CanvasProjection),
+    target: clone(target.default as unknown as CanvasProjection),
+    comparison: clone(comparison.default as unknown as CanvasComparison),
+    profile: clone(profile.default as unknown as TenantArchitectureProfile),
+  }));
+  return canvasBundle;
+}
+
+const canvasFingerprint = (seed: string) => {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `sha256:${(hash >>> 0).toString(16).repeat(8).slice(0, 64)}`;
+};
+
+const CANVAS_DECISION_FIELDS: Array<[CanvasPolicyDecision, "preferred_technology_ids" | "allowed_technology_ids" | "discouraged_technology_ids" | "prohibited_technology_ids"]> = [
+  ["PREFERRED", "preferred_technology_ids"],
+  ["ALLOWED", "allowed_technology_ids"],
+  ["DISCOURAGED", "discouraged_technology_ids"],
+  ["PROHIBITED", "prohibited_technology_ids"],
+];
+
+/**
+ * Re-derives the target projection from the current profile draft so golden mode
+ * reflects an edit immediately. The server computes this properly; the fixture keeps
+ * the two consistent enough that the UI's mutate-then-refetch path is real.
+ */
+function applyProfileToTarget(
+  target: CanvasProjection,
+  profile: TenantArchitectureProfile,
+): CanvasProjection {
+  const knownTechnology = new Map<string, EntitySummary>();
+  for (const cell of target.cells) {
+    for (const occupant of cell.occupants) knownTechnology.set(occupant.technology.id, occupant.technology);
+    for (const decision of cell.policy?.decisions ?? []) {
+      knownTechnology.set(decision.technology.id, decision.technology);
+    }
+  }
+
+  const cells: CanvasCellProjection[] = target.cells.map((cell) => {
+    const override = profile.cell_overrides.find((item) => item.cell_key === cell.cell_key);
+    if (!override) return clone(cell);
+    const decisions = CANVAS_DECISION_FIELDS.flatMap(([decision, field]) =>
+      override[field].map((id) => ({
+        technology: knownTechnology.get(id) ?? { id, kind: "Technology", name: id },
+        decision,
+        rationale: null,
+      })),
+    );
+    const notApplicable = override.applicability === "NOT_APPLICABLE";
+    return {
+      ...clone(cell),
+      state: notApplicable ? "NOT_APPLICABLE" : decisions.length ? "POPULATED" : "EMPTY",
+      state_reason: notApplicable
+        ? "The active profile marks this concern not applicable for this scope."
+        : decisions.length
+          ? `${decisions.length} governed technology decision${decisions.length === 1 ? "" : "s"}.`
+          : "No target decision has been recorded for this concern.",
+      occupants: decisions.map((decision) => ({
+        technology: decision.technology,
+        placement_keys: [],
+        classification: "CURATED" as const,
+        confidence: 1,
+        confidence_label: "HIGH" as const,
+        adoption: { applications: 0, repositories: 0, deployments: 0 },
+        policy_status: decision.decision,
+        citations: [{ fact_id: profile.id, label: "Tenant architecture profile decision" }],
+      })),
+      occupant_total: decisions.length,
+      unique_technology_total: decisions.length,
+      expectation: {
+        ...cell.expectation,
+        applicability: override.applicability,
+        minimum_implementations: override.minimum_implementations,
+        maximum_implementations: override.maximum_implementations,
+        allowed_diversity: override.allowed_diversity,
+        source: "TENANT_PROFILE",
+        rationale: override.rationale || cell.expectation.rationale,
+        owner: override.owner,
+      },
+      policy: {
+        governed: decisions.length > 0,
+        profile_id: profile.id,
+        profile_version: profile.version,
+        decisions,
+        exceptions: clone(override.exceptions),
+        rationale: override.rationale || null,
+        owner: override.owner,
+        effective_from: override.effective_from,
+        effective_to: override.effective_to,
+        migrated_function_keys: cell.policy?.migrated_function_keys ?? [],
+        fingerprint: profile.fingerprint,
+      },
+    };
+  });
+
+  const byState = { POPULATED: 0, EMPTY: 0, NOT_APPLICABLE: 0, UNOBSERVED: 0, UNBOUND: 0 };
+  const byPolicy = { PREFERRED: 0, ALLOWED: 0, DISCOURAGED: 0, PROHIBITED: 0, UNGOVERNED: 0 };
+  const unique = new Set<string>();
+  let governed = 0;
+  let placements = 0;
+  for (const cell of cells) {
+    byState[cell.state] += 1;
+    if (cell.policy?.governed) governed += 1;
+    for (const occupant of cell.occupants) {
+      byPolicy[occupant.policy_status] += 1;
+      unique.add(occupant.technology.id);
+      placements += 1;
+    }
+  }
+
+  return {
+    ...target,
+    tenant_profile_fingerprint: profile.fingerprint,
+    cells,
+    summary: {
+      ...target.summary,
+      by_state: byState,
+      by_policy_status: byPolicy,
+      governed_cells: governed,
+      placements_total: placements,
+      unique_technologies: unique.size,
+    },
+  };
+}
 
 const fixtureClient: StackGraphClient = {
   async getEstateSummary(params) {
@@ -1073,6 +1281,116 @@ const fixtureClient: StackGraphClient = {
       page_info: { has_next_page: false },
     };
   },
+  // ── Architecture Canvas ──────────────────────────────────────────────────
+  listCanvasReferenceModels: async () => {
+    const { referenceModel } = await loadCanvasFixtures();
+    await delay();
+    return {
+      contract_version: "1.0.0" as const,
+      models: [{
+        key: referenceModel.key,
+        version: referenceModel.version,
+        name: referenceModel.name,
+        description: referenceModel.description,
+        content_hash: referenceModel.content_hash,
+      }],
+    };
+  },
+  getCanvasReferenceModel: async (key) => {
+    const { referenceModel } = await loadCanvasFixtures();
+    await delay();
+    if (key !== referenceModel.key) throw new FixtureApiError(404, { detail: "Unknown reference model" });
+    return clone(referenceModel);
+  },
+  listCanvasTemplates: async () => {
+    const { template } = await loadCanvasFixtures();
+    await delay();
+    return {
+      contract_version: "1.0.0" as const,
+      templates: [{
+        key: template.key,
+        version: template.version,
+        name: template.name,
+        reference_model_key: template.reference_model_key,
+        reference_model_version: template.reference_model_version,
+        content_hash: template.content_hash,
+      }],
+    };
+  },
+  getCanvasTemplate: async (key) => {
+    const { template } = await loadCanvasFixtures();
+    await delay();
+    if (key !== template.key) throw new FixtureApiError(404, { detail: "Unknown template" });
+    return clone(template);
+  },
+  getCanvasProjection: async (params) => {
+    const bundle = await loadCanvasFixtures();
+    await delay(180);
+    if (params.scope === "TARGET") {
+      return applyProfileToTarget(bundle.target, bundle.profile);
+    }
+    if (params.scope === "APPLICATION" || params.scope === "REPOSITORY") {
+      const projection = clone(bundle.application);
+      projection.scope = params.scope;
+      if (params.subjectId && projection.subject) projection.subject.id = params.subjectId;
+      return projection;
+    }
+    return clone(bundle.estate);
+  },
+  getCanvasTargetProjection: async () => {
+    const bundle = await loadCanvasFixtures();
+    await delay(180);
+    return applyProfileToTarget(bundle.target, bundle.profile);
+  },
+  createCanvasComparison: async (body) => {
+    const bundle = await loadCanvasFixtures();
+    await delay(220);
+    return { ...clone(bundle.comparison), comparison_kind: body.comparison_kind };
+  },
+  listArchitectureProfiles: async () => {
+    const { profile } = await loadCanvasFixtures();
+    await delay();
+    return { contract_version: "1.0.0" as const, profiles: [clone(profile)] };
+  },
+  createArchitectureProfile: async (body) => {
+    const bundle = await loadCanvasFixtures();
+    await delay();
+    bundle.profile = {
+      ...clone(bundle.profile),
+      name: body.name,
+      version: bundle.profile.version + 1,
+      status: "DRAFT",
+      cell_overrides: body.copy_from_profile_id ? clone(bundle.profile.cell_overrides) : [],
+      fingerprint: canvasFingerprint(body.name),
+      updated_at: new Date().toISOString(),
+    };
+    return clone(bundle.profile);
+  },
+  updateArchitectureProfile: async (id, body) => {
+    const bundle = await loadCanvasFixtures();
+    await delay();
+    if (id !== bundle.profile.id) throw new FixtureApiError(404, { detail: "Unknown profile" });
+    if (body.expected_fingerprint !== bundle.profile.fingerprint) {
+      throw new FixtureApiError(409, { detail: "Profile changed since it was loaded" });
+    }
+    bundle.profile = {
+      ...bundle.profile,
+      name: body.name ?? bundle.profile.name,
+      cell_overrides: body.cell_overrides ? clone(body.cell_overrides) : bundle.profile.cell_overrides,
+      extension_cells: body.extension_cells ? clone(body.extension_cells) : bundle.profile.extension_cells,
+      // A changed body yields a changed fingerprint, so a stale second save 409s.
+      fingerprint: canvasFingerprint(JSON.stringify(body.cell_overrides ?? [])),
+      updated_at: new Date().toISOString(),
+    };
+    return clone(bundle.profile);
+  },
+  publishArchitectureProfile: async (id) => {
+    const bundle = await loadCanvasFixtures();
+    await delay();
+    if (id !== bundle.profile.id) throw new FixtureApiError(404, { detail: "Unknown profile" });
+    bundle.profile = { ...bundle.profile, status: "ACTIVE", updated_at: new Date().toISOString() };
+    return clone(bundle.profile);
+  },
 };
 
 async function req<T>(path: string, init?: RequestInit, allowRefresh = true): Promise<T> {
@@ -1264,6 +1582,45 @@ const liveClient: StackGraphClient = {
     req("/admin/rescans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listRescans: (cursor, limit = 50) =>
     req(`/admin/rescans?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  // ── Architecture Canvas ──────────────────────────────────────────────────
+  listCanvasReferenceModels: () => req("/canvas/reference-models"),
+  getCanvasReferenceModel: (key, version) =>
+    req(`/canvas/reference-models/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
+  listCanvasTemplates: (referenceModelKey) =>
+    req(`/canvas/templates${referenceModelKey ? `?reference_model_key=${encodeURIComponent(referenceModelKey)}` : ""}`),
+  getCanvasTemplate: (key, version) =>
+    req(`/canvas/templates/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
+  getCanvasProjection: (params) => {
+    const query = new URLSearchParams({ scope: params.scope });
+    if (params.subjectId) query.set("subject_id", params.subjectId);
+    if (params.referenceModelKey) query.set("reference_model_key", params.referenceModelKey);
+    if (params.referenceModelVersion) query.set("reference_model_version", params.referenceModelVersion);
+    if (params.templateKey) query.set("template_key", params.templateKey);
+    if (params.asOf) query.set("as_of", params.asOf);
+    return req(`/canvas/projection?${query.toString()}`);
+  },
+  getCanvasTargetProjection: (params) => {
+    const query = new URLSearchParams();
+    if (params?.referenceModelKey) query.set("reference_model_key", params.referenceModelKey);
+    if (params?.templateKey) query.set("template_key", params.templateKey);
+    if (params?.profileId) query.set("profile_id", params.profileId);
+    return req(`/canvas/target-projection${query.size ? `?${query.toString()}` : ""}`);
+  },
+  createCanvasComparison: (body) =>
+    req("/canvas/comparisons", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  listArchitectureProfiles: () => req("/admin/architecture-profiles"),
+  createArchitectureProfile: (body) =>
+    req("/admin/architecture-profiles", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  updateArchitectureProfile: (id, body) =>
+    req(`/admin/architecture-profiles/${encodeURIComponent(id)}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  publishArchitectureProfile: (id) =>
+    req(`/admin/architecture-profiles/${encodeURIComponent(id)}/publish`, { method: "POST" }),
 };
 
 export const stackGraphClient: StackGraphClient = isFixtureMode() ? fixtureClient : liveClient;

@@ -161,3 +161,28 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ---- estate view switch ---- */
+
+.viewSwitch {
+  display: inline-flex;
+  gap: var(--sg-space-3);
+  margin-block-start: var(--sg-space-2);
+  font-size: var(--sg-type-small-size);
+}
+.viewSwitch a {
+  color: var(--sg-text-secondary);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+  padding-block-end: 2px;
+}
+.viewSwitch a:hover {
+  color: var(--sg-text-primary);
+  border-block-end-color: var(--sg-surface-border-strong);
+}
+.activeView {
+  color: var(--sg-text-primary);
+  font-weight: 600;
+  border-block-end: 2px solid var(--sg-color-domain-enterprise-500);
+  padding-block-end: 2px;
+}

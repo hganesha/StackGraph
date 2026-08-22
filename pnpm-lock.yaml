@@ -29,6 +29,9 @@ importers:
       '@fontsource/ibm-plex-sans':
         specifier: ^5.1.0
         version: 5.3.0
+      '@stackgraph/canvas-ui':
+        specifier: workspace:*
+        version: link:../../packages/canvas-ui
       '@stackgraph/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
@@ -69,6 +72,34 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.4(@types/react@19.2.18)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/canvas-ui:
+    dependencies:
+      '@stackgraph/design-system':
+        specifier: workspace:*
+        version: link:../design-system
+      '@stackgraph/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@tabler/icons-react':
+        specifier: ^3.46.0
+        version: 3.46.0(react@19.2.8)
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.4(@types/react@19.2.18)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.8
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

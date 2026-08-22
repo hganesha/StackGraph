@@ -1,0 +1,686 @@
+{
+  "contract_version": "1.0.0",
+  "comparison_kind": "ACTUAL_TO_TARGET",
+  "actual_projection_fingerprint": "sha256:c3a356511fb6cd58cfdeaf0e382407dd7cf8d7f04c9ca644f34888227d5497a2",
+  "baseline_projection_fingerprint": "sha256:2276758a61900f8536e061ff634e8170e566311a389c2d4a4584be7c48d85d4f",
+  "cells": [
+    {
+      "cell_key": "cell.experience.ui-rendering",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.web-framework",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.client-navigation",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.state-consumption",
+      "status": "PROHIBITED_IN_USE",
+      "status_reason": "1 prohibited technology in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 1,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.forms-validation",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.design-system",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 2,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.experience.channels",
+      "status": "NOT_APPLICABLE",
+      "status_reason": "This product line ships web only; native channels are out of scope.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.service-api",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.domain-logic",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "6 of 12 subjects unobserved"
+    },
+    {
+      "cell_key": "cell.application.persistence-adapter",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.outbound-clients",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.background-jobs",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.workflow-execution",
+      "status": "UNGOVERNED",
+      "status_reason": "No target decision exists for this concern.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.application.runtime-framework",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 2,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.edge-gateway",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.api-contract",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.service-connectivity",
+      "status": "UNGOVERNED",
+      "status_reason": "No target decision exists for this concern.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.message-routing",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.event-stream",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.integration.stream-processing",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "no sensor has reported for this cell"
+    },
+    {
+      "cell_key": "cell.integration.integration-orchestration",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "required sensor kind is not supported for this scope"
+    },
+    {
+      "cell_key": "cell.data.relational-store",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.data.nonrelational-store",
+      "status": "UNGOVERNED",
+      "status_reason": "No target decision exists for this concern.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.data.cache-session",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.data.search-retrieval",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.data.object-storage",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.data.analytical-store",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "no sensor has reported for this cell"
+    },
+    {
+      "cell_key": "cell.data.data-processing",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "last successful observation is older than the 30-day freshness budget"
+    },
+    {
+      "cell_key": "cell.data.data-movement",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "no sensor has reported for this cell"
+    },
+    {
+      "cell_key": "cell.platform.language-runtime",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 2,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.platform.container-runtime",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.platform.compute-target",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "6 of 12 subjects unobserved"
+    },
+    {
+      "cell_key": "cell.platform.orchestration",
+      "status": "PREFERRED_IN_USE",
+      "status_reason": "Only preferred technologies are in use.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.platform.managed-compute",
+      "status": "UNGOVERNED",
+      "status_reason": "No target decision exists for this concern.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.platform.network-ingress",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.platform.platform-services",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.delivery.source-build",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 2,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.delivery.automated-testing",
+      "status": "DISCOURAGED_IN_USE",
+      "status_reason": "1 discouraged technology still in use.",
+      "counts": {
+        "preferred_in_use": 2,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 1,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.delivery.ci-cd",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "required sensor kind is not supported for this scope"
+    },
+    {
+      "cell_key": "cell.delivery.infrastructure-as-code",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "6 of 12 subjects unobserved"
+    },
+    {
+      "cell_key": "cell.delivery.config-secrets",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "required sensor kind is not supported for this scope"
+    },
+    {
+      "cell_key": "cell.delivery.release-management",
+      "status": "UNGOVERNED",
+      "status_reason": "No target decision exists for this concern.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.delivery.telemetry",
+      "status": "ALLOWED_IN_USE",
+      "status_reason": "In use technologies are allowed but not preferred.",
+      "counts": {
+        "preferred_in_use": 1,
+        "allowed_in_use": 1,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": null
+    },
+    {
+      "cell_key": "cell.delivery.incident-ops",
+      "status": "UNEVALUABLE",
+      "status_reason": "Observation is incomplete, so conformance cannot be asserted.",
+      "counts": {
+        "preferred_in_use": 0,
+        "allowed_in_use": 0,
+        "discouraged_in_use": 0,
+        "prohibited_in_use": 0,
+        "required_absent": 0
+      },
+      "added_technologies": [],
+      "removed_technologies": [],
+      "unevaluable_reason": "no sensor has reported for this cell"
+    }
+  ],
+  "summary": {
+    "cells_total": 44,
+    "by_status": {
+      "ALIGNED": 0,
+      "PREFERRED_IN_USE": 9,
+      "ALLOWED_IN_USE": 11,
+      "DISCOURAGED_IN_USE": 6,
+      "PROHIBITED_IN_USE": 1,
+      "REQUIRED_ABSENT": 0,
+      "NOT_APPLICABLE": 1,
+      "UNGOVERNED": 5,
+      "UNEVALUABLE": 11
+    },
+    "incompatible_cells": [],
+    "excluded_extension_cells": []
+  },
+  "method_version": "architecture-canvas/v1",
+  "input_fingerprint": "sha256:f1f70951edc8e423913e79122978266c9b2b05215c407e92ba9bd004ed43048a"
+}
