@@ -224,22 +224,22 @@ function InternalCatalogEditor({ state }: { state: ModernizationGovernanceState 
       ) : <p className={styles.empty}>No internal components have been governed yet.</p>}
       {componentCandidates.length ? (
         <label className={styles.field}>
-          <span className={styles.label}>Evidence-backed component proposal</span>
+          <span className={styles.label}>Manifest-backed internal package proposal</span>
           <select
             className={styles.select}
             value={selectedCandidateId}
             onChange={(event) => selectCandidate(event.target.value)}
           >
-            <option value="">Select analyzed code evidence…</option>
+            <option value="">Select a declared internal package…</option>
             {componentCandidates.map((candidate) => (
               <option key={candidate.candidate_id} value={candidate.candidate_id}>
                 {candidate.repository_name} · {candidate.capability} · {candidate.name} · {Math.round(candidate.confidence * 100)}%
               </option>
             ))}
           </select>
-          <span className={styles.help}>Selecting a proposal fills the component, capability, and fact identifiers. Approval remains an explicit governed decision and still requires an owner.</span>
+          <span className={styles.help}>Proposals require a package manifest plus a declared custom registry. Selecting one fills the package, capability, and fact identifiers; approval remains an explicit decision and requires an owner.</span>
         </label>
-      ) : <p className={styles.empty}>No ungoverned internal component proposal has complete capability evidence.</p>}
+      ) : <p className={styles.empty}>No ungoverned package has both custom-registry publication evidence and a high-confidence capability classification.</p>}
       <form className={styles.governanceForm} onSubmit={submit}>
         <div className={styles.fieldGrid}>
           <label className={styles.field}><span className={styles.label}>Component key</span><input className={styles.input} value={componentKey} onChange={(event) => setComponentKey(event.target.value)} required /></label>

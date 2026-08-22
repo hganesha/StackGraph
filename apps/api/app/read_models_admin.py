@@ -1842,9 +1842,9 @@ class AdminReadModelsMixin:
         components = await cursor.fetchall()
         cursor = await connection.execute(
             """
-            SELECT DISTINCT ON (option.canonical_key)
-                   candidate.id candidate_id,option.target_entity_id component_entity_id,
-                   option.canonical_key component_key,option.name,
+            SELECT DISTINCT ON (component.canonical_key,candidate.capability_definition_id)
+                   candidate.id candidate_id,component.id component_entity_id,
+                   component.canonical_key component_key,component.name,
                    repository.name repository_name,
                    candidate.capability_definition_id,capability.name capability,
                    candidate.confidence,
@@ -1852,7 +1852,10 @@ class AdminReadModelsMixin:
                    coalesce(impact.affected_files,0)::integer affected_files,
                    ARRAY(
                      SELECT DISTINCT fact_id
-                     FROM unnest(candidate.supporting_fact_ids || option.supporting_fact_ids) fact_id
+                     FROM unnest(
+                       candidate.supporting_fact_ids || option.supporting_fact_ids
+                       || ARRAY[publication.id]
+                     ) fact_id
                      ORDER BY fact_id
                    ) supporting_fact_ids
             FROM modernization_candidate candidate
@@ -1861,21 +1864,32 @@ class AdminReadModelsMixin:
              AND option.option_kind='INTERNAL' AND option.target_entity_id IS NOT NULL
             JOIN entity repository ON repository.id=option.target_entity_id
               AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
+            JOIN fact_assertion publication
+              ON publication.subject_entity_id=repository.id
+             AND publication.predicate='PUBLISHES' AND publication.system_to IS NULL
+             AND publication.assertion_class='DECLARED'
+             AND coalesce((publication.properties->>'internal')::boolean,false)
+            JOIN entity component ON component.id=publication.object_entity_id
+              AND component.namespace='TECHNOLOGY'
+              AND component.entity_type IN ('Package','PackageVersion')
+              AND component.canonical_key LIKE 'registry:%%'
             JOIN capability_definition capability
               ON capability.id=candidate.capability_definition_id
             LEFT JOIN modernization_impact impact
               ON impact.modernization_candidate_id=candidate.id
             WHERE candidate.stale_at IS NULL AND candidate.review_state<>'REJECTED'
+              AND candidate.confidence>=0.8
               AND option.name !~* '^(test_|main$)'
               AND option.canonical_key NOT LIKE '%%:tests/%%'
               AND option.canonical_key NOT LIKE '%%/__tests__/%%'
               AND NOT EXISTS (
                 SELECT 1 FROM modernization_internal_component component
-                WHERE component.component_entity_id=option.target_entity_id
+                WHERE component.component_entity_id=publication.object_entity_id
                   AND component.capability_definition_id=candidate.capability_definition_id
                   AND component.review_state='APPROVED'
               )
-            ORDER BY option.canonical_key,candidate.confidence DESC,option.score DESC,candidate.id
+            ORDER BY component.canonical_key,candidate.capability_definition_id,
+                     candidate.confidence DESC,option.score DESC,candidate.id
             LIMIT 50
             """
         )

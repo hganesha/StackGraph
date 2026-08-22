@@ -160,9 +160,9 @@ _ENTERPRISE_INSIGHT_REPORTS: tuple[dict[str, str], ...] = (
         "empty_requires_data": "true",
     },
     {
-        "key": "package_business_blast_radius", "title": "Package blast radius · next",
+        "key": "package_business_blast_radius", "title": "Largest package blast radius",
         "category": "ENTERPRISE_RISK", "metric_label": "enterprise impact groups",
-        "question": "If package next disappeared tomorrow, what business capabilities would be affected?",
+        "question": "Which package has the largest governed business-capability blast radius?",
         "populated_status": "WATCH", "metric_field": "row_count", "empty_requires_data": "true",
         "requires_mapped_rows": "true",
     },
@@ -2467,6 +2467,9 @@ class ReadModelStore(AdminReadModelsMixin):
         ):
             return await self._ask_modernization_blockers(tenant_id=tenant_id)
 
+        if "largest governed business-capability blast radius" in normalized:
+            return await self._ask_top_package_business_blast_radius(tenant_id=tenant_id)
+
         if "package business capability blast radius" in normalized or (
             "package" in normalized and any(
                 phrase in normalized for phrase in ("disappeared", "business capabilities", "blast radius")
@@ -3238,6 +3241,88 @@ class ReadModelStore(AdminReadModelsMixin):
             text=(
                 f"I found {len(rows)} package-to-enterprise impact group{'s' if len(rows) != 1 else ''}; "
                 f"{mapped} include governed business-capability mappings. Unmapped applications remain explicit."
+            ),
+            citations=citations, result_kind="TABLE", rows=result_rows,
+        )
+
+    async def _ask_top_package_business_blast_radius(
+        self, *, tenant_id: UUID | None,
+    ) -> AskResponse:
+        """Select the package with the largest governed capability impact.
+
+        This is the gallery-card variant of package blast radius. Free-form Ask keeps
+        resolving an explicit package name; the card must not bake in one package.
+        """
+        rows = await self.database.fetch_all(
+            """
+            WITH dependency AS (
+              SELECT coalesce(identity.package_name,
+                              regexp_replace(package.name,'@[^@]+$','')) package,
+                     fact.subject_entity_id repository_id,fact.id fact_id
+              FROM fact_assertion fact
+              JOIN entity package ON package.id=fact.object_entity_id
+                AND package.entity_type IN ('Package','PackageVersion')
+              LEFT JOIN package_registry_identity identity ON identity.entity_id=package.id
+              WHERE fact.tenant_id=%s AND fact.predicate='DEPENDS_ON'
+                AND fact.system_to IS NULL
+            ), impact AS (
+              SELECT dependency.package,repository.id repository_id,
+                     repository.name repository,application.id application_id,
+                     application.name application,capability.id capability_id,
+                     capability.name capability,mapping.criticality,dependency.fact_id
+              FROM dependency
+              JOIN entity repository ON repository.id=dependency.repository_id
+              JOIN fact_assertion application_link
+                ON application_link.object_entity_id=repository.id
+               AND application_link.predicate='IMPLEMENTED_BY'
+               AND application_link.system_to IS NULL
+               AND application_link.tenant_id=%s
+              JOIN entity application ON application.id=application_link.subject_entity_id
+              JOIN current_capability_application_relationship mapping
+                ON mapping.application_entity_id=application.id
+              JOIN entity capability ON capability.id=mapping.capability_entity_id
+            ), selected_package AS (
+              SELECT package
+              FROM impact
+              GROUP BY package
+              ORDER BY max(criticality) DESC,
+                       count(DISTINCT capability_id) DESC,
+                       count(DISTINCT application_id) DESC,
+                       count(DISTINCT repository_id) DESC,package
+              LIMIT 1
+            )
+            SELECT impact.package,capability_id,capability,
+                   max(criticality)::integer criticality,
+                   count(DISTINCT repository_id)::integer repositories,
+                   count(DISTINCT application_id)::integer applications,
+                   string_agg(DISTINCT repository,', ' ORDER BY repository) repository_names,
+                   string_agg(DISTINCT application,', ' ORDER BY application) application_names,
+                   array_agg(DISTINCT fact_id) fact_ids
+            FROM impact JOIN selected_package USING(package)
+            GROUP BY impact.package,capability_id,capability
+            ORDER BY criticality DESC,applications DESC,repositories DESC,capability
+            LIMIT 100
+            """,
+            (tenant_id, tenant_id), tenant_id=tenant_id,
+        )
+        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
+        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
+        result_rows = [{
+            "package": row["package"],
+            "business_capability": row["capability"],
+            "criticality": int(row["criticality"]),
+            "repositories": int(row["repositories"]),
+            "applications": int(row["applications"]),
+            "repository_names": row.get("repository_names"),
+            "application_names": row.get("application_names"),
+        } for row in rows]
+        return AskResponse(
+            text=(
+                f"{rows[0]['package']} has the largest governed package blast radius, "
+                f"spanning {len(rows)} business-capability impact group"
+                f"{'s' if len(rows) != 1 else ''}."
+                if rows else
+                "I found no package dependency connected to a governed application-to-capability mapping."
             ),
             citations=citations, result_kind="TABLE", rows=result_rows,
         )
