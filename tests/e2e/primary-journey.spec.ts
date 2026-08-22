@@ -11,6 +11,10 @@ const primaryRoutes = [
 ] as const;
 
 async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
+  // On a soft navigation Next swaps the head asynchronously, so <title> can be
+  // momentarily empty. Settle it first or axe reports a spurious document-title
+  // violation on the slower engines.
+  await expect(page).toHaveTitle(/.+/);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
