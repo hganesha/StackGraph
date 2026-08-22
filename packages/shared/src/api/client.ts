@@ -394,8 +394,8 @@ const fixtureClient: StackGraphClient = {
         confidence: status === "WAITING_FOR_DATA" ? null : 0.86,
         evidence_count: status === "WAITING_FOR_DATA" ? 0 : 12,
         summary: status === "WAITING_FOR_DATA"
-          ? "Additional governed data is required before this report can make a defensible recommendation."
-          : "This deterministic report is ready to inspect with ranked evidence and citations.",
+          ? "More governed data is needed before this report can produce a recommendation."
+          : "Derived from current graph facts. Open the report for its ranked evidence and citations.",
         response: clone(askResponse as AskResponse),
       })),
     };

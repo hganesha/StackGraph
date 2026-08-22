@@ -294,7 +294,7 @@ function InsightOverview({
 }) {
   if (loading) {
     return (
-      <div className={styles.reportLoading} aria-label="Loading enterprise insight reports">
+      <div className={styles.reportLoading} role="status" aria-label="Loading enterprise insight reports">
         {Array.from({ length: 6 }, (_, index) => <span key={index} />)}
       </div>
     );

@@ -1,6 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import {
+  IconBooks,
+  IconListCheck,
+  IconSortDescending,
+  IconTargetArrow,
+  IconWorld,
+} from "@tabler/icons-react";
 import type { FormEvent } from "react";
 import {
   ApiRequestError,
@@ -402,31 +409,37 @@ export function GovernanceSection({ initialView }: { initialView?: string | null
 
   const state = governance.data;
   const views = [
-    { key: "rules", label: "Insight rules", detail: "Finding logic" },
-    { key: "eligibility", label: "Eligibility", detail: "Ranking policy" },
-    { key: "catalog", label: "Replacements", detail: "Internal catalog" },
-    { key: "calibration", label: "Calibration", detail: "Promotion gate" },
-    { key: "ecosystems", label: "Ecosystems", detail: "Expansion gates" },
+    { key: "rules", label: "Insight rules", detail: "Finding logic", icon: IconListCheck },
+    { key: "eligibility", label: "Eligibility", detail: "Ranking policy", icon: IconSortDescending },
+    { key: "catalog", label: "Replacements", detail: "Internal catalog", icon: IconBooks },
+    { key: "calibration", label: "Calibration", detail: "Promotion gate", icon: IconTargetArrow },
+    { key: "ecosystems", label: "Ecosystems", detail: "Expansion gates", icon: IconWorld },
   ] as const;
   return (
     <div className={styles.section}>
       <p className={styles.sectionNote}>Govern the evidence and policy boundaries used by modernization ranking. Choose one policy area to review or change; updates remain audited and trigger fingerprinted estate reanalysis.</p>
       <div className={styles.subtabs} role="tablist" aria-label="Modernization governance areas">
-        {views.map((item) => (
-          <button
-            key={item.key}
-            id={`governance-tab-${item.key}`}
-            className={`${styles.subtab} ${view === item.key ? styles.subtabActive : ""}`}
-            type="button"
-            role="tab"
-            aria-selected={view === item.key}
-            aria-controls={`governance-panel-${item.key}`}
-            onClick={() => setView(item.key)}
-          >
-            <strong>{item.label}</strong>
-            <small>{item.detail}</small>
-          </button>
-        ))}
+        {views.map((item) => {
+          const Glyph = item.icon;
+          return (
+            <button
+              key={item.key}
+              id={`governance-tab-${item.key}`}
+              className={`${styles.subtab} ${view === item.key ? styles.subtabActive : ""}`}
+              type="button"
+              role="tab"
+              aria-selected={view === item.key}
+              aria-controls={`governance-panel-${item.key}`}
+              onClick={() => setView(item.key)}
+            >
+              <span className={styles.subtabLabel}>
+                <Glyph size={15} stroke={1.5} aria-hidden="true" />
+                <strong>{item.label}</strong>
+              </span>
+              <small>{item.detail}</small>
+            </button>
+          );
+        })}
       </div>
       <div
         id={`governance-panel-${view}`}
