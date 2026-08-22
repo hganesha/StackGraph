@@ -183,14 +183,21 @@ def test_enterprise_insight_reports_materialize_deterministic_cards_without_ai()
             tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
         ))
 
-    assert result.total_reports == 10
+    reports = {report.key: report for report in result.reports}
+    assert result.total_reports == 14
     assert result.answerable_reports == 4
     assert result.reports[0].metric_value == "87"
     assert result.reports[0].status == "ACTION_REQUIRED"
-    assert result.reports[-1].metric_value == "72.50"
-    assert result.reports[-1].response.rows == [
+    assert reports["standardization_initiatives"].metric_value == "72.50"
+    assert reports["standardization_initiatives"].response.rows == [
         {"initiative": "Standardize HTTP clients", "enterprise_payoff": 72.5},
     ]
+    # The posture reports register alongside the existing catalogue and stay
+    # answerable-by-evidence: an estate stub with no posture state waits for data.
+    assert [reports[key].status for key in (
+        "assurance_coverage", "technology_introduction",
+        "business_dark_capability", "decision_lag",
+    )] == ["WAITING_FOR_DATA"] * 4
 
 
 def test_modernization_blockers_include_runtime_baseline_evidence() -> None:

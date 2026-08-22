@@ -209,6 +209,26 @@ class FixtureApiError extends Error {
 }
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
+// The assurance-coverage report scores each scan dimension on its own row, so the
+// fixture carries a real coverage table rather than the shared Ask fixture.
+const assuranceCoverageResponse = (): AskResponse => ({
+  contract_version: "1.0.0",
+  text:
+    "78% of the 18 repositories in this estate are analytically covered. Scan freshness, " +
+    "analyzable ecosystems, evidence completeness, connector health, and repository " +
+    "availability are scored separately so a gap can be attributed to the dimension that caused it.",
+  citations: [],
+  result_kind: "TABLE",
+  rows: [
+    { dimension: "Analytically covered estate", scope: "Repositories", covered: 14, in_scope: 18, coverage_percent: 78, status: "PARTIAL", detail: "Repositories that are scanned, fresh, free of unanalyzable ecosystems, backed by evidence, and reachable." },
+    { dimension: "Scan freshness", scope: "Repositories", covered: 17, in_scope: 18, coverage_percent: 94, status: "PARTIAL", detail: "Connector freshness state is FRESH and not past its expected refresh." },
+    { dimension: "Analyzable ecosystems", scope: "Repositories", covered: 15, in_scope: 18, coverage_percent: 83, status: "UNSUPPORTED", detail: "Analyzable: NPM, PYPI. Not yet analyzable: CARGO, MAVEN." },
+    { dimension: "Evidence completeness", scope: "Current facts", covered: 2140, in_scope: 2204, coverage_percent: 97, status: "PARTIAL", detail: "Current facts that carry at least one evidence locator." },
+    { dimension: "Connector health", scope: "Connectors", covered: 3, in_scope: 3, coverage_percent: 100, status: "COVERED", detail: "Connectors reporting CONNECTED without a recorded error." },
+    { dimension: "Repository availability", scope: "Repositories", covered: 18, in_scope: 18, coverage_percent: 100, status: "COVERED", detail: "Repositories whose ingest target is enabled and unarchived, with no failed run since the last success." },
+  ],
+});
+
 // Fixture-mode admin state so the Admin surface's CRUD is exercisable without a backend.
 // Seeded to mirror the previous mock sections so the demo looks unchanged on first load.
 const adminMembers = new Map<string, TenantMember>();
@@ -393,10 +413,14 @@ const fixtureClient: StackGraphClient = {
       ["internal_library_standards", "Enterprise library standards", "PORTFOLIO_DECISIONS", "—", "standard candidates", "WAITING_FOR_DATA"],
       ["application_retirement_consolidation", "Retirement & consolidation", "PORTFOLIO_DECISIONS", "—", "portfolio candidates", "WAITING_FOR_DATA"],
       ["standardization_initiatives", "Standardization payoff", "PORTFOLIO_DECISIONS", "72.50", "highest payoff score", "ACTION_REQUIRED"],
+      ["assurance_coverage", "Analytical assurance coverage", "ENTERPRISE_RISK", "78%", "of the estate analytically covered", "WATCH"],
+      ["technology_introduction", "Technologies introduced", "TECHNOLOGY_RATIONALIZATION", "4", "technologies introduced (90 days)", "WATCH"],
+      ["business_dark_capability", "Dark business capabilities", "PORTFOLIO_DECISIONS", "2", "critical capabilities without applications", "ACTION_REQUIRED"],
+      ["decision_lag", "Decision implementation lag", "PORTFOLIO_DECISIONS", "46", "longest wait in days", "ACTION_REQUIRED"],
     ] as const;
     return {
       contract_version: "1.0.0", method_version: "enterprise-insights/v1",
-      evaluated_at: evaluatedAt, answerable_reports: 7, total_reports: 10,
+      evaluated_at: evaluatedAt, answerable_reports: 11, total_reports: 14,
       reports: definitions.map(([key, title, category, metricValue, metricLabel, status]) => ({
         key, title, category, question: title, metric_value: metricValue,
         metric_label: metricLabel, status, answerable: status !== "WAITING_FOR_DATA",
@@ -405,7 +429,9 @@ const fixtureClient: StackGraphClient = {
         summary: status === "WAITING_FOR_DATA"
           ? "More governed data is needed before this report can produce a recommendation."
           : "Derived from current graph facts. Open the report for its ranked evidence and citations.",
-        response: clone(askResponse as AskResponse),
+        response: key === "assurance_coverage"
+          ? assuranceCoverageResponse()
+          : clone(askResponse as AskResponse),
       })),
     };
   },

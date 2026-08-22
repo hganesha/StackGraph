@@ -26,6 +26,14 @@ from app.age_graph import AgeGraphReader, AgeTopology
 from app.database import Database
 from app.deterministic_insights import invalidate_deterministic_insight_cache
 from app.deterministic_insights import list_deterministic_insights
+from app.enterprise_posture_insights import (
+    ASSURANCE_COVERAGE,
+    POSTURE_INSIGHT_REPORTS,
+    answer_posture_report,
+    assurance_report_presentation,
+    match_posture_question,
+    posture_report_readiness,
+)
 from app.errors import APIError
 from app.read_models_admin import AdminReadModelsMixin
 from app.models import (
@@ -211,7 +219,7 @@ _ENTERPRISE_INSIGHT_REPORTS: tuple[dict[str, str], ...] = (
         "populated_status": "ACTION_REQUIRED", "metric_field": "enterprise_payoff",
         "empty_requires_data": "true",
     },
-)
+) + POSTURE_INSIGHT_REPORTS
 
 _GRAPH_NEIGHBORHOOD_CTE = """
 WITH RECURSIVE filters(predicates,namespaces,min_confidence) AS (
@@ -2443,8 +2451,12 @@ class ReadModelStore(AdminReadModelsMixin):
     async def enterprise_insight_reports(
         self, *, tenant_id: UUID | None,
     ) -> EnterpriseInsightReportList:
-        """Materialize the ten executive reports without invoking an AI provider."""
-        phase2_ready = await self._phase2_report_readiness(tenant_id=tenant_id)
+        """Materialize every executive report without invoking an AI provider."""
+        phase2_ready, posture_ready = await asyncio.gather(
+            self._phase2_report_readiness(tenant_id=tenant_id),
+            posture_report_readiness(self.database, tenant_id=tenant_id),
+        )
+        phase2_ready = {**phase2_ready, **posture_ready}
         results = await asyncio.gather(*(
             self.ask(AskRequest(question=definition["question"]), tenant_id=tenant_id)
             for definition in _ENTERPRISE_INSIGHT_REPORTS
@@ -2469,9 +2481,18 @@ class ReadModelStore(AdminReadModelsMixin):
                 else definition["populated_status"] if rows
                 else "HEALTHY"
             )
+            posture = (
+                assurance_report_presentation(rows)
+                if not waiting and definition["key"] == ASSURANCE_COVERAGE else None
+            )
+            if posture is not None:
+                status = posture[1]
+
             metric_field = definition["metric_field"]
             if waiting:
                 metric_value = "—"
+            elif posture is not None:
+                metric_value = posture[0]
             elif metric_field == "row_count":
                 metric_value = str(len(rows))
             else:
@@ -2633,6 +2654,14 @@ class ReadModelStore(AdminReadModelsMixin):
             word in normalized for word in ("payoff", "enterprise", "largest", "top 10")
         ):
             return await self._ask_standardization_initiatives(tenant_id=tenant_id)
+
+        # Estate posture and outcome reports are matched after the older enterprise
+        # templates so an existing question can never be re-routed by a new phrase.
+        posture_key = match_posture_question(normalized)
+        if posture_key is not None:
+            return await answer_posture_report(
+                self.database, posture_key, tenant_id=tenant_id,
+            )
 
         if "unsupported" in normalized and any(word in normalized for word in ("runtime", "node", "python", "java")):
             rows = await self.database.fetch_all(

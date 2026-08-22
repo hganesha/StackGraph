@@ -78,6 +78,123 @@
 .insightReadiness > a:hover {
   background: var(--sg-color-domain-intelligence-100);
 }
+.coverage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-4);
+  /* A theme-aware surface: the domain palettes are fixed, so a tinted background
+     would keep light values in dark mode. The accent stays on the border. */
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-300);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-surface-card);
+}
+.coverageHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sg-space-6);
+  inline-size: 100%;
+}
+.coverageEyebrow {
+  color: var(--sg-text-muted);
+  font-family: var(--sg-font-evidence);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.coverageHead h2 {
+  margin-block-start: var(--sg-space-1);
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-body-size);
+  font-weight: 500;
+}
+.coverageHead p {
+  margin-block-start: var(--sg-space-1);
+  max-inline-size: 70ch;
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.coverageScore {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sg-space-1);
+  white-space: nowrap;
+}
+.coverageScore strong {
+  color: var(--sg-text-primary);
+  font-size: 22px;
+  font-weight: 500;
+}
+.coverageDimensions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  inline-size: 100%;
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.coverageDimensions li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sg-space-3);
+  padding-block: var(--sg-space-2);
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.coverageDimensions li:last-child {
+  border-block-end: none;
+}
+.coverageDimensionName {
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.coverageDimensionCount {
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+.coverageBadge {
+  flex: none;
+  min-inline-size: 9ch;
+  padding: 2px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+  font-size: 9px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* Healthy coverage. */
+.coverageCOVERED,
+.coverageHEALTHY {
+  background: var(--sg-color-signal-success-100, var(--sg-color-domain-oss-50));
+  color: var(--sg-color-signal-success-700, var(--sg-color-domain-oss-800));
+}
+/* Partial coverage worth watching. */
+.coveragePARTIAL,
+.coverageWATCH {
+  background: var(--sg-color-signal-warning-100, var(--sg-color-domain-business-50));
+  color: var(--sg-color-signal-warning-700, var(--sg-color-domain-business-800));
+}
+/* An actionable finding. */
+.coverageGAP,
+.coverageACTION_REQUIRED {
+  background: var(--sg-color-signal-danger-100);
+  color: var(--sg-color-signal-danger-700);
+}
+/* Ecosystems StackGraph cannot analyze yet — not a gap the workspace can close. */
+.coverageUNSUPPORTED {
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-300);
+  background: var(--sg-color-domain-intelligence-100);
+  color: var(--sg-color-domain-intelligence-800);
+}
+/* Nothing to score yet. */
+.coverageNOT_EVALUATED,
+.coverageWAITING_FOR_DATA {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-muted);
+}
 .cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
