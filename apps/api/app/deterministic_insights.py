@@ -8,6 +8,10 @@ from typing import Any, Mapping
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.database import Database
+from app.insight_rule_expansion import (
+    EXPANDED_RULE_CATALOG,
+    expanded_rule_queries,
+)
 from app.models import (
     DeterministicInsight,
     DeterministicInsightList,
@@ -21,7 +25,7 @@ from app.models import (
 
 METHOD_VERSION = "deterministic-insights/v1"
 
-RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
+_CORE_RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
     {"key": "dependency.vulnerable-direct", "name": "Direct vulnerability", "phase": 1,
      "description": "Resolved direct package versions with a current OSV affected-by relationship.",
      "severity": "CRITICAL", "readiness": "ACTIVE", "missing": ()},
@@ -51,6 +55,7 @@ RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
      "severity": "MEDIUM", "readiness": "NEEDS_DATA",
      "missing": ("Approved golden-stack baselines",)},
 )
+RULE_CATALOG: tuple[Mapping[str, Any], ...] = _CORE_RULE_CATALOG + EXPANDED_RULE_CATALOG
 
 _SEVERITY_BASE = {"CRITICAL": 62.0, "HIGH": 48.0, "MEDIUM": 34.0, "LOW": 20.0, "INFO": 8.0}
 _CACHE_TTL_SECONDS = 30.0
@@ -121,18 +126,18 @@ async def list_deterministic_insights(
     else:
         rows: list[Mapping[str, Any]] = []
         queries = (
-            ("dependency.vulnerable-direct", _DIRECT_VULNERABILITY_SQL),
-            ("dependency.vulnerable-transitive", _TRANSITIVE_VULNERABILITY_SQL),
-            ("dependency.deprecated", _DEPRECATED_SQL),
-            ("dependency.unused-direct", _UNUSED_SQL),
-            ("dependency.version-fragmentation", _FRAGMENTATION_SQL),
-            ("capability.technology-diversity", _CAPABILITY_DIVERSITY_SQL),
-        )
-        for key, sql in queries:
+            ("dependency.vulnerable-direct", _DIRECT_VULNERABILITY_SQL, (tenant_id,)),
+            ("dependency.vulnerable-transitive", _TRANSITIVE_VULNERABILITY_SQL, (tenant_id,)),
+            ("dependency.deprecated", _DEPRECATED_SQL, (tenant_id,)),
+            ("dependency.unused-direct", _UNUSED_SQL, (tenant_id,)),
+            ("dependency.version-fragmentation", _FRAGMENTATION_SQL, (tenant_id,)),
+            ("capability.technology-diversity", _CAPABILITY_DIVERSITY_SQL, (tenant_id,)),
+        ) + expanded_rule_queries(tenant_id, policies)
+        for key, sql, params in queries:
             policy = policies[key]
             if not policy["enabled"] or (rule_key is not None and rule_key != key):
                 continue
-            result = await database.fetch_all(sql, (tenant_id,), tenant_id=tenant_id)
+            result = await database.fetch_all(sql, params, tenant_id=tenant_id)
             rows.extend({**row, "rule_key": key, "policy": policy} for row in result)
         phase_two_context = await _phase_two_context(database, tenant_id)
         criticality_threshold = int(
@@ -188,8 +193,13 @@ async def _policies(database: Database, tenant_id: UUID | None) -> dict[str, Map
         item["key"]: {
             "enabled": bool(by_key.get(item["key"], {}).get("enabled", item["readiness"] == "ACTIVE")),
             "severity": str(by_key.get(item["key"], {}).get("severity", item["severity"])),
-            "minimum_repositories": int(by_key.get(item["key"], {}).get("minimum_repositories", 1)),
-            "configuration": dict(by_key.get(item["key"], {}).get("configuration") or {}),
+            "minimum_repositories": int(by_key.get(item["key"], {}).get(
+                "minimum_repositories", item.get("minimum_repositories", 1),
+            )),
+            "configuration": {
+                **dict(item.get("configuration") or {}),
+                **dict(by_key.get(item["key"], {}).get("configuration") or {}),
+            },
             "version": int(by_key.get(item["key"], {}).get("version", 0)),
         }
         for item in RULE_CATALOG
@@ -240,7 +250,8 @@ def _to_insight(
     missing.append("Live deployment and runtime ingress status are not observed; only code declarations are evaluated.")
     if business_critical is None:
         missing.append("No governed capability criticality is mapped to the affected applications.")
-    known_dimensions = 7 + int(business_critical is not None)
+    coverage_penalty = max(0, min(6, int(row.get("coverage_penalty") or 0)))
+    known_dimensions = max(1, 7 - coverage_penalty + int(business_critical is not None))
     coverage = min(1.0, known_dimensions / 9)
     severity = str(policy["severity"])
     breadth = min(12.0, present * 1.5)
