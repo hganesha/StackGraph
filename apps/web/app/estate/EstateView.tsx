@@ -29,10 +29,11 @@ const DOMAIN_ORDER: Namespace[] = [
 ];
 const PAGED_DOMAINS = DOMAIN_ORDER;
 
-const hrefFor = (domain: string, id: string) => {
-  if (domain === "BUSINESS") return "/business-map";
-  if (domain === "TECHNOLOGY" || domain === "OSS") return `/technologies/${id}`;
-  return `/applications/${id}`;
+const hrefFor = (item: RankedItem) => {
+  if (item.domain === "BUSINESS") return "/business-map";
+  if (item.kind === "Service") return "/applications";
+  if (item.domain === "TECHNOLOGY" || item.domain === "OSS") return `/technologies/${item.id}`;
+  return `/applications/${item.id}`;
 };
 
 function EstateDomainSection({
@@ -86,7 +87,7 @@ function EstateDomainSection({
             <RankedTable
               caption={`${items.length} matching · ${loadedCount} loaded · sorted by ${sort}`}
               items={items}
-              renderRowHref={(item) => hrefFor(item.domain, item.id)}
+              renderRowHref={hrefFor}
               onOpen={onOpen}
             />
           ) : (
@@ -290,7 +291,7 @@ export function EstateView() {
                   hasMore={Boolean(estate.hasNextPage)}
                   isLoadingMore={estate.isFetchingNextPage}
                   onLoadMore={() => estate.fetchNextPage()}
-                  onOpen={(item) => router.push(hrefFor(item.domain, item.id))}
+                  onOpen={(item) => router.push(hrefFor(item))}
                 />
               );
             })}
@@ -304,7 +305,7 @@ export function EstateView() {
             hasMore={Boolean(activeEstate.hasNextPage)}
             isLoadingMore={activeEstate.isFetchingNextPage}
             onLoadMore={() => activeEstate.fetchNextPage()}
-            onOpen={(item) => router.push(hrefFor(item.domain, item.id))}
+            onOpen={(item) => router.push(hrefFor(item))}
           />
         )}
       </section>

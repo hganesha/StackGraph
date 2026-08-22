@@ -919,6 +919,7 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert "e.namespace='BUSINESS' AND e.entity_type='BusinessCapability'" in estate_queries
     assert "FROM current_capability_application_relationship mapping" in estate_queries
     assert "mapping.capability_entity_id=e.id" in estate_queries
+    assert "e.entity_type IN ('Application','Service')" in estate_queries
 
 
 def test_estate_summary_exposes_transitive_technology_tier() -> None:

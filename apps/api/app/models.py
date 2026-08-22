@@ -251,6 +251,7 @@ class ApplicationDetail(ContractModel):
     application: EntitySummary
     business_context: list[EntitySummary]
     repositories: list[EntitySummary]
+    services: list[EntitySummary]
     technologies: list[EntitySummary]
     technology_groups: list[ApplicationTechnologyGroup]
     dependency_hierarchies: list[ApplicationRepositoryDependencyHierarchy] = Field(default_factory=list)

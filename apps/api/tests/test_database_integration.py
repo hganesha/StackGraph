@@ -23,6 +23,7 @@ from tests.golden_billing import (
     OSS_PROJECT_ID,
     PACKAGE_ID,
     REPOSITORY_ID,
+    SERVICE_ID,
     TENANT_ID,
     install_golden_billing,
     remove_golden_billing,
@@ -634,10 +635,15 @@ def test_golden_billing_vertical_slice() -> None:
             item for item in summary["ranked_items"] if item["id"] == PACKAGE_ID
         )
         assert package_summary["dependency_tier"] == 1
+        service_summary = next(
+            item for item in summary["ranked_items"] if item["id"] == SERVICE_ID
+        )
+        assert service_summary["kind"] == "Service"
 
         application = responses["applicationDetail"].json()
         assert {item["id"] for item in application["business_context"]} == {CAPABILITY_ID}
         assert {item["id"] for item in application["repositories"]} == {REPOSITORY_ID}
+        assert {item["id"] for item in application["services"]} == {SERVICE_ID}
         assert PACKAGE_ID in {item["id"] for item in application["technologies"]}
         assert application["technology_groups"][0]["domain"]["key"] == "unclassified"
         grouped_package = application["technology_groups"][0]["functions"][0]["technologies"][0]

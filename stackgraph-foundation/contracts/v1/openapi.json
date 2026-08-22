@@ -419,6 +419,13 @@
             "title": "Repositories",
             "type": "array"
           },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Services",
+            "type": "array"
+          },
           "technologies": {
             "items": {
               "$ref": "#/components/schemas/EntitySummary"
@@ -438,6 +445,7 @@
           "application",
           "business_context",
           "repositories",
+          "services",
           "technologies",
           "technology_groups",
           "deployments",

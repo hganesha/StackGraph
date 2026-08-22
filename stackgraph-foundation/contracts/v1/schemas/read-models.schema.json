@@ -250,12 +250,13 @@
     },
     "applicationDetail": {
       "type": "object",
-      "required": ["contract_version", "application", "business_context", "repositories", "technologies", "technology_groups", "deployments", "assessments", "recommendations", "freshness"],
+      "required": ["contract_version", "application", "business_context", "repositories", "services", "technologies", "technology_groups", "deployments", "assessments", "recommendations", "freshness"],
       "properties": {
         "contract_version": {"const": "1.0.0"},
         "application": {"$ref": "#/$defs/entitySummary"},
         "business_context": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "repositories": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
+        "services": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technology_groups": {"type": "array", "items": {"$ref": "#/$defs/applicationTechnologyGroup"}},
         "dependency_hierarchies": {"type": "array", "items": {"$ref": "#/$defs/applicationRepositoryDependencyHierarchy"}},

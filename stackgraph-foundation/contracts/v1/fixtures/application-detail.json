@@ -3,6 +3,7 @@
   "application": {"id": "00000000-0000-4000-8000-000000000201", "kind": "Application", "name": "Billing API", "canonical_key": "application:billing-api"},
   "business_context": [{"id": "00000000-0000-4000-8000-000000000202", "kind": "BusinessCapability", "name": "Billing"}],
   "repositories": [{"id": "00000000-0000-4000-8000-000000000203", "kind": "Repository", "name": "billing-svc", "canonical_key": "github:repo:123"}],
+  "services": [{"id": "00000000-0000-4000-8000-000000000212", "kind": "Service", "name": "billing-api", "canonical_key": "service:github:repo:123:billing-api"}],
   "technologies": [
     {"id": "00000000-0000-4000-8000-000000000204", "kind": "PackageVersion", "name": "axios 1.7.9", "canonical_key": "pkg:npm/axios@1.7.9"},
     {"id": "00000000-0000-4000-8000-000000000210", "kind": "PackageVersion", "name": "react 19.1.1", "canonical_key": "pkg:npm/react@19.1.1", "summary": "A component model for interactive user interfaces."}

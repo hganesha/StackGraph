@@ -64,6 +64,7 @@ export interface ApplicationDetail {
   freshness: Freshness;
   recommendations: Array<RecommendationSummary>;
   repositories: Array<EntitySummary>;
+  services: Array<EntitySummary>;
   technologies: Array<EntitySummary>;
   technology_groups: Array<ApplicationTechnologyGroup>;
 }

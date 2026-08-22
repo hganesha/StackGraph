@@ -987,7 +987,7 @@ class ReadModelStore(AdminReadModelsMixin):
             ) v ON true
             LEFT JOIN observed_technology dependency ON dependency.id=e.id
             WHERE (
-                (e.namespace='ENTERPRISE' AND e.entity_type='Application'
+                (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service')
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
                 OR (e.namespace='BUSINESS' AND e.entity_type='BusinessCapability'
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
@@ -1097,6 +1097,10 @@ class ReadModelStore(AdminReadModelsMixin):
             application=_entity(application),
             business_context=[_entity(row) for row in related if row["namespace"] == "BUSINESS"],
             repositories=[_entity(row) for row in repository_rows],
+            services=[
+                _entity(row) for row in related
+                if row["namespace"] == "ENTERPRISE" and row["entity_type"] == "Service"
+            ],
             technologies=[_entity(row) for row in technology_rows],
             technology_groups=_group_application_technologies(technology_rows, catalog_rows),
             dependency_hierarchies=dependency_hierarchies,
@@ -5298,6 +5302,9 @@ class ReadModelStore(AdminReadModelsMixin):
               ) OR (
                 e.namespace='ENTERPRISE' AND e.entity_type='Repository'
                 AND d.relationship_type IN ('IMPLEMENTED_BY','IMPLEMENTS','CONTAINS')
+              ) OR (
+                e.namespace='ENTERPRISE' AND e.entity_type='Service'
+                AND d.relationship_type IN ('CONTAINS','IMPLEMENTED_BY','IMPLEMENTS')
               ) OR (
                 e.namespace='DEPLOYMENT'
                 AND d.relationship_type IN ('DEPLOYED_AS','RUNS_ON','HOSTED_IN','HOSTED_AT')

@@ -264,6 +264,7 @@ export interface ApplicationDetail {
   application: EntitySummary;
   business_context: EntitySummary[];
   repositories: EntitySummary[];
+  services: EntitySummary[];
   technologies: EntitySummary[];
   technology_groups: ApplicationTechnologyGroup[];
   dependency_hierarchies?: ApplicationRepositoryDependencyHierarchy[];

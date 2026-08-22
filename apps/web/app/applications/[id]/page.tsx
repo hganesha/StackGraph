@@ -119,6 +119,7 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
               <h2 id="application-overview-heading">Application overview</h2>
               <dl className={styles.overviewFacts}>
                 <div><dt>Repositories</dt><dd className="sg-mono">{data.repositories.length}</dd></div>
+                <div><dt>Services</dt><dd className="sg-mono">{data.services.length}</dd></div>
                 <div><dt>Technologies</dt><dd className="sg-mono">{data.technologies.length}</dd></div>
                 <div><dt>Deployments</dt><dd className="sg-mono">{data.deployments.length}</dd></div>
                 <div><dt>Recommendations</dt><dd className="sg-mono">{data.recommendations.length}</dd></div>
@@ -147,6 +148,15 @@ export default function ApplicationPage({ params }: { params: Promise<{ id: stri
                   ))}
                 </ul>
               ) : <EmptyPanel>No repositories are linked yet.</EmptyPanel>}
+            </section>
+
+            <section className={styles.overviewSection} aria-labelledby="services-heading">
+              <h2 id="services-heading">Services</h2>
+              {data.services.length > 0 ? (
+                <ul className={`${styles.entityList} sg-mono`}>
+                  {data.services.map((service) => <li key={service.id}>{service.name}</li>)}
+                </ul>
+              ) : <EmptyPanel>No code or infrastructure-defined services are linked yet.</EmptyPanel>}
             </section>
 
             <section className={styles.overviewSection} aria-labelledby="deployments-heading">

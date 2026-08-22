@@ -370,6 +370,59 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(public_entrypoint["properties"]["source_kind"], "KUBERNETES")
         self.assertEqual(public_entrypoint["evidence"][0]["locator"]["path"], "k8s/service.yaml")
 
+    def test_local_compose_builds_emit_services_but_image_dependencies_do_not(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "compose.yaml").write_text(
+                "services:\n"
+                "  api:\n    build: .\n"
+                "  worker:\n    build:\n      context: ./worker\n      dockerfile: Dockerfile\n"
+                "  postgres:\n    image: postgres:16\n"
+            )
+
+            result = scan_repository(request(root))
+
+        services = {
+            entity["name"]
+            for fact in result["facts"]
+            for entity in (fact.get("subject"), fact.get("object_entity"))
+            if entity and entity.get("type") == "Service"
+        }
+        self.assertEqual(services, {"api", "worker"})
+        for service_name in services:
+            service_facts = [
+                fact for fact in result["facts"]
+                if fact.get("subject", {}).get("name") == service_name
+                or fact.get("object_entity", {}).get("name") == service_name
+            ]
+            self.assertEqual(
+                {fact["predicate"] for fact in service_facts},
+                {"IMPLEMENTED_BY", "CONTAINS", "DEPLOYED_AS"},
+            )
+            self.assertTrue(all(
+                fact["evidence"][0]["locator"]["path"] == "compose.yaml"
+                for fact in service_facts
+            ))
+
+    def test_dockerfile_is_a_provisional_service_fallback(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Dockerfile.api").write_text(
+                "FROM python:3.13-slim AS build\nFROM python:3.13-slim\n"
+            )
+
+            result = scan_repository(request(root))
+
+        service_fact = next(
+            fact for fact in result["facts"]
+            if fact["predicate"] == "IMPLEMENTED_BY"
+            and fact.get("subject", {}).get("type") == "Service"
+        )
+        self.assertEqual(service_fact["subject"]["name"], "api")
+        self.assertEqual(service_fact["properties"]["boundary_strategy"], "DOCKERFILE_FALLBACK")
+        self.assertTrue(service_fact["properties"]["provisional"])
+        self.assertEqual(service_fact["confidence"], 0.8)
+
     def test_snapshot_blob_descriptor_must_be_complete(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

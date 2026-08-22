@@ -26,7 +26,7 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.6.0"
+SCANNER_VERSION = "1.7.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -393,6 +393,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         scan_input, contents, diagnostics,
     ))
     inventory_facts.extend(_application_boundary_facts(scan_input, contents))
+    inventory_facts.extend(_service_boundary_facts(scan_input, contents, diagnostics))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
     pass_a_completed = time.monotonic()
 
@@ -2115,6 +2116,163 @@ def _application_boundary_facts(
     }]
 
 
+def _service_boundary_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    """Emit logical services only from explicit code or infrastructure definitions.
+
+    Named Compose builds and Kubernetes workloads are stronger boundaries than a bare
+    Dockerfile. A Dockerfile is therefore used only as a repository-local fallback when
+    no named service definition exists. Image-only Compose dependencies remain deployment
+    resources so databases and brokers are not promoted into enterprise services.
+    """
+    definitions: list[tuple[str, int, str, str, dict[str, str], float]] = []
+    for path, content in sorted(contents.items()):
+        name = PurePosixPath(path).name.lower()
+        if _is_compose_file(name):
+            documents = _decode_yaml_documents(content, path, diagnostics)
+            root = documents[0] if documents else None
+            if not isinstance(root, Mapping) or not isinstance(root.get("services"), Mapping):
+                continue
+            text = content.decode("utf-8", errors="replace")
+            for service_name, definition in sorted(root["services"].items()):
+                if not isinstance(service_name, str) or not isinstance(definition, Mapping):
+                    continue
+                if not _compose_service_has_local_build(definition):
+                    continue
+                definitions.append((
+                    path,
+                    _line_for_yaml_key(text, service_name),
+                    service_name,
+                    "COMPOSE_BUILD",
+                    _deployment_ref(scan_input, path, "compose-service", service_name),
+                    1.0,
+                ))
+        elif PurePosixPath(path).suffix.lower() in {".yaml", ".yml"} and (
+            "/k8s/" in f"/{path.lower()}/"
+            or "/kubernetes/" in f"/{path.lower()}/"
+            or "/deploy/" in f"/{path.lower()}/"
+        ):
+            documents = _decode_yaml_documents(content, path, diagnostics)
+            if documents is None:
+                continue
+            text = content.decode("utf-8", errors="replace")
+            supported = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob", "Pod"}
+            for index, document in enumerate(documents):
+                if not isinstance(document, Mapping) or document.get("kind") not in supported:
+                    continue
+                metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
+                service_name = str(metadata.get("name") or f"document-{index + 1}")
+                namespace = str(metadata.get("namespace") or "default")
+                kind = str(document["kind"])
+                definitions.append((
+                    path,
+                    _line_for_yaml_key(text, service_name),
+                    service_name,
+                    "KUBERNETES_WORKLOAD",
+                    _deployment_ref(scan_input, path, kind.lower(), f"{namespace}/{service_name}"),
+                    0.9,
+                ))
+
+    if not definitions:
+        for path, content in sorted(contents.items()):
+            name = PurePosixPath(path).name.lower()
+            if name != "dockerfile" and not name.startswith("dockerfile."):
+                continue
+            from_lines = [
+                line_number
+                for line_number, line in enumerate(content.decode("utf-8", errors="replace").splitlines(), 1)
+                if re.match(r"^\s*FROM\s+(?:--platform=\S+\s+)?\S+", line, re.I)
+                and not re.match(r"^\s*FROM\s+(?:--platform=\S+\s+)?scratch(?:\s|$)", line, re.I)
+            ]
+            if not from_lines:
+                continue
+            definitions.append((
+                path,
+                from_lines[-1],
+                _dockerfile_service_name(scan_input, path),
+                "DOCKERFILE_FALLBACK",
+                _deployment_ref(scan_input, path, "dockerfile", f"stage-{from_lines[-1]}"),
+                0.8,
+            ))
+
+    facts: list[dict[str, Any]] = []
+    application = _application_ref(scan_input)
+    for path, line, service_name, strategy, deployment, confidence in definitions:
+        service = _service_ref(scan_input, service_name)
+        properties = {
+            "source_kind": strategy,
+            "boundary_strategy": strategy,
+            "provisional": strategy == "DOCKERFILE_FALLBACK",
+            "service_name": service_name,
+        }
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, service, "IMPLEMENTED_BY", _repository_ref(scan_input),
+            properties,
+            confidence=confidence,
+        ))
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, application, "CONTAINS", service,
+            properties,
+            assertion_class="INFERRED",
+            confidence=confidence,
+        ))
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line, service, "DEPLOYED_AS", deployment,
+            properties,
+            confidence=confidence,
+        ))
+    return facts
+
+
+def _compose_service_has_local_build(definition: Mapping[str, Any]) -> bool:
+    build = definition.get("build")
+    if isinstance(build, str):
+        return bool(build.strip())
+    if not isinstance(build, Mapping):
+        return False
+    context = build.get("context")
+    dockerfile = build.get("dockerfile")
+    return (
+        isinstance(context, str) and bool(context.strip())
+    ) or (
+        isinstance(dockerfile, str) and bool(dockerfile.strip())
+    )
+
+
+def _dockerfile_service_name(scan_input: ScanInput, path: str) -> str:
+    file_name = PurePosixPath(path).name
+    if "." in file_name:
+        suffix = file_name.split(".", 1)[1].strip()
+        if suffix:
+            return suffix
+    parent = PurePosixPath(path).parent
+    if str(parent) != ".":
+        return parent.name
+    return scan_input.repository_name
+
+
+def _application_ref(scan_input: ScanInput) -> dict[str, str]:
+    return {
+        "namespace": "ENTERPRISE",
+        "type": "Application",
+        "key": f"application:{scan_input.repository_key}",
+        "name": scan_input.repository_name,
+    }
+
+
+def _service_ref(scan_input: ScanInput, name: str) -> dict[str, str]:
+    normalized = quote(name.strip().casefold(), safe=".-_~")
+    return {
+        "namespace": "ENTERPRISE",
+        "type": "Service",
+        "key": f"service:{scan_input.repository_key}:{normalized}",
+        "name": name,
+    }
+
+
 def _database_storage_facts(
     scan_input: ScanInput,
     contents: Mapping[str, bytes],
@@ -2823,6 +2981,9 @@ def _entity_relationship_fact(
     predicate: str,
     object_entity: Mapping[str, str],
     properties: Mapping[str, Any],
+    *,
+    assertion_class: str = "DECLARED",
+    confidence: float = 1,
 ) -> dict[str, Any]:
     evidence = Evidence(
         path=path,
@@ -2848,8 +3009,8 @@ def _entity_relationship_fact(
         "subject": dict(subject),
         "predicate": predicate,
         "object_entity": dict(object_entity),
-        "assertion_class": "DECLARED",
-        "confidence": 1,
+        "assertion_class": assertion_class,
+        "confidence": confidence,
         "observed_at": scan_input.observed_at,
         "source_revision": scan_input.source_revision,
         "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
