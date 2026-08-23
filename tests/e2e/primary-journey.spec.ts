@@ -57,6 +57,10 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
   // through the host's own key handling, so the document-level shortcut never fires
   // under automation. The other desktop engines verify the binding for real.
   if (testInfo.project.name !== "webkit") {
+    // The loop above ends on a freshly-clicked nav link. Pressing immediately can send
+    // the keydown to the outgoing document, so settle focus on the new one first —
+    // otherwise this races under parallel load and fails perhaps one run in ten.
+    await page.locator("main#main").click({ position: { x: 2, y: 2 } });
     await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
     await expect(page).toHaveURL(/\/ask$/);
   }

@@ -1,6 +1,6 @@
 # Architecture Canvas — API gaps found during UI integration
 
-Status: findings · Date: 2026-08-23 · Author: canvas frontend
+Status: findings · Date: 2026-08-23 · Author: canvas frontend · Updated after `f55d88a`
 
 The canvas UI now binds to the published contracts
 (`stackgraph-foundation/contracts/v1/openapi.json`) rather than to the shapes the spec
@@ -105,6 +105,12 @@ travel together.
   a glyph. The UI falls back to a neutral icon rather than breaking.
 
 ---
+
+## Closed since first raised
+
+- **`GET /canvas/templates/{key}`** shipped in `f55d88a`. The UI reads the active
+  layout by key again instead of scanning the list. The list read remains for a
+  template picker.
 
 ## Not gaps
 

@@ -233,6 +233,7 @@ export interface StackGraphClient {
   listCanvasReferenceModels(): Promise<ArchitectureReferenceModelList>;
   getCanvasReferenceModel(key: string, version?: string): Promise<ArchitectureReferenceModel>;
   listCanvasTemplates(): Promise<CanvasTemplateList>;
+  getCanvasTemplate(key: string, version?: string): Promise<CanvasTemplateModel>;
   getCanvasProjection(params: CanvasProjectionParams): Promise<CanvasProjection>;
   getCanvasTargetProjection(params?: CanvasTargetProjectionParams): Promise<CanvasProjection>;
   createCanvasComparison(body: CanvasComparisonRequest): Promise<CanvasComparison>;
@@ -1314,6 +1315,17 @@ const fixtureClient: StackGraphClient = {
     await delay();
     return { contract_version: "1.0.0" as const, templates: [clone(template)] };
   },
+  getCanvasTemplate: async (key, version) => {
+    const { template } = await loadCanvasFixtures();
+    await delay();
+    if (key !== template.key || (version && version !== template.version)) {
+      throw new FixtureApiError(404, {
+        code: "CANVAS_TEMPLATE_NOT_FOUND",
+        message: "The canvas template was not found.",
+      });
+    }
+    return clone(template);
+  },
   getCanvasProjection: async (params) => {
     const bundle = await loadCanvasFixtures();
     await delay(180);
@@ -1628,8 +1640,9 @@ const liveClient: StackGraphClient = {
   listCanvasReferenceModels: () => req("/canvas/reference-models"),
   getCanvasReferenceModel: (key, version) =>
     req(`/canvas/reference-models/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
-  // The list returns full templates, geometry included, so there is no read-by-key.
   listCanvasTemplates: () => req("/canvas/templates"),
+  getCanvasTemplate: (key, version) =>
+    req(`/canvas/templates/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
   getCanvasProjection: (params) => {
     const query = new URLSearchParams({ scope: params.scope });
     if (params.subjectId) query.set("subject_id", params.subjectId);

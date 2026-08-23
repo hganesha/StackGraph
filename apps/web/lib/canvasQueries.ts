@@ -15,6 +15,8 @@ import {
   type CanvasComparisonView,
   type CanvasProjectionView,
   type CanvasScope,
+  type CanvasTemplateList,
+  type CanvasTemplateModel,
   type TenantCellPolicyModel,
 } from "@stackgraph/shared";
 
@@ -70,18 +72,31 @@ export function useCanvasReferenceModel(key: string = DEFAULT_REFERENCE_MODEL_KE
   };
 }
 
-/** The templates list returns full geometry, so there is no read-by-key to call. */
-export function useCanvasTemplate(templateKey: string = DEFAULT_TEMPLATE_KEY) {
-  const list = useQuery({
-    queryKey: ["canvas", "templates"],
-    queryFn: () => stackGraphClient.listCanvasTemplates(),
+export function useCanvasTemplate(
+  templateKey: string = DEFAULT_TEMPLATE_KEY,
+): CanvasQueryResult<CanvasTemplateModel> {
+  const query = useQuery({
+    queryKey: ["canvas", "template", templateKey],
+    queryFn: () => stackGraphClient.getCanvasTemplate(templateKey),
     ...IMMUTABLE,
   });
-  const data = useMemo(
-    () => list.data?.templates.find((entry) => entry.key === templateKey) ?? list.data?.templates[0],
-    [list.data, templateKey],
-  );
-  return { data, isLoading: list.isLoading, isError: list.isError, error: list.error };
+  return {
+    data: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: () => void query.refetch(),
+  };
+}
+
+/** Every layout compatible with the active reference model, for a template picker. */
+export function useCanvasTemplateList(options?: { enabled?: boolean }) {
+  return useQuery<CanvasTemplateList>({
+    queryKey: ["canvas", "templates"],
+    queryFn: () => stackGraphClient.listCanvasTemplates(),
+    enabled: options?.enabled ?? true,
+    ...IMMUTABLE,
+  });
 }
 
 export function useCanvasProjection(
