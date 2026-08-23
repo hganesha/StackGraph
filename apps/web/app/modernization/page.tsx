@@ -108,7 +108,7 @@ export default function ModernizationPage() {
         )}
 
         {scenario.isError ? (
-          <p className={styles.scenarioError}>The scenario could not be calculated. The ranked portfolio remains available below.</p>
+          <p className={styles.scenarioError}>Couldn’t calculate the scenario. The ranked list below still works.</p>
         ) : selectedItems.length > 0 ? (
           <div className={styles.selection}>
             <div className={styles.selectionHeader}>

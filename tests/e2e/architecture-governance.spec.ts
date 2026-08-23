@@ -31,7 +31,7 @@ async function openArchitectureProfiles(page: Page) {
   await page.goto("/admin");
   await page.getByRole("tab", { name: /Policies & rules/ }).click();
   await page.getByRole("tab", { name: /Architecture profile/ }).click();
-  await expect(page.getByRole("heading", { name: "Architecture profile revisions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisions" })).toBeVisible();
 }
 
 /** Creates a draft revision and lands on the canvas governing it. */
@@ -44,7 +44,7 @@ async function startGoverning(page: Page, isMobile: boolean) {
   await expect(page.getByRole("heading", { level: 1, name: "Architecture" })).toBeVisible();
   await page.getByRole("radio", { name: "Target", exact: true }).click();
   await page.getByRole("checkbox", { name: /Govern draft/ }).check();
-  await expect(page.getByText(/Editing draft revision/)).toBeVisible();
+  await expect(page.getByText(/Editing draft v/)).toBeVisible();
 }
 
 test.describe("architecture profile lifecycle", () => {
@@ -63,13 +63,13 @@ test.describe("architecture profile lifecycle", () => {
 
     // Inspecting the draft: this session created it, so its policies are known and shown.
     await page.getByRole("button", { name: /Inspect revision 4/ }).click();
-    await expect(page.getByText(/as returned by the last write/)).toBeVisible();
+    await expect(page.getByText(/with a decision recorded/)).toBeVisible();
 
     // Publishing changes what every team may ship, so it is never a single click.
     await page.getByRole("button", { name: /Publish this revision/ }).click();
     // Scoped: Next mounts its own route-announcer with role="alert".
     await expect(
-      page.getByRole("alert").filter({ hasText: "effective for every scope" }),
+      page.getByRole("alert").filter({ hasText: "applies this standard everywhere" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Publish revision", exact: true }).click();
 
@@ -86,7 +86,7 @@ test.describe("architecture profile lifecycle", () => {
     const toggle = page.getByRole("checkbox", { name: /Govern/ });
     await expect(toggle).toBeDisabled();
     // Editing the live standard in place would skip the publish step entirely.
-    await expect(page.getByText(/No draft revision is open/)).toBeVisible();
+    await expect(page.getByText(/No draft open/)).toBeVisible();
     await expect(page.getByRole("link", { name: /start one in Admin/ })).toBeVisible();
   });
 });
@@ -97,13 +97,13 @@ test.describe("governing a draft", () => {
 
     // The target view resolves the revision in force; the API publishes no way to
     // preview a draft, and the banner says so rather than implying otherwise.
-    await expect(page.getByText(/will not appear here until the draft is published/)).toBeVisible();
+    await expect(page.getByText(/until you publish the draft/)).toBeVisible();
 
     const cell = page.locator('[data-cell-key="cell.data.database"]');
     await cell.getByRole("heading").click();
     const panel = page.locator('aside[aria-label$="detail"]');
 
-    await panel.getByRole("button", { name: "Change the expectation" }).click();
+    await panel.getByRole("button", { name: "Change what's expected" }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Applicability").selectOption("OPTIONAL");
     await dialog

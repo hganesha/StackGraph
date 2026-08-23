@@ -20,7 +20,7 @@ import type {
 export type CanvasTone = "neutral" | "positive" | "caution" | "danger" | "quiet";
 
 export const CELL_STATE_LABEL: Record<CanvasCellState, string> = {
-  POPULATED: "Populated",
+  POPULATED: "In use",
   EMPTY: "None found",
   NOT_APPLICABLE: "Not applicable",
   UNOBSERVED: "Not observed",
@@ -28,11 +28,11 @@ export const CELL_STATE_LABEL: Record<CanvasCellState, string> = {
 };
 
 export const CELL_STATE_DESCRIPTION: Record<CanvasCellState, string> = {
-  POPULATED: "At least one implementation is evidenced here.",
-  EMPTY: "Observation completed and found no implementation.",
-  NOT_APPLICABLE: "A tenant or scope rule says this concern does not apply.",
-  UNOBSERVED: "Required evidence is missing, stale, partial, or unsupported.",
-  UNBOUND: "StackGraph has no supported sensor for this concern.",
+  POPULATED: "Something here is backed by evidence.",
+  EMPTY: "We checked everywhere we could and found nothing.",
+  NOT_APPLICABLE: "Your standard says this area does not apply here.",
+  UNOBSERVED: "We could not check — a scan is missing, stale, or unsupported.",
+  UNBOUND: "StackGraph cannot detect this yet.",
 };
 
 /**
@@ -98,15 +98,15 @@ export const APPLICABILITY_LABEL: Record<CellApplicability, string> = {
 };
 
 export const COMPARISON_LABEL: Record<CanvasComparisonCellStatus, string> = {
-  ALIGNED: "Aligned",
+  ALIGNED: "Matches your standard",
   PREFERRED_IN_USE: "Preferred in use",
   ALLOWED_IN_USE: "Allowed in use",
   DISCOURAGED_IN_USE: "Discouraged in use",
   PROHIBITED_IN_USE: "Prohibited in use",
-  REQUIRED_ABSENT: "Required but absent",
+  REQUIRED_ABSENT: "Required, but missing",
   NOT_APPLICABLE: "Not applicable",
   UNGOVERNED: "Ungoverned",
-  UNEVALUABLE: "Cannot be evaluated",
+  UNEVALUABLE: "Not enough data to judge",
 };
 
 /**
@@ -127,22 +127,22 @@ export const COMPARISON_TONE: Record<CanvasComparisonCellStatus, CanvasTone> = {
 
 export const MEASURE_STATUS_LABEL: Record<MeasureStatus, string> = {
   ELIGIBLE: "Measured",
-  INSUFFICIENT_DATA: "Insufficient data",
+  INSUFFICIENT_DATA: "Not enough data",
   NOT_APPLICABLE: "Not applicable",
-  NOT_CONFIGURED: "Not configured",
+  NOT_CONFIGURED: "No standard set",
 };
 
 export const MEASURE_LABEL = {
-  coverage: "Coverage",
-  standardisation: "Standardisation",
-  currency: "Currency",
-  risk: "Risk",
-  conformance: "Conformance",
+  coverage: "Is it covered",
+  standardisation: "How many different ones",
+  currency: "How up to date",
+  risk: "Known risks",
+  conformance: "Matches your standard",
 } as const;
 
 export const OBSERVATION_LABEL: Record<ObservationStatus, string> = {
-  COMPLETE: "Complete",
-  PARTIAL: "Partial",
-  MISSING: "No observation",
-  NOT_APPLICABLE: "Not applicable",
+  COMPLETE: "Checked everything",
+  PARTIAL: "Partly checked",
+  MISSING: "Could not check",
+  NOT_APPLICABLE: "Nothing to check",
 };

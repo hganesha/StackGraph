@@ -26,12 +26,12 @@ const PRIMARY = [
   { href: "/technologies", label: "Technologies", icon: IconStack2 },
   { href: "/architecture", label: "Architecture", icon: IconLayoutGrid },
   { href: "/modernization", label: "Modernization", icon: IconTrendingUp },
-  { href: "/ask", label: "Insights", icon: IconBulb },
+  { href: "/ask", label: "Ask", icon: IconBulb },
 ];
 
 const SECONDARY = [
   { href: "/reviews", label: "Reviews", icon: IconChecklist },
-  { href: "/health", label: "Estate Health", icon: IconActivityHeartbeat },
+  { href: "/health", label: "Scan health", icon: IconActivityHeartbeat },
 ];
 
 const ADMIN = [

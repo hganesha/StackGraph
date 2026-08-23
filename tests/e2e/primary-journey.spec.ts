@@ -7,7 +7,7 @@ const primaryRoutes = [
   ["/applications", "Applications", "Applications"],
   ["/technologies", "Technologies", "Technologies"],
   ["/modernization", "Modernization", "Modernization"],
-  ["/ask", "Insights", "Insights"],
+  ["/ask", "Ask your estate", "Ask"],
 ] as const;
 
 async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
@@ -58,12 +58,15 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
   // the document-level shortcut never fires under automation. Chromium and Firefox
   // verify the binding for real.
   if (testInfo.project.name !== "webkit" && testInfo.project.name !== "mobile") {
-    // The loop above ends on a freshly-clicked nav link. Pressing immediately can send
-    // the keydown to the outgoing document, so settle focus on the new one first —
-    // otherwise this races under parallel load and fails perhaps one run in ten.
+    // The loop above ends on a freshly-clicked nav link, so the keydown can land on the
+    // outgoing document and be lost. Settle focus on the new one, then retry the press
+    // rather than asserting once — the binding is what is under test, not the timing.
     await page.locator("main#main").click({ position: { x: 2, y: 2 } });
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
-    await expect(page).toHaveURL(/\/ask$/);
+    const shortcut = process.platform === "darwin" ? "Meta+k" : "Control+k";
+    await expect(async () => {
+      await page.keyboard.press(shortcut);
+      await expect(page).toHaveURL(/\/ask$/, { timeout: 1_500 });
+    }).toPass({ timeout: 10_000 });
   }
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page).toHaveURL(/\/ask\?view=ask$/);
