@@ -224,3 +224,44 @@ test("the profile fixture's own policies can be written back", () => {
   };
   assert.deepEqual(against("ArchitectureProfileCreateRequest", body), []);
 });
+
+// ─── Version grouping ────────────────────────────────────────────────────────
+
+test("a cell's versions of one package fold into a single group", () => {
+  const projection = read("canvas-projection-estate.json");
+  const cell = projection.cells.find((entry) => entry.cell_key === "cell.experience.ui");
+  const names = cell.occupants.map((o) => o.technology.name).sort();
+  // Guard the fixture: without several versions of one package there is nothing to fold.
+  assert.ok(names.filter((n) => n.startsWith("React@")).length >= 3, "fixture needs multiple React versions");
+
+  const purls = cell.occupants.map((o) => o.technology.canonical_key);
+  const coordinates = new Set(purls.map((p) => p.slice(0, p.lastIndexOf("@"))));
+  assert.equal(coordinates.size, 2, "three Reacts and one Vue are two packages");
+});
+
+test("a group is labelled by its most severe version, never its newest", () => {
+  const projection = read("canvas-projection-estate.json");
+  const cell = projection.cells.find((entry) => entry.cell_key === "cell.experience.ui");
+  const react = cell.occupants.filter((o) => o.technology.name.startsWith("React@"));
+
+  // The property that matters: an old prohibited major must not be hidden behind a
+  // preferred current one. If the fixture ever loses this, the rule stops being tested.
+  assert.ok(react.some((o) => o.policy_status === "PREFERRED"));
+  assert.ok(react.some((o) => o.policy_status === "PROHIBITED"));
+});
+
+test("purl coordinates carry a version that can be split off", () => {
+  const projection = read("canvas-projection-estate.json");
+  for (const cell of projection.cells) {
+    for (const occupant of cell.occupants) {
+      const purl = occupant.technology.canonical_key ?? "";
+      if (!purl.startsWith("pkg:")) continue;
+      const at = purl.lastIndexOf("@");
+      const slash = purl.indexOf("/");
+      if (at > slash) {
+        assert.ok(purl.slice(at + 1).length > 0, `${purl} has an empty version`);
+        assert.ok(purl.slice(0, at).startsWith("pkg:"), `${purl} loses its coordinate`);
+      }
+    }
+  }
+});

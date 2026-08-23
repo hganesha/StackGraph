@@ -147,6 +147,34 @@ export interface CanvasOccupantView {
   citations: Citation[];
 }
 
+/**
+ * Occupants that are the same package at different resolved versions.
+ *
+ * A technology entity is a resolved coordinate, so `react@18.3.1` and `react@16.14.0`
+ * arrive as two occupants of one cell. Listing every version flat is what makes a
+ * populated cell unreadable — and it buries the thing that matters, because version
+ * spread is usually a single fact ("we are on three Reacts"), not three facts.
+ */
+export interface CanvasOccupantGroupView {
+  /** Version-less package identity: the purl coordinate where there is one. */
+  key: string;
+  label: string;
+  members: CanvasOccupantView[];
+  /** Resolved versions, newest-looking first. Empty when none could be parsed. */
+  versions: string[];
+  /**
+   * The most severe status any version holds. A group whose newest version is
+   * preferred and whose oldest is prohibited is a governance problem, and the headline
+   * must not launder it.
+   */
+  policy_status: CanvasOccupantPolicyStatus;
+  /** Union is unknowable from per-version counts; the largest member is the floor. */
+  adoption: { applications: number; repositories: number; deployments: number };
+  confidence: number;
+  confidence_label: ConfidenceLabel;
+  classification: CanvasOccupantModel["classification"];
+}
+
 export interface CanvasPolicyDecisionView {
   technology: EntitySummary;
   decision: CanvasPolicyDecision;
@@ -219,6 +247,8 @@ export interface CanvasCellProjectionView {
   state: CanvasCellState;
   state_reason: string;
   occupants: CanvasOccupantView[];
+  /** Occupants folded by package. One entry per package, however many versions. */
+  occupant_groups: CanvasOccupantGroupView[];
   occupant_total: number;
   unique_technology_total: number;
   observation: CellObservationView;
@@ -392,6 +422,104 @@ function toOccupantView(occupant: CanvasOccupantModel): CanvasOccupantView {
   };
 }
 
+// ─── Version grouping ────────────────────────────────────────────────────────
+
+/** Severity order: a group takes its headline from its worst member, never its newest. */
+const POLICY_SEVERITY: CanvasOccupantPolicyStatus[] = [
+  "PROHIBITED",
+  "DISCOURAGED",
+  "EXEMPTED",
+  "UNGOVERNED",
+  "ALLOWED",
+  "PREFERRED",
+];
+
+/**
+ * Splits a technology into its package identity and resolved version.
+ *
+ * Prefers the purl coordinate, which is authoritative, and falls back to a trailing
+ * `@version` on the display name. Anything unparseable is its own group of one — an
+ * unrecognised naming scheme must not silently merge two different technologies.
+ */
+export function splitPackageVersion(technology: EntitySummary): {
+  key: string;
+  label: string;
+  version: string | null;
+} {
+  const purl = technology.canonical_key ?? "";
+  if (purl.startsWith("pkg:")) {
+    const at = purl.lastIndexOf("@");
+    // A scoped npm package starts with @, so only a later one delimits the version.
+    const slash = purl.indexOf("/");
+    if (at > slash && at !== -1) {
+      const coordinate = purl.slice(0, at);
+      const label = technology.name.replace(/@[^@]*$/, "").trim() || coordinate;
+      return { key: coordinate, label, version: purl.slice(at + 1) };
+    }
+    return { key: purl, label: technology.name, version: null };
+  }
+  const match = /^(.*?)@([^@]+)$/.exec(technology.name);
+  if (match && match[1].trim()) {
+    return { key: `name:${match[1].trim().toLowerCase()}`, label: match[1].trim(), version: match[2] };
+  }
+  return { key: technology.id, label: technology.name, version: null };
+}
+
+/** Descending version sort, numeric where the segments are numeric. */
+function compareVersions(a: string, b: string): number {
+  const parse = (value: string) => value.split(/[.\-+]/).map((part) => (/^\d+$/.test(part) ? Number(part) : part));
+  const left = parse(a);
+  const right = parse(b);
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const l = left[index];
+    const r = right[index];
+    if (l === undefined) return 1;
+    if (r === undefined) return -1;
+    if (l === r) continue;
+    if (typeof l === "number" && typeof r === "number") return r - l;
+    return String(r).localeCompare(String(l));
+  }
+  return 0;
+}
+
+export function groupOccupants(occupants: CanvasOccupantView[]): CanvasOccupantGroupView[] {
+  const groups = new Map<string, { label: string; members: CanvasOccupantView[]; versions: string[] }>();
+  for (const occupant of occupants) {
+    const { key, label, version } = splitPackageVersion(occupant.technology);
+    const group = groups.get(key) ?? { label, members: [], versions: [] };
+    group.members.push(occupant);
+    if (version) group.versions.push(version);
+    groups.set(key, group);
+  }
+
+  return [...groups.entries()].map(([key, group]) => {
+    const severity = Math.min(
+      ...group.members.map((member) => POLICY_SEVERITY.indexOf(member.policy_status)),
+    );
+    const confidence = Math.min(...group.members.map((member) => member.confidence));
+    return {
+      key,
+      label: group.label,
+      members: [...group.members].sort((a, b) => {
+        const av = splitPackageVersion(a.technology).version;
+        const bv = splitPackageVersion(b.technology).version;
+        if (av && bv) return compareVersions(av, bv);
+        return a.technology.name.localeCompare(b.technology.name);
+      }),
+      versions: [...new Set(group.versions)].sort(compareVersions),
+      policy_status: POLICY_SEVERITY[severity] ?? "UNGOVERNED",
+      adoption: {
+        applications: Math.max(...group.members.map((m) => m.adoption.applications)),
+        repositories: Math.max(...group.members.map((m) => m.adoption.repositories)),
+        deployments: Math.max(...group.members.map((m) => m.adoption.deployments)),
+      },
+      confidence,
+      confidence_label: confidence >= 0.85 ? "HIGH" : confidence >= 0.6 ? "MEDIUM" : "LOW",
+      classification: group.members[0].classification,
+    };
+  });
+}
+
 function toObservationView(
   observation: CellObservationStatusModel,
   ruleKey: string,
@@ -540,11 +668,14 @@ function technologyIndex(projection: CanvasProjectionWire): Map<string, EntitySu
 
 export function toProjectionView(projection: CanvasProjectionWire): CanvasProjectionView {
   const names = technologyIndex(projection);
-  const cells = projection.cells.map((cell: CanvasCellProjectionModel) => ({
+  const cells = projection.cells.map((cell: CanvasCellProjectionModel) => {
+    const occupants = cell.occupants.map(toOccupantView);
+    return {
     cell_key: cell.cell_key,
     state: cell.state,
     state_reason: cell.state_reason,
-    occupants: cell.occupants.map(toOccupantView),
+    occupants,
+    occupant_groups: groupOccupants(occupants),
     occupant_total: cell.occupant_total,
     unique_technology_total: cell.unique_technology_total,
     observation: toObservationView(cell.observation, cell.cell_key),
@@ -553,7 +684,8 @@ export function toProjectionView(projection: CanvasProjectionWire): CanvasProjec
     policy: toPolicyView(cell.policy, names),
     insight_refs: cell.insight_refs,
     citations: cell.citations,
-  }));
+    };
+  });
 
   const summary = projection.summary;
   const byPolicyStatus: Record<CanvasOccupantPolicyStatus, number> = {

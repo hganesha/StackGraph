@@ -679,3 +679,37 @@
   color: var(--sg-text-muted);
   font-style: italic;
 }
+
+/* ---- version hierarchy ---- */
+
+.versionDetails {
+  margin-block-start: var(--sg-space-1);
+}
+.versionSummary {
+  font-family: var(--sg-font-evidence);
+  font-size: 11px;
+  color: var(--sg-text-secondary);
+  cursor: pointer;
+  list-style-position: outside;
+}
+.versionSummary:hover {
+  color: var(--sg-text-primary);
+}
+.versionSummary:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 2px;
+}
+.versionList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  margin: var(--sg-space-2) 0 0;
+  padding-inline-start: var(--sg-space-3);
+  list-style: none;
+  border-inline-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.versionName {
+  font-family: var(--sg-font-evidence);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-primary);
+}

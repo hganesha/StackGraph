@@ -21,13 +21,16 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "dd8a8da9-4fc1-4e49-8f92-a7258829a991"
+          "ba34d2a9-c67b-4acc-8575-77f357f490b5",
+          "0b5ffd5a-1f8a-4f7f-88f9-fbcd9a21081e"
         ],
         "allowed_technology_ids": [],
         "discouraged_technology_ids": [
-          "023bf9c1-33df-4acc-8cbd-eda47550fe37"
+          "32d45301-7403-405e-80ae-9930de4daf9c"
         ],
-        "prohibited_technology_ids": [],
+        "prohibited_technology_ids": [
+          "326300a4-ada2-4bf0-8a2a-7c9be5c8757b"
+        ],
         "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
         "owner": "platform-architecture",
         "effective_from": "2026-01-01T00:00:00.000Z",
@@ -42,16 +45,16 @@
         "maximum_implementations": 3,
         "allowed_diversity": 3,
         "preferred_technology_ids": [
-          "5cb21413-4718-4548-8dd0-aea5da0e91e9"
+          "ef5cbcd3-29f1-4151-87a4-3541b78d2c19"
         ],
         "allowed_technology_ids": [
-          "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808"
+          "d82264b7-bbf4-41a7-8011-8e9f2cc86798"
         ],
         "discouraged_technology_ids": [
-          "d8982a6a-8943-4042-8bfc-4329005bee11"
+          "c7977750-9b35-49b1-8e2a-21fdfd8a66ba"
         ],
         "prohibited_technology_ids": [
-          "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79"
+          "5a9abcfd-e909-4cca-8a6f-ce6b9c496b24"
         ],
         "rationale": "Zustand for client state, TanStack Query for server state. Redux is retiring; MobX is prohibited.",
         "owner": "frontend-guild",
@@ -68,7 +71,7 @@
         "allowed_diversity": 2,
         "preferred_technology_ids": [],
         "allowed_technology_ids": [
-          "b5148661-e634-4a53-86d1-642cfd7329fd"
+          "332f2b4d-6aa2-483b-86b3-1cfae3c0df62"
         ],
         "discouraged_technology_ids": [],
         "prohibited_technology_ids": [],
@@ -96,13 +99,14 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "3938ba19-c483-4e8b-820f-8c4c28fe28d5"
+          "6a5d9219-a0b5-4f64-8e55-234696e9c51b",
+          "98b45529-e779-4dbe-84d8-3e20858368f5"
         ],
         "allowed_technology_ids": [
-          "2712c40e-d538-47dc-89fe-a73c873dad1f"
+          "e4d1cb90-a2e5-472b-86de-e67bd3c1dd51"
         ],
         "discouraged_technology_ids": [
-          "d2aa2088-606d-4edb-84a5-a116588da1eb"
+          "e1c21284-aa0a-4d68-8d98-89b3116c8eca"
         ],
         "prohibited_technology_ids": [],
         "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
@@ -119,11 +123,11 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "c15a1c4d-ed62-4348-80de-5cd33bec0770"
+          "07f11d0e-5ca9-4976-81ce-888d98d95db5"
         ],
         "allowed_technology_ids": [],
         "discouraged_technology_ids": [
-          "b4486af0-6a89-45ca-892e-cb72b175d252"
+          "afdd3acb-b9f0-4e06-83c2-3a15bfee77e2"
         ],
         "prohibited_technology_ids": [],
         "rationale": "PostgreSQL is the standard relational engine across all environments.",
@@ -159,10 +163,10 @@
         "maximum_implementations": 3,
         "allowed_diversity": 3,
         "preferred_technology_ids": [
-          "e247e5c6-abd9-400a-875b-2a2a9412f0bf"
+          "305dfe02-7869-4fee-8d87-0e7c3c2b60c8"
         ],
         "allowed_technology_ids": [
-          "1637df4b-4c54-401e-8633-aed560d1a658"
+          "e89e1e5a-5a6b-4c63-8209-24a95266d338"
         ],
         "discouraged_technology_ids": [],
         "prohibited_technology_ids": [

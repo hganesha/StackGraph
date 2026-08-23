@@ -724,3 +724,22 @@ button.trayRow:focus-visible {
     color: var(--sg-color-domain-business-200);
   }
 }
+
+/* A resolved version, shown beside its package when there is exactly one. */
+.chipVersion {
+  flex-shrink: 0;
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  color: var(--sg-text-muted);
+}
+/* The count when there are several. Reads as "3 vers", expanded in the panel. */
+.chipVersions {
+  flex-shrink: 0;
+  padding: 0 3px;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--sg-text-secondary);
+}
