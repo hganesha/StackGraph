@@ -2,787 +2,866 @@
   "contract_version": "1.0.0",
   "key": "architecture.stackgraph.reference",
   "version": "1.0.0",
-  "name": "StackGraph reference architecture",
-  "description": "Canonical six-domain technical reference model covering experience, application, integration, data, platform, and delivery concerns.",
-  "taxonomy_key": "stackgraph.technical-taxonomy",
-  "taxonomy_version": "2.0.0",
-  "taxonomy_content_hash": "sha256:78b266adb22c7b5715e436a6e5942564453d783cf1e6b4474c0fcf988e0a63e6",
-  "content_hash": "sha256:283168e57dc065da5a1f585e761301c80825f30b23c70452eb61f16a4282f621",
-  "domains": [
-    {
-      "key": "experience",
-      "label": "Experience & Channels",
-      "question": "How do humans and external clients interact with the system?",
-      "order": 0
-    },
-    {
-      "key": "application",
-      "label": "Application & Services",
-      "question": "Where do application behaviour and service responsibilities execute?",
-      "order": 1
-    },
-    {
-      "key": "integration",
-      "label": "Integration & Messaging",
-      "question": "How do requests, events, and workflows cross boundaries?",
-      "order": 2
-    },
-    {
-      "key": "data",
-      "label": "Data & Information",
-      "question": "How is information stored, retrieved, moved, and processed?",
-      "order": 3
-    },
-    {
-      "key": "platform",
-      "label": "Platform & Runtime",
-      "question": "On what runtime, compute, network, and managed platform does the system operate?",
-      "order": 4
-    },
-    {
-      "key": "delivery",
-      "label": "Delivery & Operations",
-      "question": "How is software built, tested, configured, released, observed, and operated?",
-      "order": 5
-    }
-  ],
-  "aspects": [
-    {
-      "key": "security-privacy",
-      "label": "Security & privacy",
-      "definition": "Controls protecting confidentiality, integrity, and privacy of the system and its data.",
-      "order": 0
-    },
-    {
-      "key": "identity-access",
-      "label": "Identity & access",
-      "definition": "Authentication, authorization, and credential distribution across the estate.",
-      "order": 1
-    },
-    {
-      "key": "governance-compliance",
-      "label": "Governance & compliance",
-      "definition": "Policy, standards, audit, and regulatory obligations applied to architecture decisions.",
-      "order": 2
-    },
-    {
-      "key": "reliability-resilience",
-      "label": "Reliability & resilience",
-      "definition": "Failure containment, recovery, and continuity of service.",
-      "order": 3
-    },
-    {
-      "key": "observability",
-      "label": "Observability",
-      "definition": "The ability to explain system behaviour from emitted signals.",
-      "order": 4
-    },
-    {
-      "key": "developer-experience",
-      "label": "Developer experience",
-      "definition": "Feedback speed and friction for the teams changing this system.",
-      "order": 5
-    },
-    {
-      "key": "cost-efficiency",
-      "label": "Cost & efficiency",
-      "definition": "Resource consumption and unit economics of the architecture.",
-      "order": 6
-    },
-    {
-      "key": "data-governance",
-      "label": "Data governance",
-      "definition": "Ownership, lineage, classification, and lifecycle of information assets.",
-      "order": 7
-    }
-  ],
+  "name": "StackGraph Reference Architecture",
+  "description": "Canonical fixed frame for evidence-backed architecture coverage and governance.",
   "cells": [
     {
-      "key": "cell.experience.ui-rendering",
-      "concern_key": "concern.experience.ui-rendering",
-      "domain_key": "experience",
-      "label": "UI rendering & interaction",
-      "definition": "Turn application state into interactive interface for a human.",
+      "key": "cell.experience.ui",
+      "concern_key": "experience.ui",
+      "label": "UI rendering",
+      "definition": "Interactive user-interface rendering and reactivity.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "ui-rendering",
-            "client-reactivity"
+          "kind": "CAPABILITY",
+          "keys": [
+            "ui-rendering"
           ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.experience.ui-rendering",
-      "icon": "ui-rendering"
-    },
-    {
-      "key": "cell.experience.web-framework",
-      "concern_key": "concern.experience.web-framework",
-      "domain_key": "experience",
-      "label": "Web framework & server rendering",
-      "definition": "Deliver and render web application shells, including the server boundary.",
-      "bindings": [
+        },
         {
-          "kind": "capability",
-          "capability_keys": [
-            "server-side-rendering",
-            "meta-framework"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 1,
-        "allowed_diversity": 1
-      },
-      "observation_rule_key": "observation.experience.web-framework",
-      "icon": "framework"
-    },
-    {
-      "key": "cell.experience.client-navigation",
-      "concern_key": "concern.experience.client-navigation",
-      "domain_key": "experience",
-      "label": "Client navigation",
-      "definition": "Map URLs and navigation intent to application views.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "application-routing"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 1,
-        "allowed_diversity": 1
-      },
-      "observation_rule_key": "observation.experience.client-navigation",
-      "icon": "route"
-    },
-    {
-      "key": "cell.experience.state-consumption",
-      "concern_key": "concern.experience.state-consumption",
-      "domain_key": "experience",
-      "label": "Client & server state",
-      "definition": "Hold UI-local state and synchronise remote authoritative state.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "client-state-management",
-            "server-state-management"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
-        "allowed_diversity": 3
-      },
-      "observation_rule_key": "observation.experience.state-consumption",
-      "icon": "state"
-    },
-    {
-      "key": "cell.experience.forms-validation",
-      "concern_key": "concern.experience.forms-validation",
-      "domain_key": "experience",
-      "label": "Forms & input validation",
-      "definition": "Collect, validate, and submit user input safely.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "form-state",
-            "runtime-validation"
+          "kind": "CATEGORY",
+          "keys": [
+            "ui-rendering-reactivity"
           ]
         }
       ],
       "aspect_keys": [
-        "security-privacy"
-      ],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.experience.forms-validation",
-      "icon": "form"
-    },
-    {
-      "key": "cell.experience.design-system",
-      "concern_key": "concern.experience.design-system",
-      "domain_key": "experience",
-      "label": "Design system & accessible UI",
-      "definition": "Provide consistent, accessible interface primitives and styling.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "css-styling",
-            "accessible-ui-primitives"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.experience.design-system",
-      "icon": "palette"
-    },
-    {
-      "key": "cell.experience.channels",
-      "concern_key": "concern.experience.channels",
-      "domain_key": "experience",
-      "label": "Mobile, desktop & embedded channels",
-      "definition": "Deliver the experience to non-browser channels.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "mobile-channel",
-            "desktop-channel"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.experience.channels",
-      "icon": "devices"
-    },
-    {
-      "key": "cell.application.service-api",
-      "concern_key": "concern.application.service-api",
-      "domain_key": "application",
-      "label": "Service & API delivery",
-      "definition": "Expose application behaviour over a network interface.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "http-web-api",
-            "rpc-service"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "security-privacy"
-      ],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.application.service-api",
-      "icon": "api"
-    },
-    {
-      "key": "cell.application.domain-logic",
-      "concern_key": "concern.application.domain-logic",
-      "domain_key": "application",
-      "label": "Domain & application logic",
-      "definition": "Execute the business rules the service is responsible for.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "domain-logic",
-            "rules-execution"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.application.domain-logic",
-      "icon": "logic"
-    },
-    {
-      "key": "cell.application.persistence-adapter",
-      "concern_key": "concern.application.persistence-adapter",
-      "domain_key": "application",
-      "label": "Data access & persistence adapters",
-      "definition": "Translate between application types and storage engines.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "orm-data-access",
-            "query-builder"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.application.persistence-adapter",
-      "icon": "database-cog"
-    },
-    {
-      "key": "cell.application.outbound-clients",
-      "concern_key": "concern.application.outbound-clients",
-      "domain_key": "application",
-      "label": "Outbound clients & integration adapters",
-      "definition": "Call external and internal services from application code.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "http-client",
-            "sdk-client"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "reliability-resilience"
-      ],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
-        "allowed_diversity": 3
-      },
-      "observation_rule_key": "observation.application.outbound-clients",
-      "icon": "arrow-out"
-    },
-    {
-      "key": "cell.application.background-jobs",
-      "concern_key": "concern.application.background-jobs",
-      "domain_key": "application",
-      "label": "Background jobs & scheduling",
-      "definition": "Run deferred, scheduled, and asynchronous work.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "background-jobs",
-            "task-scheduling"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.application.background-jobs",
-      "icon": "clock-cog"
-    },
-    {
-      "key": "cell.application.workflow-execution",
-      "concern_key": "concern.application.workflow-execution",
-      "domain_key": "application",
-      "label": "Workflow & process execution",
-      "definition": "Coordinate long-running, multi-step business processes.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "durable-workflow",
-            "saga-coordination"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "reliability-resilience"
+        "developer-experience"
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.application.workflow-execution",
-      "icon": "workflow"
-    },
-    {
-      "key": "cell.application.runtime-framework",
-      "concern_key": "concern.application.runtime-framework",
-      "domain_key": "application",
-      "label": "Runtime & application frameworks",
-      "definition": "The framework and runtime hosting application code.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "application-framework",
-            "native-runtime-capability"
-          ]
-        }
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
       ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
-        "allowed_diversity": 3
-      },
-      "observation_rule_key": "observation.application.runtime-framework",
-      "icon": "box"
+      "absence_assertable": true
     },
     {
-      "key": "cell.integration.edge-gateway",
-      "concern_key": "concern.integration.edge-gateway",
-      "domain_key": "integration",
-      "label": "Edge proxy & API gateway",
-      "definition": "Terminate, authenticate, and route inbound traffic at the edge.",
+      "key": "cell.experience.web",
+      "concern_key": "experience.web",
+      "label": "Web boundary",
+      "definition": "Web application rendering, routing, and server boundary.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "reverse-proxy",
-            "api-gateway"
+          "kind": "CAPABILITY",
+          "keys": [
+            "web-application-boundary"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "meta-framework",
+            "client-routing",
+            "frontend-framework-routing"
           ]
         }
       ],
       "aspect_keys": [
         "security-privacy",
-        "identity-access"
+        "developer-experience"
       ],
       "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.integration.edge-gateway",
-      "icon": "gateway"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.integration.api-contract",
-      "concern_key": "concern.integration.api-contract",
-      "domain_key": "integration",
-      "label": "API contracts & interchange",
-      "definition": "Define and validate the shape of exchanged messages.",
+      "key": "cell.experience.state",
+      "concern_key": "experience.state",
+      "label": "Experience state",
+      "definition": "Client-local and remotely authoritative state management.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "api-contract",
-            "schema-registry"
+          "kind": "CAPABILITY",
+          "keys": [
+            "experience-state-management"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "server-state",
+            "client-state"
           ]
         }
       ],
       "aspect_keys": [
+        "developer-experience"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.experience.input",
+      "concern_key": "experience.input",
+      "label": "Input & validation",
+      "definition": "Form state and runtime input validation.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "input-validation"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "forms-validation"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.experience.design",
+      "concern_key": "experience.design",
+      "label": "Design & accessibility",
+      "definition": "Styling, component systems, and accessible primitives.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "accessible-design-system"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "styling-components",
+            "styling-ui"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "developer-experience",
         "governance-compliance"
       ],
       "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.integration.api-contract",
-      "icon": "contract"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.integration.service-connectivity",
-      "concern_key": "concern.integration.service-connectivity",
-      "domain_key": "integration",
-      "label": "Service-to-service connectivity",
-      "definition": "Discover, secure, and route traffic between internal services.",
+      "key": "cell.experience.channels",
+      "concern_key": "experience.channels",
+      "label": "Client channels",
+      "definition": "Browser, mobile, desktop, and embedded client delivery.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "service-mesh",
-            "service-discovery"
+          "kind": "CAPABILITY",
+          "keys": [
+            "client-channel"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "mobile-desktop"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": null
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.application.service",
+      "concern_key": "application.service",
+      "label": "Service & API",
+      "definition": "Request-driven application services and APIs.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "service-api-delivery"
           ]
         }
       ],
       "aspect_keys": [
         "security-privacy",
-        "reliability-resilience"
+        "identity-access",
+        "observability"
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-capability/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.application.logic",
+      "concern_key": "application.logic",
+      "label": "Domain logic",
+      "definition": "Business rules and application behaviour.",
+      "bindings": [
+        {
+          "kind": "UNBOUND",
+          "keys": [],
+          "reason": "Domain-logic classification requires governed code-capability evidence."
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "governance-compliance"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
         "maximum_implementations": null,
         "allowed_diversity": null
       },
-      "observation_rule_key": "observation.integration.service-connectivity",
-      "icon": "network"
+      "observation_rule_key": "repository-code/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.integration.message-routing",
-      "concern_key": "concern.integration.message-routing",
-      "domain_key": "integration",
-      "label": "Message routing & queues",
-      "definition": "Deliver work items between producers and consumers.",
+      "key": "cell.application.persistence",
+      "concern_key": "application.persistence",
+      "label": "Persistence adapters",
+      "definition": "ORMs, database clients, and persistence adapters.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "message-broker",
-            "task-queue"
+          "kind": "CAPABILITY",
+          "keys": [
+            "persistence-adapter"
           ]
         }
       ],
       "aspect_keys": [
-        "reliability-resilience"
+        "security-privacy",
+        "data-governance"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-capability/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.application.outbound",
+      "concern_key": "application.outbound",
+      "label": "Outbound adapters",
+      "definition": "HTTP and other remote-service clients.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "outbound-service-client"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-capability/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.application.background",
+      "concern_key": "application.background",
+      "label": "Background execution",
+      "definition": "Deferred, asynchronous, and scheduled application work.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "background-execution"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "reliability-resilience",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-capability/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.application.workflow",
+      "concern_key": "application.workflow",
+      "label": "Workflow execution",
+      "definition": "Long-lived failure-tolerant application workflows.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "application-workflow"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "reliability-resilience",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.application.runtime",
+      "concern_key": "application.runtime",
+      "label": "Application runtime",
+      "definition": "Framework and runtime hosting for application code.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "application-runtime"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "Runtime",
+            "Framework"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "developer-experience"
       ],
       "default_expectation": {
         "applicability": "RECOMMENDED",
         "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.integration.message-routing",
-      "icon": "queue"
+      "observation_rule_key": "repository-runtime/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.integration.event-stream",
-      "concern_key": "concern.integration.event-stream",
-      "domain_key": "integration",
-      "label": "Durable event streams",
-      "definition": "Retain an ordered, replayable log of domain events.",
+      "key": "cell.integration.edge",
+      "concern_key": "integration.edge",
+      "label": "Edge & API routing",
+      "definition": "Reverse proxy, ingress, and API gateway functions.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
+          "kind": "CAPABILITY",
+          "keys": [
+            "edge-api-routing"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "api-gateway-edge"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "identity-access",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.integration.contract",
+      "concern_key": "integration.contract",
+      "label": "API contracts",
+      "definition": "Machine-readable service contracts and interchange.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "machine-api-contract"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "api-contract"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "governance-compliance",
+        "developer-experience"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": null
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.integration.connectivity",
+      "concern_key": "integration.connectivity",
+      "label": "Service connectivity",
+      "definition": "Service-to-service traffic policy and connectivity.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "service-connectivity"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "service-mesh"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "identity-access",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.integration.messaging",
+      "concern_key": "integration.messaging",
+      "label": "Message routing",
+      "definition": "Queueing, routing, acknowledgment, and delivery semantics.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "message-routing"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "reliability-resilience",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.integration.events",
+      "concern_key": "integration.events",
+      "label": "Durable event streams",
+      "definition": "Ordered, replayable, and partitioned event streams.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
             "durable-event-stream"
           ]
         }
       ],
       "aspect_keys": [
-        "reliability-resilience"
+        "reliability-resilience",
+        "observability",
+        "data-governance"
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.integration.event-stream",
-      "icon": "stream"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
       "key": "cell.integration.stream-processing",
-      "concern_key": "concern.integration.stream-processing",
-      "domain_key": "integration",
+      "concern_key": "integration.stream-processing",
       "label": "Stream processing",
-      "definition": "Transform and aggregate events in motion.",
+      "definition": "Stateful and windowed computations over event streams.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
+          "kind": "CAPABILITY",
+          "keys": [
             "stream-processing"
           ]
         }
       ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.integration.stream-processing",
-      "icon": "waveform"
-    },
-    {
-      "key": "cell.integration.integration-orchestration",
-      "concern_key": "concern.integration.integration-orchestration",
-      "domain_key": "integration",
-      "label": "Integration orchestration",
-      "definition": "Coordinate multi-system integration flows.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "data-orchestration",
-            "integration-flow"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.integration.integration-orchestration",
-      "icon": "sitemap"
-    },
-    {
-      "key": "cell.data.relational-store",
-      "concern_key": "concern.data.relational-store",
-      "domain_key": "data",
-      "label": "Relational persistence",
-      "definition": "Store authoritative transactional records with relational semantics.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "relational-database"
-          ]
-        }
-      ],
       "aspect_keys": [
+        "reliability-resilience",
+        "observability",
         "data-governance"
       ],
       "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.data.relational-store",
-      "icon": "database"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.data.nonrelational-store",
-      "concern_key": "concern.data.nonrelational-store",
-      "domain_key": "data",
-      "label": "Document, key-value & graph persistence",
-      "definition": "Store records whose access pattern is not relational.",
+      "key": "cell.integration.orchestration",
+      "concern_key": "integration.orchestration",
+      "label": "Integration orchestration",
+      "definition": "Coordination of integration and data-movement workflows.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "document-database",
-            "key-value-database",
-            "graph-database"
+          "kind": "CAPABILITY",
+          "keys": [
+            "integration-orchestration"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "workflow-orchestration"
           ]
         }
       ],
       "aspect_keys": [
-        "data-governance"
+        "reliability-resilience",
+        "observability"
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.data.nonrelational-store",
-      "icon": "database-share"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.data.cache-session",
-      "concern_key": "concern.data.cache-session",
-      "domain_key": "data",
-      "label": "Cache & session state",
-      "definition": "Hold derived or ephemeral state close to the reader.",
+      "key": "cell.integration.identity-access",
+      "concern_key": "integration.identity-access",
+      "label": "Identity & access",
+      "definition": "Shared identity, authentication, authorization, and access-policy services.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "cache",
-            "session-store"
+          "kind": "CAPABILITY",
+          "keys": [
+            "identity-access-services"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "identity-authorization-secrets"
           ]
         }
       ],
       "aspect_keys": [
+        "security-privacy",
+        "identity-access",
+        "governance-compliance"
+      ],
+      "default_expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.data.database",
+      "concern_key": "data.database",
+      "label": "Databases",
+      "definition": "Authoritative operational data stores.",
+      "bindings": [
+        {
+          "kind": "RESOURCE_KIND",
+          "keys": [
+            "DATABASE"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "data-governance",
         "reliability-resilience"
       ],
       "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.data.cache-session",
-      "icon": "bolt"
-    },
-    {
-      "key": "cell.data.search-retrieval",
-      "concern_key": "concern.data.search-retrieval",
-      "domain_key": "data",
-      "label": "Search & vector retrieval",
-      "definition": "Retrieve records by relevance rather than by key.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "full-text-search",
-            "vector-search"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 3
       },
-      "observation_rule_key": "observation.data.search-retrieval",
-      "icon": "search"
+      "observation_rule_key": "repository-resource/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_RESOURCE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.data.object-storage",
-      "concern_key": "concern.data.object-storage",
-      "domain_key": "data",
-      "label": "Object & file storage",
-      "definition": "Store unstructured blobs and files.",
+      "key": "cell.data.cache-session",
+      "concern_key": "data.cache-session",
+      "label": "Cache & session",
+      "definition": "Reusable cache and shared session state.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "object-storage"
+          "kind": "RESOURCE_KIND",
+          "keys": [
+            "CACHE"
+          ]
+        },
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "cache-session-storage"
           ]
         }
       ],
       "aspect_keys": [
+        "security-privacy",
+        "reliability-resilience"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-resource/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_RESOURCE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.data.search",
+      "concern_key": "data.search",
+      "label": "Search & retrieval",
+      "definition": "Text, structured, and vector search systems.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "search-retrieval"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
         "data-governance"
       ],
       "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.data.object-storage",
-      "icon": "archive"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.data.analytical-store",
-      "concern_key": "concern.data.analytical-store",
-      "domain_key": "data",
-      "label": "Warehouse, lake & lakehouse",
-      "definition": "Hold analytical copies of estate data.",
+      "key": "cell.data.object-storage",
+      "concern_key": "data.object-storage",
+      "label": "Object & file storage",
+      "definition": "Durable unstructured object and file stores.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "data-warehouse",
-            "data-lake"
+          "kind": "RESOURCE_KIND",
+          "keys": [
+            "OBJECT_STORAGE"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "data-governance",
+        "reliability-resilience"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-resource/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_RESOURCE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.data.analytics",
+      "concern_key": "data.analytics",
+      "label": "Warehouse & lake",
+      "definition": "Analytical warehouse, lake, and lakehouse storage.",
+      "bindings": [
+        {
+          "kind": "UNBOUND",
+          "keys": [],
+          "reason": "Warehouse and lake resource classification is not yet ingested."
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "data-governance",
+        "cost-efficiency"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": null
+      },
+      "observation_rule_key": "analytical-resource/v1",
+      "required_sensor_kinds": [
+        "ANALYTICAL_RESOURCE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.data.processing",
+      "concern_key": "data.processing",
+      "label": "Data processing",
+      "definition": "Batch and streaming data computation.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "data-processing"
           ]
         }
       ],
@@ -792,314 +871,343 @@
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.data.analytical-store",
-      "icon": "building-warehouse"
-    },
-    {
-      "key": "cell.data.data-processing",
-      "concern_key": "concern.data.data-processing",
-      "domain_key": "data",
-      "label": "Batch & streaming data processing",
-      "definition": "Compute derived datasets from stored or streaming inputs.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "batch-processing",
-            "stream-analytics"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.data.data-processing",
-      "icon": "cpu"
-    },
-    {
-      "key": "cell.data.data-movement",
-      "concern_key": "concern.data.data-movement",
-      "domain_key": "data",
-      "label": "Data movement & orchestration",
-      "definition": "Move and schedule data between systems.",
-      "bindings": [
-        {
-          "kind": "unbound",
-          "reason": "Change-data-capture and pipeline schedules are not part of any supported sensor."
-        }
-      ],
-      "aspect_keys": [
-        "data-governance"
-      ],
-      "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
-        "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.data.data-movement",
-      "icon": "transfer"
-    },
-    {
-      "key": "cell.platform.language-runtime",
-      "concern_key": "concern.platform.language-runtime",
-      "domain_key": "platform",
-      "label": "Language & runtime",
-      "definition": "The language runtime executing deployed code.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "language-runtime"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
-        "allowed_diversity": 3
-      },
-      "observation_rule_key": "observation.platform.language-runtime",
-      "icon": "terminal"
-    },
-    {
-      "key": "cell.platform.container-runtime",
-      "concern_key": "concern.platform.container-runtime",
-      "domain_key": "platform",
-      "label": "Container & artifact runtime",
-      "definition": "Package and run deployable artifacts.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "container-runtime",
-            "artifact-format"
-          ]
-        }
-      ],
-      "aspect_keys": [],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 1,
-        "allowed_diversity": 1
-      },
-      "observation_rule_key": "observation.platform.container-runtime",
-      "icon": "container"
-    },
-    {
-      "key": "cell.platform.compute-target",
-      "concern_key": "concern.platform.compute-target",
-      "domain_key": "platform",
-      "label": "Compute targets",
-      "definition": "The machine abstraction application workloads run on.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "virtual-machine-compute",
-            "bare-metal-compute"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "cost-efficiency"
-      ],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.platform.compute-target",
-      "icon": "server"
+      "observation_rule_key": "repository-capability/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.platform.orchestration",
-      "concern_key": "concern.platform.orchestration",
-      "domain_key": "platform",
-      "label": "Container orchestration",
-      "definition": "Schedule, scale, and heal containerised workloads.",
+      "key": "cell.data.movement",
+      "concern_key": "data.movement",
+      "label": "Data movement",
+      "definition": "Data pipeline scheduling, coordination, and movement.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "kubernetes-orchestration",
-            "container-scheduler"
+          "kind": "CAPABILITY",
+          "keys": [
+            "data-movement"
           ]
         }
       ],
       "aspect_keys": [
+        "data-governance",
+        "reliability-resilience",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
+    },
+    {
+      "key": "cell.platform.runtime",
+      "concern_key": "platform.runtime",
+      "label": "Language & runtime",
+      "definition": "Language runtimes that execute application code.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "language-runtime"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "Language",
+            "Runtime"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "developer-experience"
+      ],
+      "default_expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": 3
+      },
+      "observation_rule_key": "repository-runtime/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.platform.artifact",
+      "concern_key": "platform.artifact",
+      "label": "Runtime artifacts",
+      "definition": "Containers, images, and runnable workload artifacts.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "runtime-artifact"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "ContainerImage"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "developer-experience"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.platform.compute",
+      "concern_key": "platform.compute",
+      "label": "Compute targets",
+      "definition": "Virtual-machine, container, and other compute targets.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "compute-target"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "ComputeTarget"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "cost-efficiency",
         "reliability-resilience"
       ],
       "default_expectation": {
-        "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 3
       },
-      "observation_rule_key": "observation.platform.orchestration",
-      "icon": "orchestration"
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.platform.managed-compute",
-      "concern_key": "concern.platform.managed-compute",
-      "domain_key": "platform",
-      "label": "Serverless & managed compute",
-      "definition": "Run workloads on provider-managed execution.",
+      "key": "cell.platform.orchestration",
+      "concern_key": "platform.orchestration",
+      "label": "Workload orchestration",
+      "definition": "Scheduling and operation of workloads across compute targets.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "serverless-compute",
-            "managed-runtime"
+          "kind": "CAPABILITY",
+          "keys": [
+            "workload-orchestration"
           ]
         }
       ],
       "aspect_keys": [
-        "cost-efficiency"
+        "security-privacy",
+        "reliability-resilience",
+        "observability"
       ],
       "default_expectation": {
         "applicability": "OPTIONAL",
-        "minimum_implementations": null,
+        "minimum_implementations": 0,
         "maximum_implementations": null,
-        "allowed_diversity": null
+        "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.platform.managed-compute",
-      "icon": "cloud-cog"
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.platform.network-ingress",
-      "concern_key": "concern.platform.network-ingress",
-      "domain_key": "platform",
-      "label": "Network, ingress & connectivity",
-      "definition": "Provide addressability, ingress, and network isolation.",
+      "key": "cell.platform.serverless",
+      "concern_key": "platform.serverless",
+      "label": "Serverless compute",
+      "definition": "Managed event-driven functions and services.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "ingress-controller",
-            "load-balancer",
-            "private-network"
+          "kind": "CAPABILITY",
+          "keys": [
+            "serverless-compute"
           ]
         }
       ],
       "aspect_keys": [
+        "security-privacy",
+        "cost-efficiency",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.platform.network",
+      "concern_key": "platform.network",
+      "label": "Network & ingress",
+      "definition": "Platform network connectivity and ingress.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "platform-networking"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "Network",
+            "LoadBalancer"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "reliability-resilience",
+        "observability"
+      ],
+      "default_expectation": {
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": null
+      },
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.platform.provider",
+      "concern_key": "platform.provider",
+      "label": "Hosting platform",
+      "definition": "Cloud-provider and on-premises hosting platforms.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "hosting-platform"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "CloudProvider",
+            "OnPrem"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "security-privacy",
+        "governance-compliance",
+        "cost-efficiency"
+      ],
+      "default_expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": 3
+      },
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.delivery.build",
+      "concern_key": "delivery.build",
+      "label": "Build & package",
+      "definition": "Source transformation and package production.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "build-package"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "build-tooling",
+            "build-tools-bundlers",
+            "js-ts-compiler-transpilation"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "developer-experience",
         "security-privacy"
       ],
       "default_expectation": {
         "applicability": "RECOMMENDED",
         "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.platform.network-ingress",
-      "icon": "network-share"
-    },
-    {
-      "key": "cell.platform.platform-services",
-      "concern_key": "concern.platform.platform-services",
-      "domain_key": "platform",
-      "label": "Cloud & on-premises platform services",
-      "definition": "Provider-managed services the architecture depends on.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "cloud-platform-service"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "cost-efficiency",
-        "governance-compliance"
-      ],
-      "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
         "maximum_implementations": null,
-        "allowed_diversity": null
-      },
-      "observation_rule_key": "observation.platform.platform-services",
-      "icon": "cloud"
-    },
-    {
-      "key": "cell.delivery.source-build",
-      "concern_key": "concern.delivery.source-build",
-      "domain_key": "delivery",
-      "label": "Source, build & package management",
-      "definition": "Version, build, and publish deployable artifacts.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "build-bundling",
-            "package-management"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "developer-experience"
-      ],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
         "allowed_diversity": 3
       },
-      "observation_rule_key": "observation.delivery.source-build",
-      "icon": "package"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.delivery.automated-testing",
-      "concern_key": "concern.delivery.automated-testing",
-      "domain_key": "delivery",
-      "label": "Automated testing & quality controls",
-      "definition": "Verify behaviour and quality before release.",
+      "key": "cell.delivery.test",
+      "concern_key": "delivery.test",
+      "label": "Testing & quality",
+      "definition": "Automated tests and code-quality controls.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "unit-testing",
-            "e2e-testing",
-            "static-analysis"
+          "kind": "CAPABILITY",
+          "keys": [
+            "automated-quality"
           ]
-        }
-      ],
-      "aspect_keys": [
-        "developer-experience"
-      ],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 4,
-        "allowed_diversity": 4
-      },
-      "observation_rule_key": "observation.delivery.automated-testing",
-      "icon": "test"
-    },
-    {
-      "key": "cell.delivery.ci-cd",
-      "concern_key": "concern.delivery.ci-cd",
-      "domain_key": "delivery",
-      "label": "CI/CD automation",
-      "definition": "Automate the path from commit to running software.",
-      "bindings": [
+        },
         {
-          "kind": "capability",
-          "capability_keys": [
-            "ci-automation",
-            "cd-automation"
+          "kind": "CATEGORY",
+          "keys": [
+            "testing",
+            "code-quality-linting"
           ]
         }
       ],
@@ -1108,132 +1216,189 @@
         "governance-compliance"
       ],
       "default_expectation": {
-        "applicability": "REQUIRED",
+        "applicability": "RECOMMENDED",
         "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
+        "maximum_implementations": null,
+        "allowed_diversity": 4
       },
-      "observation_rule_key": "observation.delivery.ci-cd",
-      "icon": "pipeline"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.delivery.infrastructure-as-code",
-      "concern_key": "concern.delivery.infrastructure-as-code",
-      "domain_key": "delivery",
-      "label": "Infrastructure as code",
-      "definition": "Declare and version infrastructure state.",
+      "key": "cell.delivery.cicd",
+      "concern_key": "delivery.cicd",
+      "label": "CI/CD automation",
+      "definition": "Continuous integration, delivery, and deployment automation.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
+          "kind": "UNBOUND",
+          "keys": [],
+          "reason": "CI/CD configuration parsing is not yet projected into canonical evidence."
+        }
+      ],
+      "aspect_keys": [
+        "developer-experience",
+        "governance-compliance",
+        "security-privacy"
+      ],
+      "default_expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": 2
+      },
+      "observation_rule_key": "cicd/v1",
+      "required_sensor_kinds": [
+        "CICD_CONFIGURATION"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.delivery.iac",
+      "concern_key": "delivery.iac",
+      "label": "Infrastructure as code",
+      "definition": "Declarative infrastructure configuration and reconciliation.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
             "infrastructure-as-code"
           ]
         }
       ],
       "aspect_keys": [
-        "governance-compliance"
+        "governance-compliance",
+        "security-privacy",
+        "developer-experience"
       ],
       "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.delivery.infrastructure-as-code",
-      "icon": "file-code"
+      "observation_rule_key": "iac/v1",
+      "required_sensor_kinds": [
+        "INFRASTRUCTURE_CODE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.delivery.config-secrets",
-      "concern_key": "concern.delivery.config-secrets",
-      "domain_key": "delivery",
-      "label": "Configuration & secret delivery",
-      "definition": "Deliver configuration and credentials to running workloads.",
+      "key": "cell.delivery.configuration",
+      "concern_key": "delivery.configuration",
+      "label": "Configuration & secrets",
+      "definition": "Runtime configuration and secret delivery.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "configuration-management",
-            "secret-management"
+          "kind": "CAPABILITY",
+          "keys": [
+            "configuration-secret-delivery"
           ]
         }
       ],
       "aspect_keys": [
         "security-privacy",
-        "identity-access"
+        "identity-access",
+        "governance-compliance"
       ],
       "default_expectation": {
-        "applicability": "REQUIRED",
+        "applicability": "RECOMMENDED",
         "minimum_implementations": 1,
-        "maximum_implementations": 2,
+        "maximum_implementations": null,
         "allowed_diversity": 2
       },
-      "observation_rule_key": "observation.delivery.config-secrets",
-      "icon": "key"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY",
+        "REPOSITORY_CODE"
+      ],
+      "absence_assertable": false
     },
     {
-      "key": "cell.delivery.release-management",
-      "concern_key": "concern.delivery.release-management",
-      "domain_key": "delivery",
-      "label": "Release & deployment management",
-      "definition": "Control how change reaches each environment.",
+      "key": "cell.delivery.release",
+      "concern_key": "delivery.release",
+      "label": "Release & deployment",
+      "definition": "Versioned release promotion and deployment.",
       "bindings": [
         {
-          "kind": "capability",
-          "capability_keys": [
-            "release-management",
-            "progressive-delivery"
+          "kind": "CAPABILITY",
+          "keys": [
+            "release-deployment"
+          ]
+        },
+        {
+          "kind": "ENTITY_TYPE",
+          "keys": [
+            "Deployment",
+            "Environment"
           ]
         }
       ],
       "aspect_keys": [
+        "governance-compliance",
+        "reliability-resilience",
+        "developer-experience"
+      ],
+      "default_expectation": {
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": null,
+        "allowed_diversity": null
+      },
+      "observation_rule_key": "deployment/v1",
+      "required_sensor_kinds": [
+        "DEPLOYMENT"
+      ],
+      "absence_assertable": false
+    },
+    {
+      "key": "cell.delivery.observability",
+      "concern_key": "delivery.observability",
+      "label": "Telemetry & observability",
+      "definition": "Logs, metrics, traces, and telemetry operations.",
+      "bindings": [
+        {
+          "kind": "CAPABILITY",
+          "keys": [
+            "telemetry-observability"
+          ]
+        },
+        {
+          "kind": "CATEGORY",
+          "keys": [
+            "observability"
+          ]
+        }
+      ],
+      "aspect_keys": [
+        "observability",
         "reliability-resilience"
       ],
       "default_expectation": {
         "applicability": "RECOMMENDED",
         "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
-      },
-      "observation_rule_key": "observation.delivery.release-management",
-      "icon": "rocket"
-    },
-    {
-      "key": "cell.delivery.telemetry",
-      "concern_key": "concern.delivery.telemetry",
-      "domain_key": "delivery",
-      "label": "Telemetry & observability operations",
-      "definition": "Collect, store, and query signals about running systems.",
-      "bindings": [
-        {
-          "kind": "capability",
-          "capability_keys": [
-            "observability-telemetry",
-            "log-aggregation"
-          ]
-        }
-      ],
-      "aspect_keys": [
-        "observability"
-      ],
-      "default_expectation": {
-        "applicability": "REQUIRED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 3,
+        "maximum_implementations": null,
         "allowed_diversity": 3
       },
-      "observation_rule_key": "observation.delivery.telemetry",
-      "icon": "activity"
+      "observation_rule_key": "repository-dependency/v1",
+      "required_sensor_kinds": [
+        "REPOSITORY_DEPENDENCY"
+      ],
+      "absence_assertable": true
     },
     {
-      "key": "cell.delivery.incident-ops",
-      "concern_key": "concern.delivery.incident-ops",
-      "domain_key": "delivery",
-      "label": "Reliability & incident operations",
-      "definition": "Detect, route, and resolve production incidents.",
+      "key": "cell.delivery.reliability",
+      "concern_key": "delivery.reliability",
+      "label": "Reliability operations",
+      "definition": "Failure detection, response, and recovery operations.",
       "bindings": [
         {
-          "kind": "unbound",
-          "reason": "StackGraph does not yet ingest incident-management or alerting configuration."
+          "kind": "UNBOUND",
+          "keys": [],
+          "reason": "Reliability-operation evidence requires incident and service-level integrations."
         }
       ],
       "aspect_keys": [
@@ -1241,13 +1406,21 @@
         "observability"
       ],
       "default_expectation": {
-        "applicability": "RECOMMENDED",
-        "minimum_implementations": 1,
-        "maximum_implementations": 2,
-        "allowed_diversity": 2
+        "applicability": "OPTIONAL",
+        "minimum_implementations": 0,
+        "maximum_implementations": null,
+        "allowed_diversity": null
       },
-      "observation_rule_key": "observation.delivery.incident-ops",
-      "icon": "alert"
+      "observation_rule_key": "reliability/v1",
+      "required_sensor_kinds": [
+        "SERVICE_LEVEL",
+        "INCIDENT"
+      ],
+      "absence_assertable": false
     }
-  ]
+  ],
+  "taxonomy_key": "stackgraph.technical-architecture",
+  "taxonomy_version": "2.0.0",
+  "taxonomy_content_hash": "sha256:43019a76723c1d63dd29c50dd2cd06446c348f239a7ecbe503d83594becf0b30",
+  "content_hash": "sha256:4f6835e0681de166a0186b466d489f0af8ffad2e2db6602f4fd6b957797b0792"
 }

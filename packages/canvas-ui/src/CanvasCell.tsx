@@ -162,7 +162,7 @@ export const CanvasCell = forwardRef<HTMLDivElement, CanvasCellProps>(function C
     >
       <div className={styles.cellHead}>
         <span className={styles.cellGlyph}>
-          <CellIcon name={definition.icon} size={density === "compact" ? 14 : 16} />
+          <CellIcon name={definition.icon} domainKey={definition.domain_key} size={density === "compact" ? 14 : 16} />
         </span>
         <h4 className={styles.cellTitle} id={headingId}>
           {definition.label}

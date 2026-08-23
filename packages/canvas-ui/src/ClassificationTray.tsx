@@ -1,48 +1,74 @@
 "use client";
 
 import { useState } from "react";
-import type { CanvasClassificationTray, CanvasPolicyIntent } from "@stackgraph/shared";
+import type {
+  CanvasClassificationTrayView,
+  CanvasPolicyIntent,
+  CanvasTrayReason,
+} from "@stackgraph/shared";
 import type { ResolvedCanvas } from "./layout";
 import styles from "./canvas.module.css";
 
-type TrayTab = "unclassified" | "ambiguous" | "policies" | "contract";
+type TrayTab = CanvasTrayReason | "CONTRACT";
+
+const TAB_LABEL: Record<TrayTab, string> = {
+  UNCLASSIFIED: "Unclassified",
+  AMBIGUOUS: "Ambiguous",
+  UNRESOLVED_POLICY: "Unresolved policies",
+  FILTERED: "Hidden by filters",
+  CONTRACT: "Contract mismatches",
+};
+
+const TAB_NOTE: Record<TrayTab, string> = {
+  UNCLASSIFIED: "Observed, but no binding matched. These are gaps in classification, not in the estate.",
+  AMBIGUOUS: "Matched more than one mutually exclusive binding. A technology may legitimately occupy several cells; the counts must not double-count it.",
+  UNRESOLVED_POLICY: "Tenant policy that resolves to no canonical or extension cell. Assigning one moves its decisions unchanged.",
+  FILTERED: "Withheld by the active facets. Listed so the count is never silently lost.",
+  CONTRACT: "The template, reference model, and projection disagree about which cells exist.",
+};
+
+const REASON_ORDER: CanvasTrayReason[] = ["UNCLASSIFIED", "AMBIGUOUS", "UNRESOLVED_POLICY", "FILTERED"];
 
 /**
- * Everything the projection could not place, rendered where it cannot be missed.
- * The canvas must never silently drop an observation (spec §6.3), so the tray also
- * carries contract mismatches the renderer detected while resolving: canonical cells
- * laid out but not projected, projected but not laid out, or referencing an unknown
- * definition.
+ * Everything the projection could not place, rendered where it cannot be missed
+ * (spec §6.3: the canvas must never silently drop an observation).
+ *
+ * Two things are deliberately loud here. The server's own counts are shown rather
+ * than the length of the item list, because a truncated list under-reports; and when
+ * the server says it truncated, that is stated rather than inferred from arithmetic.
+ * The tray also carries contract mismatches the renderer detected while resolving.
  */
 export function ClassificationTray({
   tray,
   resolved,
   onSelectOccupant,
   onPolicyIntent,
-  onSelectCell,
 }: {
-  tray: CanvasClassificationTray;
+  tray: CanvasClassificationTrayView;
   resolved: ResolvedCanvas;
   onSelectOccupant?: (technologyId: string, cellKey: string) => void;
   onPolicyIntent?: (intent: CanvasPolicyIntent) => void;
-  onSelectCell?: (cellKey: string) => void;
 }) {
   const contractIssues =
     resolved.missingFromProjection.length +
     resolved.missingFromTemplate.length +
     resolved.unknownCellKeys.length;
 
-  const tabs: Array<{ id: TrayTab; label: string; count: number }> = [
-    { id: "unclassified", label: "Unclassified", count: tray.unclassified_technologies.length },
-    { id: "ambiguous", label: "Ambiguous", count: tray.ambiguous_observations.length },
-    { id: "policies", label: "Unresolved policies", count: tray.unresolved_policies.length },
-    ...(contractIssues ? [{ id: "contract" as const, label: "Contract mismatches", count: contractIssues }] : []),
+  const tabs: Array<{ id: TrayTab; count: number }> = [
+    ...REASON_ORDER.filter((reason) => tray.counts[reason] > 0).map((reason) => ({
+      id: reason as TrayTab,
+      count: tray.counts[reason],
+    })),
+    ...(contractIssues ? [{ id: "CONTRACT" as TrayTab, count: contractIssues }] : []),
   ];
-  const total = tabs.reduce((sum, tab) => sum + tab.count, 0) + tray.filtered_out_total;
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<TrayTab>("unclassified");
 
-  if (total === 0) return null;
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<TrayTab>(tabs[0]?.id ?? "UNCLASSIFIED");
+
+  if (!tabs.length) return null;
+
+  const items = tab === "CONTRACT" ? [] : tray.byReason[tab as CanvasTrayReason];
+  const listedShortOfCount = tab !== "CONTRACT" && items.length < tray.counts[tab as CanvasTrayReason];
 
   return (
     <section className={styles.tray} aria-labelledby="canvas-tray-heading">
@@ -57,13 +83,19 @@ export function ClassificationTray({
           Not placed on the canvas
         </h3>
         <span className={styles.trayCount}>
-          {total} observation{total === 1 ? "" : "s"}
-          {tray.filtered_out_total ? ` · ${tray.filtered_out_total} hidden by filters` : ""}
+          {tray.total} observation{tray.total === 1 ? "" : "s"}
+          {tray.truncated ? " · list truncated" : ""}
         </span>
       </button>
 
       {open ? (
         <div className={styles.trayBody} id="canvas-tray-body">
+          {tray.truncated ? (
+            <p className={styles.trayWarning} role="status">
+              The server truncated this list. The counts above are complete; the rows below are not.
+            </p>
+          ) : null}
+
           <div className={styles.trayTabs} role="tablist" aria-label="Unplaced observation categories">
             {tabs.map((entry) => (
               <button
@@ -77,7 +109,7 @@ export function ClassificationTray({
                 className={`${styles.trayTab} ${tab === entry.id ? styles.trayTabActive : ""}`}
                 onClick={() => setTab(entry.id)}
               >
-                {entry.label} <span className={styles.trayTabCount}>{entry.count}</span>
+                {TAB_LABEL[entry.id]} <span className={styles.trayTabCount}>{entry.count}</span>
               </button>
             ))}
           </div>
@@ -89,90 +121,18 @@ export function ClassificationTray({
             className={styles.trayPanel}
             tabIndex={0}
           >
-            {tab === "unclassified" ? (
-              <ul className={styles.trayList}>
-                {tray.unclassified_technologies.map((entry) => (
-                  <li key={entry.technology.id}>
-                    <button
-                      type="button"
-                      className={styles.trayRow}
-                      onClick={() => onSelectOccupant?.(entry.technology.id, "")}
-                    >
-                      <span className={styles.trayRowName}>{entry.technology.name}</span>
-                      <span className={styles.trayRowMeta}>{entry.ecosystem ?? "unknown ecosystem"}</span>
-                      <span className={styles.trayRowReason}>{entry.reason}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <p className={styles.trayNote}>{TAB_NOTE[tab]}</p>
 
-            {tab === "ambiguous" ? (
-              <ul className={styles.trayList}>
-                {tray.ambiguous_observations.map((entry) => (
-                  <li key={entry.technology.id}>
-                    <div className={styles.trayRow}>
-                      <span className={styles.trayRowName}>{entry.technology.name}</span>
-                      <span className={styles.trayRowMeta}>
-                        {entry.candidate_cell_keys.map((key) => (
-                          <button
-                            key={key}
-                            type="button"
-                            className={styles.trayLink}
-                            onClick={() => onSelectCell?.(key)}
-                          >
-                            {resolved.flatCells.find((cell) => cell.key === key)?.definition.label ?? key}
-                          </button>
-                        ))}
-                      </span>
-                      <span className={styles.trayRowReason}>{entry.reason}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            {tab === "policies" ? (
-              <ul className={styles.trayList}>
-                {tray.unresolved_policies.map((entry) => (
-                  <li key={entry.policy_key}>
-                    <div className={styles.trayRow}>
-                      <span className={styles.trayRowName}>{entry.label}</span>
-                      <span className={styles.trayRowMeta}>
-                        {entry.source.toLowerCase()} · {entry.technology_count} technolog
-                        {entry.technology_count === 1 ? "y" : "ies"}
-                      </span>
-                      <span className={styles.trayRowReason}>{entry.reason}</span>
-                      {onPolicyIntent ? (
-                        <button
-                          type="button"
-                          className={styles.trayAction}
-                          onClick={() =>
-                            onPolicyIntent({
-                              kind: "RESOLVE_UNRESOLVED_POLICY",
-                              policy_key: entry.policy_key,
-                              cell_key: null,
-                            })
-                          }
-                        >
-                          Assign a cell
-                        </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-
-            {tab === "contract" ? (
+            {tab === "CONTRACT" ? (
               <ul className={styles.trayList}>
                 {resolved.missingFromProjection.map((key) => (
                   <li key={`mp:${key}`}>
                     <div className={styles.trayRow}>
                       <span className={styles.trayRowName}>{key}</span>
+                      <span className={styles.trayRowMeta}>laid out, not projected</span>
                       <span className={styles.trayRowReason}>
-                        Laid out by the template but absent from the projection. The canvas omitted it rather than
-                        inventing a state.
+                        The template lays this cell out but the projection did not return it. The canvas
+                        omitted it rather than inventing a state.
                       </span>
                     </div>
                   </li>
@@ -181,8 +141,9 @@ export function ClassificationTray({
                   <li key={`mt:${key}`}>
                     <div className={styles.trayRow}>
                       <span className={styles.trayRowName}>{key}</span>
+                      <span className={styles.trayRowMeta}>projected, not laid out</span>
                       <span className={styles.trayRowReason}>
-                        Returned by the projection but not laid out by this template.
+                        Returned by the projection but absent from this template.
                       </span>
                     </div>
                   </li>
@@ -191,6 +152,7 @@ export function ClassificationTray({
                   <li key={`uk:${key}`}>
                     <div className={styles.trayRow}>
                       <span className={styles.trayRowName}>{key}</span>
+                      <span className={styles.trayRowMeta}>no definition</span>
                       <span className={styles.trayRowReason}>
                         No definition for this key in the active reference model.
                       </span>
@@ -198,7 +160,58 @@ export function ClassificationTray({
                   </li>
                 ))}
               </ul>
-            ) : null}
+            ) : (
+              <>
+                <ul className={styles.trayList}>
+                  {items.map((item) => {
+                    const openable = tab !== "FILTERED" && Boolean(onSelectOccupant);
+                    const body = (
+                      <>
+                        <span className={styles.trayRowName}>{item.entity.name}</span>
+                        <span className={styles.trayRowMeta}>{item.entity.kind}</span>
+                        <span className={styles.trayRowReason}>{item.detail}</span>
+                      </>
+                    );
+                    return (
+                      <li key={`${item.reason}:${item.entity.id}`}>
+                        {openable ? (
+                          <button
+                            type="button"
+                            className={styles.trayRow}
+                            onClick={() => onSelectOccupant?.(item.entity.id, "")}
+                          >
+                            {body}
+                          </button>
+                        ) : (
+                          <div className={styles.trayRow}>{body}</div>
+                        )}
+                        {tab === "UNRESOLVED_POLICY" && onPolicyIntent ? (
+                          <button
+                            type="button"
+                            className={styles.trayAction}
+                            onClick={() =>
+                              onPolicyIntent({
+                                kind: "RESOLVE_UNRESOLVED_POLICY",
+                                policy_key: item.entity.id,
+                                cell_key: null,
+                              })
+                            }
+                          >
+                            Assign a cell
+                            <span className={styles.visuallyHidden}> for {item.entity.name}</span>
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {listedShortOfCount ? (
+                  <p className={styles.trayNote}>
+                    Showing {items.length} of {tray.counts[tab as CanvasTrayReason]}.
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       ) : null}

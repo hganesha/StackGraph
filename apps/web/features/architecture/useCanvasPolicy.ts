@@ -2,13 +2,12 @@
 
 import { useCallback, useState } from "react";
 import type {
+  ArchitectureProfileDetail,
+  ArchitectureProfileSummary,
   CanvasPolicyDecision,
   CanvasPolicyIntent,
-  CanvasUnresolvedPolicy,
-  CellExpectation,
-  PolicyException,
-  TenantArchitectureProfile,
-  TenantCellPolicy,
+  CellExpectationModel,
+  TenantCellPolicyModel,
 } from "@stackgraph/shared";
 import { ApiRequestError } from "@stackgraph/shared";
 import { useUpdateArchitectureProfile } from "@/lib/canvasQueries";
@@ -16,12 +15,12 @@ import { useUpdateArchitectureProfile } from "@/lib/canvasQueries";
 export interface PolicyPrompt {
   intent: CanvasPolicyIntent;
   title: string;
-  /** Rationale is mandatory for a decision that changes what teams may ship. */
+  /** Rationale is mandatory for a decision that narrows what teams may ship. */
   requiresRationale: boolean;
 }
 
 export const DECISION_FIELD: Record<CanvasPolicyDecision, keyof Pick<
-  TenantCellPolicy,
+  TenantCellPolicyModel,
   | "preferred_technology_ids"
   | "allowed_technology_ids"
   | "discouraged_technology_ids"
@@ -35,7 +34,7 @@ export const DECISION_FIELD: Record<CanvasPolicyDecision, keyof Pick<
 
 const DECISION_FIELDS = Object.values(DECISION_FIELD);
 
-export function emptyCellPolicy(cellKey: string): TenantCellPolicy {
+export function emptyCellPolicy(cellKey: string): TenantCellPolicyModel {
   return {
     cell_key: cellKey,
     applicability: "RECOMMENDED",
@@ -58,33 +57,49 @@ export function emptyCellPolicy(cellKey: string): TenantCellPolicy {
 /**
  * Turns a renderer intent into a profile write.
  *
- * The canvas package emits intents and knows nothing about permissions or the API
- * (spec §9.2). This hook is the application-layer half: it decides which intents need
- * a rationale, applies the change to the active profile, and surfaces the optimistic
- * concurrency conflict rather than silently retrying it — a retry here would overwrite
- * somebody else's governance decision.
+ * Two properties of the published API shape this hook:
+ *
+ *   * an update is a whole-state PUT, so it must start from an authoritative copy of
+ *     the draft. `detail` is that copy. When it is absent the hook reports itself as
+ *     unwritable rather than PUTting a state assembled from guesses, which would drop
+ *     every policy this session had not seen.
+ *   * concurrency is guarded by version, not fingerprint, and a successful write
+ *     increments it. The conflict is surfaced rather than retried: a retry here would
+ *     overwrite somebody else's governance decision.
  */
-export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
+export function useCanvasPolicy(
+  summary: ArchitectureProfileSummary | null,
+  detail: ArchitectureProfileDetail | null,
+) {
   const [prompt, setPrompt] = useState<PolicyPrompt | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
   const update = useUpdateArchitectureProfile();
 
-  /** Applies `mutate` to the named cell's override, creating it if it does not exist. */
+  const writable = Boolean(summary && detail && detail.id === summary.id);
+
   const writeCell = useCallback(
-    async (cellKey: string, mutate: (policy: TenantCellPolicy) => TenantCellPolicy) => {
-      if (!profile) return;
+    async (cellKey: string, mutate: (policy: TenantCellPolicyModel) => TenantCellPolicyModel) => {
+      if (!summary || !detail) return;
       setConflict(null);
-      const overrides = [...profile.cell_overrides];
-      const index = overrides.findIndex((entry) => entry.cell_key === cellKey);
-      const base = index >= 0 ? { ...overrides[index] } : emptyCellPolicy(cellKey);
+      const policies = [...(detail.state.cell_policies ?? [])];
+      const index = policies.findIndex((entry) => entry.cell_key === cellKey);
+      const base = index >= 0 ? { ...policies[index] } : emptyCellPolicy(cellKey);
       const next = mutate(base);
-      if (index >= 0) overrides[index] = next;
-      else overrides.push(next);
+      if (index >= 0) policies[index] = next;
+      else policies.push(next);
 
       try {
         await update.mutateAsync({
-          id: profile.id,
-          body: { expected_fingerprint: profile.fingerprint, cell_overrides: overrides },
+          id: summary.id,
+          // The cached detail is the version this edit was composed against.
+          expectedVersion: detail.version,
+          state: {
+            name: detail.state.name,
+            reference_model_key: detail.reference_model_key,
+            reference_model_version: detail.reference_model_version,
+            cell_policies: policies,
+            extension_cells: detail.state.extension_cells ?? [],
+          },
         });
         setPrompt(null);
       } catch (error) {
@@ -97,7 +112,7 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
         throw error;
       }
     },
-    [profile, update],
+    [detail, summary, update],
   );
 
   /** A technology holds exactly one decision: clear it everywhere, then re-add. */
@@ -106,10 +121,10 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
       writeCell(cellKey, (policy) => {
         const next = { ...policy };
         for (const field of DECISION_FIELDS) {
-          next[field] = next[field].filter((id) => id !== technologyId);
+          next[field] = (next[field] ?? []).filter((id) => id !== technologyId);
         }
         if (decision !== "UNGOVERNED") {
-          next[DECISION_FIELD[decision]] = [...next[DECISION_FIELD[decision]], technologyId];
+          next[DECISION_FIELD[decision]] = [...(next[DECISION_FIELD[decision]] ?? []), technologyId];
         }
         next.rationale = rationale || next.rationale;
         return next;
@@ -118,7 +133,7 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
   );
 
   const applyExpectation = useCallback(
-    (cellKey: string, expectation: CellExpectation, rationale: string) =>
+    (cellKey: string, expectation: CellExpectationModel, rationale: string) =>
       writeCell(cellKey, (policy) => ({ ...policy, ...expectation, rationale: rationale || policy.rationale })),
     [writeCell],
   );
@@ -132,28 +147,25 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
   );
 
   const applyExceptions = useCallback(
-    (cellKey: string, exceptions: PolicyException[]) =>
+    (cellKey: string, exceptions: TenantCellPolicyModel["exceptions"]) =>
       writeCell(cellKey, (policy) => ({ ...policy, exceptions })),
     [writeCell],
   );
 
   /**
-   * Moves an unresolved legacy or custom policy onto a canonical cell, preserving each
-   * technology's decision. §7.3 is explicit that migration must not invent REQUIRED or
-   * PREFERRED, so applicability is left untouched and only the decisions move.
+   * Moves an unresolved policy's decisions onto a canonical cell. Migration never
+   * invents REQUIRED or PREFERRED, so applicability is untouched and only the
+   * decisions move (spec §7.3).
    */
   const resolveUnresolvedPolicy = useCallback(
-    (cellKey: string, unresolved: CanvasUnresolvedPolicy, rationale: string) =>
+    (cellKey: string, technologyIds: string[], decision: CanvasPolicyDecision, rationale: string) =>
       writeCell(cellKey, (policy) => {
         const next = { ...policy };
-        for (const entry of unresolved.technologies) {
+        for (const id of technologyIds) {
           for (const field of DECISION_FIELDS) {
-            next[field] = next[field].filter((id) => id !== entry.technology.id);
+            next[field] = (next[field] ?? []).filter((entry) => entry !== id);
           }
-          next[DECISION_FIELD[entry.decision]] = [
-            ...next[DECISION_FIELD[entry.decision]],
-            entry.technology.id,
-          ];
+          next[DECISION_FIELD[decision]] = [...(next[DECISION_FIELD[decision]] ?? []), id];
         }
         next.rationale = rationale || next.rationale;
         return next;
@@ -164,17 +176,12 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
   const handleIntent = useCallback((intent: CanvasPolicyIntent) => {
     switch (intent.kind) {
       case "PROMOTE_FROM_ACTUAL":
-        setPrompt({
-          intent,
-          title: `Make ${intent.technology_name} the standard`,
-          requiresRationale: true,
-        });
+        setPrompt({ intent, title: `Make ${intent.technology_name} the standard`, requiresRationale: true });
         break;
       case "SET_TECHNOLOGY_DECISION":
         setPrompt({
           intent,
           title: `Set ${intent.technology_name} to ${intent.decision.toLowerCase()}`,
-          // Narrowing what teams may ship needs a reason on the record; widening does not.
           requiresRationale: intent.decision === "PROHIBITED" || intent.decision === "DISCOURAGED",
         });
         break;
@@ -193,10 +200,10 @@ export function useCanvasPolicy(profile: TenantArchitectureProfile | null) {
   return {
     prompt,
     conflict,
+    writable,
     isSaving: update.isPending,
     error: update.error,
     handleIntent,
-    openPrompt: setPrompt,
     dismiss: () => {
       setPrompt(null);
       setConflict(null);

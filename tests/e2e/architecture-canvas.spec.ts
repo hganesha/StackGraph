@@ -28,7 +28,7 @@ test.describe("architecture canvas", () => {
 
     // Every canonical cell is rendered. A canvas that drops cells is not a fixed frame.
     const cells = page.locator(CANVAS_CELL);
-    await expect(cells).toHaveCount(44);
+    await expect(cells).toHaveCount(43);
 
     // All five states are represented and each carries a text label, never colour alone.
     const states = await cells.evaluateAll((nodes) =>
@@ -37,7 +37,7 @@ test.describe("architecture canvas", () => {
     expect(states).toEqual(["EMPTY", "NOT_APPLICABLE", "POPULATED", "UNBOUND", "UNOBSERVED"]);
 
     // The caption states the distribution rather than an aggregate score.
-    await expect(page.locator("#canvas-caption")).toContainText("44 canonical cells");
+    await expect(page.locator("#canvas-caption")).toContainText("43 canonical cells");
     await expect(page.locator("#canvas-caption")).toContainText("not yet modelled");
 
     await expectNoSeriousAccessibilityViolations(page);
@@ -74,7 +74,7 @@ test.describe("architecture canvas", () => {
     const first = page.locator(CANVAS_CELL).first();
     await first.focus();
     const startKey = await first.getAttribute("data-cell-key");
-    expect(startKey).toBe("cell.experience.ui-rendering");
+    expect(startKey).toBe("cell.experience.ui");
 
     await page.keyboard.press("ArrowRight");
     const afterRight = await page.evaluate(
@@ -98,7 +98,7 @@ test.describe("architecture canvas", () => {
     await page.goto("/architecture");
     await waitForCanvas(page);
 
-    const cell = page.locator('[data-cell-key="cell.experience.state-consumption"]');
+    const cell = page.locator('[data-cell-key="cell.experience.state"]');
     // Click the heading, not the cell's centre: the centre is covered by occupant
     // chips, and a chip click deliberately navigates to that technology instead.
     await cell.getByRole("heading").click();
@@ -136,10 +136,11 @@ test.describe("architecture canvas", () => {
     // Comparison and lens views may not hide canonical cells (spec §5.4).
     await expect(page.locator(CANVAS_CELL)).toHaveCount(before);
 
+    // Cell keys and aspect assignments come from the server catalog: UI rendering
+    // carries no security aspect, databases do.
     // toHaveCSS retries, so this settles past the dim transition rather than racing it.
-    await expect(page.locator('[data-cell-key="cell.data.relational-store"]')).toHaveCSS("opacity", "0.42");
-    // A cell carrying the aspect stays at full strength.
-    await expect(page.locator('[data-cell-key="cell.delivery.config-secrets"]')).toHaveCSS("opacity", "1");
+    await expect(page.locator('[data-cell-key="cell.experience.ui"]')).toHaveCSS("opacity", "0.42");
+    await expect(page.locator('[data-cell-key="cell.data.database"]')).toHaveCSS("opacity", "1");
 
     const dimmed = await page
       .locator(CANVAS_CELL)
@@ -208,6 +209,7 @@ test.describe("architecture canvas", () => {
     await page.getByRole("tab", { name: /Ambiguous/ }).click();
     // A technology may legitimately occupy several cells; the reason must be visible.
     await expect(page.getByRole("tabpanel")).toContainText("Redis");
+    await expect(page.getByRole("tabpanel")).toContainText("not mutually exclusive");
   });
 });
 
@@ -216,7 +218,7 @@ test.describe("canvas across surfaces", () => {
     await page.goto("/estate?view=canvas");
     await expect(page.getByRole("heading", { level: 1, name: "Software Estate" })).toBeVisible();
     await waitForCanvas(page);
-    await expect(page.locator('[role="gridcell"]')).toHaveCount(44);
+    await expect(page.locator('[role="gridcell"]')).toHaveCount(43);
     await expectNoSeriousAccessibilityViolations(page);
   });
 
@@ -230,7 +232,7 @@ test.describe("canvas across surfaces", () => {
     await expect(page.getByRole("heading", { level: 1, name: /architecture canvas$/ })).toBeVisible();
     await waitForCanvas(page);
     // Same canonical geometry as the estate: that is what makes the two comparable.
-    await expect(page.locator('[role="gridcell"]')).toHaveCount(44);
+    await expect(page.locator('[role="gridcell"]')).toHaveCount(43);
     await expectNoSeriousAccessibilityViolations(page);
   });
 });

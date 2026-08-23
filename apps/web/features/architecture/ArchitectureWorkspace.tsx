@@ -14,6 +14,7 @@ import {
   useCanvasReferenceModel,
   useCanvasTargetProjection,
   useCanvasTemplate,
+  useProfileDetail,
 } from "@/lib/canvasQueries";
 import { useEstateDomainSummary } from "@/lib/queries";
 import { useCan } from "@/lib/session";
@@ -109,15 +110,16 @@ export function ArchitectureWorkspace({
         .sort((a, b) => b.version - a.version)[0] ?? null,
     [profiles.data],
   );
-  const policy = useCanvasPolicy(draftProfile);
-  const canWritePolicy = canGovern && Boolean(draftProfile);
+  const draftDetail = useProfileDetail(draftProfile?.id ?? null);
+  const policy = useCanvasPolicy(draftProfile ?? null, draftDetail);
+  const canWritePolicy = canGovern && policy.writable;
   const governing = showingTarget && mode === "govern" && canWritePolicy;
 
-  // While governing, the target view previews the draft, so an edit is visible before
-  // it is published. Otherwise it shows the revision actually in force.
-  const targetProjection = useCanvasTargetProjection(governing ? draftProfile?.id : undefined, {
-    enabled: showingTarget && canReview,
-  });
+  // The target projection always resolves the revision in force: the published route
+  // takes no profile selector, so a draft cannot be previewed through it. Govern mode
+  // therefore says plainly that it is editing a draft whose effect is not yet visible
+  // here, rather than implying the target has already moved.
+  const targetProjection = useCanvasTargetProjection({ enabled: showingTarget && canReview });
   const projection = showingTarget ? targetProjection : actualProjection;
 
   const selectedDefinition = useMemo(
@@ -146,8 +148,8 @@ export function ArchitectureWorkspace({
     if (policy.prompt?.intent.kind !== "RESOLVE_UNRESOLVED_POLICY") return null;
     const key = policy.prompt.intent.policy_key;
     return (
-      projection.data?.classification_tray.unresolved_policies.find(
-        (entry) => entry.policy_key === key,
+      projection.data?.classification_tray.byReason.UNRESOLVED_POLICY.find(
+        (entry) => entry.entity.id === key,
       ) ?? null
     );
   }, [policy.prompt, projection.data]);
@@ -157,7 +159,15 @@ export function ArchitectureWorkspace({
       const existing = projection.data?.cells.find((cell) => cell.cell_key === cellKey)?.policy?.exceptions ?? [];
       void policy.applyExceptions(
         cellKey,
-        existing.filter((exception) => exception.id !== exceptionId),
+        existing
+          .filter((exception) => exception.key !== exceptionId)
+          .map((exception) => ({
+            key: exception.key,
+            rationale: exception.rationale,
+            subject_ids: exception.subject_ids,
+            effective_from: exception.effective_from,
+            effective_to: exception.effective_to,
+          })),
       );
     },
     [policy, projection.data],
@@ -186,7 +196,8 @@ export function ArchitectureWorkspace({
           if (submission.targetCellKey && promptUnresolvedPolicy) {
             void policy.resolveUnresolvedPolicy(
               submission.targetCellKey,
-              promptUnresolvedPolicy,
+              [promptUnresolvedPolicy.entity.id],
+              submission.migrationDecision ?? "ALLOWED",
               submission.rationale,
             );
           }
@@ -258,8 +269,16 @@ export function ArchitectureWorkspace({
 
       {governing && draftProfile ? (
         <p className={styles.draftBanner} role="status">
-          Previewing draft revision v{draftProfile.version}. Changes save to the draft and take
-          effect for the estate only when it is published.
+          Editing draft revision v{draftProfile.version}. The cells below show the revision
+          currently in force — the API has no way to preview a draft — so changes will not appear
+          here until the draft is published.
+        </p>
+      ) : null}
+      {showingTarget && canGovern && draftProfile && !policy.writable ? (
+        <p className={styles.draftBanner} role="status">
+          Draft v{draftProfile.version} exists but its contents were not loaded in this session, and
+          the API publishes no way to read a single revision back. Create or edit a draft here to
+          govern it, so an edit is never written over policies that could not be read.
         </p>
       ) : null}
 

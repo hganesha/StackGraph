@@ -672,3 +672,10 @@
     color: var(--sg-color-domain-business-200);
   }
 }
+
+/* A governed technology the projection cannot name: shown as unresolved, never as a
+   bare identifier pretending to be a name. */
+.decisionUnresolved {
+  color: var(--sg-text-muted);
+  font-style: italic;
+}

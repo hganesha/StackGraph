@@ -1,6 +1,6 @@
 "use client";
 
-import type { ArchitectureAspectDefinition, CanvasProjection } from "@stackgraph/shared";
+import type { ArchitectureAspectView, CanvasProjectionView } from "@stackgraph/shared";
 import type { ResolvedCanvas } from "./layout";
 import styles from "./canvas.module.css";
 
@@ -18,9 +18,9 @@ export function CanvasAspectRail({
   onSelectAspect,
   variant,
 }: {
-  aspects: ArchitectureAspectDefinition[];
+  aspects: ArchitectureAspectView[];
   resolved: ResolvedCanvas;
-  projection: CanvasProjection;
+  projection: CanvasProjectionView;
   activeAspect: string | null;
   onSelectAspect: (aspectKey: string | null) => void;
   variant: "rail" | "band";

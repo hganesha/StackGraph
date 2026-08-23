@@ -1,145 +1,179 @@
 {
-  "contract_version": "1.0.0",
-  "id": "4e4c6b63-7b14-44b3-851d-d384a644d4d6",
+  "id": "d4933216-d682-406a-847b-f54f7caba440",
+  "profile_key": "enterprise.target",
   "name": "Enterprise architecture standard",
   "reference_model_key": "architecture.stackgraph.reference",
   "reference_model_version": "1.0.0",
   "version": 3,
   "status": "ACTIVE",
-  "cell_overrides": [
-    {
-      "cell_key": "cell.experience.ui-rendering",
-      "applicability": "REQUIRED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 2,
-      "allowed_diversity": 2,
-      "scope_selector": {},
-      "preferred_technology_ids": [
-        "4480fdc8-2280-49d3-8be2-88afc8a566b3"
-      ],
-      "allowed_technology_ids": [],
-      "discouraged_technology_ids": [
-        "4b430abe-2242-4d69-8756-1d42ce3057e8"
-      ],
-      "prohibited_technology_ids": [],
-      "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
-      "owner": "platform-architecture",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    },
-    {
-      "cell_key": "cell.experience.state-consumption",
-      "applicability": "RECOMMENDED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 3,
-      "allowed_diversity": 3,
-      "scope_selector": {},
-      "preferred_technology_ids": [
-        "3f9d5e17-552d-463c-8f7d-17f728453d76"
-      ],
-      "allowed_technology_ids": [
-        "f71eb2d5-2c99-413f-8207-93ae3cf76c25"
-      ],
-      "discouraged_technology_ids": [
-        "701be562-914b-45f2-84d4-c0026fb67006"
-      ],
-      "prohibited_technology_ids": [
-        "52c6d8a7-0b44-4565-889e-a95f49edf8bd"
-      ],
-      "rationale": "Zustand for client state, TanStack Query for server state. Redux is being retired; MobX is prohibited.",
-      "owner": "frontend-guild",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    },
-    {
-      "cell_key": "cell.application.service-api",
-      "applicability": "REQUIRED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 2,
-      "allowed_diversity": 2,
-      "scope_selector": {},
-      "preferred_technology_ids": [
-        "d62e402e-7fea-4375-888f-5025b7bb7076"
-      ],
-      "allowed_technology_ids": [
-        "7f5c974e-8a99-42b0-8ac4-124f4baea132"
-      ],
-      "discouraged_technology_ids": [
-        "9fce2b50-845e-4ca8-88ca-07f631fbe797"
-      ],
-      "prohibited_technology_ids": [],
-      "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
-      "owner": "platform-architecture",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    },
-    {
-      "cell_key": "cell.data.relational-store",
-      "applicability": "REQUIRED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 2,
-      "allowed_diversity": 2,
-      "scope_selector": {},
-      "preferred_technology_ids": [
-        "819e9923-6986-467a-8cf6-7d824e9679d1"
-      ],
-      "allowed_technology_ids": [],
-      "discouraged_technology_ids": [
-        "50b31e9c-7005-4827-8ed6-6d778c3c417d"
-      ],
-      "prohibited_technology_ids": [],
-      "rationale": "PostgreSQL is the standard relational engine across all environments.",
-      "owner": "data-platform",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    },
-    {
-      "cell_key": "cell.integration.edge-gateway",
-      "applicability": "REQUIRED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 2,
-      "allowed_diversity": 2,
-      "scope_selector": {},
-      "preferred_technology_ids": [],
-      "allowed_technology_ids": [
-        "3135c623-3dba-47b5-8e89-9fa9be8d1a7d"
-      ],
-      "discouraged_technology_ids": [],
-      "prohibited_technology_ids": [],
-      "rationale": "NGINX terminates edge traffic. Kong was introduced without review and is unresolved.",
-      "owner": "platform-architecture",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    },
-    {
-      "cell_key": "cell.delivery.telemetry",
-      "applicability": "REQUIRED",
-      "minimum_implementations": 1,
-      "maximum_implementations": 3,
-      "allowed_diversity": 3,
-      "scope_selector": {},
-      "preferred_technology_ids": [
-        "f8249c05-b58e-4676-8b0e-469b311320ba"
-      ],
-      "allowed_technology_ids": [
-        "6b79b09c-918f-43a9-8841-6bebb17ad13f"
-      ],
-      "discouraged_technology_ids": [],
-      "prohibited_technology_ids": [],
-      "rationale": "OpenTelemetry is the standard instrumentation layer; Prometheus remains allowed for infrastructure metrics.",
-      "owner": "observability-guild",
-      "effective_from": "2026-01-01T00:00:00.000Z",
-      "effective_to": null,
-      "exceptions": []
-    }
-  ],
-  "extension_cells": [],
   "fingerprint": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
-  "updated_by": "platform-architecture",
-  "updated_at": "2026-08-18T10:30:00.000Z"
+  "created_at": "2026-06-01T09:00:00.000Z",
+  "updated_at": "2026-08-18T10:30:00.000Z",
+  "state": {
+    "name": "Enterprise architecture standard",
+    "reference_model_key": "architecture.stackgraph.reference",
+    "reference_model_version": "1.0.0",
+    "cell_policies": [
+      {
+        "cell_key": "cell.experience.ui",
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "preferred_technology_ids": [
+          "dd8a8da9-4fc1-4e49-8f92-a7258829a991"
+        ],
+        "allowed_technology_ids": [],
+        "discouraged_technology_ids": [
+          "023bf9c1-33df-4acc-8cbd-eda47550fe37"
+        ],
+        "prohibited_technology_ids": [],
+        "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      },
+      {
+        "cell_key": "cell.experience.state",
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "preferred_technology_ids": [
+          "5cb21413-4718-4548-8dd0-aea5da0e91e9"
+        ],
+        "allowed_technology_ids": [
+          "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808"
+        ],
+        "discouraged_technology_ids": [
+          "d8982a6a-8943-4042-8bfc-4329005bee11"
+        ],
+        "prohibited_technology_ids": [
+          "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79"
+        ],
+        "rationale": "Zustand for client state, TanStack Query for server state. Redux is retiring; MobX is prohibited.",
+        "owner": "frontend-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      },
+      {
+        "cell_key": "cell.experience.design",
+        "applicability": "RECOMMENDED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "preferred_technology_ids": [],
+        "allowed_technology_ids": [
+          "b5148661-e634-4a53-86d1-642cfd7329fd"
+        ],
+        "discouraged_technology_ids": [],
+        "prohibited_technology_ids": [],
+        "rationale": "Radix carries a documented exception until the in-house primitives land.",
+        "owner": "design-systems",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": [
+          {
+            "key": "radix-until-inhouse",
+            "rationale": "Radix UI stays until the in-house primitives ship.",
+            "subject_ids": [],
+            "effective_from": "2026-04-01T00:00:00.000Z",
+            "effective_to": "2026-12-31T00:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "cell_key": "cell.application.service",
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "preferred_technology_ids": [
+          "3938ba19-c483-4e8b-820f-8c4c28fe28d5"
+        ],
+        "allowed_technology_ids": [
+          "2712c40e-d538-47dc-89fe-a73c873dad1f"
+        ],
+        "discouraged_technology_ids": [
+          "d2aa2088-606d-4edb-84a5-a116588da1eb"
+        ],
+        "prohibited_technology_ids": [],
+        "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      },
+      {
+        "cell_key": "cell.data.database",
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "preferred_technology_ids": [
+          "c15a1c4d-ed62-4348-80de-5cd33bec0770"
+        ],
+        "allowed_technology_ids": [],
+        "discouraged_technology_ids": [
+          "b4486af0-6a89-45ca-892e-cb72b175d252"
+        ],
+        "prohibited_technology_ids": [],
+        "rationale": "PostgreSQL is the standard relational engine across all environments.",
+        "owner": "data-platform",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      },
+      {
+        "cell_key": "cell.integration.edge",
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 2,
+        "allowed_diversity": 2,
+        "preferred_technology_ids": [],
+        "allowed_technology_ids": [
+          "3135c623-3dba-47b5-8e89-9fa9be8d1a7d"
+        ],
+        "discouraged_technology_ids": [],
+        "prohibited_technology_ids": [],
+        "rationale": "NGINX terminates edge traffic. Kong was introduced without review.",
+        "owner": "platform-architecture",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      },
+      {
+        "cell_key": "cell.delivery.observability",
+        "applicability": "REQUIRED",
+        "minimum_implementations": 1,
+        "maximum_implementations": 3,
+        "allowed_diversity": 3,
+        "preferred_technology_ids": [
+          "e247e5c6-abd9-400a-875b-2a2a9412f0bf"
+        ],
+        "allowed_technology_ids": [
+          "1637df4b-4c54-401e-8633-aed560d1a658"
+        ],
+        "discouraged_technology_ids": [],
+        "prohibited_technology_ids": [
+          "a75bc08b-db9d-4137-86d7-d6f5d22814dd"
+        ],
+        "rationale": "OpenTelemetry is the standard instrumentation layer; Prometheus remains allowed for infrastructure metrics.",
+        "owner": "observability-guild",
+        "effective_from": "2026-01-01T00:00:00.000Z",
+        "effective_to": null,
+        "scope_selector": {},
+        "exceptions": []
+      }
+    ],
+    "extension_cells": []
+  }
 }

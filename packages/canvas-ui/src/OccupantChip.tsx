@@ -1,6 +1,6 @@
 "use client";
 
-import type { CanvasOccupant } from "@stackgraph/shared";
+import type { CanvasOccupantView } from "@stackgraph/shared";
 import { POLICY_LABEL, POLICY_TONE } from "./vocabulary";
 import styles from "./canvas.module.css";
 
@@ -16,7 +16,7 @@ export function OccupantChip({
   onSelect,
   compact = false,
 }: {
-  occupant: CanvasOccupant;
+  occupant: CanvasOccupantView;
   cellKey: string;
   onSelect?: (technologyId: string, cellKey: string) => void;
   compact?: boolean;

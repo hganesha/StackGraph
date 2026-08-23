@@ -2,11 +2,12 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
-  ArchitectureCellDefinition,
-  CanvasCellProjection,
-  CanvasUnresolvedPolicy,
+  ArchitectureCellView,
+  CanvasPolicyDecision,
+  CanvasCellProjectionView,
+  CanvasTrayItemView,
   CellApplicability,
-  CellExpectation,
+  CellExpectationModel,
 } from "@stackgraph/shared";
 import { APPLICABILITY_LABEL, POLICY_LABEL } from "@stackgraph/canvas-ui";
 import type { PolicyPrompt } from "./useCanvasPolicy";
@@ -16,9 +17,10 @@ const APPLICABILITIES: CellApplicability[] = ["REQUIRED", "RECOMMENDED", "OPTION
 
 export interface PolicySubmission {
   rationale: string;
-  expectation?: CellExpectation;
+  expectation?: CellExpectationModel;
   details?: { rationale: string; owner: string | null; effective_from: string | null; effective_to: string | null };
   targetCellKey?: string;
+  migrationDecision?: CanvasPolicyDecision;
 }
 
 /**
@@ -41,10 +43,10 @@ export function PolicyIntentDialog({
   onDismiss,
 }: {
   prompt: PolicyPrompt;
-  cell: CanvasCellProjection | null;
-  definition: ArchitectureCellDefinition | null;
-  cells: ArchitectureCellDefinition[];
-  unresolvedPolicy: CanvasUnresolvedPolicy | null;
+  cell: CanvasCellProjectionView | null;
+  definition: ArchitectureCellView | null;
+  cells: ArchitectureCellView[];
+  unresolvedPolicy: CanvasTrayItemView | null;
   conflict: string | null;
   isSaving: boolean;
   onConfirm: (submission: PolicySubmission) => void;
@@ -60,13 +62,16 @@ export function PolicyIntentDialog({
   const [owner, setOwner] = useState(cell?.policy?.owner ?? "");
   const [effectiveFrom, setEffectiveFrom] = useState(cell?.policy?.effective_from?.slice(0, 10) ?? "");
   const [effectiveTo, setEffectiveTo] = useState(cell?.policy?.effective_to?.slice(0, 10) ?? "");
-  const [expectation, setExpectation] = useState<CellExpectation>({
+  const [expectation, setExpectation] = useState<CellExpectationModel>({
     applicability: cell?.expectation.applicability ?? "RECOMMENDED",
     minimum_implementations: cell?.expectation.minimum_implementations ?? 1,
     maximum_implementations: cell?.expectation.maximum_implementations ?? null,
     allowed_diversity: cell?.expectation.allowed_diversity ?? null,
   });
   const [targetCellKey, setTargetCellKey] = useState("");
+  // Migration never infers a decision: §7.3 forbids inventing REQUIRED or PREFERRED,
+  // so the reviewer states it explicitly and it is recorded with their rationale.
+  const [migrationDecision, setMigrationDecision] = useState<CanvasPolicyDecision>("ALLOWED");
 
   const sortedCells = useMemo(
     () => [...cells].sort((a, b) => a.label.localeCompare(b.label)),
@@ -124,6 +129,7 @@ export function PolicyIntentDialog({
             }
           : undefined,
       targetCellKey: needsTargetCell ? targetCellKey : undefined,
+      migrationDecision: needsTargetCell ? migrationDecision : undefined,
     });
   };
 
@@ -283,18 +289,26 @@ export function PolicyIntentDialog({
           <div className={styles.dialogFields}>
             {unresolvedPolicy ? (
               <>
-                <p className={styles.dialogBody}>
-                  {unresolvedPolicy.reason} Each decision below moves to the chosen cell unchanged —
-                  migration never invents a required or preferred state.
-                </p>
-                <ul className={styles.dialogList}>
-                  {unresolvedPolicy.technologies.map((entry) => (
-                    <li key={entry.technology.id}>
-                      <span>{entry.technology.name}</span>
-                      <span className={styles.dialogListState}>{POLICY_LABEL[entry.decision]}</span>
-                    </li>
-                  ))}
-                </ul>
+                <p className={styles.dialogBody}>{unresolvedPolicy.detail}</p>
+                <div className={styles.dialogRow}>
+                  <span className={styles.dialogField}>
+                    <label className={styles.dialogLabel} htmlFor={`${fieldId}-decision`}>
+                      Decision for {unresolvedPolicy.entity.name}
+                    </label>
+                    <select
+                      id={`${fieldId}-decision`}
+                      className={styles.dialogSelect}
+                      value={migrationDecision}
+                      onChange={(event) => setMigrationDecision(event.target.value as CanvasPolicyDecision)}
+                    >
+                      {(["PREFERRED", "ALLOWED", "DISCOURAGED", "PROHIBITED"] as const).map((decision) => (
+                        <option key={decision} value={decision}>
+                          {POLICY_LABEL[decision]}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </div>
               </>
             ) : null}
             <label className={styles.dialogLabel} htmlFor={`${fieldId}-cell`}>

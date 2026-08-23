@@ -1,12 +1,12 @@
 import type {
-  ArchitectureCellDefinition,
-  ArchitectureReferenceModel,
-  CanvasBandLayout,
-  CanvasCellComparison,
-  CanvasCellProjection,
-  CanvasComparison,
-  CanvasProjection,
-  CanvasTemplate,
+  ArchitectureCellView,
+  ArchitectureReferenceModelView,
+  CanvasBandLayoutModel,
+  CanvasCellComparisonView,
+  CanvasCellProjectionView,
+  CanvasComparisonView,
+  CanvasProjectionView,
+  CanvasTemplateModel,
 } from "@stackgraph/shared";
 
 /**
@@ -48,9 +48,9 @@ export function effectiveColumns(containerWidth: number, templateColumns: number
 
 export interface ResolvedCell {
   key: string;
-  definition: ArchitectureCellDefinition;
-  projection: CanvasCellProjection;
-  comparison: CanvasCellComparison | null;
+  definition: ArchitectureCellView;
+  projection: CanvasCellProjectionView;
+  comparison: CanvasCellComparisonView | null;
   span: 1 | 2 | 3;
   /** Flat index across every band, used for roving-tabindex navigation. */
   flatIndex: number;
@@ -79,15 +79,15 @@ export interface ResolvedCanvas {
   unknownCellKeys: string[];
 }
 
-function bandOrder(template: CanvasTemplate): CanvasBandLayout[] {
+function bandOrder(template: CanvasTemplateModel): CanvasBandLayoutModel[] {
   return [...template.bands].sort((a, b) => a.order - b.order);
 }
 
 export function resolveCanvas(
-  template: CanvasTemplate,
-  referenceModel: ArchitectureReferenceModel,
-  projection: CanvasProjection,
-  comparison?: CanvasComparison | null,
+  template: CanvasTemplateModel,
+  referenceModel: ArchitectureReferenceModelView,
+  projection: CanvasProjectionView,
+  comparison?: CanvasComparisonView | null,
 ): ResolvedCanvas {
   const definitions = new Map(referenceModel.cells.map((cell) => [cell.key, cell]));
   const projected = new Map(projection.cells.map((cell) => [cell.cell_key, cell]));
