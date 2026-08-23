@@ -11,7 +11,6 @@ import {
   IconRefresh,
   IconScale,
   IconServer2,
-  IconSparkles,
   IconTrendingUp,
   IconUsers,
   type Icon,
@@ -29,7 +28,8 @@ import styles from "@/components/admin/admin.module.css";
 
 const TABS = [
   { key: "data", label: "Data & sources", description: "Connections and refresh", icon: IconDatabase },
-  { key: "intelligence", label: "Intelligence", description: "AI models and services", icon: IconBrain },
+  { key: "services", label: "Services & health", description: "Runtime status and controls", icon: IconServer2 },
+  { key: "intelligence", label: "Intelligence", description: "AI provider and models", icon: IconBrain },
   { key: "governance", label: "Policies & rules", description: "Modernization and code policy", icon: IconScale },
   { key: "access", label: "People & access", description: "Members and roles", icon: IconUsers },
 ] as const;
@@ -39,11 +39,6 @@ type TabKey = (typeof TABS)[number]["key"];
 const DATA_VIEWS = [
   { key: "connections", label: "Connections", detail: "Sources and repositories", icon: IconPlugConnected },
   { key: "scan", label: "Scan & refresh", detail: "Cadence, quotas, and rescans", icon: IconRefresh },
-] as const;
-
-const INTELLIGENCE_VIEWS = [
-  { key: "ai", label: "AI provider", detail: "Models and data residency", icon: IconSparkles },
-  { key: "services", label: "Worker services", detail: "Queues and processing state", icon: IconServer2 },
 ] as const;
 
 const GOVERNANCE_VIEWS = [
@@ -100,7 +95,6 @@ export default function AdminPage() {
     TABS.some((item) => item.key === requestedTab) ? requestedTab as TabKey : "data",
   );
   const [dataView, setDataView] = useState<(typeof DATA_VIEWS)[number]["key"]>("connections");
-  const [intelligenceView, setIntelligenceView] = useState<(typeof INTELLIGENCE_VIEWS)[number]["key"]>("ai");
   const [governanceView, setGovernanceView] = useState<(typeof GOVERNANCE_VIEWS)[number]["key"]>("modernization");
   const activeTab = TABS.find((item) => item.key === tab) ?? TABS[0];
 
@@ -171,14 +165,8 @@ export default function AdminPage() {
                 </div>
               </div>
             ) : null}
-            {tab === "intelligence" ? (
-              <div className={styles.section}>
-                <SectionTabs scope="intelligence" label="Intelligence settings" items={INTELLIGENCE_VIEWS} active={intelligenceView} onChange={(key) => setIntelligenceView(key as typeof intelligenceView)} />
-                <div id={`intelligence-panel-${intelligenceView}`} role="tabpanel" aria-labelledby={`intelligence-tab-${intelligenceView}`}>
-                  {intelligenceView === "ai" ? <IntelligenceSection /> : <ServicesSection />}
-                </div>
-              </div>
-            ) : null}
+            {tab === "services" ? <ServicesSection /> : null}
+            {tab === "intelligence" ? <IntelligenceSection /> : null}
             {tab === "governance" ? (
               <div className={styles.section}>
                 <SectionTabs scope="policy" label="Policy and rule settings" items={GOVERNANCE_VIEWS} active={governanceView} onChange={(key) => setGovernanceView(key as typeof governanceView)} />
