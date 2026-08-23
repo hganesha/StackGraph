@@ -47,6 +47,13 @@ const domainOf = (cell) => concernDomain.get(cell.concern_key);
 
 // ─── Technologies ────────────────────────────────────────────────────────────
 
+const applicationSubject = {
+  id: "00000000-0000-4000-8000-000000000101",
+  kind: "Application",
+  name: "Helios Storefront",
+  canonical_key: "stackgraph:application:helios-storefront",
+};
+
 const TECH = new Map();
 function tech(name) {
   if (!TECH.has(name)) {
@@ -179,11 +186,14 @@ function cellPolicy(cellKey, occupants) {
     effective_from: "2026-01-01T00:00:00.000Z",
     effective_to: null,
     scope_selector: {},
+    // An exception must name at least one subject: CanvasPolicyExceptionModel
+    // constrains subject_ids to min_length=1. There is no estate-wide exception —
+    // widening the standing policy is the way to say that.
     exceptions: cellKey === "cell.experience.design"
       ? [{
           key: "radix-until-inhouse",
           rationale: "Radix UI stays until the in-house primitives ship.",
-          subject_ids: [],
+          subject_ids: [applicationSubject.id],
           effective_from: "2026-04-01T00:00:00.000Z",
           effective_to: "2026-12-31T00:00:00.000Z",
         }]
@@ -416,12 +426,6 @@ function projection(scope, subject, cells) {
 const PROFILE_ID = uuid("profile");
 const PROFILE_FINGERPRINT = sha("profile:v3");
 const estateCells = buildCells(1);
-const applicationSubject = {
-  id: "00000000-0000-4000-8000-000000000101",
-  kind: "Application",
-  name: "Helios Storefront",
-  canonical_key: "stackgraph:application:helios-storefront",
-};
 const applicationCells = buildCells(0.34);
 
 // ─── Target projection ───────────────────────────────────────────────────────
@@ -449,8 +453,10 @@ function targetCells() {
           ? `${decisions.length} governed technology decision${decisions.length === 1 ? "" : "s"}.`
           : "No target decision has been recorded for this concern.",
       occupants: decisions.map(([id, decision]) => ({
-        technology: byId.get(id) ?? { id, kind: "Technology", name: id },
-        placement_keys: [],
+        technology: byId.get(id) ?? { id, kind: "Technology", name: `Unresolved technology ${id}` },
+        // What the server emits for a target occupant: a decision is not an observed
+        // placement, so its provenance is the policy itself.
+        placement_keys: [`policy:${cell.key}`],
         classification: "CURATED",
         confidence: 1,
         confidence_label: "HIGH",
@@ -458,8 +464,9 @@ function targetCells() {
         adoption_repositories: 0,
         adoption_deployments: 0,
         policy_status: decision,
-        policy_reference: null,
-        citations: [cite("Tenant architecture profile decision", `target:${cell.key}:${id}`)],
+        policy_reference: PROFILE_FINGERPRINT,
+        // A target decision is not an observation, so it carries no evidence.
+        citations: [],
       })),
       occupant_total: decisions.length,
       unique_technology_total: decisions.length,
@@ -468,7 +475,7 @@ function targetCells() {
       measures: null,
       policy,
       insight_refs: [],
-      citations: policy ? [cite("Tenant architecture profile", `target:${cell.key}`)] : [],
+      citations: [],
     };
   });
 }
