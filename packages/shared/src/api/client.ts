@@ -1473,14 +1473,46 @@ async function req<T>(path: string, init?: RequestInit, allowRefresh = true): Pr
   return (await res.json()) as T;
 }
 
+/**
+ * Carries the server's own explanation into `message`.
+ *
+ * It used to read `StackGraph API 422` and nothing else, which told a user that
+ * something was rejected but never what — and a 422 from a whole-state write is
+ * exactly the case where the field path is the entire diagnosis.
+ */
 export class ApiRequestError extends Error {
   constructor(
     public status: number,
     public detail: unknown,
   ) {
-    super(`StackGraph API ${status}`);
+    super(`StackGraph API ${status}${describeApiDetail(detail)}`);
     this.name = "ApiRequestError";
   }
+}
+
+/** Renders a FastAPI error body — either the house `{code, message}` or a 422's `detail[]`. */
+function describeApiDetail(detail: unknown): string {
+  if (!detail || typeof detail !== "object") return "";
+  const body = detail as Record<string, unknown>;
+  if (typeof body.message === "string" && body.message) {
+    return `: ${body.message}`;
+  }
+  const issues = body.detail;
+  if (Array.isArray(issues) && issues.length) {
+    const rendered = issues
+      .slice(0, 3)
+      .map((issue) => {
+        const entry = issue as { loc?: unknown[]; msg?: string };
+        const path = Array.isArray(entry.loc)
+          ? entry.loc.filter((part) => part !== "body").join(".")
+          : "";
+        return path ? `${path} — ${entry.msg ?? "invalid"}` : entry.msg ?? "invalid";
+      })
+      .join("; ");
+    return `: ${rendered}${issues.length > 3 ? ` (and ${issues.length - 3} more)` : ""}`;
+  }
+  if (typeof issues === "string" && issues) return `: ${issues}`;
+  return "";
 }
 
 const liveClient: StackGraphClient = {

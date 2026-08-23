@@ -26,7 +26,9 @@
             "name": "React",
             "canonical_key": "stackgraph:technology:react"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.ui"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -34,13 +36,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PREFERRED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "e926e5b2-ab04-4c7b-81d9-d2957f742f7d",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -49,7 +46,9 @@
             "name": "Vue",
             "canonical_key": "stackgraph:technology:vue"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.ui"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -57,13 +56,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "DISCOURAGED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "c3222d1c-e12a-42ce-8a09-55b4f9fb0d40",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 2,
@@ -112,12 +106,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "e1de83bd-b921-46f6-8ac1-05e5375372a3",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.experience.web",
@@ -164,7 +153,9 @@
             "name": "Zustand",
             "canonical_key": "stackgraph:technology:zustand"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.state"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -172,13 +163,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PREFERRED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "d5b51612-28ca-425e-8a24-063d2780b105",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -187,7 +173,9 @@
             "name": "TanStack Query",
             "canonical_key": "stackgraph:technology:tanstack-query"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.state"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -195,13 +183,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "ALLOWED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "1dc82f01-5437-4e7b-8bc6-8ae81a60f7b0",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -210,7 +193,9 @@
             "name": "Redux",
             "canonical_key": "stackgraph:technology:redux"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.state"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -218,13 +203,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "DISCOURAGED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "72a4b3de-e007-4aee-838d-18e9293725ca",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -233,7 +213,9 @@
             "name": "MobX",
             "canonical_key": "stackgraph:technology:mobx"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.state"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -241,13 +223,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PROHIBITED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "62407a45-0167-45fa-851b-c9f100f29792",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 4,
@@ -300,12 +277,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "ae4399b1-a2fb-4867-8ec2-b56938882843",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.experience.input",
@@ -352,7 +324,9 @@
             "name": "Tailwind CSS",
             "canonical_key": "stackgraph:technology:tailwind-css"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.experience.design"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -360,13 +334,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "ALLOWED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "12ed43e8-f04d-41e1-8fca-d1bf94de4def",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 1,
@@ -414,19 +383,16 @@
           {
             "key": "radix-until-inhouse",
             "rationale": "Radix UI stays until the in-house primitives ship.",
-            "subject_ids": [],
+            "subject_ids": [
+              "00000000-0000-4000-8000-000000000101"
+            ],
             "effective_from": "2026-04-01T00:00:00.000Z",
             "effective_to": "2026-12-31T00:00:00.000Z"
           }
         ]
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "60c9dbc9-3e9a-4919-80a1-c3c8667cba2e",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.experience.channels",
@@ -473,7 +439,9 @@
             "name": "FastAPI",
             "canonical_key": "stackgraph:technology:fastapi"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.application.service"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -481,13 +449,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PREFERRED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "ba73d037-1116-4386-861c-2c3a220d0e23",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -496,7 +459,9 @@
             "name": "Express",
             "canonical_key": "stackgraph:technology:express"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.application.service"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -504,13 +469,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "ALLOWED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "309c8b78-76a9-46e4-84a6-02a64bbc0688",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -519,7 +479,9 @@
             "name": "Flask",
             "canonical_key": "stackgraph:technology:flask"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.application.service"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -527,13 +489,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "DISCOURAGED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "4627830e-2757-4dac-877a-742a53e59349",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 3,
@@ -586,12 +543,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "d43bbcb7-ed0b-4bb9-8a6d-4cc8ed78039a",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.application.logic",
@@ -811,7 +763,9 @@
             "name": "NGINX",
             "canonical_key": "stackgraph:technology:nginx"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.integration.edge"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -819,13 +773,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "ALLOWED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "ed28962f-e16b-40a0-8741-47b27f04ef48",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 1,
@@ -872,12 +821,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "221fbff2-2698-4173-810c-0f78234be83c",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.integration.contract",
@@ -1124,7 +1068,9 @@
             "name": "PostgreSQL",
             "canonical_key": "stackgraph:technology:postgresql"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.data.database"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -1132,13 +1078,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PREFERRED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "cb4452ca-8a81-4c8d-8e6d-c51cb7896f4d",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -1147,7 +1088,9 @@
             "name": "MySQL",
             "canonical_key": "stackgraph:technology:mysql"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.data.database"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -1155,13 +1098,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "DISCOURAGED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "43b6613b-220e-4b2b-8020-c076cd1b4cf6",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 2,
@@ -1210,12 +1148,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "89c5f135-4937-49fb-821a-e9da1d33af4a",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.data.cache-session",
@@ -1864,7 +1797,9 @@
             "name": "OpenTelemetry",
             "canonical_key": "stackgraph:technology:opentelemetry"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.delivery.observability"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -1872,13 +1807,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PREFERRED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "c5b266d4-5613-44a3-8efa-4b0c41ac2c62",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -1887,7 +1817,9 @@
             "name": "Prometheus",
             "canonical_key": "stackgraph:technology:prometheus"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.delivery.observability"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -1895,13 +1827,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "ALLOWED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "e08f6328-b75b-4ab9-8173-75db9bdb630f",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         },
         {
           "technology": {
@@ -1910,7 +1837,9 @@
             "name": "Splunk",
             "canonical_key": "stackgraph:technology:splunk"
           },
-          "placement_keys": [],
+          "placement_keys": [
+            "policy:cell.delivery.observability"
+          ],
           "classification": "CURATED",
           "confidence": 1,
           "confidence_label": "HIGH",
@@ -1918,13 +1847,8 @@
           "adoption_repositories": 0,
           "adoption_deployments": 0,
           "policy_status": "PROHIBITED",
-          "policy_reference": null,
-          "citations": [
-            {
-              "fact_id": "9d5524a4-f112-4dd5-8cca-1de8cc7f6edc",
-              "label": "Tenant architecture profile decision"
-            }
-          ]
+          "policy_reference": "sha256:7ca5f8b2989efc703b80d93799a9ec655a9987c4eda64904c5169c8d4dd28705",
+          "citations": []
         }
       ],
       "occupant_total": 3,
@@ -1975,12 +1899,7 @@
         "exceptions": []
       },
       "insight_refs": [],
-      "citations": [
-        {
-          "fact_id": "bcb7ed00-2cb8-4396-89c8-8b898d821ccf",
-          "label": "Tenant architecture profile"
-        }
-      ]
+      "citations": []
     },
     {
       "cell_key": "cell.delivery.reliability",
