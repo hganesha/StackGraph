@@ -27,6 +27,7 @@ SNAPSHOT_ID = "00000000-0000-4000-8000-000000007103"
 ARTIFACT_ID = "00000000-0000-4000-8000-000000007104"
 PUBLIC_REGISTRY_ID = "00000000-0000-4000-8000-000000007005"
 PRIVATE_REGISTRY_ID = "00000000-0000-4000-8000-000000009001"
+PUBLIC_PYPI_REGISTRY_ID = "00000000-0000-4000-8000-000000009006"
 SECOND_REPOSITORY_ID = "00000000-0000-4000-8000-000000009002"
 PRIVATE_DEPENDENCY_ID = "00000000-0000-4000-8000-000000009003"
 PUBLIC_COLLISION_ID = "00000000-0000-4000-8000-000000009004"
@@ -106,9 +107,12 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
             ) VALUES (
               %s,%s,'00000000-0000-4000-8000-000000009000','npm-private',
               'https://npm.acme.test/','https://npm.acme.test/','NPM','PRIVATE','TOKEN'
+            ),(
+              %s,%s,'00000000-0000-4000-8000-000000009000','pypi-public',
+              'https://pypi.org/','https://pypi.org/','PYPI','PUBLIC','NONE'
             )
             """,
-            (PRIVATE_REGISTRY_ID, TENANT_ID),
+            (PRIVATE_REGISTRY_ID, TENANT_ID, PUBLIC_PYPI_REGISTRY_ID, TENANT_ID),
         )
         connection.execute(
             """
@@ -118,7 +122,7 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
               (%s,%s,'ENTERPRISE','Repository','github:repo:phase-1-copy','phase-1-copy','{}',now()),
               (%s,%s,'TECHNOLOGY','PackageVersion','pkg:npm/%%40acme/shared@1.0.0','@acme/shared 1.0.0','{}',now()),
               (%s,%s,'TECHNOLOGY','PackageVersion','pkg:npm/%%40acme/shared@1.0.0-public','@acme/shared public 1.0.0','{}',now()),
-              (%s,%s,'TECHNOLOGY','PackageVersion','pkg:npm/copyleft-lib@1.0.0','copyleft-lib 1.0.0','{}',now())
+              (%s,%s,'TECHNOLOGY','PackageVersion','pkg:pypi/copyleft-lib@1.0.0','copyleft-lib 1.0.0','{}',now())
             """,
             (
                 SECOND_REPOSITORY_ID,
@@ -139,7 +143,7 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
             ) VALUES
               ('00000000-0000-4000-8000-000000009010',%s,%s,%s,'@acme/shared','1.0.0','pkg:npm/%%40acme/shared@1.0.0','PRIVATE',now()),
               ('00000000-0000-4000-8000-000000009011',%s,%s,%s,'@acme/shared','1.0.0','pkg:npm/%%40acme/shared@1.0.0','PUBLIC',now()),
-              ('00000000-0000-4000-8000-000000009012',%s,%s,%s,'copyleft-lib','1.0.0','pkg:npm/copyleft-lib@1.0.0','PUBLIC',now())
+              ('00000000-0000-4000-8000-000000009012',%s,%s,%s,'copyleft-lib','1.0.0','pkg:pypi/copyleft-lib@1.0.0','PUBLIC',now())
             """,
             (
                 TENANT_ID,
@@ -150,7 +154,7 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
                 PUBLIC_REGISTRY_ID,
                 TENANT_ID,
                 LICENSE_DEPENDENCY_ID,
-                PUBLIC_REGISTRY_ID,
+                PUBLIC_PYPI_REGISTRY_ID,
             ),
         )
 
@@ -196,7 +200,15 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
                 fact_id=fact_id,
                 subject_id=repository_id,
                 predicate="HAS_PROPERTY",
-                object_value={"record_kind": "code_implementation_summary", "path": path},
+                object_value={
+                    "record_kind": "code_implementation_summary",
+                    "path": path,
+                    **({
+                        "vendored_package_key": "pkg:pypi/legacy",
+                        "vendored_package_version": "2.4.1",
+                        "vendored_identity_source": "pyproject.toml",
+                    } if fact_id == vendored_fact else {}),
+                },
             )
         connection.execute(
             """
@@ -214,7 +226,7 @@ def _install_expanded_rule_fixture(database_url: str) -> None:
                 PRIVATE_REGISTRY_ID,
                 TENANT_ID,
                 license_fact,
-                PUBLIC_REGISTRY_ID,
+                PUBLIC_PYPI_REGISTRY_ID,
             ),
         )
         clone_fingerprint = "sha256:" + "a" * 64
@@ -281,6 +293,7 @@ def test_expanded_rules_query_seeded_database_with_evidence() -> None:
         assert results["supplychain.dependency-confusion"].summary.total == 1
         license_insight = results["oss.license-obligation"].insights[0]
         assert license_insight.kind == "LICENSE_OBLIGATION"
+        assert "PYPI dependency" in license_insight.summary
         assert any("No active license allow-list" in value for value in license_insight.missing_inputs)
         clone_insight = results["code.cross-repository-clone"].insights[0]
         assert clone_insight.affected_repository_count == 2
@@ -290,6 +303,8 @@ def test_expanded_rules_query_seeded_database_with_evidence() -> None:
         }
         vendored_insight = results["code.vendored-third-party"].insights[0]
         assert vendored_insight.kind == "VENDORED_SOURCE_OUTSIDE_MANAGEMENT"
+        assert "pkg:pypi/legacy@2.4.1" in vendored_insight.title
+        assert "no matching current DEPENDS_ON" in vendored_insight.summary
         assert vendored_insight.supporting_fact_ids
     finally:
         remove_golden_billing(admin_database_url)

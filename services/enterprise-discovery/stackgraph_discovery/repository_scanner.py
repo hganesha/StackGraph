@@ -26,7 +26,7 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.7.0"
+SCANNER_VERSION = "1.8.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -301,6 +301,9 @@ class CodeUnit:
     dynamic_signals: tuple[str, ...]
     touchpoints: tuple[Mapping[str, str], ...]
     vendored: bool
+    vendored_package_key: str | None = None
+    vendored_package_version: str | None = None
+    vendored_identity_source: str | None = None
 
 
 @dataclass(slots=True)
@@ -1213,6 +1216,7 @@ def _scan_code_units(
         suffix = PurePosixPath(path).suffix.lower()
         content = contents[path]
         if suffix == ".py":
+            vendored_identity = _vendored_identity(contents, path, "pypi")
             try:
                 tree = ast.parse(content.decode("utf-8"), filename=path)
             except (UnicodeDecodeError, SyntaxError):
@@ -1234,10 +1238,14 @@ def _scan_code_units(
                     dynamic_signals=_dynamic_signals(path, content),
                     touchpoints=repository_touchpoints,
                     vendored=_is_vendored(path),
+                    vendored_package_key=vendored_identity[0],
+                    vendored_package_version=vendored_identity[1],
+                    vendored_identity_source=vendored_identity[2],
                 ))
                 if len(units) >= max_units:
                     break
         elif suffix in {".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"}:
+            vendored_identity = _vendored_identity(contents, path, "npm")
             text = content.decode("utf-8", errors="replace")
             for match in sorted(
                 [*JS_FUNCTION.finditer(text), *JS_ARROW_FUNCTION.finditer(text)],
@@ -1263,6 +1271,9 @@ def _scan_code_units(
                     dynamic_signals=_dynamic_signals(path, content),
                     touchpoints=repository_touchpoints,
                     vendored=_is_vendored(path),
+                    vendored_package_key=vendored_identity[0],
+                    vendored_package_version=vendored_identity[1],
+                    vendored_identity_source=vendored_identity[2],
                 ))
                 if len(units) >= max_units:
                     break
@@ -1287,6 +1298,9 @@ def _code_unit_facts(scan_input: ScanInput, units: Iterable[CodeUnit]) -> list[d
             "dynamic_signals": list(unit.dynamic_signals),
             "touchpoints": [dict(item) for item in unit.touchpoints],
             "vendored": unit.vendored,
+            "vendored_package_key": unit.vendored_package_key,
+            "vendored_package_version": unit.vendored_package_version,
+            "vendored_identity_source": unit.vendored_identity_source,
         }
         identity = {
             "tenant": scan_input.tenant_key,
@@ -1462,6 +1476,64 @@ def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str,
 
 def _is_vendored(path: str) -> bool:
     return bool({"vendor", "vendored", "third_party", "third-party"} & set(PurePosixPath(path.lower()).parts))
+
+
+def _vendored_identity(
+    contents: Mapping[str, bytes], path: str, ecosystem: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Return a deterministic package identity for a vendored source path.
+
+    Package metadata inside the vendored root is authoritative.  When it is not
+    present, the first directory below the vendor marker is retained as a
+    bounded path-derived identity; no version is invented in that case.
+    """
+    parts = PurePosixPath(path).parts
+    lowered = [part.lower() for part in parts]
+    marker_index = next((
+        index for index, part in enumerate(lowered)
+        if part in {"vendor", "vendored", "third_party", "third-party"}
+    ), None)
+    if marker_index is None or marker_index + 1 >= len(parts):
+        return None, None, None
+
+    package_parts = [parts[marker_index + 1]]
+    if package_parts[0].startswith("@") and marker_index + 2 < len(parts):
+        package_parts.append(parts[marker_index + 2])
+    root = "/".join(parts[:marker_index + 1 + len(package_parts)])
+
+    if ecosystem == "npm":
+        metadata_path = f"{root}/package.json"
+        if metadata_path in contents:
+            try:
+                document = json.loads(contents[metadata_path].decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                document = None
+            if isinstance(document, Mapping):
+                name = str(document.get("name") or "").strip()
+                version = str(document.get("version") or "").strip() or None
+                if name:
+                    encoded_name = quote(name.lower(), safe="/")
+                    return f"pkg:npm/{encoded_name}", version, metadata_path
+    else:
+        metadata_path = f"{root}/pyproject.toml"
+        if metadata_path in contents:
+            try:
+                document = tomllib.loads(contents[metadata_path].decode("utf-8"))
+            except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+                document = None
+            project = document.get("project") if isinstance(document, Mapping) else None
+            if isinstance(project, Mapping):
+                name = str(project.get("name") or "").strip()
+                version = str(project.get("version") or "").strip() or None
+                if name:
+                    return f"pkg:pypi/{normalize_package_name('pypi', name)}", version, metadata_path
+
+    path_name = "/".join(package_parts)
+    normalized = (
+        quote(path_name.lower(), safe="/") if ecosystem == "npm"
+        else normalize_package_name("pypi", path_name)
+    )
+    return f"pkg:{ecosystem}/{normalized}", None, f"path:{root}"
 
 
 def _dependency_facts(

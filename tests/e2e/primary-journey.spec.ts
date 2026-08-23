@@ -60,6 +60,8 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
     await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
     await expect(page).toHaveURL(/\/ask$/);
   }
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page).toHaveURL(/\/ask\?view=ask$/);
 });
 
 test("reduced motion and narrow viewport preserve the primary navigation", async ({ page }) => {
@@ -91,15 +93,19 @@ test("explicit light and dark themes remain accessible", async ({ page }) => {
   await expectNoSeriousAccessibilityViolations(page);
 });
 
-// Fails at HEAD, independently of the Architecture Canvas work: the "Data
-// infrastructure" disclosure never becomes clickable on the Billing API fixture.
-// It was invisible until now because this file had an unterminated test block a few
-// lines below, so the whole spec failed to parse and never ran. Marked fixme rather
-// than deleted so the suite is runnable again and this keeps its own owner.
-test.fixme("application technology embeds deterministic data infrastructure evidence", async ({ page }) => {
+test("application technology embeds deterministic data infrastructure evidence", async ({ page }) => {
+  // This is a focused rendering interaction; the live backend read model is covered
+  // by API integration tests, while this fixture carries the full database evidence.
+  await page.route("**/api/v1/applications/00000000-0000-4000-8000-000000000201", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      path: "packages/shared/src/fixtures/application-detail.json",
+    })
+  );
   await page.goto("/applications/00000000-0000-4000-8000-000000000201");
   await expect(page.getByRole("heading", { level: 1, name: "Billing API" })).toBeVisible();
 
+  await page.getByRole("tab", { name: "Technology" }).click();
   await page.getByRole("button", { name: /Data infrastructure/ }).click();
   await page.getByRole("button", { name: /^Databases/ }).click();
   await page.getByRole("button", { name: "PostgreSQL" }).click();

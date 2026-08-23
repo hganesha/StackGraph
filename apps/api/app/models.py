@@ -1064,6 +1064,474 @@ class CapabilityFootprintList(ContractModel):
     footprints: list[CapabilityFootprintModel]
 
 
+# --- Architecture canvas -------------------------------------------------
+
+ArchitectureDomainKey = Literal[
+    "experience", "application", "integration", "data", "platform", "delivery",
+]
+ArchitectureProfileStatus = Literal["DRAFT", "ACTIVE", "ARCHIVED"]
+CanvasProjectionScope = Literal["ESTATE", "APPLICATION", "REPOSITORY", "TARGET"]
+CanvasCellState = Literal[
+    "POPULATED", "EMPTY", "NOT_APPLICABLE", "UNOBSERVED", "UNBOUND",
+]
+CellApplicability = Literal["REQUIRED", "RECOMMENDED", "OPTIONAL", "NOT_APPLICABLE"]
+CanvasPolicyStatus = Literal[
+    "PREFERRED", "ALLOWED", "DISCOURAGED", "PROHIBITED", "EXEMPTED", "UNGOVERNED",
+]
+MeasureStatus = Literal[
+    "ELIGIBLE", "INSUFFICIENT_DATA", "NOT_APPLICABLE", "NOT_CONFIGURED",
+]
+
+
+class ArchitectureDomainModel(ContractModel):
+    key: ArchitectureDomainKey
+    label: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
+    question: str = Field(min_length=1)
+    order: int = Field(ge=0)
+
+
+class ArchitectureConcernModel(ContractModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    domain_key: ArchitectureDomainKey
+    label: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
+    order: int = Field(ge=0)
+
+
+class ArchitectureCapabilityModel(ContractModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    concern_key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    name: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
+    aliases: list[str] = Field(default_factory=list)
+
+
+class ArchitectureAspectModel(ContractModel):
+    key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    label: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
+
+
+class ArchitectureTaxonomyResponse(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    key: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    domains: list[ArchitectureDomainModel] = Field(min_length=1)
+    concerns: list[ArchitectureConcernModel] = Field(min_length=1)
+    capabilities: list[ArchitectureCapabilityModel] = Field(min_length=1)
+    aspects: list[ArchitectureAspectModel]
+
+
+class CanvasBindingModel(ContractModel):
+    kind: Literal[
+        "CAPABILITY", "CATEGORY", "RESOURCE_KIND", "ENTITY_TYPE",
+        "ARCHITECTURE_ROLE", "UNBOUND",
+    ]
+    keys: list[str] = Field(default_factory=list)
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def binding_shape_is_valid(self) -> "CanvasBindingModel":
+        if self.kind == "UNBOUND":
+            if self.keys or not self.reason:
+                raise ValueError("an UNBOUND binding requires a reason and no keys")
+        elif not self.keys or self.reason is not None:
+            raise ValueError("a bound binding requires keys and no reason")
+        return self
+
+
+class CellExpectationModel(ContractModel):
+    applicability: CellApplicability = "OPTIONAL"
+    minimum_implementations: int | None = Field(default=None, ge=0)
+    maximum_implementations: int | None = Field(default=None, ge=0)
+    allowed_diversity: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def cardinality_is_ordered(self) -> "CellExpectationModel":
+        if (
+            self.minimum_implementations is not None
+            and self.maximum_implementations is not None
+            and self.minimum_implementations > self.maximum_implementations
+        ):
+            raise ValueError("minimum_implementations cannot exceed maximum_implementations")
+        if self.applicability == "NOT_APPLICABLE" and any(
+            value not in (None, 0)
+            for value in (self.minimum_implementations, self.maximum_implementations)
+        ):
+            raise ValueError("NOT_APPLICABLE expectations cannot require implementations")
+        return self
+
+
+class ArchitectureCellDefinitionModel(ContractModel):
+    key: str = Field(pattern=r"^cell\.[a-z][a-z0-9.-]{1,127}$")
+    concern_key: str = Field(pattern=r"^[a-z][a-z0-9.-]{1,127}$")
+    label: str = Field(min_length=1)
+    definition: str = Field(min_length=1, max_length=500)
+    bindings: list[CanvasBindingModel] = Field(min_length=1)
+    aspect_keys: list[str] = Field(default_factory=list)
+    default_expectation: CellExpectationModel
+    observation_rule_key: str = Field(min_length=1)
+    required_sensor_kinds: list[str] = Field(min_length=1)
+    absence_assertable: bool = False
+
+
+class ArchitectureReferenceModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    key: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    taxonomy_key: str = Field(min_length=1)
+    taxonomy_version: str = Field(min_length=1)
+    taxonomy_content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    cells: list[ArchitectureCellDefinitionModel] = Field(min_length=1)
+
+
+class ArchitectureReferenceModelList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    models: list[ArchitectureReferenceModel]
+
+
+class CanvasCellLayoutModel(ContractModel):
+    cell_key: str = Field(pattern=r"^cell\.[a-z][a-z0-9.-]{1,127}$")
+    span: Literal[1, 2, 3] = 1
+
+
+class CanvasBandLayoutModel(ContractModel):
+    domain_key: ArchitectureDomainKey
+    order: int = Field(ge=0)
+    columns: int = Field(ge=1, le=8)
+    cells: list[CanvasCellLayoutModel] = Field(min_length=1)
+
+
+class CanvasTemplateModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    key: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    reference_model_key: str = Field(min_length=1)
+    reference_model_version: str = Field(min_length=1)
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    bands: list[CanvasBandLayoutModel] = Field(min_length=1)
+
+
+class CanvasTemplateList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    templates: list[CanvasTemplateModel]
+
+
+class CanvasScopeSelectorModel(ContractModel):
+    application_ids: list[UUID] = Field(default_factory=list)
+    repository_ids: list[UUID] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class CanvasPolicyExceptionModel(ContractModel):
+    key: str = Field(min_length=1, max_length=128)
+    rationale: str = Field(min_length=1, max_length=2000)
+    subject_ids: list[UUID] = Field(min_length=1)
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+
+    @model_validator(mode="after")
+    def exception_dates_are_ordered(self) -> "CanvasPolicyExceptionModel":
+        if self.effective_from and self.effective_to and self.effective_from >= self.effective_to:
+            raise ValueError("effective_from must precede effective_to")
+        return self
+
+
+class TenantCellPolicyModel(CellExpectationModel):
+    cell_key: str = Field(pattern=r"^cell\.[a-z][a-z0-9.-]{1,127}$")
+    scope_selector: CanvasScopeSelectorModel = Field(default_factory=CanvasScopeSelectorModel)
+    preferred_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    allowed_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    discouraged_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    prohibited_technology_ids: list[UUID] = Field(default_factory=list, max_length=2000)
+    rationale: str = Field(default="", max_length=4000)
+    owner: str | None = Field(default=None, max_length=255)
+    effective_from: datetime | None = None
+    effective_to: datetime | None = None
+    exceptions: list[CanvasPolicyExceptionModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def technology_decisions_do_not_overlap(self) -> "TenantCellPolicyModel":
+        decisions = (
+            self.preferred_technology_ids,
+            self.allowed_technology_ids,
+            self.discouraged_technology_ids,
+            self.prohibited_technology_ids,
+        )
+        seen: set[UUID] = set()
+        for values in decisions:
+            overlap = seen & set(values)
+            if overlap:
+                raise ValueError("a technology may have only one decision state per cell")
+            seen.update(values)
+        if self.effective_from and self.effective_to and self.effective_from >= self.effective_to:
+            raise ValueError("effective_from must precede effective_to")
+        return self
+
+
+class TenantExtensionCellModel(ContractModel):
+    key: str = Field(pattern=r"^tenant\.[a-z0-9][a-z0-9.-]{2,127}$")
+    domain_key: ArchitectureDomainKey
+    label: str = Field(min_length=1, max_length=255)
+    definition: str = Field(min_length=1, max_length=500)
+    bindings: list[CanvasBindingModel] = Field(min_length=1)
+    aspect_keys: list[str] = Field(default_factory=list)
+    default_expectation: CellExpectationModel
+
+
+class ArchitectureProfileStateModel(ContractModel):
+    name: str = Field(min_length=1, max_length=255)
+    reference_model_key: str = Field(min_length=1)
+    reference_model_version: str = Field(min_length=1)
+    cell_policies: list[TenantCellPolicyModel] = Field(default_factory=list)
+    extension_cells: list[TenantExtensionCellModel] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def policy_and_extension_keys_are_unique(self) -> "ArchitectureProfileStateModel":
+        policy_keys = [item.cell_key for item in self.cell_policies]
+        extension_keys = [item.key for item in self.extension_cells]
+        if len(policy_keys) != len(set(policy_keys)):
+            raise ValueError("cell_policies contains duplicate cell keys")
+        if len(extension_keys) != len(set(extension_keys)):
+            raise ValueError("extension_cells contains duplicate keys")
+        return self
+
+
+class ArchitectureProfileCreateRequest(ContractModel):
+    profile_key: str = Field(pattern=r"^[a-z][a-z0-9_.-]{2,127}$")
+    state: ArchitectureProfileStateModel
+
+
+class ArchitectureProfileUpdateRequest(ContractModel):
+    expected_version: int = Field(ge=1)
+    state: ArchitectureProfileStateModel
+
+
+class ArchitectureProfilePublishRequest(ContractModel):
+    expected_version: int = Field(ge=1)
+
+
+class ArchitectureProfileSummary(ContractModel):
+    id: UUID
+    profile_key: str
+    name: str
+    reference_model_key: str
+    reference_model_version: str
+    version: int = Field(ge=1)
+    status: ArchitectureProfileStatus
+    fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    created_at: datetime
+    updated_at: datetime
+
+
+class ArchitectureProfileDetail(ArchitectureProfileSummary):
+    state: ArchitectureProfileStateModel
+
+
+class ArchitectureProfileList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    profiles: list[ArchitectureProfileSummary]
+
+
+class CellObservationStatusModel(ContractModel):
+    required_sensor_kinds: list[str]
+    supported_sensor_kinds: list[str]
+    in_scope_subjects: int = Field(ge=0)
+    observed_subjects: int = Field(ge=0)
+    fresh_subjects: int = Field(ge=0)
+    status: Literal["COMPLETE", "PARTIAL", "MISSING", "NOT_APPLICABLE"]
+    missing_inputs: list[str]
+    method_version: str = Field(min_length=1)
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+
+class CanvasOccupantModel(ContractModel):
+    technology: EntitySummary
+    placement_keys: list[str] = Field(min_length=1)
+    classification: TechnologyClassification
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    adoption_applications: int = Field(ge=0)
+    adoption_repositories: int = Field(ge=0)
+    adoption_deployments: int = Field(ge=0)
+    policy_status: CanvasPolicyStatus
+    citations: list[Citation] = Field(default_factory=list)
+    policy_reference: str | None = None
+
+
+class MeasureResultModel(ContractModel):
+    value: float | None = Field(default=None, ge=0, le=100)
+    status: MeasureStatus
+    inputs: list[str]
+    supporting_fact_ids: list[UUID]
+    method_version: str = Field(min_length=1)
+
+
+class CanvasCellMeasuresModel(ContractModel):
+    posture_band: Literal["STRONG", "ADEQUATE", "WEAK", "AT_RISK"] | None = None
+    overall_score: float | None = Field(default=None, ge=0, le=100)
+    coverage: MeasureResultModel
+    standardisation: MeasureResultModel
+    currency: MeasureResultModel
+    risk: MeasureResultModel
+    conformance: MeasureResultModel
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    method_version: str = Field(min_length=1)
+    missing_inputs: list[str]
+
+
+class CanvasCellProjectionModel(ContractModel):
+    cell_key: str
+    state: CanvasCellState
+    state_reason: str = Field(min_length=1)
+    occupants: list[CanvasOccupantModel]
+    occupant_total: int = Field(ge=0)
+    unique_technology_total: int = Field(ge=0)
+    observation: CellObservationStatusModel
+    expectation: CellExpectationModel
+    measures: CanvasCellMeasuresModel | None = None
+    policy: TenantCellPolicyModel | None = None
+    insight_refs: list[UUID]
+    citations: list[Citation]
+
+
+class CanvasClassificationTrayItemModel(ContractModel):
+    entity: EntitySummary
+    reason: Literal["UNCLASSIFIED", "AMBIGUOUS", "UNRESOLVED_POLICY", "FILTERED"]
+    detail: str = Field(min_length=1)
+    citations: list[Citation]
+
+
+class CanvasClassificationTrayModel(ContractModel):
+    items: list[CanvasClassificationTrayItemModel]
+    total_count: int = Field(ge=0)
+    truncated: bool
+    unclassified_count: int = Field(ge=0)
+    ambiguous_count: int = Field(ge=0)
+    unresolved_policy_count: int = Field(ge=0)
+    filtered_count: int = Field(ge=0)
+
+
+class CanvasProjectionSummaryModel(ContractModel):
+    populated_cells: int = Field(ge=0)
+    empty_cells: int = Field(ge=0)
+    not_applicable_cells: int = Field(ge=0)
+    unobserved_cells: int = Field(ge=0)
+    unbound_cells: int = Field(ge=0)
+    governed_cells: int = Field(ge=0)
+    cells_with_violations: int = Field(ge=0)
+    strong: int = Field(ge=0)
+    adequate: int = Field(ge=0)
+    weak: int = Field(ge=0)
+    at_risk: int = Field(ge=0)
+    unique_technologies: int = Field(ge=0)
+    technology_cell_placements: int = Field(ge=0)
+
+
+class CanvasProjection(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    method_version: str = Field(min_length=1)
+    taxonomy_key: str
+    taxonomy_version: str
+    taxonomy_content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    reference_model_key: str
+    reference_model_version: str
+    reference_model_content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    template_key: str
+    template_version: str
+    tenant_profile_fingerprint: str | None = Field(
+        default=None, pattern=r"^sha256:[a-f0-9]{64}$",
+    )
+    scope: CanvasProjectionScope
+    subject: EntitySummary | None = None
+    cells: list[CanvasCellProjectionModel]
+    classification_tray: CanvasClassificationTrayModel
+    summary: CanvasProjectionSummaryModel
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+    @model_validator(mode="after")
+    def observed_occupants_are_cited(self) -> "CanvasProjection":
+        if self.scope != "TARGET":
+            for cell in self.cells:
+                if cell.state == "POPULATED" and any(
+                    not occupant.citations for occupant in cell.occupants
+                ):
+                    raise ValueError("every observed canvas occupant requires a citation")
+        return self
+
+
+class CanvasProjectionSelectorModel(ContractModel):
+    scope: CanvasProjectionScope
+    subject_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def subject_matches_scope(self) -> "CanvasProjectionSelectorModel":
+        if self.scope in {"APPLICATION", "REPOSITORY"} and self.subject_id is None:
+            raise ValueError("APPLICATION and REPOSITORY selectors require subject_id")
+        if self.scope in {"ESTATE", "TARGET"} and self.subject_id is not None:
+            raise ValueError("ESTATE and TARGET selectors do not accept subject_id")
+        return self
+
+
+class CanvasComparisonRequest(ContractModel):
+    comparison_kind: Literal["ACTUAL_TO_TARGET", "ACTUAL_TO_ACTUAL", "TIME_TO_TIME"]
+    actual: CanvasProjectionSelectorModel
+    baseline: CanvasProjectionSelectorModel
+    reference_model_key: str = "architecture.stackgraph.reference"
+    template_key: str = "canvas.stackgraph.reference"
+
+    @model_validator(mode="after")
+    def comparison_selectors_match_kind(self) -> "CanvasComparisonRequest":
+        if self.comparison_kind == "ACTUAL_TO_TARGET" and self.baseline.scope != "TARGET":
+            raise ValueError("ACTUAL_TO_TARGET comparisons require a TARGET baseline")
+        if self.comparison_kind == "TIME_TO_TIME":
+            raise ValueError("TIME_TO_TIME comparison is reserved until historical projections ship")
+        return self
+
+
+class CanvasCellComparisonModel(ContractModel):
+    cell_key: str
+    actual_state: CanvasCellState
+    baseline_state: CanvasCellState
+    preferred_in_use: int = Field(ge=0)
+    allowed_in_use: int = Field(ge=0)
+    discouraged_in_use: int = Field(ge=0)
+    prohibited_in_use: int = Field(ge=0)
+    required_but_absent: bool
+    ungoverned_in_use: int = Field(ge=0)
+    unevaluable: bool
+
+
+class CanvasComparisonSummaryModel(ContractModel):
+    compared_cells: int = Field(ge=0)
+    aligned_cells: int = Field(ge=0)
+    cells_with_violations: int = Field(ge=0)
+    required_but_absent_cells: int = Field(ge=0)
+    ungoverned_cells: int = Field(ge=0)
+    unevaluable_cells: int = Field(ge=0)
+
+
+class CanvasComparison(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    comparison_kind: Literal["ACTUAL_TO_TARGET", "ACTUAL_TO_ACTUAL"]
+    actual_projection_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    baseline_projection_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    cells: list[CanvasCellComparisonModel]
+    summary: CanvasComparisonSummaryModel
+    method_version: str = Field(min_length=1)
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+
+
 class ModernizationScenarioRequest(ContractModel):
     budget_points: int = Field(ge=0, le=100000)
     excluded_recommendation_ids: list[UUID] = Field(default_factory=list)

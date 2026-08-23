@@ -680,6 +680,674 @@
         "title": "ApplicationTechnologyUsage",
         "type": "object"
       },
+      "ArchitectureAspectModel": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "definition"
+        ],
+        "title": "ArchitectureAspectModel",
+        "type": "object"
+      },
+      "ArchitectureCapabilityModel": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "concern_key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Concern Key",
+            "type": "string"
+          },
+          "definition": {
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "concern_key",
+          "name",
+          "definition"
+        ],
+        "title": "ArchitectureCapabilityModel",
+        "type": "object"
+      },
+      "ArchitectureCellDefinitionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "absence_assertable": {
+            "default": false,
+            "title": "Absence Assertable",
+            "type": "boolean"
+          },
+          "aspect_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aspect Keys",
+            "type": "array"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasBindingModel"
+            },
+            "minItems": 1,
+            "title": "Bindings",
+            "type": "array"
+          },
+          "concern_key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Concern Key",
+            "type": "string"
+          },
+          "default_expectation": {
+            "$ref": "#/components/schemas/CellExpectationModel"
+          },
+          "definition": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "key": {
+            "pattern": "^cell\\.[a-z][a-z0-9.-]{1,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "observation_rule_key": {
+            "minLength": 1,
+            "title": "Observation Rule Key",
+            "type": "string"
+          },
+          "required_sensor_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Required Sensor Kinds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "concern_key",
+          "label",
+          "definition",
+          "bindings",
+          "default_expectation",
+          "observation_rule_key",
+          "required_sensor_kinds"
+        ],
+        "title": "ArchitectureCellDefinitionModel",
+        "type": "object"
+      },
+      "ArchitectureConcernModel": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "domain_key": {
+            "enum": [
+              "experience",
+              "application",
+              "integration",
+              "data",
+              "platform",
+              "delivery"
+            ],
+            "title": "Domain Key",
+            "type": "string"
+          },
+          "key": {
+            "pattern": "^[a-z][a-z0-9.-]{1,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "domain_key",
+          "label",
+          "definition",
+          "order"
+        ],
+        "title": "ArchitectureConcernModel",
+        "type": "object"
+      },
+      "ArchitectureDomainModel": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "experience",
+              "application",
+              "integration",
+              "data",
+              "platform",
+              "delivery"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "question": {
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "definition",
+          "question",
+          "order"
+        ],
+        "title": "ArchitectureDomainModel",
+        "type": "object"
+      },
+      "ArchitectureProfileCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "profile_key": {
+            "pattern": "^[a-z][a-z0-9_.-]{2,127}$",
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ArchitectureProfileStateModel"
+          }
+        },
+        "required": [
+          "profile_key",
+          "state"
+        ],
+        "title": "ArchitectureProfileCreateRequest",
+        "type": "object"
+      },
+      "ArchitectureProfileDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "reference_model_version": {
+            "title": "Reference Model Version",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ArchitectureProfileStateModel"
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "profile_key",
+          "name",
+          "reference_model_key",
+          "reference_model_version",
+          "version",
+          "status",
+          "fingerprint",
+          "created_at",
+          "updated_at",
+          "state"
+        ],
+        "title": "ArchitectureProfileDetail",
+        "type": "object"
+      },
+      "ArchitectureProfileList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureProfileSummary"
+            },
+            "title": "Profiles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profiles"
+        ],
+        "title": "ArchitectureProfileList",
+        "type": "object"
+      },
+      "ArchitectureProfilePublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ArchitectureProfilePublishRequest",
+        "type": "object"
+      },
+      "ArchitectureProfileStateModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cell_policies": {
+            "items": {
+              "$ref": "#/components/schemas/TenantCellPolicyModel"
+            },
+            "title": "Cell Policies",
+            "type": "array"
+          },
+          "extension_cells": {
+            "items": {
+              "$ref": "#/components/schemas/TenantExtensionCellModel"
+            },
+            "title": "Extension Cells",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "minLength": 1,
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "reference_model_version": {
+            "minLength": 1,
+            "title": "Reference Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reference_model_key",
+          "reference_model_version"
+        ],
+        "title": "ArchitectureProfileStateModel",
+        "type": "object"
+      },
+      "ArchitectureProfileSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile_key": {
+            "title": "Profile Key",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "reference_model_version": {
+            "title": "Reference Model Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "profile_key",
+          "name",
+          "reference_model_key",
+          "reference_model_version",
+          "version",
+          "status",
+          "fingerprint",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ArchitectureProfileSummary",
+        "type": "object"
+      },
+      "ArchitectureProfileUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ArchitectureProfileStateModel"
+          }
+        },
+        "required": [
+          "expected_version",
+          "state"
+        ],
+        "title": "ArchitectureProfileUpdateRequest",
+        "type": "object"
+      },
+      "ArchitectureReferenceModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureCellDefinitionModel"
+            },
+            "minItems": 1,
+            "title": "Cells",
+            "type": "array"
+          },
+          "content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "taxonomy_content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Taxonomy Content Hash",
+            "type": "string"
+          },
+          "taxonomy_key": {
+            "minLength": 1,
+            "title": "Taxonomy Key",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "minLength": 1,
+            "title": "Taxonomy Version",
+            "type": "string"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "name",
+          "description",
+          "taxonomy_key",
+          "taxonomy_version",
+          "taxonomy_content_hash",
+          "content_hash",
+          "cells"
+        ],
+        "title": "ArchitectureReferenceModel",
+        "type": "object"
+      },
+      "ArchitectureReferenceModelList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureReferenceModel"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "models"
+        ],
+        "title": "ArchitectureReferenceModelList",
+        "type": "object"
+      },
+      "ArchitectureTaxonomyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aspects": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureAspectModel"
+            },
+            "title": "Aspects",
+            "type": "array"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureCapabilityModel"
+            },
+            "minItems": 1,
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "concerns": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureConcernModel"
+            },
+            "minItems": 1,
+            "title": "Concerns",
+            "type": "array"
+          },
+          "content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "domains": {
+            "items": {
+              "$ref": "#/components/schemas/ArchitectureDomainModel"
+            },
+            "minItems": 1,
+            "title": "Domains",
+            "type": "array"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "name",
+          "description",
+          "content_hash",
+          "domains",
+          "concerns",
+          "capabilities",
+          "aspects"
+        ],
+        "title": "ArchitectureTaxonomyResponse",
+        "type": "object"
+      },
       "AskRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1749,6 +2417,1124 @@
         "title": "CalibrationObservedMetrics",
         "type": "object"
       },
+      "CanvasBandLayoutModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasCellLayoutModel"
+            },
+            "minItems": 1,
+            "title": "Cells",
+            "type": "array"
+          },
+          "columns": {
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Columns",
+            "type": "integer"
+          },
+          "domain_key": {
+            "enum": [
+              "experience",
+              "application",
+              "integration",
+              "data",
+              "platform",
+              "delivery"
+            ],
+            "title": "Domain Key",
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "domain_key",
+          "order",
+          "columns",
+          "cells"
+        ],
+        "title": "CanvasBandLayoutModel",
+        "type": "object"
+      },
+      "CanvasBindingModel": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keys",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "CAPABILITY",
+              "CATEGORY",
+              "RESOURCE_KIND",
+              "ENTITY_TYPE",
+              "ARCHITECTURE_ROLE",
+              "UNBOUND"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "CanvasBindingModel",
+        "type": "object"
+      },
+      "CanvasCellComparisonModel": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_state": {
+            "enum": [
+              "POPULATED",
+              "EMPTY",
+              "NOT_APPLICABLE",
+              "UNOBSERVED",
+              "UNBOUND"
+            ],
+            "title": "Actual State",
+            "type": "string"
+          },
+          "allowed_in_use": {
+            "minimum": 0.0,
+            "title": "Allowed In Use",
+            "type": "integer"
+          },
+          "baseline_state": {
+            "enum": [
+              "POPULATED",
+              "EMPTY",
+              "NOT_APPLICABLE",
+              "UNOBSERVED",
+              "UNBOUND"
+            ],
+            "title": "Baseline State",
+            "type": "string"
+          },
+          "cell_key": {
+            "title": "Cell Key",
+            "type": "string"
+          },
+          "discouraged_in_use": {
+            "minimum": 0.0,
+            "title": "Discouraged In Use",
+            "type": "integer"
+          },
+          "preferred_in_use": {
+            "minimum": 0.0,
+            "title": "Preferred In Use",
+            "type": "integer"
+          },
+          "prohibited_in_use": {
+            "minimum": 0.0,
+            "title": "Prohibited In Use",
+            "type": "integer"
+          },
+          "required_but_absent": {
+            "title": "Required But Absent",
+            "type": "boolean"
+          },
+          "unevaluable": {
+            "title": "Unevaluable",
+            "type": "boolean"
+          },
+          "ungoverned_in_use": {
+            "minimum": 0.0,
+            "title": "Ungoverned In Use",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cell_key",
+          "actual_state",
+          "baseline_state",
+          "preferred_in_use",
+          "allowed_in_use",
+          "discouraged_in_use",
+          "prohibited_in_use",
+          "required_but_absent",
+          "ungoverned_in_use",
+          "unevaluable"
+        ],
+        "title": "CanvasCellComparisonModel",
+        "type": "object"
+      },
+      "CanvasCellLayoutModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cell_key": {
+            "pattern": "^cell\\.[a-z][a-z0-9.-]{1,127}$",
+            "title": "Cell Key",
+            "type": "string"
+          },
+          "span": {
+            "default": 1,
+            "enum": [
+              1,
+              2,
+              3
+            ],
+            "title": "Span",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cell_key"
+        ],
+        "title": "CanvasCellLayoutModel",
+        "type": "object"
+      },
+      "CanvasCellMeasuresModel": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "conformance": {
+            "$ref": "#/components/schemas/MeasureResultModel"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/MeasureResultModel"
+          },
+          "currency": {
+            "$ref": "#/components/schemas/MeasureResultModel"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "overall_score": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score"
+          },
+          "posture_band": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STRONG",
+                  "ADEQUATE",
+                  "WEAK",
+                  "AT_RISK"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posture Band"
+          },
+          "risk": {
+            "$ref": "#/components/schemas/MeasureResultModel"
+          },
+          "standardisation": {
+            "$ref": "#/components/schemas/MeasureResultModel"
+          }
+        },
+        "required": [
+          "coverage",
+          "standardisation",
+          "currency",
+          "risk",
+          "conformance",
+          "confidence",
+          "confidence_label",
+          "method_version",
+          "missing_inputs"
+        ],
+        "title": "CanvasCellMeasuresModel",
+        "type": "object"
+      },
+      "CanvasCellProjectionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "cell_key": {
+            "title": "Cell Key",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "expectation": {
+            "$ref": "#/components/schemas/CellExpectationModel"
+          },
+          "insight_refs": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Insight Refs",
+            "type": "array"
+          },
+          "measures": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanvasCellMeasuresModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observation": {
+            "$ref": "#/components/schemas/CellObservationStatusModel"
+          },
+          "occupant_total": {
+            "minimum": 0.0,
+            "title": "Occupant Total",
+            "type": "integer"
+          },
+          "occupants": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasOccupantModel"
+            },
+            "title": "Occupants",
+            "type": "array"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TenantCellPolicyModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "POPULATED",
+              "EMPTY",
+              "NOT_APPLICABLE",
+              "UNOBSERVED",
+              "UNBOUND"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "state_reason": {
+            "minLength": 1,
+            "title": "State Reason",
+            "type": "string"
+          },
+          "unique_technology_total": {
+            "minimum": 0.0,
+            "title": "Unique Technology Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cell_key",
+          "state",
+          "state_reason",
+          "occupants",
+          "occupant_total",
+          "unique_technology_total",
+          "observation",
+          "expectation",
+          "insight_refs",
+          "citations"
+        ],
+        "title": "CanvasCellProjectionModel",
+        "type": "object"
+      },
+      "CanvasClassificationTrayItemModel": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "reason": {
+            "enum": [
+              "UNCLASSIFIED",
+              "AMBIGUOUS",
+              "UNRESOLVED_POLICY",
+              "FILTERED"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "reason",
+          "detail",
+          "citations"
+        ],
+        "title": "CanvasClassificationTrayItemModel",
+        "type": "object"
+      },
+      "CanvasClassificationTrayModel": {
+        "additionalProperties": false,
+        "properties": {
+          "ambiguous_count": {
+            "minimum": 0.0,
+            "title": "Ambiguous Count",
+            "type": "integer"
+          },
+          "filtered_count": {
+            "minimum": 0.0,
+            "title": "Filtered Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasClassificationTrayItemModel"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_count": {
+            "minimum": 0.0,
+            "title": "Total Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "unclassified_count": {
+            "minimum": 0.0,
+            "title": "Unclassified Count",
+            "type": "integer"
+          },
+          "unresolved_policy_count": {
+            "minimum": 0.0,
+            "title": "Unresolved Policy Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total_count",
+          "truncated",
+          "unclassified_count",
+          "ambiguous_count",
+          "unresolved_policy_count",
+          "filtered_count"
+        ],
+        "title": "CanvasClassificationTrayModel",
+        "type": "object"
+      },
+      "CanvasComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_projection_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Actual Projection Fingerprint",
+            "type": "string"
+          },
+          "baseline_projection_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Baseline Projection Fingerprint",
+            "type": "string"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasCellComparisonModel"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "comparison_kind": {
+            "enum": [
+              "ACTUAL_TO_TARGET",
+              "ACTUAL_TO_ACTUAL"
+            ],
+            "title": "Comparison Kind",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CanvasComparisonSummaryModel"
+          }
+        },
+        "required": [
+          "comparison_kind",
+          "actual_projection_fingerprint",
+          "baseline_projection_fingerprint",
+          "cells",
+          "summary",
+          "method_version",
+          "input_fingerprint"
+        ],
+        "title": "CanvasComparison",
+        "type": "object"
+      },
+      "CanvasComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actual": {
+            "$ref": "#/components/schemas/CanvasProjectionSelectorModel"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/CanvasProjectionSelectorModel"
+          },
+          "comparison_kind": {
+            "enum": [
+              "ACTUAL_TO_TARGET",
+              "ACTUAL_TO_ACTUAL",
+              "TIME_TO_TIME"
+            ],
+            "title": "Comparison Kind",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "default": "architecture.stackgraph.reference",
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "template_key": {
+            "default": "canvas.stackgraph.reference",
+            "title": "Template Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comparison_kind",
+          "actual",
+          "baseline"
+        ],
+        "title": "CanvasComparisonRequest",
+        "type": "object"
+      },
+      "CanvasComparisonSummaryModel": {
+        "additionalProperties": false,
+        "properties": {
+          "aligned_cells": {
+            "minimum": 0.0,
+            "title": "Aligned Cells",
+            "type": "integer"
+          },
+          "cells_with_violations": {
+            "minimum": 0.0,
+            "title": "Cells With Violations",
+            "type": "integer"
+          },
+          "compared_cells": {
+            "minimum": 0.0,
+            "title": "Compared Cells",
+            "type": "integer"
+          },
+          "required_but_absent_cells": {
+            "minimum": 0.0,
+            "title": "Required But Absent Cells",
+            "type": "integer"
+          },
+          "unevaluable_cells": {
+            "minimum": 0.0,
+            "title": "Unevaluable Cells",
+            "type": "integer"
+          },
+          "ungoverned_cells": {
+            "minimum": 0.0,
+            "title": "Ungoverned Cells",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "compared_cells",
+          "aligned_cells",
+          "cells_with_violations",
+          "required_but_absent_cells",
+          "ungoverned_cells",
+          "unevaluable_cells"
+        ],
+        "title": "CanvasComparisonSummaryModel",
+        "type": "object"
+      },
+      "CanvasOccupantModel": {
+        "additionalProperties": false,
+        "properties": {
+          "adoption_applications": {
+            "minimum": 0.0,
+            "title": "Adoption Applications",
+            "type": "integer"
+          },
+          "adoption_deployments": {
+            "minimum": 0.0,
+            "title": "Adoption Deployments",
+            "type": "integer"
+          },
+          "adoption_repositories": {
+            "minimum": 0.0,
+            "title": "Adoption Repositories",
+            "type": "integer"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "classification": {
+            "enum": [
+              "CURATED",
+              "CATALOG_MATCH",
+              "DETERMINISTIC",
+              "UNCLASSIFIED"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "placement_keys": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Placement Keys",
+            "type": "array"
+          },
+          "policy_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Reference"
+          },
+          "policy_status": {
+            "enum": [
+              "PREFERRED",
+              "ALLOWED",
+              "DISCOURAGED",
+              "PROHIBITED",
+              "EXEMPTED",
+              "UNGOVERNED"
+            ],
+            "title": "Policy Status",
+            "type": "string"
+          },
+          "technology": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "technology",
+          "placement_keys",
+          "classification",
+          "confidence",
+          "confidence_label",
+          "adoption_applications",
+          "adoption_repositories",
+          "adoption_deployments",
+          "policy_status"
+        ],
+        "title": "CanvasOccupantModel",
+        "type": "object"
+      },
+      "CanvasPolicyExceptionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "subject_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Subject Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "rationale",
+          "subject_ids"
+        ],
+        "title": "CanvasPolicyExceptionModel",
+        "type": "object"
+      },
+      "CanvasProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasCellProjectionModel"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "classification_tray": {
+            "$ref": "#/components/schemas/CanvasClassificationTrayModel"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "reference_model_content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Reference Model Content Hash",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "reference_model_version": {
+            "title": "Reference Model Version",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "ESTATE",
+              "APPLICATION",
+              "REPOSITORY",
+              "TARGET"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CanvasProjectionSummaryModel"
+          },
+          "taxonomy_content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Taxonomy Content Hash",
+            "type": "string"
+          },
+          "taxonomy_key": {
+            "title": "Taxonomy Key",
+            "type": "string"
+          },
+          "taxonomy_version": {
+            "title": "Taxonomy Version",
+            "type": "string"
+          },
+          "template_key": {
+            "title": "Template Key",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "string"
+          },
+          "tenant_profile_fingerprint": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Profile Fingerprint"
+          }
+        },
+        "required": [
+          "as_of",
+          "method_version",
+          "taxonomy_key",
+          "taxonomy_version",
+          "taxonomy_content_hash",
+          "reference_model_key",
+          "reference_model_version",
+          "reference_model_content_hash",
+          "template_key",
+          "template_version",
+          "scope",
+          "cells",
+          "classification_tray",
+          "summary",
+          "input_fingerprint"
+        ],
+        "title": "CanvasProjection",
+        "type": "object"
+      },
+      "CanvasProjectionSelectorModel": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "enum": [
+              "ESTATE",
+              "APPLICATION",
+              "REPOSITORY",
+              "TARGET"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "title": "CanvasProjectionSelectorModel",
+        "type": "object"
+      },
+      "CanvasProjectionSummaryModel": {
+        "additionalProperties": false,
+        "properties": {
+          "adequate": {
+            "minimum": 0.0,
+            "title": "Adequate",
+            "type": "integer"
+          },
+          "at_risk": {
+            "minimum": 0.0,
+            "title": "At Risk",
+            "type": "integer"
+          },
+          "cells_with_violations": {
+            "minimum": 0.0,
+            "title": "Cells With Violations",
+            "type": "integer"
+          },
+          "empty_cells": {
+            "minimum": 0.0,
+            "title": "Empty Cells",
+            "type": "integer"
+          },
+          "governed_cells": {
+            "minimum": 0.0,
+            "title": "Governed Cells",
+            "type": "integer"
+          },
+          "not_applicable_cells": {
+            "minimum": 0.0,
+            "title": "Not Applicable Cells",
+            "type": "integer"
+          },
+          "populated_cells": {
+            "minimum": 0.0,
+            "title": "Populated Cells",
+            "type": "integer"
+          },
+          "strong": {
+            "minimum": 0.0,
+            "title": "Strong",
+            "type": "integer"
+          },
+          "technology_cell_placements": {
+            "minimum": 0.0,
+            "title": "Technology Cell Placements",
+            "type": "integer"
+          },
+          "unbound_cells": {
+            "minimum": 0.0,
+            "title": "Unbound Cells",
+            "type": "integer"
+          },
+          "unique_technologies": {
+            "minimum": 0.0,
+            "title": "Unique Technologies",
+            "type": "integer"
+          },
+          "unobserved_cells": {
+            "minimum": 0.0,
+            "title": "Unobserved Cells",
+            "type": "integer"
+          },
+          "weak": {
+            "minimum": 0.0,
+            "title": "Weak",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "populated_cells",
+          "empty_cells",
+          "not_applicable_cells",
+          "unobserved_cells",
+          "unbound_cells",
+          "governed_cells",
+          "cells_with_violations",
+          "strong",
+          "adequate",
+          "weak",
+          "at_risk",
+          "unique_technologies",
+          "technology_cell_placements"
+        ],
+        "title": "CanvasProjectionSummaryModel",
+        "type": "object"
+      },
+      "CanvasScopeSelectorModel": {
+        "additionalProperties": false,
+        "properties": {
+          "application_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Application Ids",
+            "type": "array"
+          },
+          "repository_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Repository Ids",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "CanvasScopeSelectorModel",
+        "type": "object"
+      },
+      "CanvasTemplateList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasTemplateModel"
+            },
+            "title": "Templates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "title": "CanvasTemplateList",
+        "type": "object"
+      },
+      "CanvasTemplateModel": {
+        "additionalProperties": false,
+        "properties": {
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasBandLayoutModel"
+            },
+            "minItems": 1,
+            "title": "Bands",
+            "type": "array"
+          },
+          "content_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "reference_model_key": {
+            "minLength": 1,
+            "title": "Reference Model Key",
+            "type": "string"
+          },
+          "reference_model_version": {
+            "minLength": 1,
+            "title": "Reference Model Version",
+            "type": "string"
+          },
+          "version": {
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "version",
+          "name",
+          "reference_model_key",
+          "reference_model_version",
+          "content_hash",
+          "bands"
+        ],
+        "title": "CanvasTemplateModel",
+        "type": "object"
+      },
       "CapabilityDefinitionModel": {
         "additionalProperties": false,
         "properties": {
@@ -2148,6 +3934,134 @@
           "capabilities"
         ],
         "title": "CapabilityTaxonomyResponse",
+        "type": "object"
+      },
+      "CellExpectationModel": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_diversity": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Diversity"
+          },
+          "applicability": {
+            "default": "OPTIONAL",
+            "enum": [
+              "REQUIRED",
+              "RECOMMENDED",
+              "OPTIONAL",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Applicability",
+            "type": "string"
+          },
+          "maximum_implementations": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Implementations"
+          },
+          "minimum_implementations": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Implementations"
+          }
+        },
+        "title": "CellExpectationModel",
+        "type": "object"
+      },
+      "CellObservationStatusModel": {
+        "additionalProperties": false,
+        "properties": {
+          "fresh_subjects": {
+            "minimum": 0.0,
+            "title": "Fresh Subjects",
+            "type": "integer"
+          },
+          "in_scope_subjects": {
+            "minimum": 0.0,
+            "title": "In Scope Subjects",
+            "type": "integer"
+          },
+          "input_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "observed_subjects": {
+            "minimum": 0.0,
+            "title": "Observed Subjects",
+            "type": "integer"
+          },
+          "required_sensor_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Sensor Kinds",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "COMPLETE",
+              "PARTIAL",
+              "MISSING",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supported_sensor_kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supported Sensor Kinds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "required_sensor_kinds",
+          "supported_sensor_kinds",
+          "in_scope_subjects",
+          "observed_subjects",
+          "fresh_subjects",
+          "status",
+          "missing_inputs",
+          "method_version",
+          "input_fingerprint"
+        ],
+        "title": "CellObservationStatusModel",
         "type": "object"
       },
       "Citation": {
@@ -4763,6 +6677,62 @@
           "application_count"
         ],
         "title": "InternalUsage",
+        "type": "object"
+      },
+      "MeasureResultModel": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "method_version": {
+            "minLength": 1,
+            "title": "Method Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ELIGIBLE",
+              "INSUFFICIENT_DATA",
+              "NOT_APPLICABLE",
+              "NOT_CONFIGURED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maximum": 100.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "status",
+          "inputs",
+          "supporting_fact_ids",
+          "method_version"
+        ],
+        "title": "MeasureResultModel",
         "type": "object"
       },
       "MemberInviteRequest": {
@@ -8240,6 +10210,156 @@
         "title": "TechnologyEstateHierarchyNode",
         "type": "object"
       },
+      "TenantCellPolicyModel": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_diversity": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed Diversity"
+          },
+          "allowed_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Allowed Technology Ids",
+            "type": "array"
+          },
+          "applicability": {
+            "default": "OPTIONAL",
+            "enum": [
+              "REQUIRED",
+              "RECOMMENDED",
+              "OPTIONAL",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Applicability",
+            "type": "string"
+          },
+          "cell_key": {
+            "pattern": "^cell\\.[a-z][a-z0-9.-]{1,127}$",
+            "title": "Cell Key",
+            "type": "string"
+          },
+          "discouraged_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Discouraged Technology Ids",
+            "type": "array"
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "exceptions": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasPolicyExceptionModel"
+            },
+            "title": "Exceptions",
+            "type": "array"
+          },
+          "maximum_implementations": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum Implementations"
+          },
+          "minimum_implementations": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Implementations"
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
+          "preferred_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Preferred Technology Ids",
+            "type": "array"
+          },
+          "prohibited_technology_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 2000,
+            "title": "Prohibited Technology Ids",
+            "type": "array"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "scope_selector": {
+            "$ref": "#/components/schemas/CanvasScopeSelectorModel"
+          }
+        },
+        "required": [
+          "cell_key"
+        ],
+        "title": "TenantCellPolicyModel",
+        "type": "object"
+      },
       "TenantCodeFunctionPolicySummary": {
         "additionalProperties": false,
         "properties": {
@@ -8508,6 +10628,68 @@
         "title": "TenantCodePolicySummary",
         "type": "object"
       },
+      "TenantExtensionCellModel": {
+        "additionalProperties": false,
+        "properties": {
+          "aspect_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aspect Keys",
+            "type": "array"
+          },
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/CanvasBindingModel"
+            },
+            "minItems": 1,
+            "title": "Bindings",
+            "type": "array"
+          },
+          "default_expectation": {
+            "$ref": "#/components/schemas/CellExpectationModel"
+          },
+          "definition": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Definition",
+            "type": "string"
+          },
+          "domain_key": {
+            "enum": [
+              "experience",
+              "application",
+              "integration",
+              "data",
+              "platform",
+              "delivery"
+            ],
+            "title": "Domain Key",
+            "type": "string"
+          },
+          "key": {
+            "pattern": "^tenant\\.[a-z0-9][a-z0-9.-]{2,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "domain_key",
+          "label",
+          "definition",
+          "bindings",
+          "default_expectation"
+        ],
+        "title": "TenantExtensionCellModel",
+        "type": "object"
+      },
       "TenantMember": {
         "additionalProperties": false,
         "properties": {
@@ -8741,6 +10923,172 @@
           }
         },
         "summary": "Test Ai Provider Connection",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/architecture-profiles": {
+      "get": {
+        "operationId": "listArchitectureProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Architecture Profiles",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "createArchitectureProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchitectureProfileCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureProfileDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Architecture Profile",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/architecture-profiles/{id}": {
+      "put": {
+        "operationId": "updateArchitectureProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchitectureProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureProfileDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Architecture Profile",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/admin/architecture-profiles/{id}/publish": {
+      "post": {
+        "operationId": "publishArchitectureProfile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArchitectureProfilePublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureProfileDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Architecture Profile",
         "tags": [
           "admin"
         ]
@@ -10484,6 +12832,307 @@
         "summary": "List Business Map Revisions",
         "tags": [
           "business-map"
+        ]
+      }
+    },
+    "/canvas/comparisons": {
+      "post": {
+        "operationId": "compareCanvasProjections",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanvasComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare Canvas Projections",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/projection": {
+      "get": {
+        "operationId": "getCanvasProjection",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "ESTATE",
+              "enum": [
+                "ESTATE",
+                "APPLICATION",
+                "REPOSITORY",
+                "TARGET"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "subject_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reference_model_key",
+            "required": false,
+            "schema": {
+              "default": "architecture.stackgraph.reference",
+              "title": "Reference Model Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template_key",
+            "required": false,
+            "schema": {
+              "default": "canvas.stackgraph.reference",
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Canvas Projection",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/reference-models": {
+      "get": {
+        "operationId": "listArchitectureReferenceModels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureReferenceModelList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Architecture Reference Models",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/reference-models/{key}": {
+      "get": {
+        "operationId": "getArchitectureReferenceModel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureReferenceModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Architecture Reference Model",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/target-projection": {
+      "get": {
+        "operationId": "getTargetCanvasProjection",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "reference_model_key",
+            "required": false,
+            "schema": {
+              "default": "architecture.stackgraph.reference",
+              "title": "Reference Model Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template_key",
+            "required": false,
+            "schema": {
+              "default": "canvas.stackgraph.reference",
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasProjection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Target Canvas Projection",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/taxonomy": {
+      "get": {
+        "operationId": "getArchitectureTaxonomy",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchitectureTaxonomyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Architecture Taxonomy",
+        "tags": [
+          "architecture-canvas"
+        ]
+      }
+    },
+    "/canvas/templates": {
+      "get": {
+        "operationId": "listCanvasTemplates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasTemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Canvas Templates",
+        "tags": [
+          "architecture-canvas"
         ]
       }
     },
