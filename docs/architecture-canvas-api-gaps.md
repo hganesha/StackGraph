@@ -54,13 +54,17 @@ technology ids. Names are only resolvable for technologies that also appear as
 occupants somewhere in the projection.
 
 A technology that is **prohibited and therefore not in use** is exactly the case that
-cannot be resolved — and exactly the one a reviewer most needs to read. The UI renders
-`Unnamed technology · a75bc08b` in a muted style with a count and an explanation,
-rather than a bare UUID pretending to be a name.
+cannot be resolved — and exactly the one a reviewer most needs to read.
 
-**Ask:** either an `EntitySummary` alongside each decision, or a
-`referenced_technologies: EntitySummary[]` block on the projection covering every id
-its policies mention.
+Partly handled server-side: `canvas_projection` looks the ids up and, when it cannot
+resolve one, emits `Unresolved technology {id}` and pushes an `UNRESOLVED_POLICY` tray
+item ([read_models.py:1876](../apps/api/app/read_models.py:1876)). So the common case
+is covered. The UI keeps its own fallback — `Unnamed technology · a75bc08b` in a muted
+style with a count and an explanation — for ids that reach it unresolved anyway.
+
+**Ask:** lower priority than first assessed. An `EntitySummary` alongside each decision
+would still remove a lookup and a failure mode, but the tray already prevents a silent
+drop.
 
 ## 4. Comparison cannot show what changed between two actuals
 
@@ -107,6 +111,12 @@ travel together.
 ---
 
 ## Closed since first raised
+
+- **Policy exceptions must name a subject.** `CanvasPolicyExceptionModel.subject_ids`
+  is `min_length=1`, so there is no estate-wide exception; widening the standing policy
+  is how that is expressed. Not an API gap — a UI misreading that made
+  `POST /admin/architecture-profiles` return 422. Fixed, and the fixtures are now
+  validated against the published schema so bounds like this cannot pass unnoticed.
 
 - **`GET /canvas/templates/{key}`** shipped in `f55d88a`. The UI reads the active
   layout by key again instead of scanning the list. The list read remains for a

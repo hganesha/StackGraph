@@ -319,9 +319,7 @@ export function CanvasDetailPanel({
                       <span className={styles.exceptionText}>
                         {exception.rationale}
                         {exception.effective_to ? ` (until ${exception.effective_to.slice(0, 10)})` : ""}
-                        {exception.subject_ids.length
-                          ? ` · ${exception.subject_ids.length} scoped subject${exception.subject_ids.length === 1 ? "" : "s"}`
-                          : " · estate-wide"}
+                        {` · ${exception.subject_ids.length} scoped subject${exception.subject_ids.length === 1 ? "" : "s"}`}
                       </span>
                       {canGovern && onRemoveException ? (
                         <button

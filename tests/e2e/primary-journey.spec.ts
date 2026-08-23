@@ -53,10 +53,11 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
     await expectNoSeriousAccessibilityViolations(page);
   }
 
-  // Same WebKit caveat as the tab-order branch above: macOS WebKit routes Meta+K
-  // through the host's own key handling, so the document-level shortcut never fires
-  // under automation. The other desktop engines verify the binding for real.
-  if (testInfo.project.name !== "webkit") {
+  // Same caveats as the tab-order branch above: mobile emulation has no hardware
+  // keyboard, and macOS WebKit routes Meta+K through the host's own key handling, so
+  // the document-level shortcut never fires under automation. Chromium and Firefox
+  // verify the binding for real.
+  if (testInfo.project.name !== "webkit" && testInfo.project.name !== "mobile") {
     // The loop above ends on a freshly-clicked nav link. Pressing immediately can send
     // the keydown to the outgoing document, so settle focus on the new one first —
     // otherwise this races under parallel load and fails perhaps one run in ten.
