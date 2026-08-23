@@ -183,7 +183,12 @@ export const CanvasCell = forwardRef<HTMLDivElement, CanvasCellProps>(function C
 
       <p className={styles.cellStatus}>
         <span className={`${styles.statusDot} ${styles[`tone-${signal.tone}`]}`} aria-hidden="true" />
-        <span className={styles.statusLabel}>{signal.label}</span>
+        {/* The state is explained on hover rather than spelled out in the cell: the
+            distinction between "none found" and "not observed" is the one readers most
+            often miss, and there is no room to make it in a chip. */}
+        <span className={styles.statusLabel} title={CELL_STATE_DESCRIPTION[state]}>
+          {signal.label}
+        </span>
       </p>
 
       {state === "POPULATED" ? (

@@ -50,8 +50,7 @@ export function ScanSection() {
   return (
     <div className={styles.section}>
       <p className={styles.sectionNote}>
-        Control how often connected sources are rescanned. The scheduler creates the work; workers never invent
-        their own loops.
+        Control how often connected sources are rescanned.
       </p>
 
       <label className={styles.field}>
@@ -80,7 +79,7 @@ export function ScanSection() {
         >
           {rescan.isPending ? "Queuing…" : "Rescan now"}
         </button>
-        <span className={styles.help}>Reconciles missed webhook deliveries and re-checks changed repositories.</span>
+        <span className={styles.help}>Catches up on anything missed and re-checks changed repositories.</span>
         {rescan.isSuccess ? <span className={styles.success}>Rescan queued.</span> : null}
       </div>
 
@@ -91,7 +90,7 @@ export function ScanSection() {
             ? status.data.quotas.map((quota) => `${quota.provider.toLowerCase()}: ${quota.used}/${quota.limit ?? "∞"} ${quota.status}`).join(" · ")
             : "No provider quota observations yet"}
         </span>
-        <span className={styles.help}>Per-provider quota and backoff state, so throttling reads as intentional, not failure.</span>
+        <span className={styles.help}>Rate limits per provider. Throttling here is expected, not a failure.</span>
       </div>
       {status.data?.recent_jobs[0] ? (
         <div className={styles.field}>

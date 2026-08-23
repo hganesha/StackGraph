@@ -230,8 +230,8 @@ export function EstateView() {
       <header className={styles.head}>
         <h1 className={styles.title}>Software Estate</h1>
         <p className={styles.subtitle}>
-          Every application, repository, service, and technology discovered across the connected
-          repositories, grouped by domain and ranked by priority.
+          Everything found across your connected repositories, grouped by domain and ranked by
+          priority.
         </p>
         <nav className={styles.viewSwitch} aria-label="Estate view">
           {([
@@ -259,7 +259,7 @@ export function EstateView() {
       {isError ? (
         <div className={styles.notice} role="alert">
           <IconAlertTriangle size={18} stroke={1.5} aria-hidden="true" />
-          <span>Couldn’t load the estate summary. Retry, or check the API connection.</span>
+          <span>Couldn’t load the estate. Try again, or check the API connection.</span>
         </div>
       ) : null}
 

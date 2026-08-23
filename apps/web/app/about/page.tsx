@@ -13,7 +13,7 @@ import {
   IconSortDescending,
   type Icon,
 } from "@tabler/icons-react";
-import { DomainIcon, NAMESPACES } from "@stackgraph/design-system";
+import { DomainIcon, GLOSSARY, NAMESPACES } from "@stackgraph/design-system";
 import { config, namespaceLabel, type Namespace } from "@stackgraph/shared";
 import styles from "./about.module.css";
 
@@ -89,7 +89,7 @@ const STARTING_POINTS: Array<{ href: string; icon: Icon; title: string; body: st
   {
     href: "/ask",
     icon: IconBulb,
-    title: "Insights",
+    title: "Ask",
     body: "Standing evidence reports, plus a plain-language question box whose answers carry their citations.",
   },
 ];
@@ -204,9 +204,35 @@ export default function AboutPage() {
         </dl>
         <p>
           Coverage and freshness for the current workspace live on{" "}
-          <Link href="/health">Estate Health</Link>.
+          <Link href="/health">Scan health</Link>.
         </p>
       </footer>
+      <section className={styles.section} aria-labelledby="glossary-heading">
+        <div className={styles.sectionHead}>
+          <span className={styles.eyebrow}>Vocabulary</span>
+          <h2 id="glossary-heading" className={styles.h2}>
+            Words used throughout
+          </h2>
+          <p className={styles.sectionNote}>
+            These appear across every screen. Wherever one is used, hovering it shows the same
+            definition you see here.
+          </p>
+        </div>
+        <dl className={styles.glossary}>
+          {Object.entries(GLOSSARY).map(([key, entry]) => (
+            <div key={key} className={styles.glossaryRow}>
+              <dt className={styles.glossaryTerm}>{entry.term}</dt>
+              <dd className={styles.glossaryBody}>
+                {entry.body}
+                {"note" in entry && entry.note ? (
+                  <span className={styles.glossaryNote}>{entry.note}</span>
+                ) : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
     </div>
   );
 }

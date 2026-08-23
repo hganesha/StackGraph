@@ -131,8 +131,8 @@ function TechnologyGraphWorkspace({
             <Skeleton height="100%" />
           ) : isError || !data ? (
             <div className={styles.graphEmpty}>
-              <h3>Graph unavailable</h3>
-              <p>The hierarchy remains available while this neighborhood is retried.</p>
+              <h3>Couldn&apos;t load the graph</h3>
+              <p>The hierarchy on the left still works.</p>
             </div>
           ) : (
             <GraphCanvas graph={data} onSelect={(nodeId) => setSelectedNodeId(nodeId ?? center.technology.id)} />
@@ -209,8 +209,8 @@ function TechnologyGraphWorkspace({
           </>
         ) : (
           <div className={styles.inspectorEmpty}>
-            <h2>Select a graph node</h2>
-            <p>Its connections, dependent applications, and evidence will appear here.</p>
+            <h2>Pick anything in the graph</h2>
+            <p>Everything it connects to, and the evidence behind it, appears here.</p>
           </div>
         )}
       </aside>
@@ -259,7 +259,7 @@ export function TechnologyHierarchyView() {
         <div>
           <h1 className={styles.title}>Technologies</h1>
           <p className={styles.subtitle}>
-            Manifest technologies and their resolved dependencies, limited to connected repositories.
+            Technologies declared in your manifests, and what they pull in.
           </p>
         </div>
         <div className={styles.headActions}>

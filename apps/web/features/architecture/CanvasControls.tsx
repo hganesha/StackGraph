@@ -8,10 +8,10 @@ import styles from "./architecture.module.css";
 export type CanvasView = "actual" | "target" | "drift" | "compare";
 
 const EMPHASIS_OPTIONS: Array<{ value: CanvasEmphasis; label: string; hint: string }> = [
-  { value: "posture", label: "Posture", hint: "Tone follows the measured posture band." },
-  { value: "conformance", label: "Conformance", hint: "Tone follows alignment with the target policy." },
-  { value: "coverage", label: "Coverage", hint: "Tone follows applicability against what was found." },
-  { value: "none", label: "None", hint: "No tone; read the labels only." },
+  { value: "posture", label: "Health", hint: "Colour cells by how healthy each area looks." },
+  { value: "conformance", label: "Your standard", hint: "Colour cells by how well they match the standard you set." },
+  { value: "coverage", label: "Gaps", hint: "Colour cells by what is expected against what was found." },
+  { value: "none", label: "Off", hint: "No colour — read the labels only." },
 ];
 
 /**
@@ -112,8 +112,8 @@ export function CanvasControls({
       ) : null}
 
       <fieldset className={styles.controlGroup}>
-        <legend className={styles.controlLegend}>Emphasis</legend>
-        <div className={styles.segmented} role="radiogroup" aria-label="Cell emphasis">
+        <legend className={styles.controlLegend}>Colour by</legend>
+        <div className={styles.segmented} role="radiogroup" aria-label="Colour cells by">
           {EMPHASIS_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -164,8 +164,8 @@ export function CanvasControls({
           </label>
           {!canWritePolicy ? (
             <p className={styles.controlNote}>
-              No draft revision is open. Edits are made against a draft and take effect when it is
-              published — <Link href="/admin?tab=governance">start one in Admin</Link>.
+              No draft open. Changes are made in a draft and apply when you publish it —{" "}
+              <Link href="/admin?tab=governance">start one in Admin</Link>.
             </p>
           ) : null}
         </fieldset>
