@@ -109,8 +109,11 @@ export const CanvasCell = forwardRef<HTMLDivElement, CanvasCellProps>(function C
   const { definition, projection, comparison } = cell;
   const state = projection.state;
   const signal = emphasisSignal(cell, emphasis);
-  const visible = projection.occupants.slice(0, density === "compact" ? 3 : VISIBLE_OCCUPANTS);
-  const overflow = projection.occupant_total - visible.length;
+  // Packages, not resolved versions: a cell shows what is in use, and three Reacts is
+  // one thing in use, not three.
+  const groups = projection.occupant_groups;
+  const visible = groups.slice(0, density === "compact" ? 3 : VISIBLE_OCCUPANTS);
+  const overflow = groups.length - visible.length;
   const observation = projection.observation;
   const headingId = `canvas-cell-${cell.key}`;
 
@@ -122,7 +125,13 @@ export const CanvasCell = forwardRef<HTMLDivElement, CanvasCellProps>(function C
     APPLICABILITY_LABEL[projection.expectation.applicability],
     projection.measures?.posture_band ? `posture ${projection.measures.posture_band.toLowerCase().replace("_", " ")}` : "not scored",
     comparison ? COMPARISON_LABEL[comparison.status].toLowerCase() : null,
-    projection.occupant_total ? `${projection.occupant_total} implementations` : null,
+    groups.length
+      ? `${groups.length} package${groups.length === 1 ? "" : "s"}${
+          projection.occupant_total > groups.length
+            ? `, ${projection.occupant_total} resolved versions`
+            : ""
+        }`
+      : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -180,10 +189,10 @@ export const CanvasCell = forwardRef<HTMLDivElement, CanvasCellProps>(function C
       {state === "POPULATED" ? (
         <>
           <ul className={styles.occupants}>
-            {visible.map((occupant) => (
-              <li key={`${occupant.technology.id}:${occupant.placement_keys.join("|")}`}>
+            {visible.map((group) => (
+              <li key={group.key}>
                 <OccupantChip
-                  occupant={occupant}
+                  group={group}
                   cellKey={cell.key}
                   onSelect={onSelectOccupant}
                   compact={density === "compact"}

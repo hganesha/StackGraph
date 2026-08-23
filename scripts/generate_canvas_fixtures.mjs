@@ -55,13 +55,24 @@ const applicationSubject = {
 };
 
 const TECH = new Map();
-function tech(name) {
+
+/**
+ * A technology entity is a resolved coordinate, so distinct versions of one package
+ * are distinct entities: `pkg:npm/react@18.3.1` and `pkg:npm/react@17.0.2` both land
+ * in the same cell. `name@version` here mirrors that, and gives the renderer something
+ * real to collapse.
+ */
+function tech(name, ecosystem = "npm") {
   if (!TECH.has(name)) {
+    const [pkg, version] = name.split(/@(?=[^@]*$)/);
+    const coordinate = pkg.toLowerCase().replace(/\s+/g, "-");
     TECH.set(name, {
       id: uuid(`tech:${name}`),
       kind: "Technology",
       name,
-      canonical_key: `stackgraph:technology:${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      canonical_key: version
+        ? `pkg:${ecosystem}/${coordinate}@${version}`
+        : `pkg:${ecosystem}/${coordinate}`,
     });
   }
   return TECH.get(name);
@@ -69,8 +80,12 @@ function tech(name) {
 
 // [cellKey, technology, placementKeys, classification, confidence, apps, repos, deployments, policyStatus]
 const PLACEMENTS = [
-  ["cell.experience.ui", "React", ["ui-rendering"], "CURATED", 0.97, 9, 14, 11, "PREFERRED"],
-  ["cell.experience.ui", "Vue", ["ui-rendering"], "CATALOG_MATCH", 0.71, 1, 1, 1, "DISCOURAGED"],
+  ["cell.experience.ui", "React@18.3.1", ["ui-rendering"], "CURATED", 0.97, 9, 14, 11, "PREFERRED"],
+  ["cell.experience.ui", "React@18.2.0", ["ui-rendering"], "CURATED", 0.95, 4, 5, 4, "PREFERRED"],
+  // An old major still in the estate, and prohibited: the reason a collapsed group can
+  // never take its headline from the newest member.
+  ["cell.experience.ui", "React@16.14.0", ["ui-rendering"], "CATALOG_MATCH", 0.68, 1, 2, 1, "PROHIBITED"],
+  ["cell.experience.ui", "Vue@3.4.21", ["ui-rendering"], "CATALOG_MATCH", 0.71, 1, 1, 1, "DISCOURAGED"],
   ["cell.experience.web", "Next.js", ["meta-framework"], "CURATED", 0.95, 7, 9, 8, "PREFERRED"],
   ["cell.experience.state", "TanStack Query", ["server-state"], "CURATED", 0.9, 6, 8, 7, "ALLOWED"],
   ["cell.experience.state", "Zustand", ["client-state"], "CURATED", 0.88, 5, 6, 5, "PREFERRED"],
@@ -80,9 +95,10 @@ const PLACEMENTS = [
   ["cell.experience.design", "Tailwind CSS", ["css-styling"], "CURATED", 0.86, 4, 5, 4, "ALLOWED"],
   ["cell.experience.design", "Radix UI", ["accessible-ui"], "CURATED", 0.83, 3, 4, 3, "EXEMPTED"],
 
-  ["cell.application.service", "FastAPI", ["http-web-api"], "CURATED", 0.96, 8, 11, 10, "PREFERRED"],
-  ["cell.application.service", "Express", ["http-web-api"], "CATALOG_MATCH", 0.74, 3, 4, 3, "ALLOWED"],
-  ["cell.application.service", "Flask", ["http-web-api"], "CATALOG_MATCH", 0.69, 2, 2, 1, "DISCOURAGED"],
+  ["cell.application.service", "FastAPI@0.115.0", ["http-web-api"], "CURATED", 0.96, 8, 11, 10, "PREFERRED"],
+  ["cell.application.service", "FastAPI@0.109.2", ["http-web-api"], "CURATED", 0.9, 3, 4, 3, "PREFERRED"],
+  ["cell.application.service", "Express@4.19.2", ["http-web-api"], "CATALOG_MATCH", 0.74, 3, 4, 3, "ALLOWED"],
+  ["cell.application.service", "Flask@3.0.3", ["http-web-api"], "CATALOG_MATCH", 0.69, 2, 2, 1, "DISCOURAGED"],
   ["cell.application.persistence", "SQLAlchemy", ["orm-data-access"], "CURATED", 0.94, 7, 9, 8, "PREFERRED"],
   ["cell.application.persistence", "Prisma", ["orm-data-access"], "CURATED", 0.81, 2, 3, 2, "ALLOWED"],
   ["cell.application.persistence", "Drizzle", ["orm-data-access"], "CATALOG_MATCH", 0.62, 1, 1, 1, "UNGOVERNED"],

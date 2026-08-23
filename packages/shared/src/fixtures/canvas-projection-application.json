@@ -22,14 +22,14 @@
     {
       "cell_key": "cell.experience.ui",
       "state": "POPULATED",
-      "state_reason": "2 placements with supporting evidence.",
+      "state_reason": "4 placements with supporting evidence.",
       "occupants": [
         {
           "technology": {
-            "id": "dd8a8da9-4fc1-4e49-8f92-a7258829a991",
+            "id": "ba34d2a9-c67b-4acc-8575-77f357f490b5",
             "kind": "Technology",
-            "name": "React",
-            "canonical_key": "stackgraph:technology:react"
+            "name": "React@18.3.1",
+            "canonical_key": "pkg:npm/react@18.3.1"
           },
           "placement_keys": [
             "ui-rendering"
@@ -44,17 +44,67 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "b740ffd6-ba6f-4721-8846-8e685499e1ba",
-              "label": "React detected in dependency manifest"
+              "fact_id": "f44f55af-2d96-421b-87cf-ba89b19a65da",
+              "label": "React@18.3.1 detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "023bf9c1-33df-4acc-8cbd-eda47550fe37",
+            "id": "0b5ffd5a-1f8a-4f7f-88f9-fbcd9a21081e",
             "kind": "Technology",
-            "name": "Vue",
-            "canonical_key": "stackgraph:technology:vue"
+            "name": "React@18.2.0",
+            "canonical_key": "pkg:npm/react@18.2.0"
+          },
+          "placement_keys": [
+            "ui-rendering"
+          ],
+          "classification": "CURATED",
+          "confidence": 0.95,
+          "confidence_label": "HIGH",
+          "adoption_applications": 1,
+          "adoption_repositories": 2,
+          "adoption_deployments": 1,
+          "policy_status": "PREFERRED",
+          "policy_reference": null,
+          "citations": [
+            {
+              "fact_id": "c54d3345-5bc5-421c-8e13-8d6c35905825",
+              "label": "React@18.2.0 detected in dependency manifest"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "326300a4-ada2-4bf0-8a2a-7c9be5c8757b",
+            "kind": "Technology",
+            "name": "React@16.14.0",
+            "canonical_key": "pkg:npm/react@16.14.0"
+          },
+          "placement_keys": [
+            "ui-rendering"
+          ],
+          "classification": "CATALOG_MATCH",
+          "confidence": 0.68,
+          "confidence_label": "MEDIUM",
+          "adoption_applications": 1,
+          "adoption_repositories": 1,
+          "adoption_deployments": 1,
+          "policy_status": "PROHIBITED",
+          "policy_reference": null,
+          "citations": [
+            {
+              "fact_id": "012a3806-90c1-4708-8040-b36ed4e477b0",
+              "label": "React@16.14.0 detected in dependency manifest"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "32d45301-7403-405e-80ae-9930de4daf9c",
+            "kind": "Technology",
+            "name": "Vue@3.4.21",
+            "canonical_key": "pkg:npm/vue@3.4.21"
           },
           "placement_keys": [
             "ui-rendering"
@@ -69,14 +119,14 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "cdc26399-0ad6-4523-83ec-a7dc0c33e588",
-              "label": "Vue detected in dependency manifest"
+              "fact_id": "ecc69f86-51d6-4334-8ca1-fbeacb57bbd3",
+              "label": "Vue@3.4.21 detected in dependency manifest"
             }
           ]
         }
       ],
-      "occupant_total": 2,
-      "unique_technology_total": 2,
+      "occupant_total": 4,
+      "unique_technology_total": 4,
       "observation": {
         "status": "COMPLETE",
         "required_sensor_kinds": [
@@ -99,8 +149,8 @@
         "allowed_diversity": 2
       },
       "measures": {
-        "posture_band": "ADEQUATE",
-        "overall_score": 76,
+        "posture_band": "WEAK",
+        "overall_score": 56,
         "coverage": {
           "value": 1,
           "status": "ELIGIBLE",
@@ -109,59 +159,59 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "cbd0e3c0-a5ef-4e18-8067-9c83d4dd43f6"
+            "f4a137a4-02cf-4d68-89a0-8faf83dd118a"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "standardisation": {
-          "value": 0.5,
+          "value": 0.25,
           "status": "ELIGIBLE",
           "inputs": [
             "unique technology placements",
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "a2ebce68-e205-4e06-8c4e-78a0e993c3b1"
+            "2ef734fe-9bd0-4e4f-815a-3c66db36c46c"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "currency": {
-          "value": 0.67,
+          "value": 0.79,
           "status": "ELIGIBLE",
           "inputs": [
             "resolved versions",
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "ca108006-7636-4d34-8c16-2008ffc42a9f"
+            "85d3e9a6-c542-439c-8601-2f792b5b2335"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "risk": {
-          "value": 0.85,
+          "value": 0.44999999999999996,
           "status": "ELIGIBLE",
           "inputs": [
             "attributed deterministic insights",
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "a3744073-7513-4e94-835e-238b7004687d"
+            "2b97530c-16e0-4c41-84bc-750b91956376"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "conformance": {
-          "value": 0.8,
+          "value": 0.30000000000000004,
           "status": "ELIGIBLE",
           "inputs": [
             "effective tenant policy",
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "10a75606-df24-405c-8586-1cd058b4dc51"
+            "b176a2af-d5c7-4fe3-82f8-5f7a293a6bb5"
           ],
           "method_version": "architecture-canvas/v1"
         },
-        "confidence": 0.71,
+        "confidence": 0.68,
         "confidence_label": "MEDIUM",
         "method_version": "architecture-canvas/v1",
         "missing_inputs": []
@@ -173,13 +223,16 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "dd8a8da9-4fc1-4e49-8f92-a7258829a991"
+          "ba34d2a9-c67b-4acc-8575-77f357f490b5",
+          "0b5ffd5a-1f8a-4f7f-88f9-fbcd9a21081e"
         ],
         "allowed_technology_ids": [],
         "discouraged_technology_ids": [
-          "023bf9c1-33df-4acc-8cbd-eda47550fe37"
+          "32d45301-7403-405e-80ae-9930de4daf9c"
         ],
-        "prohibited_technology_ids": [],
+        "prohibited_technology_ids": [
+          "326300a4-ada2-4bf0-8a2a-7c9be5c8757b"
+        ],
         "rationale": "React is the single approved rendering library; Vue entered through an acquired codebase.",
         "owner": "platform-architecture",
         "effective_from": "2026-01-01T00:00:00.000Z",
@@ -188,11 +241,11 @@
         "exceptions": []
       },
       "insight_refs": [
-        "cb2acf54-29fb-4b70-89a3-cc6ee59d4f18"
+        "6a04c434-c3e5-41bd-809d-90c1e2225b85"
       ],
       "citations": [
         {
-          "fact_id": "aa3e3ac9-844d-4a17-8bc7-afd19434d43e",
+          "fact_id": "6f20eb5c-0dc0-457a-8fba-eef3fb935fef",
           "label": "UI rendering evidence"
         }
       ]
@@ -204,10 +257,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "48c6ac69-e2b0-4f63-83d9-71d382d7fae5",
+            "id": "edae95fc-373d-471d-86df-73a13f92555a",
             "kind": "Technology",
             "name": "Next.js",
-            "canonical_key": "stackgraph:technology:next-js"
+            "canonical_key": "pkg:npm/next.js"
           },
           "placement_keys": [
             "meta-framework"
@@ -222,7 +275,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "eaa0687a-04f5-45ed-8c41-bacf4ee8992e",
+              "fact_id": "579b38dc-2f70-4312-8467-8c75535db4de",
               "label": "Next.js detected in dependency manifest"
             }
           ]
@@ -262,7 +315,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "e9d6ffcf-5aaa-454d-8e29-acddce2d0673"
+            "8b68eec0-0f36-4f1e-8734-e5ef6b8a29f6"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -283,7 +336,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "24a5ee37-cc57-482a-812c-af2ce12b22a7"
+            "94ee7c5b-c86f-40d6-8383-9b3a010f7bd3"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -295,7 +348,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "2706bfef-bb4e-4d44-8b20-dd71d959d7e2"
+            "1a763551-1126-40eb-8aac-49a43754c615"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -307,7 +360,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "71122f5d-02ed-4011-886e-4fcede6e3c93"
+            "53bff91c-80eb-4e2a-8bfb-19f655821e5a"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -322,7 +375,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "5d65c6ff-d5dd-4c78-8f07-4ed1a36df241",
+          "fact_id": "8b613dff-ac75-4428-879b-b857fede2e17",
           "label": "Web boundary evidence"
         }
       ]
@@ -334,10 +387,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808",
+            "id": "d82264b7-bbf4-41a7-8011-8e9f2cc86798",
             "kind": "Technology",
             "name": "TanStack Query",
-            "canonical_key": "stackgraph:technology:tanstack-query"
+            "canonical_key": "pkg:npm/tanstack-query"
           },
           "placement_keys": [
             "server-state"
@@ -352,17 +405,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "b4b6fc31-9bbe-42fe-8da2-588763a0a37e",
+              "fact_id": "9f7a5a01-e24c-4ac6-8bac-8568982a6f54",
               "label": "TanStack Query detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "5cb21413-4718-4548-8dd0-aea5da0e91e9",
+            "id": "ef5cbcd3-29f1-4151-87a4-3541b78d2c19",
             "kind": "Technology",
             "name": "Zustand",
-            "canonical_key": "stackgraph:technology:zustand"
+            "canonical_key": "pkg:npm/zustand"
           },
           "placement_keys": [
             "client-state"
@@ -377,17 +430,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "5be70f85-78df-40a2-8515-30a1317583ce",
+              "fact_id": "85c43a1f-275a-4af3-8649-092c2c89c664",
               "label": "Zustand detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "d8982a6a-8943-4042-8bfc-4329005bee11",
+            "id": "c7977750-9b35-49b1-8e2a-21fdfd8a66ba",
             "kind": "Technology",
             "name": "Redux",
-            "canonical_key": "stackgraph:technology:redux"
+            "canonical_key": "pkg:npm/redux"
           },
           "placement_keys": [
             "client-state"
@@ -402,17 +455,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "8aa1548e-08f9-433c-86b3-c5b9f4c95f55",
+              "fact_id": "6d5c3d0e-fe85-4700-86e2-e2290f3248a7",
               "label": "Redux detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79",
+            "id": "5a9abcfd-e909-4cca-8a6f-ce6b9c496b24",
             "kind": "Technology",
             "name": "MobX",
-            "canonical_key": "stackgraph:technology:mobx"
+            "canonical_key": "pkg:npm/mobx"
           },
           "placement_keys": [
             "client-state"
@@ -427,7 +480,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "3ea92deb-a47e-4fe6-8c56-f327cdc93921",
+              "fact_id": "7d7bf295-c807-4912-8d19-f3dc9b149b9f",
               "label": "MobX detected in dependency manifest"
             }
           ]
@@ -467,7 +520,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "b698a4b2-3cd2-4f8b-80cf-c1eb93e5cd00"
+            "4c93f17d-5c35-41fe-8a93-fab22e3db3be"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -479,7 +532,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "8f526e3c-3d75-4726-8d1e-0a420f165a2e"
+            "7c289b9a-8358-4c5b-8956-99ef96eb8b3d"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -491,7 +544,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "9f931255-4b4a-4cc2-8ef5-e44bee80d89b"
+            "4bf8cf42-3e68-4e1b-8949-efc1e62f667e"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -503,7 +556,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "b90a7d34-836b-4b53-8796-efb1d1ee5705"
+            "a98bbb01-d9a9-4c13-85f4-018f27fdafcc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -515,7 +568,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "88d37848-1928-4a8d-89b3-9841235834fa"
+            "2d7623bb-709a-4a18-85db-babb425610b0"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -531,16 +584,16 @@
         "maximum_implementations": 3,
         "allowed_diversity": 3,
         "preferred_technology_ids": [
-          "5cb21413-4718-4548-8dd0-aea5da0e91e9"
+          "ef5cbcd3-29f1-4151-87a4-3541b78d2c19"
         ],
         "allowed_technology_ids": [
-          "4f4221a9-ee65-41a5-81f6-1d4ab5a0a808"
+          "d82264b7-bbf4-41a7-8011-8e9f2cc86798"
         ],
         "discouraged_technology_ids": [
-          "d8982a6a-8943-4042-8bfc-4329005bee11"
+          "c7977750-9b35-49b1-8e2a-21fdfd8a66ba"
         ],
         "prohibited_technology_ids": [
-          "e4a3e3a2-daaf-47ee-8f78-a31ed1c1dd79"
+          "5a9abcfd-e909-4cca-8a6f-ce6b9c496b24"
         ],
         "rationale": "Zustand for client state, TanStack Query for server state. Redux is retiring; MobX is prohibited.",
         "owner": "frontend-guild",
@@ -550,11 +603,11 @@
         "exceptions": []
       },
       "insight_refs": [
-        "f1504134-ab8d-499d-8af9-70e4b2f3e0bd"
+        "b01ea40e-5821-45dd-8aee-8f47507ec60c"
       ],
       "citations": [
         {
-          "fact_id": "7d52efe3-ccab-47b8-8e8f-ba27c612c6ca",
+          "fact_id": "c5f7286a-26ed-41bb-8403-f7beb92a7f36",
           "label": "Experience state evidence"
         }
       ]
@@ -566,10 +619,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "2d65b2fe-ad4e-49d9-82ad-cea0477acaca",
+            "id": "60031be4-e177-43a4-84ee-709b9e345ea4",
             "kind": "Technology",
             "name": "Zod",
-            "canonical_key": "stackgraph:technology:zod"
+            "canonical_key": "pkg:npm/zod"
           },
           "placement_keys": [
             "runtime-validation"
@@ -584,7 +637,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "0193a6fb-8dec-4819-8492-50a35878e953",
+              "fact_id": "fc287243-fcc3-417c-82b7-109c4adcaea7",
               "label": "Zod detected in dependency manifest"
             }
           ]
@@ -624,7 +677,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "4d689e19-b98e-4641-843c-47d7689d634a"
+            "ddc9f375-aa80-48fe-863b-a0c2b736e1aa"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -645,7 +698,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "50e9fbef-559f-44b9-835f-652e8c0c6f65"
+            "0806075f-059f-4a84-8321-e6dd20849617"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -657,7 +710,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "b0dd9896-11a7-4a4c-81f3-968838384c48"
+            "b895ac7a-2d90-4d32-8879-a6d931759c6a"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -669,7 +722,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "327c3ad5-71f9-46a7-8673-2a1329af46aa"
+            "ab35b539-6609-4096-8db4-abc7a3599246"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -684,7 +737,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "484df3f0-5a14-40e9-822f-e5b3d49f862a",
+          "fact_id": "af58b546-db24-4de3-8bb1-5cf60a4a625f",
           "label": "Input & validation evidence"
         }
       ]
@@ -696,10 +749,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "b5148661-e634-4a53-86d1-642cfd7329fd",
+            "id": "332f2b4d-6aa2-483b-86b3-1cfae3c0df62",
             "kind": "Technology",
             "name": "Tailwind CSS",
-            "canonical_key": "stackgraph:technology:tailwind-css"
+            "canonical_key": "pkg:npm/tailwind-css"
           },
           "placement_keys": [
             "css-styling"
@@ -714,17 +767,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "06124598-715f-452f-8c73-e11d4bc1a014",
+              "fact_id": "8c01a6b5-c86d-4b83-899a-b54c0888d777",
               "label": "Tailwind CSS detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "22d230ad-b956-4a15-8289-bfd967f5fcaa",
+            "id": "c58c2560-ec5a-46db-8e18-2487dfb6f1af",
             "kind": "Technology",
             "name": "Radix UI",
-            "canonical_key": "stackgraph:technology:radix-ui"
+            "canonical_key": "pkg:npm/radix-ui"
           },
           "placement_keys": [
             "accessible-ui"
@@ -739,7 +792,7 @@
           "policy_reference": "radix-until-inhouse",
           "citations": [
             {
-              "fact_id": "730fec47-7059-4910-8684-fc34d759c5a3",
+              "fact_id": "0a0becf0-2c61-406c-849d-3d06bc982577",
               "label": "Radix UI detected in dependency manifest"
             }
           ]
@@ -779,7 +832,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "e90b508b-b3a8-4793-80e5-f8f4161a81c1"
+            "1b778529-fab2-46db-82f1-91a041d14bd4"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -791,7 +844,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "8731e12e-e980-4671-8808-962544d6c25f"
+            "7a3b568e-aa7a-42c1-85ed-32b2d4acd104"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -803,7 +856,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "df5cf152-801f-4740-8574-0220468af891"
+            "237972c8-fe2c-4aed-8be3-6bb129e3014c"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -815,7 +868,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "c737b377-711f-4f06-8b97-075c8ca511da"
+            "12f7cd0d-dcfe-49c1-86c1-6bba7344e606"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -827,7 +880,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "6f876b9f-734e-4290-8814-20540bc5804d"
+            "738c81a9-8dbb-4ef5-8e21-623589a3cb4b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -844,7 +897,7 @@
         "allowed_diversity": 2,
         "preferred_technology_ids": [],
         "allowed_technology_ids": [
-          "b5148661-e634-4a53-86d1-642cfd7329fd"
+          "332f2b4d-6aa2-483b-86b3-1cfae3c0df62"
         ],
         "discouraged_technology_ids": [],
         "prohibited_technology_ids": [],
@@ -868,7 +921,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "287e96cf-4510-4a5a-870d-6b32a63486ec",
+          "fact_id": "b05de68a-0bce-4d86-84c4-eb4e253f223a",
           "label": "Design & accessibility evidence"
         }
       ]
@@ -909,14 +962,14 @@
     {
       "cell_key": "cell.application.service",
       "state": "POPULATED",
-      "state_reason": "3 placements with supporting evidence.",
+      "state_reason": "4 placements with supporting evidence.",
       "occupants": [
         {
           "technology": {
-            "id": "3938ba19-c483-4e8b-820f-8c4c28fe28d5",
+            "id": "6a5d9219-a0b5-4f64-8e55-234696e9c51b",
             "kind": "Technology",
-            "name": "FastAPI",
-            "canonical_key": "stackgraph:technology:fastapi"
+            "name": "FastAPI@0.115.0",
+            "canonical_key": "pkg:npm/fastapi@0.115.0"
           },
           "placement_keys": [
             "http-web-api"
@@ -931,17 +984,42 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "8c9ca449-c298-46d7-8450-d04ad7d7fd35",
-              "label": "FastAPI detected in dependency manifest"
+              "fact_id": "5b9f6c7f-822c-4450-8834-08168c3f462f",
+              "label": "FastAPI@0.115.0 detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "2712c40e-d538-47dc-89fe-a73c873dad1f",
+            "id": "98b45529-e779-4dbe-84d8-3e20858368f5",
             "kind": "Technology",
-            "name": "Express",
-            "canonical_key": "stackgraph:technology:express"
+            "name": "FastAPI@0.109.2",
+            "canonical_key": "pkg:npm/fastapi@0.109.2"
+          },
+          "placement_keys": [
+            "http-web-api"
+          ],
+          "classification": "CURATED",
+          "confidence": 0.9,
+          "confidence_label": "HIGH",
+          "adoption_applications": 1,
+          "adoption_repositories": 1,
+          "adoption_deployments": 1,
+          "policy_status": "PREFERRED",
+          "policy_reference": null,
+          "citations": [
+            {
+              "fact_id": "40b1e11c-de87-4791-85a8-838e90018ce8",
+              "label": "FastAPI@0.109.2 detected in dependency manifest"
+            }
+          ]
+        },
+        {
+          "technology": {
+            "id": "e4d1cb90-a2e5-472b-86de-e67bd3c1dd51",
+            "kind": "Technology",
+            "name": "Express@4.19.2",
+            "canonical_key": "pkg:npm/express@4.19.2"
           },
           "placement_keys": [
             "http-web-api"
@@ -956,17 +1034,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "fdf2980a-f112-4092-816c-bc0a21b32850",
-              "label": "Express detected in dependency manifest"
+              "fact_id": "e2e18f44-90dc-4074-8092-f37671163d5b",
+              "label": "Express@4.19.2 detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "d2aa2088-606d-4edb-84a5-a116588da1eb",
+            "id": "e1c21284-aa0a-4d68-8d98-89b3116c8eca",
             "kind": "Technology",
-            "name": "Flask",
-            "canonical_key": "stackgraph:technology:flask"
+            "name": "Flask@3.0.3",
+            "canonical_key": "pkg:npm/flask@3.0.3"
           },
           "placement_keys": [
             "http-web-api"
@@ -981,14 +1059,14 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "486bdf4a-834a-40d1-841d-afd53e2a6435",
-              "label": "Flask detected in dependency manifest"
+              "fact_id": "cafb27d0-b594-4f80-8885-f1af179e97ef",
+              "label": "Flask@3.0.3 detected in dependency manifest"
             }
           ]
         }
       ],
-      "occupant_total": 3,
-      "unique_technology_total": 3,
+      "occupant_total": 4,
+      "unique_technology_total": 4,
       "observation": {
         "status": "COMPLETE",
         "required_sensor_kinds": [
@@ -1014,7 +1092,7 @@
       },
       "measures": {
         "posture_band": "ADEQUATE",
-        "overall_score": 73,
+        "overall_score": 74,
         "coverage": {
           "value": 1,
           "status": "ELIGIBLE",
@@ -1023,31 +1101,31 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "bfa55ef5-28b6-4c95-88bb-8645c2d69767"
+            "83023446-430f-4365-8562-c751d6278be8"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "standardisation": {
-          "value": 0.33333333333333337,
+          "value": 0.25,
           "status": "ELIGIBLE",
           "inputs": [
             "unique technology placements",
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "771935dc-d655-4dfb-827e-1de96154e8a0"
+            "b83a5d6e-b04f-45bf-81f5-38864e114b00"
           ],
           "method_version": "architecture-canvas/v1"
         },
         "currency": {
-          "value": 0.67,
+          "value": 0.79,
           "status": "ELIGIBLE",
           "inputs": [
             "resolved versions",
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "8e73ba65-9311-45a9-8e6a-63479d7c840f"
+            "6e4313a1-389c-4804-8a09-ec483a8fac93"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1059,7 +1137,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "6e5c501b-3981-498c-8d63-880851a3a245"
+            "f52ae49d-d3b1-45ab-8920-3a90740e4b62"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1071,7 +1149,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "fbad2e37-951b-43a8-8f74-8603a2eff2a9"
+            "1bace465-efdd-432a-82e2-1a7982f14839"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1087,13 +1165,14 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "3938ba19-c483-4e8b-820f-8c4c28fe28d5"
+          "6a5d9219-a0b5-4f64-8e55-234696e9c51b",
+          "98b45529-e779-4dbe-84d8-3e20858368f5"
         ],
         "allowed_technology_ids": [
-          "2712c40e-d538-47dc-89fe-a73c873dad1f"
+          "e4d1cb90-a2e5-472b-86de-e67bd3c1dd51"
         ],
         "discouraged_technology_ids": [
-          "d2aa2088-606d-4edb-84a5-a116588da1eb"
+          "e1c21284-aa0a-4d68-8d98-89b3116c8eca"
         ],
         "prohibited_technology_ids": [],
         "rationale": "FastAPI is the standard service framework. Express is allowed for edge workers only.",
@@ -1104,11 +1183,11 @@
         "exceptions": []
       },
       "insight_refs": [
-        "6da37025-53fd-402c-80ff-887c44dee968"
+        "236b350d-a6ef-460a-8d9c-8d55d3f1023e"
       ],
       "citations": [
         {
-          "fact_id": "5751cfc7-a17e-44fd-833b-0406a3cf0015",
+          "fact_id": "f762c489-9c30-4782-8ad8-457cbe68af09",
           "label": "Service & API evidence"
         }
       ]
@@ -1155,10 +1234,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "1cf97174-4b75-4505-8ae7-2139d8496dbf",
+            "id": "f69acc0c-9eff-455a-8274-eeb225f61dcc",
             "kind": "Technology",
             "name": "SQLAlchemy",
-            "canonical_key": "stackgraph:technology:sqlalchemy"
+            "canonical_key": "pkg:npm/sqlalchemy"
           },
           "placement_keys": [
             "orm-data-access"
@@ -1173,17 +1252,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "36b66a02-e932-4e38-8275-394c329e377f",
+              "fact_id": "c6a1f966-492e-4064-8daa-f1ba34007a76",
               "label": "SQLAlchemy detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "0a1bba05-00cf-491d-86db-fff7b46af9e6",
+            "id": "9667c0ad-af32-4c3f-81a4-dae82fdc1d3e",
             "kind": "Technology",
             "name": "Prisma",
-            "canonical_key": "stackgraph:technology:prisma"
+            "canonical_key": "pkg:npm/prisma"
           },
           "placement_keys": [
             "orm-data-access"
@@ -1198,17 +1277,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "a49724ab-2963-44b3-8e41-969ccb30df8f",
+              "fact_id": "31f98acc-79c3-4d44-89c8-c85ec8ff8016",
               "label": "Prisma detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "f7386610-8c59-4033-8536-4ea26070d3af",
+            "id": "cab3173a-26dd-44c4-8cb7-229df75b7b4e",
             "kind": "Technology",
             "name": "Drizzle",
-            "canonical_key": "stackgraph:technology:drizzle"
+            "canonical_key": "pkg:npm/drizzle"
           },
           "placement_keys": [
             "orm-data-access"
@@ -1223,7 +1302,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "97f7d805-036a-498f-8804-bd895ea2d79b",
+              "fact_id": "5669289d-fe0e-460a-8027-bd66085e7b98",
               "label": "Drizzle detected in dependency manifest"
             }
           ]
@@ -1265,7 +1344,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "200c2035-7dc1-4115-85c8-2911e47ce776"
+            "7e945a04-c1ce-4ef6-812b-c2871ab2c54c"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1277,7 +1356,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "a664e1d9-cf49-4c54-8818-9548de4303dd"
+            "cec8ece1-b1ec-4253-8629-6bd670dd6ab8"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1289,7 +1368,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "5a4b2fd9-b25b-47d2-86a8-dd33dc52454f"
+            "a3e04e63-c035-40e0-8b44-28294cc3a554"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1301,7 +1380,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "3de0052b-4368-4393-858a-c940a45fc5e6"
+            "e03a7d37-713c-4976-8dbb-96b239461641"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1313,7 +1392,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "dd51da94-c41c-4d18-8a02-9499bcdc85d1"
+            "c2e8d5ad-86c3-4c6f-8a85-4db111aaf1df"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1326,7 +1405,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "1d621a56-96b5-4dbc-802c-02be19315d83",
+          "fact_id": "c9e99cfc-6ea0-4e6f-8cf2-641f6e6aa453",
           "label": "Persistence adapters evidence"
         }
       ]
@@ -1338,10 +1417,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "4d15b328-ef1f-4e43-8f2f-1379b111d483",
+            "id": "4c99eef5-825b-44a5-8ea6-7dccff1ea59c",
             "kind": "Technology",
             "name": "httpx",
-            "canonical_key": "stackgraph:technology:httpx"
+            "canonical_key": "pkg:npm/httpx"
           },
           "placement_keys": [
             "http-client"
@@ -1356,17 +1435,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "85afff17-40fe-46d0-8d18-1661c5e81238",
+              "fact_id": "3369e3df-6373-4157-82fa-fbd07f02ec30",
               "label": "httpx detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "a5211ab1-1ce6-4cfa-8153-57d0427261a1",
+            "id": "1562a33d-ca05-457d-887c-b06058fb4a9e",
             "kind": "Technology",
             "name": "requests",
-            "canonical_key": "stackgraph:technology:requests"
+            "canonical_key": "pkg:npm/requests"
           },
           "placement_keys": [
             "http-client"
@@ -1381,7 +1460,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "1fa12ae3-048d-413a-8803-5ec64c84bf28",
+              "fact_id": "a5b17e05-e081-43a0-8995-bcebb4cff940",
               "label": "requests detected in dependency manifest"
             }
           ]
@@ -1423,7 +1502,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "4b21b3ff-e926-46b4-849c-e688908686b3"
+            "06c35585-754d-4fc5-80f0-d8c59cf1b79f"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1435,7 +1514,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "d43256eb-baf3-4da2-8c29-13347a1fbb24"
+            "3c33dd39-e486-4cd4-8d81-49f3b5ce5a11"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1447,7 +1526,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "15df0b10-e948-483b-8a84-b7a85078a9a8"
+            "f7bb9187-93c1-4825-811a-7cd92073c738"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1459,7 +1538,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "2f80b721-2be3-42e1-8a1d-91fa98ee83f3"
+            "82a218bf-d584-48c1-8708-8fc4ff257982"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1471,7 +1550,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "b37f81ae-6bde-4881-8a6c-151cdbe18709"
+            "349796cf-ecff-4aa6-8869-651519888b52"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1482,11 +1561,11 @@
       },
       "policy": null,
       "insight_refs": [
-        "cd6e8af0-eddc-4033-8d62-2455522d585b"
+        "01bac98d-17aa-45e9-8317-81462665ea42"
       ],
       "citations": [
         {
-          "fact_id": "f6f0c62c-e4ef-4ac4-8be1-0cbd6dd0dd9b",
+          "fact_id": "f42b5f1d-d839-451a-8a31-62903dc6642a",
           "label": "Outbound adapters evidence"
         }
       ]
@@ -1498,10 +1577,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "325b99af-8440-4c1a-8d2f-29fd751271c6",
+            "id": "bb9dc022-c76d-4dbd-8daf-f58c225b7af2",
             "kind": "Technology",
             "name": "Celery",
-            "canonical_key": "stackgraph:technology:celery"
+            "canonical_key": "pkg:npm/celery"
           },
           "placement_keys": [
             "background-jobs"
@@ -1516,7 +1595,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "cff1eb96-1741-408a-8672-8dfadd0c3903",
+              "fact_id": "4e8907a9-1926-4de3-887f-c1be3bd5d93f",
               "label": "Celery detected in dependency manifest"
             }
           ]
@@ -1558,7 +1637,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "731631d1-b3cc-46fd-8d9c-92d6766c96f4"
+            "1c4b072f-1584-457d-88be-1b207a5695bd"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1579,7 +1658,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "5614c61c-a1f2-4c6a-8a7a-ba9fcd480c73"
+            "ef21d4d3-1b7c-4214-86f8-d5b44660577c"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1591,7 +1670,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "df1bbbf4-8bed-4f70-8648-832bdb2d39c2"
+            "240342f3-f57a-498f-852a-9b184b49f272"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1603,7 +1682,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "188d6cbe-17e2-4795-8421-6a428fd499dd"
+            "465e9191-0520-4708-8cfb-c2e9a2b2e05a"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1618,7 +1697,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "c929babd-e263-4218-84b3-f3e4cb3eb993",
+          "fact_id": "cb66050b-01f8-4cb3-8c77-1373d2c25a23",
           "label": "Background execution evidence"
         }
       ]
@@ -1663,10 +1742,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+            "id": "f2f56a4a-e7be-4201-8694-ee7275915a3f",
             "kind": "Technology",
             "name": "Python 3.12",
-            "canonical_key": "stackgraph:technology:python-3-12"
+            "canonical_key": "pkg:npm/python-3.12"
           },
           "placement_keys": [
             "language-runtime"
@@ -1681,17 +1760,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "e1f4f512-4c37-4121-8c33-cf0d7e54da9e",
+              "fact_id": "c19c3466-8047-43ae-85fb-135346bace64",
               "label": "Python 3.12 detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "52b24fc0-6359-41eb-8338-8d6fd84acd21",
+            "id": "3614e60c-855b-4f61-826d-0fe793ad0cbc",
             "kind": "Technology",
             "name": "Node.js 22",
-            "canonical_key": "stackgraph:technology:node-js-22"
+            "canonical_key": "pkg:npm/node.js-22"
           },
           "placement_keys": [
             "language-runtime"
@@ -1706,7 +1785,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "8a6356ab-8b64-4600-83eb-a3fcb4fd03e4",
+              "fact_id": "ff956b00-df3a-47b0-89fb-dbffa1f7eb28",
               "label": "Node.js 22 detected in dependency manifest"
             }
           ]
@@ -1748,7 +1827,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "63c4fd25-b3e4-49d1-872e-1b54f112ab9b"
+            "dc6d41c9-aba4-4a0d-8b21-b9f835589f6c"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1760,7 +1839,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "4794d41f-186e-4b99-8011-5148ee32a68b"
+            "e20d20e4-d8ea-450b-82e7-ddd3b9f24375"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1772,7 +1851,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "0ac0a318-ef2e-4366-8dd4-c4bd3de0a265"
+            "cb149ed9-bb71-4d41-86b9-f34792af9399"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1784,7 +1863,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "798df99b-8983-4e03-8a9f-b40b37ed5856"
+            "fa93b234-e355-40a5-8cc3-d932a40623a1"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1796,7 +1875,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "bc8bda24-2d1a-44f1-8741-1f202703ad8f"
+            "94ccc7a8-b0ea-4c9d-8be4-3abd6e0e09d0"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1809,7 +1888,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "c20c6aa1-772d-4cad-8dfd-ea0fa55e8abe",
+          "fact_id": "a970ba33-33da-452a-8553-6533702b4f28",
           "label": "Application runtime evidence"
         }
       ]
@@ -1824,7 +1903,7 @@
             "id": "3135c623-3dba-47b5-8e89-9fa9be8d1a7d",
             "kind": "Technology",
             "name": "NGINX",
-            "canonical_key": "stackgraph:technology:nginx"
+            "canonical_key": "pkg:npm/nginx"
           },
           "placement_keys": [
             "reverse-proxy"
@@ -1839,17 +1918,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "32b8df3e-8016-4cd4-820b-396974d2354a",
+              "fact_id": "00a1c471-d8da-476e-83f4-ff675f791eac",
               "label": "NGINX detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "9da77648-b9ce-436f-896c-0d9b2b217fb6",
+            "id": "5914be63-a807-4d11-899f-0f3cb889e9a3",
             "kind": "Technology",
             "name": "Kong",
-            "canonical_key": "stackgraph:technology:kong"
+            "canonical_key": "pkg:npm/kong"
           },
           "placement_keys": [
             "api-gateway"
@@ -1864,7 +1943,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "d6c774ee-448f-43c3-89b7-d8ecffef704a",
+              "fact_id": "d5a14f3e-4640-43ba-89f7-3b6b4e9019b6",
               "label": "Kong detected in dependency manifest"
             }
           ]
@@ -1904,7 +1983,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "1e067ce9-3707-4d24-8505-a1922231b5fe"
+            "35a378c0-37b2-447a-8306-7b129fe72b93"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1916,7 +1995,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "07385256-2a78-4cf4-8e83-cd1d11105835"
+            "5c7e21f1-61b3-43ae-8548-35da4ecf4025"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1928,7 +2007,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "268662f9-909e-4924-8a6c-a1cfc45dd662"
+            "a20b239e-ac8b-4ff6-864a-1ccbcc347e70"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1940,7 +2019,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "01f63007-06b0-4ff5-87ae-b5daf6db8283"
+            "ddf33507-41de-4863-8a18-9a41f62ddbef"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1952,7 +2031,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "ebcfe99f-5ad6-4b27-8a99-75323880cae5"
+            "78a67277-e819-4b84-82b2-931fff45131b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -1983,7 +2062,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "3a96be87-5063-4891-8853-4547a66534c1",
+          "fact_id": "0be69d08-75b2-4354-80b5-84b44d23c39a",
           "label": "Edge & API routing evidence"
         }
       ]
@@ -1995,10 +2074,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "ec1c9de0-cfa0-46b4-87a0-11a9a120b435",
+            "id": "0c0efdf0-6a9a-43dc-848d-8c5c2bc1cc2b",
             "kind": "Technology",
             "name": "OpenAPI",
-            "canonical_key": "stackgraph:technology:openapi"
+            "canonical_key": "pkg:npm/openapi"
           },
           "placement_keys": [
             "api-contract"
@@ -2013,7 +2092,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "9786679c-ec04-43c8-85ec-192370a6d817",
+              "fact_id": "0b66e4e5-9ae0-4333-8765-3bda3a22c698",
               "label": "OpenAPI detected in dependency manifest"
             }
           ]
@@ -2053,7 +2132,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "a27ebc71-a03b-4007-883c-d84139aa2974"
+            "d00f9c4d-dadf-4ab2-8762-1f3af6cb5e26"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2074,7 +2153,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "edac4cbf-b423-4d11-8b90-4d16a14ce7a0"
+            "25b1c75e-55fd-4a38-821c-442f853698cd"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2086,7 +2165,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "26b0ecac-7d00-443a-8efd-32cee0c2f0b0"
+            "b6201aa1-031b-43db-8caf-3f4eb9c0e912"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2098,7 +2177,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "4d77d12f-0518-45ca-8172-b3a842512937"
+            "a7ad21a0-658a-4cf7-8f94-0381727c23af"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2113,7 +2192,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "d2bf9dbe-e4aa-4b71-89ba-d0d7d3d9aedb",
+          "fact_id": "fb01894f-3cc8-4c78-85b4-4e6ca0e7feb0",
           "label": "API contracts evidence"
         }
       ]
@@ -2161,7 +2240,7 @@
             "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
             "kind": "Technology",
             "name": "Redis",
-            "canonical_key": "stackgraph:technology:redis"
+            "canonical_key": "pkg:npm/redis"
           },
           "placement_keys": [
             "task-queue"
@@ -2176,17 +2255,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "fc80125d-2b50-40c1-85e3-03b1ed6f1b2c",
+              "fact_id": "cb3ed4e7-c244-4f25-8aeb-09bb247938c0",
               "label": "Redis detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "0c7ac374-443b-4a93-86e7-0fbb5b7f6ae5",
+            "id": "9e7c0148-d20e-4c16-854e-aff283616332",
             "kind": "Technology",
             "name": "RabbitMQ",
-            "canonical_key": "stackgraph:technology:rabbitmq"
+            "canonical_key": "pkg:npm/rabbitmq"
           },
           "placement_keys": [
             "message-broker"
@@ -2201,7 +2280,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "41618029-f62b-4deb-85dd-ecb58517083c",
+              "fact_id": "f0f65f04-11dc-44a5-8999-5f52d0565eb5",
               "label": "RabbitMQ detected in dependency manifest"
             }
           ]
@@ -2241,7 +2320,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "2eccc311-9b0d-4cb1-8a9d-3c6885431e45"
+            "16250189-1e23-422e-87b3-f636d7e2f23b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2253,7 +2332,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "0f4056d6-c80f-4aba-8bf3-f88e122c1844"
+            "2054264c-1cde-4cb6-88ad-c73ae13d6fa2"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2265,7 +2344,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "61ebbe65-3255-4377-8663-a7c04f70e658"
+            "2de5c24a-d904-424d-80b8-bd6d80220917"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2277,7 +2356,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "ea515d7c-2b0d-4393-8534-9d3055e9b556"
+            "1e189e21-5645-413c-852d-a9d816e7b817"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2289,7 +2368,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "d5b4b802-f999-4a0e-8367-0fc51d8ed569"
+            "84de57bf-a879-4bc4-897a-937cbc928afd"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2300,11 +2379,11 @@
       },
       "policy": null,
       "insight_refs": [
-        "9257e225-cd3b-4700-8166-24aada296ea3"
+        "6043a054-cca2-422f-8510-3686bbfd1f24"
       ],
       "citations": [
         {
-          "fact_id": "c2b68a29-51f1-4792-8025-445338fa8678",
+          "fact_id": "00358185-2aea-4e13-84ce-845eea91005b",
           "label": "Message routing evidence"
         }
       ]
@@ -2316,10 +2395,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "13bb7101-33e7-4952-8f55-e9fe22b432ff",
+            "id": "d6a78096-33d6-43c0-8579-1a8c945bde44",
             "kind": "Technology",
             "name": "Apache Kafka",
-            "canonical_key": "stackgraph:technology:apache-kafka"
+            "canonical_key": "pkg:npm/apache-kafka"
           },
           "placement_keys": [
             "durable-event-stream"
@@ -2334,7 +2413,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "e549e4ac-52c3-4df4-8b2a-ef354fb9770a",
+              "fact_id": "388c5ac3-39b2-4359-89c9-b1505ed4a1a8",
               "label": "Apache Kafka detected in dependency manifest"
             }
           ]
@@ -2374,7 +2453,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "cb5ff085-ab1f-4587-8b4e-1f5ba3f55a58"
+            "c8c25e97-a987-4392-8b8c-e89abf348b1e"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2395,7 +2474,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "030e9732-3f8a-43c1-8e49-7df29beb0bb9"
+            "cc4313e5-b5a6-4cc2-87d9-a7b5e86e6f3c"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2407,7 +2486,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "84ca8102-020b-44c2-874f-48a881afd933"
+            "e6bcb0e9-2094-427b-8448-41dfcf514500"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2419,7 +2498,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "5f05a8ec-7b94-49d4-898d-120d0c2b26eb"
+            "471ab238-8fa3-4492-87bf-06f90519ddfd"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2434,7 +2513,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "dfae31c7-25c5-440d-8e74-73c5b448a68b",
+          "fact_id": "c89bad65-55a4-40cb-8227-5132b6ccaa90",
           "label": "Durable event streams evidence"
         }
       ]
@@ -2512,10 +2591,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "8681d2a4-aa9b-4e60-8749-9956db6cff73",
+            "id": "60397937-8c9e-474b-83a6-3ac316a83d30",
             "kind": "Technology",
             "name": "Keycloak",
-            "canonical_key": "stackgraph:technology:keycloak"
+            "canonical_key": "pkg:npm/keycloak"
           },
           "placement_keys": [
             "identity-provider"
@@ -2530,7 +2609,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "f8430911-478e-4fdf-8fd9-994d19c0d84e",
+              "fact_id": "4d90ecb9-390b-4bc1-8c66-7e1561cedccb",
               "label": "Keycloak detected in dependency manifest"
             }
           ]
@@ -2572,7 +2651,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "c7433280-dec9-4160-8c90-f18fa23719af"
+            "50298c57-9ee0-404a-83e7-b3a80554d77b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2593,7 +2672,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "5b149cfb-86c6-4e7c-8398-ba168fb65ec4"
+            "6333ecab-48d4-4e40-895f-bd15dae76f46"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2605,7 +2684,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "9b80d878-9652-4b9a-87f8-3c4592dd4fff"
+            "8d73e9d3-349f-4562-8060-18c2bcecab21"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2617,7 +2696,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "19f31eb7-ae7b-44c3-82e0-cc43a9fc4269"
+            "59795e6c-13d0-4056-8387-d5e7fa553fe9"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2632,7 +2711,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "3448cfa9-c467-4432-8d6b-dbb2eff64db3",
+          "fact_id": "b617b46f-9bbc-45eb-8116-136205a2b678",
           "label": "Identity & access evidence"
         }
       ]
@@ -2644,10 +2723,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "c15a1c4d-ed62-4348-80de-5cd33bec0770",
+            "id": "07f11d0e-5ca9-4976-81ce-888d98d95db5",
             "kind": "Technology",
             "name": "PostgreSQL",
-            "canonical_key": "stackgraph:technology:postgresql"
+            "canonical_key": "pkg:npm/postgresql"
           },
           "placement_keys": [
             "relational-database"
@@ -2662,17 +2741,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "ea1629d8-e19c-401a-8beb-dd00f852ca1d",
+              "fact_id": "5018c106-42bc-45c1-86e1-97a8da6ab00d",
               "label": "PostgreSQL detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "b4486af0-6a89-45ca-892e-cb72b175d252",
+            "id": "afdd3acb-b9f0-4e06-83c2-3a15bfee77e2",
             "kind": "Technology",
             "name": "MySQL",
-            "canonical_key": "stackgraph:technology:mysql"
+            "canonical_key": "pkg:npm/mysql"
           },
           "placement_keys": [
             "relational-database"
@@ -2687,7 +2766,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "d962f1ca-3a74-464c-8ae6-0d085d477374",
+              "fact_id": "3635d924-3dfa-4ea3-863b-507b59a70337",
               "label": "MySQL detected in dependency manifest"
             }
           ]
@@ -2727,7 +2806,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "9a351c21-96e0-4f83-8578-9b527377b391"
+            "7b717990-c22f-46f8-86b1-0b827d214b2f"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2739,7 +2818,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "ab9ac292-19cf-4ab8-8fa7-387c9c5c4a2d"
+            "e615322d-5f83-4889-899c-e61868b9d2fc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2751,7 +2830,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "1c567eec-1d46-456a-8588-a938360c6573"
+            "c9e297a1-e0c4-424a-8b86-bf947ce4c4c1"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2763,7 +2842,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "6a364982-b0f5-4182-8422-c396abbebb9a"
+            "f8333b7f-8e8b-4f33-851f-427dc41c85cc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2775,7 +2854,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "e86017e4-d6d2-48e8-8218-42ee0eff6f1a"
+            "d7d9e122-e310-40c5-8eb5-708a0e9dab5a"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2791,11 +2870,11 @@
         "maximum_implementations": 2,
         "allowed_diversity": 2,
         "preferred_technology_ids": [
-          "c15a1c4d-ed62-4348-80de-5cd33bec0770"
+          "07f11d0e-5ca9-4976-81ce-888d98d95db5"
         ],
         "allowed_technology_ids": [],
         "discouraged_technology_ids": [
-          "b4486af0-6a89-45ca-892e-cb72b175d252"
+          "afdd3acb-b9f0-4e06-83c2-3a15bfee77e2"
         ],
         "prohibited_technology_ids": [],
         "rationale": "PostgreSQL is the standard relational engine across all environments.",
@@ -2806,11 +2885,11 @@
         "exceptions": []
       },
       "insight_refs": [
-        "0b94018c-b1d8-49a7-8f6a-188726da8a61"
+        "8e057e37-d268-46cc-8b07-bd2d4733dd69"
       ],
       "citations": [
         {
-          "fact_id": "3247e16e-8c64-4d2c-8620-130acf447421",
+          "fact_id": "ff92848e-c19a-40a9-8ef6-5ac5713669fa",
           "label": "Databases evidence"
         }
       ]
@@ -2825,7 +2904,7 @@
             "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
             "kind": "Technology",
             "name": "Redis",
-            "canonical_key": "stackgraph:technology:redis"
+            "canonical_key": "pkg:npm/redis"
           },
           "placement_keys": [
             "cache"
@@ -2840,7 +2919,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "0d09498e-c2e7-494b-83d2-5a080fdadd1b",
+              "fact_id": "57a5a1fd-54cf-47d8-80b0-4e9a648c8ff2",
               "label": "Redis detected in dependency manifest"
             }
           ]
@@ -2882,7 +2961,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "ca2721fe-2b8a-4d6a-8218-a8b832979b3c"
+            "b90d482b-8bed-4dfb-8f9a-c31abbb8f0d0"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2903,7 +2982,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "0a9b2d55-506e-403d-801f-af548acf6c7d"
+            "819d074b-2df2-461b-82bb-299732b6caf9"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2915,7 +2994,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "3870598a-eebd-482b-8470-60637bd52647"
+            "44fe231d-badc-49bc-82d7-4d1aefcaaba1"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2927,7 +3006,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "5bea925a-1509-45e8-88ae-a8b97b9fa6c7"
+            "97adad8d-ca54-4d51-82e6-47da25736ba8"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -2942,7 +3021,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "23f654b6-76fe-41e3-8f79-123cf62da186",
+          "fact_id": "1e12c581-cd80-40be-83e1-578625434a2a",
           "label": "Cache & session evidence"
         }
       ]
@@ -2954,10 +3033,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "a7b87906-57f6-4038-8064-cf45193c5eac",
+            "id": "322f2744-86d8-4637-8202-afbfb8a82190",
             "kind": "Technology",
             "name": "OpenSearch",
-            "canonical_key": "stackgraph:technology:opensearch"
+            "canonical_key": "pkg:npm/opensearch"
           },
           "placement_keys": [
             "full-text-search"
@@ -2972,7 +3051,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "6676f078-a75f-4828-818c-37093e4b608e",
+              "fact_id": "de6ed726-f9e7-4eee-864e-59d5fa975f66",
               "label": "OpenSearch detected in dependency manifest"
             }
           ]
@@ -3012,7 +3091,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "20518d6f-c4fa-4f53-8b3e-925f1db634e1"
+            "b6874cba-3fab-40fe-8d35-108266a2b596"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3033,7 +3112,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "2f66b335-57fb-431d-8a67-1cf5c4b89858"
+            "b6150783-7186-4acc-808e-ea5ce66bb364"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3045,7 +3124,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "7e841f61-23fa-44cd-854f-6e824c470265"
+            "96ae2142-b1cd-459d-8b41-59ec887ce3cc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3070,7 +3149,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "9f85c53a-94f0-426b-8666-e20cac3e9f9d",
+          "fact_id": "ab1f3084-21bc-4ccb-8fb2-5e18b2c223bb",
           "label": "Search & retrieval evidence"
         }
       ]
@@ -3082,10 +3161,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "7df6ab50-b8e5-4044-8894-99d0835d2aaf",
+            "id": "94e005b0-7f83-446b-8528-6fb6df793f8b",
             "kind": "Technology",
             "name": "Amazon S3",
-            "canonical_key": "stackgraph:technology:amazon-s3"
+            "canonical_key": "pkg:npm/amazon-s3"
           },
           "placement_keys": [
             "object-storage"
@@ -3100,7 +3179,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "7d7a4c62-b2fb-41f2-8363-a24dad28a876",
+              "fact_id": "f2c39f7b-6052-457a-8a99-7f4df30e0646",
               "label": "Amazon S3 detected in dependency manifest"
             }
           ]
@@ -3140,7 +3219,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "cef264a1-7b56-416a-8b20-9af5d07d5060"
+            "80a8271c-eecc-4d70-862e-abc9b723b414"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3161,7 +3240,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "0a7180d1-6f26-4a48-841e-bfd863fea2c8"
+            "00d04251-9176-43bd-80fd-86dac75917a7"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3173,7 +3252,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "c5f9c7ed-6659-40e9-84a7-faebfd4790ca"
+            "9e70b65f-f7a5-438a-8d83-3e15fa0e705f"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3185,7 +3264,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "c971d027-4739-41f5-8fec-417ccc5c0924"
+            "49e8b0bd-ca72-4569-8f56-19be38c1f54b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3200,7 +3279,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "163842ae-fea5-47ce-8cc0-64dd4da0f90e",
+          "fact_id": "d45cc0c2-6030-434e-8595-e57ab5239fba",
           "label": "Object & file storage evidence"
         }
       ]
@@ -3315,10 +3394,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "9d069821-5d04-4d6d-8426-4a44926acf34",
+            "id": "f2f56a4a-e7be-4201-8694-ee7275915a3f",
             "kind": "Technology",
             "name": "Python 3.12",
-            "canonical_key": "stackgraph:technology:python-3-12"
+            "canonical_key": "pkg:npm/python-3.12"
           },
           "placement_keys": [
             "language-runtime"
@@ -3333,17 +3412,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "a0d78873-aef8-4940-88c9-ce0989503bbe",
+              "fact_id": "af025eb7-de59-46cf-8dfa-91604c86a1d3",
               "label": "Python 3.12 detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "0f4cbad2-a124-413b-833d-e4efba6628af",
+            "id": "463624a3-7c23-4b87-8ed6-41af67cbcefc",
             "kind": "Technology",
             "name": "Go 1.22",
-            "canonical_key": "stackgraph:technology:go-1-22"
+            "canonical_key": "pkg:npm/go-1.22"
           },
           "placement_keys": [
             "language-runtime"
@@ -3358,7 +3437,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "d06c1665-2be7-4ef6-8778-9785f017ca3d",
+              "fact_id": "4624774a-96df-41a5-8721-0886ac6a09f1",
               "label": "Go 1.22 detected in dependency manifest"
             }
           ]
@@ -3400,7 +3479,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "5cb8ac6b-fa5c-407e-8d31-5018a5299950"
+            "62829e67-cd8f-4e40-86c6-34525ae504bf"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3412,7 +3491,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "1c3b70c4-d82e-4596-85a4-947fa341d54b"
+            "3b3b34b8-94e3-4a00-8935-dbfad3db0147"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3424,7 +3503,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "2f5db3f5-3876-42e9-87e5-e72283919c07"
+            "ff9702c7-ac96-4bd7-86b2-a5d7f3800dcc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3436,7 +3515,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "150cbcd4-5e0b-45f9-865e-b93eede54450"
+            "2a852d6f-2c84-42ea-8bce-8285024672dc"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3448,7 +3527,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "bd8b200c-2def-4695-8fe3-cc8c4c0a0019"
+            "5107a6f0-6410-46c0-8e70-5a21edbfef9b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3461,7 +3540,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "2db9c8af-9f4b-4831-8401-54b0c6a86088",
+          "fact_id": "0ace9d54-5716-429b-87d2-d7de9e46bb31",
           "label": "Language & runtime evidence"
         }
       ]
@@ -3473,10 +3552,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "a2390c86-62f8-476e-85a6-b22b876d7fd6",
+            "id": "d87b8726-7145-48d1-83da-af4fc0bb3db3",
             "kind": "Technology",
             "name": "Docker",
-            "canonical_key": "stackgraph:technology:docker"
+            "canonical_key": "pkg:npm/docker"
           },
           "placement_keys": [
             "container-runtime"
@@ -3491,7 +3570,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "ba9b350c-de8b-4b39-8087-55bd12132645",
+              "fact_id": "a9650228-9db0-467f-8a87-bed890d1099b",
               "label": "Docker detected in dependency manifest"
             }
           ]
@@ -3531,7 +3610,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "2bd83016-19f5-4066-8e6d-5c189b6c471b"
+            "6ec247c6-57fb-4323-8a55-c92c268326d1"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3552,7 +3631,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "6acab845-28df-4b51-8946-5c7102a1c9a5"
+            "fa9f1b47-3e78-487c-8f32-db3f0598cf25"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3564,7 +3643,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "43490b7c-f88d-47b8-8c65-d0139967d1e7"
+            "52b731c1-e3ed-4e25-89a7-a6eb7dce2632"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3576,7 +3655,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "589e774a-6db3-45d4-8b29-09709fff50f4"
+            "1ecf139f-5bfe-4272-80ee-481c4dd35ae2"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3591,7 +3670,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "5aa255cf-2bc1-43ef-87a8-ba89bce6967e",
+          "fact_id": "801f19e0-0210-4fb0-860a-9de13782c4d2",
           "label": "Runtime artifacts evidence"
         }
       ]
@@ -3638,10 +3717,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "fa59b567-46bc-421f-8c23-599efb62be24",
+            "id": "b7037790-62b6-4cd7-8b7f-38e87772a8d5",
             "kind": "Technology",
             "name": "Kubernetes",
-            "canonical_key": "stackgraph:technology:kubernetes"
+            "canonical_key": "pkg:npm/kubernetes"
           },
           "placement_keys": [
             "kubernetes"
@@ -3656,7 +3735,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "06d18b5c-cdaa-44e7-806e-1ba411867f26",
+              "fact_id": "3a2b4d4c-fadc-4096-861c-9f0f5448e804",
               "label": "Kubernetes detected in dependency manifest"
             }
           ]
@@ -3696,7 +3775,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "9f151d99-c9c2-4464-82df-00fc6a80ca7c"
+            "68d1e3c6-9e9a-4abe-86ad-dd1a1fafe18d"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3717,7 +3796,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "0c871801-edd5-4bd4-82aa-dd8589bd7e8f"
+            "6da79481-817c-4150-8e78-7fa18180fb29"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3729,7 +3808,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "0cdd46f3-0310-4ab3-8d9e-de0af1d56a2c"
+            "eeb4e430-bb63-49f8-8287-29ebdfadad7d"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3741,7 +3820,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "8ab48333-33a5-43e8-8451-049f2cf2e502"
+            "5551ecea-eead-481a-83b2-b56eb0304eb6"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3756,7 +3835,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "e1b20573-dce3-4da6-817d-f1d3c7bf1dd7",
+          "fact_id": "e0b0592d-4719-4c04-874c-70256f4d4155",
           "label": "Workload orchestration evidence"
         }
       ]
@@ -3801,10 +3880,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "b689e639-9ad0-4ec4-8ab1-24c3c626f41e",
+            "id": "e2338300-ebab-4e51-8ed7-2658f10defe7",
             "kind": "Technology",
             "name": "NGINX Ingress",
-            "canonical_key": "stackgraph:technology:nginx-ingress"
+            "canonical_key": "pkg:npm/nginx-ingress"
           },
           "placement_keys": [
             "ingress-controller"
@@ -3819,7 +3898,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "81447ee2-2723-4a4d-84c2-aed5e399f942",
+              "fact_id": "a67d6b14-ea26-4b31-867f-81239013d7b8",
               "label": "NGINX Ingress detected in dependency manifest"
             }
           ]
@@ -3859,7 +3938,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "32cf566b-ffce-425c-8d3a-51105e8fee22"
+            "af3f49bd-b8f2-44b8-848f-2d997d83a4ce"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3880,7 +3959,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "4f948088-8d5b-4a08-8196-be3a8b804797"
+            "7d67efca-3a46-40c1-86d9-67cb5f400c39"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3892,7 +3971,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "2123e8d1-dab4-4919-853b-6e4731d27c59"
+            "f953b4c9-3bac-4822-85fc-0ffac2f35b4e"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3904,7 +3983,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "619a4e74-d4a3-4d19-865f-96a48b1f97a9"
+            "bf7d75ef-d992-49d8-8c73-715fcb221b01"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -3919,7 +3998,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "229f61ed-c1fb-42b0-8e3d-52b2cd6ea825",
+          "fact_id": "d75fbde1-09c1-4308-8ab8-366fb528c448",
           "label": "Network & ingress evidence"
         }
       ]
@@ -3931,10 +4010,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "ca22d5b9-9d8d-4960-89c0-bb44e8f6494b",
+            "id": "b3783041-40eb-45cf-8269-edc5e59e7575",
             "kind": "Technology",
             "name": "Amazon RDS",
-            "canonical_key": "stackgraph:technology:amazon-rds"
+            "canonical_key": "pkg:npm/amazon-rds"
           },
           "placement_keys": [
             "cloud-platform-service"
@@ -3949,7 +4028,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "15916f9c-e1ae-4877-8407-be1ae109b288",
+              "fact_id": "65db5a39-6887-4bb5-8f10-04c313a0653d",
               "label": "Amazon RDS detected in dependency manifest"
             }
           ]
@@ -3989,7 +4068,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "78be49fd-472f-46ff-864e-aed42f03f174"
+            "95dbf7e6-0eee-46b3-87d4-668a41c514fb"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4010,7 +4089,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "36102616-4afc-4f3e-8bc5-358a06903d5c"
+            "8bf2f0c5-4785-4ce7-8008-7eb3c5db1816"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4022,7 +4101,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "27c41c89-cba8-4735-8086-40a6a340dbc7"
+            "212ff2bc-e93d-4cc7-8a5c-e53c9b4dfac5"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4034,7 +4113,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "ee709c2d-a5f9-41fc-8016-6058361ac91f"
+            "55a895fb-8b9d-4606-8b9a-47eee357a528"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4049,7 +4128,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "d800eabd-8cbe-4527-8de1-06cd37510714",
+          "fact_id": "26a17465-081e-4d1f-85cf-100225b13932",
           "label": "Hosting platform evidence"
         }
       ]
@@ -4061,10 +4140,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "0e8c6851-15de-4736-87ba-0fad604f818f",
+            "id": "c6579521-6165-4b3b-8ce2-f561010e0973",
             "kind": "Technology",
             "name": "pnpm",
-            "canonical_key": "stackgraph:technology:pnpm"
+            "canonical_key": "pkg:npm/pnpm"
           },
           "placement_keys": [
             "package-management"
@@ -4079,17 +4158,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "5ee881b9-858b-42bf-8e49-4081adda3271",
+              "fact_id": "6010e65d-00b5-41f8-8ecf-10f2099cb9b2",
               "label": "pnpm detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "6562c6a4-717e-419c-8d34-d9abe62c372f",
+            "id": "729266f8-495d-4c5c-8695-f4a5541b01ff",
             "kind": "Technology",
             "name": "uv",
-            "canonical_key": "stackgraph:technology:uv"
+            "canonical_key": "pkg:npm/uv"
           },
           "placement_keys": [
             "package-management"
@@ -4104,7 +4183,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "d43e02bf-a8f2-44cb-85ba-d725a17e39b0",
+              "fact_id": "d319a4cd-421c-4857-8e07-2dd4e15e2284",
               "label": "uv detected in dependency manifest"
             }
           ]
@@ -4144,7 +4223,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "94e84535-1f70-41ae-87b2-09973f7fa03c"
+            "4b48fd12-1bc0-4966-8cd8-1ffb2bd64a3b"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4156,7 +4235,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "d675956b-a5c2-4216-8e04-1e623574da95"
+            "2ba6ed4c-f56d-476a-8f18-051897ebac5e"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4168,7 +4247,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "cc30fdf7-6900-4388-81e5-21ff673b43c7"
+            "26a06373-0c81-4989-8d77-dd85c8aed7c2"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4180,7 +4259,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "cd15da2b-94ad-4d61-827d-8cbec579e2e1"
+            "6e5f45c1-6269-472c-8314-7fee3c3fac7f"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4192,7 +4271,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "26e14a68-ffd9-43e9-8940-101a3fa09a36"
+            "f66f58fd-52d3-46ef-8035-fcba447cf589"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4205,7 +4284,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "a0c7bd7c-922a-4564-8b1c-4f1afa8f374e",
+          "fact_id": "4629c6fd-a15a-48ca-8b54-45a1384920b7",
           "label": "Build & package evidence"
         }
       ]
@@ -4217,10 +4296,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "354ab5a7-c891-49dc-8cb5-4ad6744ff746",
+            "id": "a08bde64-fb20-4aaf-8b51-5fb0a3363fb0",
             "kind": "Technology",
             "name": "Playwright",
-            "canonical_key": "stackgraph:technology:playwright"
+            "canonical_key": "pkg:npm/playwright"
           },
           "placement_keys": [
             "e2e-testing"
@@ -4235,17 +4314,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "0d94a4d0-4b8a-4170-84be-6f3dc1ef2895",
+              "fact_id": "ff7af877-8588-49b3-8ace-7028e79ee7a5",
               "label": "Playwright detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "713fcae5-1925-4ea6-8e4b-78a079a2df57",
+            "id": "1fb760e6-30f7-4e9e-8a44-8c0c2dd45be0",
             "kind": "Technology",
             "name": "pytest",
-            "canonical_key": "stackgraph:technology:pytest"
+            "canonical_key": "pkg:npm/pytest"
           },
           "placement_keys": [
             "unit-testing"
@@ -4260,17 +4339,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "5b19b2fb-1be0-4763-8fba-0a002c6cd46a",
+              "fact_id": "2d3d3c78-0ba0-4a01-89ad-833029f01f58",
               "label": "pytest detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "3c1c17b2-b76e-4938-8555-993d67b2ebf7",
+            "id": "214fae5f-b479-4b82-8c85-4e2f4c2f3eb1",
             "kind": "Technology",
             "name": "Jest",
-            "canonical_key": "stackgraph:technology:jest"
+            "canonical_key": "pkg:npm/jest"
           },
           "placement_keys": [
             "unit-testing"
@@ -4285,7 +4364,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "41e1119c-915f-460f-8cf6-9b5bb13c362e",
+              "fact_id": "57ffcd0d-1040-42a1-8fcb-7f96475ff34e",
               "label": "Jest detected in dependency manifest"
             }
           ]
@@ -4325,7 +4404,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "6553b121-c183-4190-84ea-67bad7b84889"
+            "b3091d6d-e047-4d8a-874e-9e5b165c2c25"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4337,7 +4416,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "bd91d1f6-6afd-44c5-82b4-e19e2c7bb53f"
+            "88d4bdc1-adbf-45cf-802c-44c5f2ad5cda"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4349,7 +4428,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "9678096a-0310-4b2a-8f57-566bb40c4c53"
+            "89893ccc-ba10-4699-860f-3e113baed52f"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4361,7 +4440,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "c7ed973c-a9bd-49ab-886e-771942a34ef3"
+            "3b0a5ff9-dfef-4b02-82dd-8c5cadc4c4f9"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4373,7 +4452,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "775f4547-253d-4a9c-87c5-deb1f0525742"
+            "87445473-93da-4294-89c1-64e375b36611"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4384,11 +4463,11 @@
       },
       "policy": null,
       "insight_refs": [
-        "297c2049-ae5a-4f53-89db-b0ffcde6b164"
+        "1f415c7d-992c-4b7b-85ab-fad71b9eff93"
       ],
       "citations": [
         {
-          "fact_id": "5e55e098-b62f-4a24-89cf-525dc89c7a3b",
+          "fact_id": "b57dd787-a154-4b65-8984-46bb13c8daa9",
           "label": "Testing & quality evidence"
         }
       ]
@@ -4535,10 +4614,10 @@
       "occupants": [
         {
           "technology": {
-            "id": "e247e5c6-abd9-400a-875b-2a2a9412f0bf",
+            "id": "305dfe02-7869-4fee-8d87-0e7c3c2b60c8",
             "kind": "Technology",
             "name": "OpenTelemetry",
-            "canonical_key": "stackgraph:technology:opentelemetry"
+            "canonical_key": "pkg:npm/opentelemetry"
           },
           "placement_keys": [
             "telemetry"
@@ -4553,17 +4632,17 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "305db14b-016e-496c-8acb-de9f466a738c",
+              "fact_id": "c0c851ae-d925-4e3b-8178-75e662186e8e",
               "label": "OpenTelemetry detected in dependency manifest"
             }
           ]
         },
         {
           "technology": {
-            "id": "1637df4b-4c54-401e-8633-aed560d1a658",
+            "id": "e89e1e5a-5a6b-4c63-8209-24a95266d338",
             "kind": "Technology",
             "name": "Prometheus",
-            "canonical_key": "stackgraph:technology:prometheus"
+            "canonical_key": "pkg:npm/prometheus"
           },
           "placement_keys": [
             "telemetry"
@@ -4578,7 +4657,7 @@
           "policy_reference": null,
           "citations": [
             {
-              "fact_id": "a8baa343-3ba2-4105-8188-206ea6f7aaa2",
+              "fact_id": "4db1c4a1-e201-42df-80e2-9d0a098123f1",
               "label": "Prometheus detected in dependency manifest"
             }
           ]
@@ -4618,7 +4697,7 @@
             "minimum implementations"
           ],
           "supporting_fact_ids": [
-            "d0492647-419d-4f7e-8ded-393d783f431f"
+            "83b5ca76-6039-4aa8-81d8-e6cc88eda9c7"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4630,7 +4709,7 @@
             "allowed diversity"
           ],
           "supporting_fact_ids": [
-            "cf405555-3783-43ed-8ff0-3ea90278f439"
+            "e9beec3d-6b09-46d8-8fea-774d43c734a2"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4642,7 +4721,7 @@
             "deprecation metadata"
           ],
           "supporting_fact_ids": [
-            "19029585-b9cb-4e83-8d35-9a07e8e78cef"
+            "fdd0ff8f-2720-4f8e-864f-2a9c5acd9706"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4654,7 +4733,7 @@
             "advisory matches"
           ],
           "supporting_fact_ids": [
-            "cad6fc44-02bb-44a0-8b2c-338b37df8c93"
+            "3515e5d6-4128-4384-8e51-03c8a36f6790"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4666,7 +4745,7 @@
             "resolved placements"
           ],
           "supporting_fact_ids": [
-            "9f2caa02-32db-4a10-8e65-800d116dcb5b"
+            "bfc021e5-e8d1-40a4-8deb-2b4dc078a5db"
           ],
           "method_version": "architecture-canvas/v1"
         },
@@ -4682,10 +4761,10 @@
         "maximum_implementations": 3,
         "allowed_diversity": 3,
         "preferred_technology_ids": [
-          "e247e5c6-abd9-400a-875b-2a2a9412f0bf"
+          "305dfe02-7869-4fee-8d87-0e7c3c2b60c8"
         ],
         "allowed_technology_ids": [
-          "1637df4b-4c54-401e-8633-aed560d1a658"
+          "e89e1e5a-5a6b-4c63-8209-24a95266d338"
         ],
         "discouraged_technology_ids": [],
         "prohibited_technology_ids": [
@@ -4701,7 +4780,7 @@
       "insight_refs": [],
       "citations": [
         {
-          "fact_id": "42612173-bbc4-4d5e-8ee6-0a126ed2557d",
+          "fact_id": "f7697009-f563-4bff-83cb-ebe5c6b1dd90",
           "label": "Telemetry & observability evidence"
         }
       ]
@@ -4748,7 +4827,7 @@
           "id": "10a45927-21bd-4aca-82d2-b549ea96a049",
           "kind": "Technology",
           "name": "internal-billing-sdk",
-          "canonical_key": "stackgraph:technology:internal-billing-sdk"
+          "canonical_key": "pkg:npm/internal-billing-sdk"
         },
         "reason": "UNCLASSIFIED",
         "detail": "No catalog match and no capability inference above the confidence floor. Ecosystem PYPI.",
@@ -4764,7 +4843,7 @@
           "id": "d4a91110-feca-4ca1-875d-27c0a23ed082",
           "kind": "Technology",
           "name": "acme-telemetry-shim",
-          "canonical_key": "stackgraph:technology:acme-telemetry-shim"
+          "canonical_key": "pkg:npm/acme-telemetry-shim"
         },
         "reason": "UNCLASSIFIED",
         "detail": "Private registry package; no public metadata available. Ecosystem NPM.",
@@ -4780,7 +4859,7 @@
           "id": "51041988-a411-41a3-8db8-63fd2d2d65a1",
           "kind": "Technology",
           "name": "legacy-soap-bridge",
-          "canonical_key": "stackgraph:technology:legacy-soap-bridge"
+          "canonical_key": "pkg:npm/legacy-soap-bridge"
         },
         "reason": "UNCLASSIFIED",
         "detail": "Ecosystem MAVEN is not yet analyzable.",
@@ -4796,7 +4875,7 @@
           "id": "ad36004c-9f2f-4e58-8546-1de001dfe8e7",
           "kind": "Technology",
           "name": "Redis",
-          "canonical_key": "stackgraph:technology:redis"
+          "canonical_key": "pkg:npm/redis"
         },
         "reason": "AMBIGUOUS",
         "detail": "Cache and task-queue capabilities are both evidenced; the placements are not mutually exclusive but must not be double-counted.",
@@ -4812,7 +4891,7 @@
           "id": "3135c623-3dba-47b5-8e89-9fa9be8d1a7d",
           "kind": "Technology",
           "name": "NGINX",
-          "canonical_key": "stackgraph:technology:nginx"
+          "canonical_key": "pkg:npm/nginx"
         },
         "reason": "AMBIGUOUS",
         "detail": "Reverse-proxy and ingress-controller roles both match the observed configuration.",
@@ -4828,7 +4907,7 @@
           "id": "5d3e14c0-25f7-476d-8cd3-9f8f0a8bdd40",
           "kind": "Technology",
           "name": "Style Dictionary",
-          "canonical_key": "stackgraph:technology:style-dictionary"
+          "canonical_key": "pkg:npm/style-dictionary"
         },
         "reason": "UNRESOLVED_POLICY",
         "detail": "Custom governed function 'tenant-design-tokens' has no mapping to a canonical or extension cell.",
@@ -4844,7 +4923,7 @@
           "id": "5d67ea84-7ca1-4b27-823c-ec7caf8d501e",
           "kind": "Technology",
           "name": "Theo",
-          "canonical_key": "stackgraph:technology:theo"
+          "canonical_key": "pkg:npm/theo"
         },
         "reason": "UNRESOLVED_POLICY",
         "detail": "Custom governed function 'tenant-design-tokens' has no mapping to a canonical or extension cell.",
@@ -4860,7 +4939,7 @@
           "id": "96de52e4-fd76-4a6f-884e-85c075909ac6",
           "kind": "Technology",
           "name": "Crystal Reports",
-          "canonical_key": "stackgraph:technology:crystal-reports"
+          "canonical_key": "pkg:npm/crystal-reports"
         },
         "reason": "FILTERED",
         "detail": "Withheld by the active confidence filter.",
@@ -4886,13 +4965,13 @@
     "unobserved_cells": 11,
     "unbound_cells": 2,
     "strong": 20,
-    "adequate": 6,
-    "weak": 1,
+    "adequate": 5,
+    "weak": 2,
     "at_risk": 0,
     "governed_cells": 7,
-    "cells_with_violations": 1,
-    "unique_technologies": 44,
-    "technology_cell_placements": 46
+    "cells_with_violations": 2,
+    "unique_technologies": 47,
+    "technology_cell_placements": 49
   },
   "input_fingerprint": "sha256:27f05396832cb4f9f7eb66daf9a0be5229a6835916a870d6edf4597991810048"
 }

@@ -5,7 +5,7 @@ export { CanvasCell } from "./CanvasCell";
 export type { CanvasEmphasis, CanvasMode } from "./CanvasCell";
 export { CanvasAspectRail } from "./CanvasAspectRail";
 export { ClassificationTray } from "./ClassificationTray";
-export { OccupantChip } from "./OccupantChip";
+export { OccupantChip, VersionRow } from "./OccupantChip";
 export { PostureMeter } from "./PostureMeter";
 export { CellIcon, isKnownIconKey, unknownIconKeys } from "./icons";
 export {

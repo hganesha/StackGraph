@@ -4,6 +4,7 @@ import Link from "next/link";
 import type {
   CanvasCellComparisonView,
   CanvasCellProjectionView,
+  CanvasOccupantView,
   CanvasPolicyDecision,
   CanvasPolicyIntent,
   ArchitectureCellView,
@@ -30,6 +31,64 @@ import styles from "./architecture.module.css";
  * measured, what the target says, and what the evidence is. Nothing is omitted because
  * it is null — a null measure states why it is null.
  */
+/** Target-decision controls for one resolved version. */
+function DecisionControls({
+  cellKey,
+  occupant,
+  onPolicyIntent,
+}: {
+  cellKey: string;
+  occupant: CanvasOccupantView;
+  onPolicyIntent: (intent: CanvasPolicyIntent) => void;
+}) {
+  return (
+    <div className={styles.decisionControls}>
+      {occupant.policy_status !== "PREFERRED" ? (
+        <button
+          type="button"
+          className={styles.panelAction}
+          onClick={() =>
+            onPolicyIntent({
+              kind: "PROMOTE_FROM_ACTUAL",
+              cell_key: cellKey,
+              technology_id: occupant.technology.id,
+              technology_name: occupant.technology.name,
+            })
+          }
+        >
+          Make this the standard
+        </button>
+      ) : null}
+      <label className={styles.decisionSelectLabel}>
+        <span className={styles.visuallyHidden}>
+          Target decision for {occupant.technology.name}
+        </span>
+        <select
+          className={styles.decisionSelect}
+          value={occupant.policy_status}
+          onChange={(event) =>
+            onPolicyIntent({
+              kind: "SET_TECHNOLOGY_DECISION",
+              cell_key: cellKey,
+              technology_id: occupant.technology.id,
+              technology_name: occupant.technology.name,
+              decision: event.target.value as CanvasPolicyDecision | "UNGOVERNED",
+            })
+          }
+        >
+          {(["PREFERRED", "ALLOWED", "DISCOURAGED", "PROHIBITED", "UNGOVERNED"] as const).map(
+            (decision) => (
+              <option key={decision} value={decision}>
+                {POLICY_LABEL[decision]}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+    </div>
+  );
+}
+
 export function CanvasDetailPanel({
   definition,
   cell,
@@ -131,88 +190,114 @@ export function CanvasDetailPanel({
         ) : null}
       </section>
 
-      {cell.occupants.length ? (
+      {cell.occupant_groups.length ? (
         <section className={styles.panelSection} aria-labelledby="panel-occupants">
           <h3 className={styles.panelSectionTitle} id="panel-occupants">
-            Implementations ({cell.occupant_total})
+            Implementations ({cell.occupant_groups.length} package
+            {cell.occupant_groups.length === 1 ? "" : "s"}
+            {cell.occupant_total > cell.occupant_groups.length
+              ? `, ${cell.occupant_total} versions`
+              : ""}
+            )
           </h3>
           <ul className={styles.occupantList}>
-            {cell.occupants.map((occupant) => (
-              <li key={`${occupant.technology.id}:${occupant.placement_keys.join("|")}`}>
-                <div className={styles.occupantRow}>
-                  <Link href={`/technologies/${occupant.technology.id}`} className={styles.occupantName}>
-                    {occupant.technology.name}
-                  </Link>
-                  <span className={styles.occupantPolicy}>{POLICY_LABEL[occupant.policy_status]}</span>
-                  <ConfidenceChip label={occupant.confidence_label} value={occupant.confidence} />
-                </div>
-                <p className={styles.occupantMeta}>
-                  {occupant.classification.replace("_", " ").toLowerCase()} ·{" "}
-                  {occupant.adoption.applications} apps · {occupant.adoption.repositories} repos ·{" "}
-                  {occupant.adoption.deployments} deployments
-                </p>
-                {occupant.placement_keys.length ? (
-                  <p className={styles.occupantMeta}>
-                    Placed here by: {occupant.placement_keys.join(", ")}
-                  </p>
-                ) : null}
-                <div className={styles.citationRow}>
-                  {occupant.citations.map((citation) => (
-                    <CitationChip
-                      key={citation.fact_id}
-                      label={citation.label}
-                      onOpen={() => openEvidence(citation.fact_id, citation.label)}
-                    />
-                  ))}
-                </div>
-                {canGovern && onPolicyIntent ? (
-                  <div className={styles.decisionControls}>
-                    {occupant.policy_status !== "PREFERRED" ? (
-                      <button
-                        type="button"
-                        className={styles.panelAction}
-                        onClick={() =>
-                          onPolicyIntent({
-                            kind: "PROMOTE_FROM_ACTUAL",
-                            cell_key: cell.cell_key,
-                            technology_id: occupant.technology.id,
-                            technology_name: occupant.technology.name,
-                          })
-                        }
-                      >
-                        Make this the standard
-                      </button>
-                    ) : null}
-                    <label className={styles.decisionSelectLabel}>
-                      <span className={styles.visuallyHidden}>
-                        Target decision for {occupant.technology.name}
-                      </span>
-                      <select
-                        className={styles.decisionSelect}
-                        value={occupant.policy_status}
-                        onChange={(event) =>
-                          onPolicyIntent({
-                            kind: "SET_TECHNOLOGY_DECISION",
-                            cell_key: cell.cell_key,
-                            technology_id: occupant.technology.id,
-                            technology_name: occupant.technology.name,
-                            decision: event.target.value as CanvasPolicyDecision | "UNGOVERNED",
-                          })
-                        }
-                      >
-                        {(["PREFERRED", "ALLOWED", "DISCOURAGED", "PROHIBITED", "UNGOVERNED"] as const).map(
-                          (decision) => (
-                            <option key={decision} value={decision}>
-                              {POLICY_LABEL[decision]}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </label>
+            {cell.occupant_groups.map((group) => {
+              const multiple = group.members.length > 1;
+              const newest = group.members[0];
+              return (
+                <li key={group.key}>
+                  <div className={styles.occupantRow}>
+                    <Link href={`/technologies/${newest.technology.id}`} className={styles.occupantName}>
+                      {group.label}
+                    </Link>
+                    <span className={styles.occupantPolicy}>{POLICY_LABEL[group.policy_status]}</span>
+                    <ConfidenceChip label={group.confidence_label} value={group.confidence} />
                   </div>
-                ) : null}
-              </li>
-            ))}
+                  <p className={styles.occupantMeta}>
+                    {group.classification.replace("_", " ").toLowerCase()} ·{" "}
+                    {group.adoption.applications} apps · {group.adoption.repositories} repos ·{" "}
+                    {group.adoption.deployments} deployments
+                  </p>
+
+                  {multiple ? (
+                    <details className={styles.versionDetails}>
+                      <summary className={styles.versionSummary}>
+                        {group.members.length} resolved versions
+                        {group.policy_status === "PROHIBITED" || group.policy_status === "DISCOURAGED"
+                          ? " — not all are permitted"
+                          : ""}
+                      </summary>
+                      {/* Per version, because the decision that matters is usually about
+                          one of them: an old major is prohibited while the current one
+                          is preferred, and a collapsed row cannot say which is which. */}
+                      <ul className={styles.versionList}>
+                        {group.members.map((member) => (
+                          <li key={member.technology.id}>
+                            <div className={styles.occupantRow}>
+                              <Link
+                                href={`/technologies/${member.technology.id}`}
+                                className={styles.versionName}
+                              >
+                                {member.technology.name}
+                              </Link>
+                              <span className={styles.occupantPolicy}>
+                                {POLICY_LABEL[member.policy_status]}
+                              </span>
+                            </div>
+                            <p className={styles.occupantMeta}>
+                              {member.adoption.applications} apps · {member.adoption.repositories} repos
+                              {member.placement_keys.length
+                                ? ` · placed by ${member.placement_keys.join(", ")}`
+                                : ""}
+                            </p>
+                            <div className={styles.citationRow}>
+                              {member.citations.map((citation) => (
+                                <CitationChip
+                                  key={citation.fact_id}
+                                  label={citation.label}
+                                  onOpen={() => openEvidence(citation.fact_id, citation.label)}
+                                />
+                              ))}
+                            </div>
+                            {canGovern && onPolicyIntent ? (
+                              <DecisionControls
+                                cellKey={cell.cell_key}
+                                occupant={member}
+                                onPolicyIntent={onPolicyIntent}
+                              />
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : (
+                    <>
+                      {newest.placement_keys.length ? (
+                        <p className={styles.occupantMeta}>
+                          Placed here by: {newest.placement_keys.join(", ")}
+                        </p>
+                      ) : null}
+                      <div className={styles.citationRow}>
+                        {newest.citations.map((citation) => (
+                          <CitationChip
+                            key={citation.fact_id}
+                            label={citation.label}
+                            onOpen={() => openEvidence(citation.fact_id, citation.label)}
+                          />
+                        ))}
+                      </div>
+                      {canGovern && onPolicyIntent ? (
+                        <DecisionControls
+                          cellKey={cell.cell_key}
+                          occupant={newest}
+                          onPolicyIntent={onPolicyIntent}
+                        />
+                      ) : null}
+                    </>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}

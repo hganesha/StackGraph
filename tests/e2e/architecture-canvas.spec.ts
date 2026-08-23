@@ -94,6 +94,29 @@ test.describe("architecture canvas", () => {
     expect(tabbable).toBe(1);
   });
 
+  test("versions of one package collapse into a single chip", async ({ page }) => {
+    await page.goto("/architecture");
+    await waitForCanvas(page);
+
+    const cell = page.locator('[data-cell-key="cell.experience.ui"]');
+    // Three resolved Reacts and one Vue read as two packages, not four technologies.
+    await expect(cell.locator("li")).toHaveCount(2);
+    await expect(cell).toContainText("3 versions");
+
+    // The headline comes from the most severe version. React's current major is
+    // preferred and its oldest is prohibited; the chip must show the prohibition.
+    // (The label is title-case in the DOM and uppercased by CSS.)
+    await expect(cell).toContainText(/Prohibited/i);
+
+    // Expanding happens in the panel, where each version keeps its own decision.
+    await cell.getByRole("heading").click();
+    const panel = page.locator('aside[aria-label$="detail"]');
+    await expect(panel).toContainText("2 packages, 4 versions");
+    await panel.getByText(/3 resolved versions/).click();
+    await expect(panel).toContainText("React@18.3.1");
+    await expect(panel).toContainText("React@16.14.0");
+  });
+
   test("selecting a cell opens the detail panel and Escape closes it", async ({ page }, testInfo) => {
     await page.goto("/architecture");
     await waitForCanvas(page);

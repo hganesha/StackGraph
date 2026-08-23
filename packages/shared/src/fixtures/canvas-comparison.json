@@ -8,10 +8,10 @@
       "cell_key": "cell.experience.ui",
       "actual_state": "POPULATED",
       "baseline_state": "POPULATED",
-      "preferred_in_use": 1,
+      "preferred_in_use": 2,
       "allowed_in_use": 0,
       "discouraged_in_use": 1,
-      "prohibited_in_use": 0,
+      "prohibited_in_use": 1,
       "ungoverned_in_use": 0,
       "required_but_absent": false,
       "unevaluable": false
@@ -80,7 +80,7 @@
       "cell_key": "cell.application.service",
       "actual_state": "POPULATED",
       "baseline_state": "POPULATED",
-      "preferred_in_use": 1,
+      "preferred_in_use": 2,
       "allowed_in_use": 1,
       "discouraged_in_use": 1,
       "prohibited_in_use": 0,
@@ -524,7 +524,7 @@
   "summary": {
     "compared_cells": 43,
     "aligned_cells": 23,
-    "cells_with_violations": 1,
+    "cells_with_violations": 2,
     "required_but_absent_cells": 0,
     "unevaluable_cells": 13,
     "ungoverned_cells": 3
