@@ -1,0 +1,1148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StackGraph — Read the estate back</title>
+<meta name="description" content="Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. StackGraph reads the estate back from source, with evidence under every conclusion.">
+<meta property="og:title" content="StackGraph — Read the estate back">
+<meta property="og:description" content="Software estate intelligence: what you run, why it exists, what it depends on, where it runs, whether it is still viable, and what should change.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF9F6; --card:#FFFFFF; --sunken:#F1EFEA; --rule:#DEDCD4;
+  --ink:#14151A; --ink-2:#403F3A; --ink-3:#6E6C64;
+  --night:#0E0F13; --night-2:#171921; --night-3:#1C1E24; --night-rule:#2C2E36;
+  --snow:#EDEBE4; --snow-2:#A9A79E; --snow-3:#75736B;
+
+  --biz:#D4A843; --biz-lo:#83682A; --biz-hi:#E5CB8E;
+  --ent:#4A6FA5; --ent-lo:#2E4566; --ent-hi:#92A9C9;
+  --oss:#2A9D8F; --oss-lo:#1A6159; --oss-hi:#7FC4BC;
+  --int:#7B5AA6; --int-lo:#4C3867; --int-hi:#B09CCA;
+  --danger:#B3261E; --danger-hi:#E08B84;
+
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --serif:"IBM Plex Serif",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  --measure:34rem;
+  --wide:74rem;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%; scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--serif); font-size:1.0625rem; line-height:1.68;
+  font-synthesis-weight:none; -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+img,svg{max-width:100%}
+a{color:inherit}
+h1,h2,h3,h4{font-family:var(--sans); font-weight:600; letter-spacing:-.018em; line-height:1.12; margin:0}
+p{margin:0 0 1.15em}
+p:last-child{margin-bottom:0}
+
+/* ---------- shared layout ---------- */
+.wrap{width:min(100% - 2.5rem, var(--wide)); margin-inline:auto}
+.col{width:min(100% - 2.5rem, var(--measure)); margin-inline:auto}
+.kicker{
+  font-family:var(--mono); font-size:.6875rem; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3);
+  margin:0 0 1.15rem;
+}
+.night .kicker{color:var(--snow-3)}
+.rule-kicker{display:flex; align-items:center; gap:.85rem}
+.rule-kicker::after{content:""; flex:1; height:1px; background:var(--rule)}
+.night .rule-kicker::after{background:var(--night-rule)}
+
+section{position:relative}
+.night{background:var(--night); color:var(--snow)}
+.night h1,.night h2,.night h3{color:#F6F4EE}
+
+/* reveal */
+.rv{opacity:0; transform:translateY(18px); transition:opacity .7s var(--ease), transform .7s var(--ease)}
+.rv.on{opacity:1; transform:none}
+.rv[data-d="1"]{transition-delay:.09s}
+.rv[data-d="2"]{transition-delay:.18s}
+.rv[data-d="3"]{transition-delay:.27s}
+
+/* ---------- masthead ---------- */
+.mast{
+  position:fixed; inset:0 0 auto 0; z-index:60;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:1rem; padding:.85rem clamp(1.25rem,4vw,2.5rem);
+  font-family:var(--sans);
+  color:#F6F4EE;
+  transition:background .35s var(--ease), color .35s var(--ease), border-color .35s var(--ease);
+  border-bottom:1px solid transparent;
+}
+.mast.solid{background:rgba(250,249,246,.93); backdrop-filter:blur(10px); color:var(--ink); border-bottom-color:var(--rule)}
+.mast.dark{background:rgba(14,15,19,.9); backdrop-filter:blur(10px); border-bottom-color:var(--night-rule)}
+.brand{display:flex; align-items:center; gap:.6rem; text-decoration:none; font-weight:600; font-size:.95rem; letter-spacing:-.01em}
+.brand svg{display:block; flex:none}
+.mast nav{display:flex; align-items:center; gap:1.5rem; font-size:.8125rem}
+.mast nav a{text-decoration:none; opacity:.72; transition:opacity .15s}
+.mast nav a:hover{opacity:1}
+.btn{
+  font-family:var(--sans); font-size:.8125rem; font-weight:600; letter-spacing:-.005em;
+  display:inline-flex; align-items:center; gap:.5rem;
+  padding:.55rem 1rem; border-radius:999px; text-decoration:none; cursor:pointer;
+  border:1px solid currentColor; transition:background .18s var(--ease), color .18s var(--ease), opacity .18s var(--ease)
+}
+.btn-solid{background:#F6F4EE; color:var(--night); border-color:#F6F4EE}
+.mast.solid .btn-solid{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.btn-solid:not(:disabled):hover{background:var(--biz); border-color:var(--biz); color:var(--night)}
+button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
+.btn:disabled{opacity:.4; cursor:not-allowed}
+@media (max-width:820px){ .mast nav{display:none} }
+
+/* ---------- hero ---------- */
+.hero{
+  background:var(--night); color:var(--snow);
+  min-height:100svh; display:flex; align-items:flex-end;
+  padding:8rem 0 clamp(3rem,7vh,5.5rem); overflow:hidden;
+}
+#heroField{position:absolute; inset:0; width:100%; height:100%; opacity:.85}
+.hero .wrap{position:relative; z-index:2}
+.hero::after{
+  content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(120% 85% at 18% 82%, rgba(14,15,19,.94) 0%, rgba(14,15,19,.72) 42%, rgba(14,15,19,.10) 78%);
+}
+.hero h1{
+  font-size:clamp(2.5rem,6.6vw,5.1rem); line-height:.99; letter-spacing:-.035em;
+  max-width:17ch; margin:0 0 1.5rem; color:#FBFAF6; font-weight:600;
+}
+.hero h1 .dim{color:var(--snow-2); display:block}
+.hero .dek{
+  font-family:var(--serif); font-size:clamp(1.0625rem,1.7vw,1.3125rem); line-height:1.55;
+  color:var(--snow-2); max-width:46ch; margin:0 0 2.25rem;
+}
+.hero .dek b{color:#F6F4EE; font-weight:400}
+.hero-cta{display:flex; flex-wrap:wrap; gap:.75rem; align-items:center}
+.hero-meta{
+  margin-top:3.25rem; padding-top:1.15rem; border-top:1px solid var(--night-rule);
+  display:flex; flex-wrap:wrap; gap:2.25rem;
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--snow-3);
+}
+.hero-meta span{display:block; color:var(--snow-2); letter-spacing:.06em}
+
+/* ---------- editorial passages ---------- */
+.passage{padding:clamp(4.5rem,10vh,8rem) 0}
+.passage h2{font-size:clamp(1.85rem,3.7vw,2.9rem); letter-spacing:-.028em; margin:0 0 1.5rem; max-width:18ch}
+.passage.night h2{max-width:20ch}
+.lede{font-size:1.1875rem; line-height:1.62}
+.dropcap::first-letter{
+  font-family:var(--sans); font-weight:600; float:left;
+  font-size:4.05em; line-height:.79; padding:.06em .1em 0 0; margin-right:.02em;
+  color:var(--ent);
+}
+.note{
+  font-family:var(--sans); font-size:.875rem; line-height:1.6; color:var(--ink-3);
+  border-left:2px solid var(--rule); padding-left:1.1rem; margin:2rem 0;
+}
+.night .note{color:var(--snow-2); border-left-color:var(--night-rule)}
+
+.quote{
+  padding:clamp(3.5rem,8vh,6rem) 0; background:var(--sunken);
+  border-block:1px solid var(--rule);
+}
+.quote blockquote{
+  margin:0; font-family:var(--sans); font-weight:500;
+  font-size:clamp(1.6rem,3.6vw,2.6rem); line-height:1.16; letter-spacing:-.028em;
+  max-width:20ch;
+}
+.quote .attr{
+  margin-top:1.5rem; font-family:var(--mono); font-size:.6875rem;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3)
+}
+
+/* ---------- scrollytelling stage ---------- */
+.stage{position:relative}
+.stage-inner{
+  width:min(100% - 2.5rem, var(--wide)); margin-inline:auto;
+  display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr); gap:clamp(2rem,5vw,4.5rem);
+  align-items:start;
+}
+.viz{
+  position:sticky; top:0; height:100svh; padding-top:3.25rem;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.viz svg{width:100%; height:auto; max-height:76svh}
+.steps{padding:14svh 0 22svh}
+.step{min-height:74svh; display:flex; flex-direction:column; justify-content:center; padding:2rem 0}
+.step h3{
+  font-size:1.5rem; letter-spacing:-.02em; margin:0 0 .85rem;
+  transition:color .4s var(--ease); color:var(--snow-3);
+}
+.step p{color:var(--snow-3); transition:color .4s var(--ease); max-width:40ch}
+.step .idx{
+  font-family:var(--mono); font-size:.6875rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--snow-3); margin-bottom:.9rem;
+  display:flex; align-items:center; gap:.7rem; transition:color .4s var(--ease)
+}
+.step .idx::before{
+  content:""; width:1.6rem; height:1px; background:currentColor;
+  transition:width .45s var(--ease), background .4s var(--ease)
+}
+.step.cur h3{color:#F6F4EE}
+.step.cur p{color:var(--snow-2)}
+.step.cur .idx{color:var(--tone,var(--ent-hi))}
+.step.cur .idx::before{width:3.2rem}
+
+@media (max-width:900px){
+  .stage-inner{grid-template-columns:1fr; gap:0}
+  .viz{
+    height:56svh; top:3.3rem; z-index:5; background:var(--night);
+  }
+  .viz::after{
+    content:""; position:absolute; top:100%; left:-2rem; right:-2rem; height:2.75rem;
+    background:linear-gradient(180deg,var(--night),rgba(14,15,19,0)); pointer-events:none;
+  }
+  .viz svg{max-height:50svh}
+  .steps{padding:1.5rem 0 8svh; position:relative; z-index:1}
+  .step{min-height:auto; padding:1.5rem 0 2.75rem}
+  .step h3{color:#F6F4EE} .step p{color:var(--snow-2)}
+}
+@media (max-width:820px){
+  .mast{padding:.6rem 1.15rem}
+  .mast .btn{padding:.45rem .85rem; font-size:.75rem}
+}
+
+/* estate stack svg */
+.plane{opacity:0; transform:translateY(26px); transition:opacity .75s var(--ease), transform .75s var(--ease)}
+.plane.is-on{opacity:1; transform:none}
+.plane .face{transition:fill-opacity .5s var(--ease)}
+.plane.is-cur .face{fill-opacity:.20}
+.plane .lbl{font-family:var(--mono); font-size:12.5px; font-weight:500; letter-spacing:.13em; text-transform:uppercase; fill:var(--snow-2); transition:fill .4s var(--ease)}
+.plane .cnt{font-family:var(--mono); font-size:11.5px; letter-spacing:.04em; fill:var(--snow-3)}
+.plane.is-cur .lbl{fill:#F6F4EE}
+.plane.is-cur .cnt{fill:var(--snow-2)}
+#estate{transition:transform .85s var(--ease)}
+#discovery[data-step="1"] #estate{transform:translateY(225px)}
+#discovery[data-step="2"] #estate{transform:translateY(172px)}
+#discovery[data-step="3"] #estate{transform:translateY(120px)}
+#discovery[data-step="4"] #estate{transform:translateY(67px)}
+#discovery[data-step="5"] #estate{transform:translateY(15px)}
+.riser{opacity:0; transition:opacity .8s var(--ease) .15s}
+.riser.is-on{opacity:.55}
+
+/* ---------- evidence card ---------- */
+.evidence{
+  font-family:var(--mono); font-size:.78125rem; line-height:1.5;
+  background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  overflow:hidden; margin:2.5rem 0;
+  box-shadow:0 1px 0 rgba(20,21,26,.04), 0 12px 30px -22px rgba(20,21,26,.5);
+}
+.night .evidence{background:var(--night-3); border-color:var(--night-rule); box-shadow:none}
+.evidence .ev-head{
+  display:flex; justify-content:space-between; gap:1rem; align-items:center;
+  padding:.7rem .95rem; border-bottom:1px solid var(--rule);
+  background:var(--sunken); font-size:.6875rem; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3)
+}
+.night .evidence .ev-head{background:var(--night-2); border-bottom-color:var(--night-rule); color:var(--snow-3)}
+.ev-row{display:grid; grid-template-columns:8.5rem minmax(0,1fr) auto; gap:.75rem; align-items:baseline; padding:.55rem .95rem; border-bottom:1px solid var(--rule)}
+.night .ev-row{border-bottom-color:var(--night-rule)}
+.ev-row:last-child{border-bottom:0}
+.ev-cls{font-size:.6875rem; font-weight:600; letter-spacing:.09em}
+.ev-cls[data-c="DECLARED"]{color:var(--ent)}
+.ev-cls[data-c="OBSERVED"]{color:var(--oss)}
+.ev-cls[data-c="INFERRED"]{color:var(--int)}
+.ev-cls[data-c="EXTERNAL_MEASURED"]{color:var(--biz-lo)}
+.night .ev-cls[data-c="DECLARED"]{color:var(--ent-hi)}
+.night .ev-cls[data-c="OBSERVED"]{color:var(--oss-hi)}
+.night .ev-cls[data-c="INFERRED"]{color:var(--int-hi)}
+.night .ev-cls[data-c="EXTERNAL_MEASURED"]{color:var(--biz)}
+.ev-src{color:var(--ink-3); overflow-wrap:anywhere}
+.night .ev-src{color:var(--snow-2)}
+.ev-val{color:var(--ink); white-space:nowrap; font-weight:500}
+.night .ev-val{color:var(--snow)}
+.conf{display:inline-flex; gap:2px; vertical-align:baseline; margin-right:.4rem}
+.conf i{width:5px; height:9px; background:currentColor; opacity:.22; display:inline-block; border-radius:1px}
+.conf i.f{opacity:1}
+@media (max-width:640px){
+  .ev-row{grid-template-columns:1fr auto; row-gap:.15rem}
+  .ev-cls{grid-column:1/-1}
+}
+
+/* ---------- capability fan ---------- */
+.fan{margin:2.75rem auto}
+.fan svg{width:100%; height:auto; display:block}
+.fan text{font-family:var(--mono)}
+
+/* ---------- viability card ---------- */
+.viab{
+  border:1px solid var(--night-rule); border-radius:10px; background:var(--night-3);
+  padding:1.35rem 1.4rem 1.5rem; margin:2.5rem 0; font-family:var(--mono);
+}
+.viab-top{display:flex; justify-content:space-between; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:1.35rem}
+.viab-top .pkg{font-size:1.0625rem; font-weight:500; color:#F6F4EE; letter-spacing:-.01em}
+.viab-top .tag{font-size:.6875rem; letter-spacing:.14em; text-transform:uppercase; color:var(--snow-3)}
+.bar{display:grid; grid-template-columns:13rem minmax(0,1fr) 2.6rem; gap:.85rem; align-items:center; font-size:.78125rem; margin-bottom:.62rem}
+.bar .bl{color:var(--snow-2); letter-spacing:.02em}
+.bar .bt{height:5px; background:var(--night-rule); border-radius:3px; overflow:hidden}
+.bar .bt i{display:block; height:100%; width:0; background:var(--tone,var(--ent-hi)); border-radius:3px; transition:width 1.05s var(--ease)}
+.viab.on .bar .bt i{width:var(--w)}
+.bar .bn{text-align:right; color:var(--snow); font-variant-numeric:tabular-nums}
+.viab-sum{margin-top:1.35rem; padding-top:1.15rem; border-top:1px solid var(--night-rule); display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap}
+.viab-sum .score{font-size:2rem; font-weight:500; color:#F6F4EE; letter-spacing:-.02em; line-height:1}
+.viab-sum .score span{font-size:.6875rem; letter-spacing:.14em; text-transform:uppercase; color:var(--snow-3); display:block; margin-bottom:.35rem; font-weight:400}
+.act{
+  font-family:var(--mono); font-size:.75rem; font-weight:600; letter-spacing:.12em;
+  padding:.42rem .85rem; border-radius:999px; border:1px solid var(--danger-hi); color:var(--danger-hi)
+}
+@media (max-width:560px){ .bar{grid-template-columns:1fr; gap:.25rem} .bar .bn{text-align:left} }
+
+/* ---------- propagation ladder ---------- */
+.ladder{display:flex; flex-direction:column; gap:0; font-family:var(--mono); margin:0 auto; max-width:27rem; width:100%}
+.rung{
+  border:1px solid var(--night-rule); border-radius:8px; background:var(--night-3);
+  padding:.68rem .9rem; opacity:.3; transform:translateX(-10px);
+  transition:opacity .5s var(--ease), transform .5s var(--ease), border-color .5s var(--ease), background .5s var(--ease);
+}
+.rung.is-on{opacity:1; transform:none; border-color:var(--tone,var(--ent)); background:var(--night-2)}
+.rung .rl{font-size:.625rem; letter-spacing:.15em; text-transform:uppercase; color:var(--snow-3); margin-bottom:.18rem}
+.rung .rv{font-size:.8125rem; color:var(--snow); opacity:1; transform:none}
+.rung.is-on .rl{color:var(--tone,var(--ent-hi))}
+.link{height:1.15rem; width:1px; background:var(--night-rule); margin-inline:auto; position:relative; flex:none}
+.link.is-on{background:var(--tone,var(--ent-hi)); opacity:.6}
+.link::after{content:""; position:absolute; bottom:-1px; left:50%; transform:translateX(-50%); border:3px solid transparent; border-top-color:currentColor; color:var(--night-rule)}
+.link.is-on::after{color:var(--tone,var(--ent-hi))}
+
+/* ---------- coverage grid ---------- */
+.cover{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr)); gap:.5rem;
+  margin:2.5rem 0; font-family:var(--mono);
+}
+.cell{
+  border:1px solid var(--rule); border-radius:8px; padding:.75rem .8rem .8rem; background:var(--card);
+  min-height:5.6rem; display:flex; flex-direction:column; justify-content:space-between; gap:.5rem;
+}
+.cell .cn{font-size:.75rem; color:var(--ink); line-height:1.35; letter-spacing:-.005em}
+.cell .cs{font-size:.625rem; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3)}
+.cell[data-s="occupied"]{border-color:var(--oss); background:#EEF7F6}
+.cell[data-s="occupied"] .cs{color:var(--oss-lo)}
+.cell[data-s="absent"]{border-color:var(--danger); background:#F9EEED}
+.cell[data-s="absent"] .cs{color:var(--danger)}
+.cell[data-s="n/a"]{background:var(--sunken); color:var(--ink-3)}
+.cell[data-s="n/a"] .cn{color:var(--ink-3)}
+.cell[data-s="unevaluable"]{
+  border-style:dashed; background:repeating-linear-gradient(135deg,var(--sunken) 0 6px,var(--card) 6px 12px);
+}
+.legend{display:flex; flex-wrap:wrap; gap:1.15rem; font-family:var(--mono); font-size:.6875rem; letter-spacing:.06em; color:var(--ink-3); margin-top:1.25rem}
+.legend b{display:inline-block; width:.7rem; height:.7rem; border-radius:2px; margin-right:.45rem; vertical-align:-1px; border:1px solid var(--rule)}
+
+/* ---------- portfolio table ---------- */
+.tbl{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:.8125rem; margin:2.5rem 0}
+.tbl th{
+  text-align:left; font-weight:500; font-size:.625rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-3); padding:0 .75rem .6rem 0; border-bottom:1px solid var(--rule); white-space:nowrap;
+}
+.tbl td{padding:.72rem .75rem .72rem 0; border-bottom:1px solid var(--rule); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .app{color:var(--ink); font-weight:500}
+.tbl .num{text-align:right; font-variant-numeric:tabular-nums; padding-left:1.5rem}
+.tbl td:last-child,.tbl th:last-child{padding-right:0}
+.pill{font-size:.625rem; font-weight:600; letter-spacing:.11em; padding:.22rem .5rem; border-radius:999px; border:1px solid; white-space:nowrap}
+.pill[data-a="REPLATFORM"],.pill[data-a="UPGRADE"]{color:var(--ent-lo); border-color:var(--ent-hi); background:#F1F4F8}
+.pill[data-a="CONSOLIDATE"]{color:var(--int-lo); border-color:var(--int-hi); background:#F4F2F8}
+.pill[data-a="RETIRE"],.pill[data-a="REPLACE"]{color:var(--danger); border-color:#F0D2CF; background:#F9EEED}
+.vocab{display:flex; flex-wrap:wrap; gap:.4rem; margin:2rem 0 0}
+.vocab span{font-family:var(--mono); font-size:.6875rem; letter-spacing:.11em; color:var(--ink-3); border:1px solid var(--rule); border-radius:999px; padding:.3rem .7rem}
+@media (max-width:700px){ .tbl .hide-s{display:none} }
+
+/* ---------- oss migration ---------- */
+.migr{
+  margin:2.5rem 0; border:1px solid var(--night-rule); border-radius:10px; background:var(--night-3);
+  font-family:var(--mono); overflow:hidden;
+}
+.migr-head{display:flex; align-items:center; gap:1rem; padding:.9rem 1rem; border-bottom:1px solid var(--night-rule); background:var(--night-2)}
+.migr-head .from,.migr-head .to{font-size:.9375rem; color:#F6F4EE}
+.migr-head .from{color:var(--snow-2); text-decoration:line-through; text-decoration-color:var(--danger-hi); text-decoration-thickness:1px}
+.migr-head .arrow{color:var(--oss-hi); flex:none}
+.migr-row{display:grid; grid-template-columns:minmax(0,1fr) 1.4rem minmax(0,1fr); gap:.6rem; align-items:center; padding:.55rem 1rem; border-bottom:1px solid var(--night-rule); font-size:.78125rem}
+.migr-row:last-child{border-bottom:0}
+.migr-row .a{color:var(--snow-2)}
+.migr-row .b{color:var(--snow)}
+.migr-row .m{color:var(--oss-hi); text-align:center}
+.migr-foot{display:flex; flex-wrap:wrap; gap:1.5rem; padding:.8rem 1rem; background:var(--night-2); border-top:1px solid var(--night-rule); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; color:var(--snow-3)}
+.migr-foot b{color:var(--snow); font-weight:500; letter-spacing:.04em}
+
+/* ---------- closing ---------- */
+.close{padding:clamp(5rem,12vh,9rem) 0 clamp(3.5rem,8vh,6rem); text-align:left}
+.close h2{font-size:clamp(2.1rem,5vw,3.6rem); letter-spacing:-.032em; max-width:16ch; margin-bottom:1.6rem}
+.close .dek{font-size:1.125rem; color:var(--snow-2); max-width:44ch; margin-bottom:2.5rem}
+.close-cta{display:flex; flex-wrap:wrap; gap:.75rem}
+.foot{border-top:1px solid var(--night-rule); padding:2rem 0 3rem; font-family:var(--mono); font-size:.6875rem; letter-spacing:.08em; color:var(--snow-3)}
+.foot-in{display:flex; flex-wrap:wrap; justify-content:space-between; gap:1.25rem 2rem; align-items:center}
+.foot a{text-decoration:none; opacity:.8}
+.foot a:hover{opacity:1; color:var(--snow)}
+.foot-links{display:flex; flex-wrap:wrap; gap:1.5rem}
+.foot-by{
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:.6rem 1.1rem;
+  margin-top:1.6rem; padding-top:1.3rem; border-top:1px solid var(--night-rule);
+}
+.foot-by span{color:var(--snow-2)}
+.foot-by a{color:var(--snow-2); text-decoration:none; border-bottom:1px solid var(--snow-3); padding-bottom:1px; opacity:1}
+.foot-by a:hover{color:var(--snow); border-bottom-color:var(--snow)}
+
+
+/* ---------- hero animation keyframes ---------- */
+@keyframes nodeIn{from{opacity:0; transform:scale(.35)} to{opacity:var(--o,1); transform:none}}
+@keyframes edgeIn{from{opacity:0} to{opacity:var(--o,.2)}}
+#heroField circle{transform-box:fill-box; transform-origin:center}
+
+/* ---------- impact ladder on small screens ---------- */
+@media (max-width:900px){
+  #impact .viz{height:auto; padding:1.1rem 0 1.4rem}
+  #impact .rung{padding:.5rem .8rem}
+  #impact .rung .rl{font-size:.5625rem}
+  #impact .rung .rv{font-size:.75rem}
+  #impact .link{height:.75rem}
+}
+@media (max-width:420px){
+  #impact .rung{padding:.4rem .7rem}
+  #impact .link{height:.6rem}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important}
+  .rv{opacity:1; transform:none}
+  .plane{opacity:1; transform:none}
+  .rung{opacity:1; transform:none}
+}
+</style>
+</head>
+<body>
+
+<header class="mast" id="mast">
+  <a class="brand" href="#top">
+    <svg width="22" height="22" viewBox="0 0 44 44" aria-hidden="true">
+      <g stroke-linejoin="round">
+        <path d="M22 5 40 13 22 21 4 13Z" fill="#4A6FA5" opacity=".95"/>
+        <path d="M22 15 40 23 22 31 4 23Z" fill="#7B5AA6" opacity=".95"/>
+        <path d="M22 25 40 33 22 41 4 33Z" fill="#2A9D8F" opacity=".95"/>
+      </g>
+    </svg>
+    StackGraph
+  </a>
+  <nav>
+    <a href="#discovery">Discovery</a>
+    <a href="#evidence">Evidence</a>
+    <a href="#ecosystem">Ecosystem</a>
+    <a href="#impact">Impact</a>
+    <a href="#portfolio">Portfolio</a>
+  </nav>
+  <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <svg id="heroField" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+  <div class="wrap">
+    <p class="kicker">Software estate intelligence</p>
+    <h1>The code is writing itself.<span class="dim">Nobody is drawing the map.</span></h1>
+    <p class="dek">Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. <b>StackGraph reads the estate back from source</b> and keeps a live model of what you run, why it exists, what it depends on, where it runs, and what is worth changing.</p>
+    <div class="hero-cta">
+      <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
+      <a class="btn" href="#discovery">Read the story</a>
+    </div>
+    <div class="hero-meta">
+      <div>Read-only repository access<span>Minimal permissions</span></div>
+      <div>Evidence class on every fact<span>Declared · Observed · Inferred</span></div>
+      <div>Tenant-isolated<span>Shared OSS reference graph</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COLD OPEN ============ -->
+<section class="passage" id="open">
+  <div class="col">
+    <p class="lede dropcap rv">At 11:40 on a Tuesday night, an agent working on a payments service needed to debounce a form handler. It reached for the utility library it had seen most often, added the dependency, and moved on. The pull request was four lines long. The tests passed. A reviewer approved it the next morning without opening the lockfile.</p>
+    <p class="rv" data-d="1">Every party behaved reasonably. The agent solved the problem it was given. The reviewer read the diff it was shown. And the estate changed shape without anyone recording that it had.</p>
+    <p class="rv" data-d="2">Now multiply that by the number of agents currently committing to your repositories, running at a cadence no architecture review board was designed to sample.</p>
+    <p class="note rv" data-d="3">The enterprise problem is no longer that organizations have vulnerabilities. It is that they can no longer answer plain questions about their own software: what exists, what business function it serves, what it is built from, where it runs, whether the technology is still a sound bet, and what should change.</p>
+  </div>
+</section>
+
+<section class="quote">
+  <div class="col">
+    <blockquote>The cost of producing software is falling faster than the cost of understanding it.</blockquote>
+    <p class="attr">StackGraph product thesis, §2.1</p>
+  </div>
+</section>
+
+<!-- ============ STAGE 1 : THE ESTATE ASSEMBLES ============ -->
+<section class="stage night" id="discovery">
+  <div class="stage-inner">
+    <div class="viz">
+      <svg viewBox="0 0 760 640" role="img" aria-label="Five stacked planes of an enterprise software estate: repositories, code and technology, dependencies, deployment, and applications and business.">
+        <defs>
+          <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="7"/>
+          </filter>
+        </defs>
+        <g id="estate">
+          <g class="riser" data-layer="2" stroke="#92A9C9" stroke-width="1.1">
+            <line x1="165" y1="100" x2="364" y2="216"/>
+            <line x1="405" y1="93" x2="229" y2="229"/>
+            <line x1="373" y1="104" x2="420" y2="201"/>
+            <line x1="321" y1="74" x2="270" y2="159"/>
+            <line x1="149" y1="85" x2="260" y2="173"/>
+          </g>
+          <g class="riser" data-layer="3" stroke="#7FC4BC" stroke-width="1.1">
+            <line x1="364" y1="216" x2="240" y2="314"/>
+            <line x1="229" y1="229" x2="213" y2="302"/>
+            <line x1="420" y1="201" x2="233" y2="338"/>
+            <line x1="270" y1="159" x2="137" y2="312"/>
+            <line x1="260" y1="173" x2="314" y2="277"/>
+          </g>
+          <g class="riser" data-layer="4" stroke="#92A9C9" stroke-width="1.1">
+            <line x1="240" y1="314" x2="243" y2="416"/>
+            <line x1="213" y1="302" x2="119" y2="410"/>
+            <line x1="233" y1="338" x2="237" y2="397"/>
+            <line x1="137" y1="312" x2="330" y2="389"/>
+            <line x1="314" y1="277" x2="243" y2="416"/>
+          </g>
+          <g class="riser" data-layer="5" stroke="#E5CB8E" stroke-width="1.1">
+            <line x1="243" y1="416" x2="211" y2="508"/>
+            <line x1="119" y1="410" x2="263" y2="520"/>
+            <line x1="237" y1="397" x2="220" y2="535"/>
+            <line x1="330" y1="389" x2="379" y2="526"/>
+            <line x1="243" y1="416" x2="251" y2="499"/>
+          </g>
+          <g class="plane" data-layer="1" style="--tone:#92A9C9">
+            <path class="face" d="M270 43 L470 95 L270 147 L70 95 Z" fill="#4A6FA5" fill-opacity=".085" stroke="#4A6FA5" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#4A6FA5" stroke-opacity=".45" stroke-width="1">
+              <line x1="165" y1="100" x2="279" y2="120"/>
+              <line x1="218" y1="106" x2="373" y2="104"/>
+              <line x1="405" y1="93" x2="228" y2="126"/>
+              <line x1="279" y1="120" x2="321" y2="74"/>
+              <line x1="373" y1="104" x2="273" y2="83"/>
+              <line x1="228" y1="126" x2="149" y2="85"/>
+              <line x1="321" y1="74" x2="165" y2="100"/>
+              <line x1="273" y1="83" x2="218" y2="106"/>
+            </g>
+              <circle cx="165" cy="100" r="5.2" fill="#92A9C9"/>
+              <circle cx="218" cy="106" r="3.4" fill="#92A9C9"/>
+              <circle cx="405" cy="93" r="3.4" fill="#92A9C9"/>
+              <circle cx="279" cy="120" r="3.4" fill="#92A9C9"/>
+              <circle cx="373" cy="104" r="5.2" fill="#92A9C9"/>
+              <circle cx="228" cy="126" r="3.4" fill="#92A9C9"/>
+              <circle cx="321" cy="74" r="3.4" fill="#92A9C9"/>
+              <circle cx="273" cy="83" r="3.4" fill="#92A9C9"/>
+              <circle cx="149" cy="85" r="5.2" fill="#92A9C9"/>
+            <line x1="478" y1="95" x2="478" y2="95" stroke="#4A6FA5" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="92">REPOSITORIES</text>
+            <text class="cnt" x="492" y="108">1,284 connected</text>
+          </g>
+          <g class="plane" data-layer="2" style="--tone:#92A9C9">
+            <path class="face" d="M270 148 L470 200 L270 252 L70 200 Z" fill="#4A6FA5" fill-opacity=".085" stroke="#4A6FA5" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#4A6FA5" stroke-opacity=".45" stroke-width="1">
+              <line x1="364" y1="216" x2="291" y2="217"/>
+              <line x1="191" y1="219" x2="420" y2="201"/>
+              <line x1="229" y1="229" x2="148" y2="195"/>
+              <line x1="291" y1="217" x2="270" y2="159"/>
+              <line x1="420" y1="201" x2="284" y2="195"/>
+              <line x1="148" y1="195" x2="260" y2="173"/>
+              <line x1="270" y1="159" x2="209" y2="207"/>
+              <line x1="284" y1="195" x2="213" y2="174"/>
+              <line x1="260" y1="173" x2="364" y2="216"/>
+              <line x1="209" y1="207" x2="191" y2="219"/>
+            </g>
+              <circle cx="364" cy="216" r="5.2" fill="#92A9C9"/>
+              <circle cx="191" cy="219" r="3.4" fill="#92A9C9"/>
+              <circle cx="229" cy="229" r="3.4" fill="#92A9C9"/>
+              <circle cx="291" cy="217" r="3.4" fill="#92A9C9"/>
+              <circle cx="420" cy="201" r="5.2" fill="#92A9C9"/>
+              <circle cx="148" cy="195" r="3.4" fill="#92A9C9"/>
+              <circle cx="270" cy="159" r="3.4" fill="#92A9C9"/>
+              <circle cx="284" cy="195" r="3.4" fill="#92A9C9"/>
+              <circle cx="260" cy="173" r="5.2" fill="#92A9C9"/>
+              <circle cx="209" cy="207" r="3.4" fill="#92A9C9"/>
+              <circle cx="213" cy="174" r="3.4" fill="#92A9C9"/>
+            <line x1="478" y1="200" x2="478" y2="200" stroke="#4A6FA5" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="197">CODE &amp; TECHNOLOGY</text>
+            <text class="cnt" x="492" y="213">6,203 technologies</text>
+          </g>
+          <g class="plane" data-layer="3" style="--tone:#7FC4BC">
+            <path class="face" d="M270 253 L470 305 L270 357 L70 305 Z" fill="#2A9D8F" fill-opacity=".085" stroke="#2A9D8F" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#2A9D8F" stroke-opacity=".45" stroke-width="1">
+              <line x1="240" y1="314" x2="303" y2="296"/>
+              <line x1="403" y1="306" x2="233" y2="338"/>
+              <line x1="213" y1="302" x2="261" y2="276"/>
+              <line x1="303" y1="296" x2="137" y2="312"/>
+              <line x1="233" y1="338" x2="317" y2="309"/>
+              <line x1="261" y1="276" x2="314" y2="277"/>
+              <line x1="137" y1="312" x2="217" y2="281"/>
+              <line x1="317" y1="309" x2="357" y2="325"/>
+              <line x1="314" y1="277" x2="141" y2="297"/>
+              <line x1="217" y1="281" x2="360" y2="290"/>
+              <line x1="357" y1="325" x2="240" y2="314"/>
+              <line x1="141" y1="297" x2="403" y2="306"/>
+            </g>
+              <circle cx="240" cy="314" r="5.2" fill="#7FC4BC"/>
+              <circle cx="403" cy="306" r="3.4" fill="#7FC4BC"/>
+              <circle cx="213" cy="302" r="3.4" fill="#7FC4BC"/>
+              <circle cx="303" cy="296" r="3.4" fill="#7FC4BC"/>
+              <circle cx="233" cy="338" r="5.2" fill="#7FC4BC"/>
+              <circle cx="261" cy="276" r="3.4" fill="#7FC4BC"/>
+              <circle cx="137" cy="312" r="3.4" fill="#7FC4BC"/>
+              <circle cx="317" cy="309" r="3.4" fill="#7FC4BC"/>
+              <circle cx="314" cy="277" r="5.2" fill="#7FC4BC"/>
+              <circle cx="217" cy="281" r="3.4" fill="#7FC4BC"/>
+              <circle cx="357" cy="325" r="3.4" fill="#7FC4BC"/>
+              <circle cx="141" cy="297" r="3.4" fill="#7FC4BC"/>
+              <circle cx="360" cy="290" r="5.2" fill="#7FC4BC"/>
+            <line x1="478" y1="305" x2="478" y2="305" stroke="#2A9D8F" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="302">DEPENDENCIES</text>
+            <text class="cnt" x="492" y="318">148,922 resolved edges</text>
+          </g>
+          <g class="plane" data-layer="4" style="--tone:#92A9C9">
+            <path class="face" d="M270 358 L470 410 L270 462 L70 410 Z" fill="#4A6FA5" fill-opacity=".085" stroke="#4A6FA5" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#4A6FA5" stroke-opacity=".45" stroke-width="1">
+              <line x1="243" y1="416" x2="376" y2="413"/>
+              <line x1="287" y1="418" x2="237" y2="397"/>
+              <line x1="119" y1="410" x2="164" y2="411"/>
+              <line x1="376" y1="413" x2="330" y2="389"/>
+              <line x1="237" y1="397" x2="166" y2="397"/>
+              <line x1="164" y1="411" x2="243" y2="416"/>
+              <line x1="330" y1="389" x2="287" y2="418"/>
+            </g>
+              <circle cx="243" cy="416" r="5.2" fill="#92A9C9"/>
+              <circle cx="287" cy="418" r="3.4" fill="#92A9C9"/>
+              <circle cx="119" cy="410" r="3.4" fill="#92A9C9"/>
+              <circle cx="376" cy="413" r="3.4" fill="#92A9C9"/>
+              <circle cx="237" cy="397" r="5.2" fill="#92A9C9"/>
+              <circle cx="164" cy="411" r="3.4" fill="#92A9C9"/>
+              <circle cx="330" cy="389" r="3.4" fill="#92A9C9"/>
+              <circle cx="166" cy="397" r="3.4" fill="#92A9C9"/>
+            <line x1="478" y1="410" x2="478" y2="410" stroke="#4A6FA5" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="407">DEPLOYMENT</text>
+            <text class="cnt" x="492" y="423">412 declared targets</text>
+          </g>
+          <g class="plane" data-layer="5" style="--tone:#E5CB8E">
+            <path class="face" d="M270 463 L470 515 L270 567 L70 515 Z" fill="#D4A843" fill-opacity=".085" stroke="#D4A843" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#D4A843" stroke-opacity=".45" stroke-width="1">
+              <line x1="211" y1="508" x2="297" y2="487"/>
+              <line x1="251" y1="499" x2="220" y2="535"/>
+              <line x1="263" y1="520" x2="310" y2="521"/>
+              <line x1="297" y1="487" x2="379" y2="526"/>
+              <line x1="220" y1="535" x2="211" y2="508"/>
+              <line x1="310" y1="521" x2="251" y2="499"/>
+            </g>
+              <circle cx="211" cy="508" r="5.2" fill="#E5CB8E"/>
+              <circle cx="251" cy="499" r="3.4" fill="#E5CB8E"/>
+              <circle cx="263" cy="520" r="3.4" fill="#E5CB8E"/>
+              <circle cx="297" cy="487" r="3.4" fill="#E5CB8E"/>
+              <circle cx="220" cy="535" r="5.2" fill="#E5CB8E"/>
+              <circle cx="310" cy="521" r="3.4" fill="#E5CB8E"/>
+              <circle cx="379" cy="526" r="3.4" fill="#E5CB8E"/>
+            <line x1="478" y1="515" x2="478" y2="515" stroke="#D4A843" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="512">APPLICATIONS &amp; BUSINESS</text>
+            <text class="cnt" x="492" y="528">96 capabilities mapped</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <div class="steps">
+      <div class="step" data-index="1" style="--tone:#92A9C9">
+        <p class="idx">01 / Sensor</p>
+        <h3>Connect read-only and start at the repository</h3>
+        <p>A read-only connection to your repository host is the first sensor. StackGraph reads languages and their proportions, build systems, monorepo boundaries, service boundaries, ownership metadata, manifests, lockfiles, and infrastructure files. A repository is where the reading starts. It is not the answer.</p>
+      </div>
+      <div class="step" data-index="2" style="--tone:#92A9C9">
+        <p class="idx">02 / Technology</p>
+        <h3>Separate what is listed from what is used</h3>
+        <p>Scanners parse package.json, pyproject.toml, lockfiles, tsconfig, framework configuration, and the imports themselves. A package sitting in a manifest and a package referenced in production code are recorded as different facts, because they lead to different decisions.</p>
+      </div>
+      <div class="step" data-index="3" style="--tone:#7FC4BC">
+        <p class="idx">03 / Dependencies</p>
+        <h3>Resolve the graph so a finding can be explained</h3>
+        <p>Direct, transitive, dev, peer, and optional edges are resolved with the registry origin, the integrity hash, and the lockfile behavior that produced them. When something is wrong three hops down, the path from your application to it is printable.</p>
+      </div>
+      <div class="step" data-index="4" style="--tone:#92A9C9">
+        <p class="idx">04 / Deployment</p>
+        <h3>Read the intended runtime out of the repository</h3>
+        <p>Dockerfiles, Compose, Kubernetes, Helm, Terraform, CloudFormation, Pulumi, and CI pipelines are normalized into compute type, environment, and provider. Declared intent now, observed runtime later, with the drift between them reported rather than averaged away.</p>
+      </div>
+      <div class="step" data-index="5" style="--tone:#E5CB8E">
+        <p class="idx">05 / Business</p>
+        <h3>Attach the technology to something worth money</h3>
+        <p>Applications map upward to capability, process, function, and value chain stage, from curated business maps, service catalogs, imported architecture data, and inference that carries its own confidence. This is the layer that turns a finding into a decision somebody owns.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EVIDENCE ============ -->
+<section class="passage" id="evidence">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter two · Evidence</p>
+    <h2 class="rv">A manifest is a claim, not an inventory.</h2>
+    <p class="lede rv" data-d="1">A package listed in <code style="font-family:var(--mono);font-size:.9em">package.json</code> means somebody once wanted it there. It says nothing about whether the code still calls it, how much of it is reached, or what job it is doing. Most tooling collapses that distinction and then reports a number nobody can defend in a review.</p>
+    <p class="rv" data-d="2">StackGraph refuses to collapse it. Every fact carries the class of evidence that produced it, and that class stays attached wherever the fact travels.</p>
+
+    <div class="evidence rv" data-d="3">
+      <div class="ev-head"><span>repo / payments-api</span><span>scan 0c41f8a</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="DECLARED">DECLARED</span><span class="ev-src">package.json:14</span><span class="ev-val">lodash ^4.17.21</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">src/forms/useDebounce.ts:3</span><span class="ev-val">import { debounce }</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">src/report/group.ts:11</span><span class="ev-val">import { groupBy }</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">src/api/normalize.ts:7</span><span class="ev-val">import { get }</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="EXTERNAL_MEASURED">EXTERNAL_MEASURED</span><span class="ev-src">deps.dev · 2026-08-19</span><span class="ev-val">3 of 305 exports reached</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="INFERRED">INFERRED</span><span class="ev-src">capability: collection and timing utilities</span><span class="ev-val"><span class="conf"><i class="f"></i><i class="f"></i><i></i></span>0.72</span></div>
+    </div>
+
+    <p class="rv">Raw observation and StackGraph's reading of it are stored apart. <span style="font-family:var(--mono);font-size:.88em">FACT: last release 4.2 years ago</span> is a different record from <span style="font-family:var(--mono);font-size:.88em">ASSESSMENT: maintenance health LOW</span>. An architect can argue with the second without anyone re-litigating the first, which is the only way this kind of conclusion survives contact with the team that owns the code.</p>
+    <p class="note rv">No material conclusion without evidence. A number on a screen that cannot open into the file, line, registry response, advisory, or curated record behind it does not belong on the screen.</p>
+  </div>
+</section>
+
+<!-- ============ FUNCTION BEFORE PACKAGE ============ -->
+<section class="passage" style="background:var(--sunken); border-block:1px solid var(--rule)">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter three · Judgment</p>
+    <h2 class="rv">Ask what the code needs done.</h2>
+    <p class="lede rv" data-d="1">An engine that matches package to package will answer the lodash question with another utility library. That is the wrong question. Three functions are in use, and once you know which three, the decision space opens up.</p>
+  </div>
+
+  <div class="wrap fan rv" data-d="2" style="max-width:52rem">
+    <svg viewBox="0 0 760 340" role="img" aria-label="Three observed lodash symbols converge on an inferred capability, which fans out to four scored candidate answers.">
+      <g fill="none" stroke="#2A9D8F" stroke-opacity=".5" stroke-width="1.25">
+        <path d="M180 73 C215 73 215 170 250 170"/>
+        <path d="M180 163 C215 163 215 170 250 170"/>
+        <path d="M180 253 C215 253 215 170 250 170"/>
+      </g>
+      <g fill="none" stroke="#4A6FA5" stroke-opacity=".45" stroke-width="1.25">
+        <path d="M430 170 C465 170 465 56 500 56"/>
+        <path d="M430 170 C465 170 465 122 500 122"/>
+        <path d="M430 170 C465 170 465 188 500 188"/>
+        <path d="M430 170 C465 170 465 254 500 254"/>
+      </g>
+
+      <g font-family="IBM Plex Mono, monospace">
+        <g fill="#FFFFFF" stroke="#AAD8D2">
+          <rect x="0" y="46" width="180" height="54" rx="7"/>
+          <rect x="0" y="136" width="180" height="54" rx="7"/>
+          <rect x="0" y="226" width="180" height="54" rx="7"/>
+        </g>
+        <g font-size="10" letter-spacing="1.4" fill="#1A6159">
+          <text x="13" y="67">OBSERVED</text><text x="13" y="157">OBSERVED</text><text x="13" y="247">OBSERVED</text>
+        </g>
+        <g font-size="13" fill="#14151A">
+          <text x="13" y="87">debounce</text><text x="13" y="177">groupBy</text><text x="13" y="267">get</text>
+        </g>
+
+        <rect x="250" y="130" width="180" height="80" rx="7" fill="#F4F2F8" stroke="#B09CCA"/>
+        <text x="264" y="153" font-size="10" letter-spacing="1.4" fill="#4C3867">INFERRED CAPABILITY</text>
+        <text x="264" y="175" font-size="13" fill="#14151A">collection and</text>
+        <text x="264" y="193" font-size="13" fill="#14151A">timing utilities</text>
+
+        <g fill="#FFFFFF" stroke="#B7C5DB">
+          <rect x="500" y="30" width="260" height="52" rx="7"/>
+          <rect x="500" y="96" width="260" height="52" rx="7"/>
+          <rect x="500" y="162" width="260" height="52" rx="7"/>
+          <rect x="500" y="228" width="260" height="52" rx="7"/>
+        </g>
+        <g font-size="12" fill="#14151A">
+          <text x="513" y="52">focused debounce dependency</text>
+          <text x="513" y="118">native JavaScript</text>
+          <text x="513" y="184">lodash-es</text>
+          <text x="513" y="250">retain lodash</text>
+        </g>
+        <g font-size="10" fill="#6E6C64" letter-spacing=".4">
+          <text x="513" y="70">fit 94 · 1 call site</text>
+          <text x="513" y="136">fit 88 · 2 call sites</text>
+          <text x="513" y="202">fit 71 · bundle only</text>
+          <text x="513" y="268">fit 55 · baseline</text>
+        </g>
+        <g>
+          <rect x="690" y="64" width="56" height="4" rx="2" fill="#D7DFEB"/><rect x="690" y="64" width="53" height="4" rx="2" fill="#4A6FA5"/>
+          <rect x="690" y="130" width="56" height="4" rx="2" fill="#D7DFEB"/><rect x="690" y="130" width="49" height="4" rx="2" fill="#4A6FA5"/>
+          <rect x="690" y="196" width="56" height="4" rx="2" fill="#D7DFEB"/><rect x="690" y="196" width="40" height="4" rx="2" fill="#4A6FA5"/>
+          <rect x="690" y="262" width="56" height="4" rx="2" fill="#D7DFEB"/><rect x="690" y="262" width="31" height="4" rx="2" fill="#4A6FA5"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="col">
+    <p class="rv">Candidates are drawn from your own organizational standards, the implementations already running inside your estate, the public ecosystem, and the runtime you are already paying for. They are scored on capability fit, runtime compatibility, internal adoption, maintenance health, migration surface, and dependency complexity. Sometimes the best replacement for a dependency is no dependency.</p>
+    <p class="rv">And the answer never arrives as a single line. Counter-signals ship next to the recommendation, because retry semantics do differ, integration tests will be required, and a recommendation that hides its own weak points does not survive an architecture review.</p>
+  </div>
+</section>
+
+<!-- ============ DUPLICATION ============ -->
+<section class="passage">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter four · Repetition</p>
+    <h2 class="rv">Four teams already built the same thing.</h2>
+    <p class="lede rv" data-d="1">Package-level cleanup is the small prize. The larger one is organizational: the same capability implemented independently across an estate, each version maintained by people who do not know the others exist.</p>
+    <div class="evidence rv" data-d="2">
+      <div class="ev-head"><span>capability / pdf generation</span><span>4 implementations</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">billing/invoice-pdf</span><span class="ev-val">since 2019</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">claims/claims-doc</span><span class="ev-val">since 2021</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">legal/contract-renderer</span><span class="ev-val">since 2023</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">platform/shared-document-service</span><span class="ev-val">since 2024</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="INFERRED">INFERRED</span><span class="ev-src">candidate consolidation · 3 of 4</span><span class="ev-val"><span class="conf"><i class="f"></i><i class="f"></i><i></i></span>review</span></div>
+    </div>
+    <p class="rv">Candidates come from structural fingerprints, dependency and symbol usage, embeddings over the implementations themselves, and covering tests where they exist. Similarity is offered as a candidate for review and never as proof of equivalence, because the fourth implementation usually exists for a reason somebody in the building still remembers.</p>
+    <p class="rv">Counted across the estate, the same signal produces a measure of technology entropy: how much variation exists per capability, which teams are introducing it, and whether it is growing. Variation is not automatically waste. It just has to be visible before anyone can argue about it.</p>
+  </div>
+</section>
+
+<!-- ============ OSS ECOSYSTEM ============ -->
+<section class="passage night" id="ecosystem">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter five · The outside world</p>
+    <h2 class="rv">The ecosystem already ran the experiment.</h2>
+    <p class="lede rv" data-d="1" style="color:var(--snow-2)">Millions of public repositories record which technologies were adopted, which were abandoned, what replaced them, and roughly what the swap cost. StackGraph maintains a reference graph around the technologies your estate actually contains rather than crawling everything, then keeps release recency, release cadence, maintainer activity and concentration, archive state, license, runtime compatibility, adoption trend, and co-occurrence against each one.</p>
+    <p class="rv" data-d="2" style="color:var(--snow-2)">The most useful part of it is the migration graph. Watch a public repository where one technology leaves and another arrives while the behavior around it stays put. Aggregate thousands of those and a migration stops being folklore.</p>
+
+    <div class="migr rv" data-d="3">
+      <div class="migr-head">
+        <span class="from">axios</span>
+        <svg class="arrow" width="26" height="12" viewBox="0 0 26 12" aria-hidden="true"><path d="M0 6h22M17 1l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+        <span class="to">native fetch</span>
+      </div>
+      <div class="migr-row"><span class="a">axios.get(url)</span><span class="m">&rarr;</span><span class="b">fetch(url)</span></div>
+      <div class="migr-row"><span class="a">response.data</span><span class="m">&rarr;</span><span class="b">await response.json()</span></div>
+      <div class="migr-row"><span class="a">interceptors</span><span class="m">&rarr;</span><span class="b">wrapper or middleware</span></div>
+      <div class="migr-row"><span class="a">timeout option</span><span class="m">&rarr;</span><span class="b">AbortSignal.timeout()</span></div>
+      <div class="migr-foot">
+        <span>Observed migrations <b>2,847</b></span>
+        <span>Median files touched <b>8</b></span>
+        <span>Complexity <b>LOW</b></span>
+        <span>Reverted within 90 days <b>3.1%</b></span>
+      </div>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">That pattern is reusable in both directions. It tells an architect what the change will cost, and it gives a coding agent the context to perform the change correctly once a human has approved it.</p>
+    <p class="note rv">Installed base is a poor guide to trajectory. A technology can hold an enormous footprint while almost no new system chooses it. StackGraph tracks new-project selection, upgrade velocity, migration-in rate, and migration-out rate separately, so a large estate does not get mistaken for a healthy one.</p>
+  </div>
+</section>
+
+<!-- ============ VIABILITY ============ -->
+<section class="passage night" style="padding-top:0">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter six · Viability</p>
+    <h2 class="rv">A package can be secure and still be a bad bet.</h2>
+    <p class="lede rv" data-d="1" style="color:var(--snow-2)">Vulnerability management asks one question and answers it well. It has nothing to say about a dependency with no known CVEs, no maintainer, no release since 2022, and no compatibility story for the runtime you are moving to. That package passes every scanner in the building.</p>
+
+    <div class="viab rv" data-d="2" id="viabCard">
+      <div class="viab-top">
+        <span class="pkg">request@2.88.2</span>
+        <span class="tag">Present in 24 repositories</span>
+      </div>
+      <div class="bar" style="--tone:var(--oss-hi)"><span class="bl">Security</span><span class="bt"><i style="--w:82%"></i></span><span class="bn">82</span></div>
+      <div class="bar" style="--tone:var(--danger-hi)"><span class="bl">Supportability</span><span class="bt"><i style="--w:18%"></i></span><span class="bn">18</span></div>
+      <div class="bar" style="--tone:var(--danger-hi)"><span class="bl">Ecosystem health</span><span class="bt"><i style="--w:24%"></i></span><span class="bn">24</span></div>
+      <div class="bar" style="--tone:var(--ent-hi)"><span class="bl">Performance opportunity</span><span class="bt"><i style="--w:47%"></i></span><span class="bn">47</span></div>
+      <div class="bar" style="--tone:var(--danger-hi)"><span class="bl">Organizational alignment</span><span class="bt"><i style="--w:31%"></i></span><span class="bn">31</span></div>
+      <div class="bar" style="--tone:var(--oss-hi)"><span class="bl">Replaceability</span><span class="bt"><i style="--w:91%"></i></span><span class="bn">91</span></div>
+      <div class="viab-sum">
+        <div class="score"><span>Overall viability</span>38</div>
+        <span class="act">REPLACE</span>
+      </div>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">Viability is deliberately kept as several numbers rather than one. Security, maintenance, adoption, compatibility, and organizational fit fail in different ways and get fixed by different people, and collapsing them into a single opaque grade destroys the information that made the score worth computing.</p>
+    <p class="rv" style="color:var(--snow-2)">The same treatment rolls upward. An application carries its own profile: dependency viability, runtime health, architecture fitness, deployment fitness, technology entropy, and business criticality, each traceable back down to the repositories that produced it.</p>
+  </div>
+</section>
+
+<!-- ============ STAGE 2 : BUSINESS IMPACT PROPAGATION ============ -->
+<section class="stage night" id="impact">
+  <div class="stage-inner">
+    <div class="viz">
+      <div class="ladder" role="img" aria-label="A vulnerability propagating upward from a package version through repository, service, application, business capability, and value chain stage.">
+        <div class="rung" data-layer="1" style="--tone:var(--danger-hi)"><div class="rl">Vulnerability</div><div class="rv">CVE-2026-31884 · CRITICAL</div></div>
+        <div class="link" data-layer="2" style="--tone:var(--oss-hi)"></div>
+        <div class="rung" data-layer="2" style="--tone:var(--oss-hi)"><div class="rl">Package version</div><div class="rv">xml-parse@1.4.2 · transitive, depth 3</div></div>
+        <div class="link" data-layer="3" style="--tone:var(--ent-hi)"></div>
+        <div class="rung" data-layer="3" style="--tone:var(--ent-hi)"><div class="rl">Repository</div><div class="rv">billing/invoice-pdf</div></div>
+        <div class="link" data-layer="4" style="--tone:var(--ent-hi)"></div>
+        <div class="rung" data-layer="4" style="--tone:var(--ent-hi)"><div class="rl">Service</div><div class="rv">invoice-render · 2 prod environments</div></div>
+        <div class="link" data-layer="5" style="--tone:var(--ent-hi)"></div>
+        <div class="rung" data-layer="5" style="--tone:var(--ent-hi)"><div class="rl">Application</div><div class="rv">Billing Platform</div></div>
+        <div class="link" data-layer="6" style="--tone:var(--biz)"></div>
+        <div class="rung" data-layer="6" style="--tone:var(--biz)"><div class="rl">Business capability</div><div class="rv">Invoice Customer · criticality 5</div></div>
+        <div class="link" data-layer="7" style="--tone:var(--biz)"></div>
+        <div class="rung" data-layer="7" style="--tone:var(--biz)"><div class="rl">Value chain stage</div><div class="rv">Order to Cash · owner Finance Ops</div></div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step" data-index="1" data-reveal="2" style="--tone:var(--danger-hi)">
+        <p class="idx">01 / The finding</p>
+        <h3>Most tooling stops at the package</h3>
+        <p>A scanner returns a critical advisory against a transitive dependency three hops down. It is correct, it is unranked, and it arrives alongside four hundred others. Nobody can tell from this alone whether it matters this quarter.</p>
+      </div>
+      <div class="step" data-index="2" data-reveal="4" style="--tone:var(--ent-hi)">
+        <p class="idx">02 / The code</p>
+        <h3>Walk it up to something that runs</h3>
+        <p>The resolved graph names the repository that pulled it in and the service built from that repository, with the deployment evidence showing it reaches two production environments and one public entry point.</p>
+      </div>
+      <div class="step" data-index="3" data-reveal="6" style="--tone:var(--biz)">
+        <p class="idx">03 / The business</p>
+        <h3>Give it a name the board recognizes</h3>
+        <p>The business map carries this service into the Billing Platform, and the Billing Platform into a capability rated criticality 5 with a named owner. The advisory becomes potential exposure in customer invoicing.</p>
+      </div>
+      <div class="step" data-index="4" data-reveal="7" style="--tone:var(--biz)">
+        <p class="idx">04 / The general case</p>
+        <h3>The same walk runs for everything else</h3>
+        <p>An unsupported runtime, an abandoned package, an unmaintained base image, a single-region deployment, an on-prem dependency under a cloud-exit program. Each one propagates along the identical path, which is what makes a mixed list of technical findings rankable against each other.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PORTFOLIO ============ -->
+<section class="passage" id="portfolio">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter seven · Allocation</p>
+    <h2 class="rv">Where the next ten million goes.</h2>
+    <p class="lede rv" data-d="1">Findings without ranking are a backlog, and backlogs get funded last. Modernization is an allocation problem: business importance weighed against the viability gap and the opportunity, discounted by confidence, divided by what the migration will actually cost.</p>
+  </div>
+
+  <div class="wrap rv" data-d="2" style="max-width:56rem">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="width:2rem">#</th><th>Application</th>
+          <th class="hide-s">Business impact</th>
+          <th class="num">Viability</th>
+          <th class="hide-s">Effort</th>
+          <th>Action</th>
+          <th class="num">Priority</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td class="app">Billing API</td><td class="hide-s">Tier 1</td><td class="num">41</td><td class="hide-s">Medium</td><td><span class="pill" data-a="UPGRADE">UPGRADE</span></td><td class="num">94</td></tr>
+        <tr><td>2</td><td class="app">Customer Profile</td><td class="hide-s">Tier 1</td><td class="num">58</td><td class="hide-s">Low</td><td><span class="pill" data-a="CONSOLIDATE">CONSOLIDATE</span></td><td class="num">88</td></tr>
+        <tr><td>3</td><td class="app">Document Rendering</td><td class="hide-s">Tier 2</td><td class="num">52</td><td class="hide-s">Medium</td><td><span class="pill" data-a="CONSOLIDATE">CONSOLIDATE</span></td><td class="num">71</td></tr>
+        <tr><td>4</td><td class="app">Partner Feed Gateway</td><td class="hide-s">Tier 2</td><td class="num">63</td><td class="hide-s">Low</td><td><span class="pill" data-a="REPLATFORM">REPLATFORM</span></td><td class="num">64</td></tr>
+        <tr><td>5</td><td class="app">Legacy Reporting</td><td class="hide-s">Tier 4</td><td class="num">22</td><td class="hide-s">Low</td><td><span class="pill" data-a="RETIRE">RETIRE</span></td><td class="num">57</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p class="rv">Every recommendation lands in a controlled vocabulary, which is the boring detail that makes a portfolio countable. You can ask how many applications are queued for retirement this year and get an answer, rather than a search across free text written by eleven different architects.</p>
+    <div class="vocab rv">
+      <span>RETAIN</span><span>UPGRADE</span><span>REMOVE</span><span>REPLACE</span><span>CONSOLIDATE</span><span>REFACTOR</span><span>REBUILD</span><span>REPLATFORM</span><span>RETIRE</span><span>INVESTIGATE</span>
+    </div>
+    <p class="note rv">A recommendation is a proposal, not an instruction. Each one carries its review state, and StackGraph tracks the lag between a decision being accepted and anything landing in a repository. Accepted work sitting untouched past thirty days is itself a reportable finding.</p>
+  </div>
+</section>
+
+<!-- ============ NEGATIVE SPACE / CANVAS ============ -->
+<section class="passage" style="background:var(--sunken); border-block:1px solid var(--rule)">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter eight · Absence</p>
+    <h2 class="rv">An empty result is not a clean bill of health.</h2>
+    <p class="lede rv" data-d="1">Every scanner in this category enumerates things that exist. Ask one what your estate is missing and it returns nothing, which the reader takes as reassurance when it usually means unobserved. The Architecture Canvas holds a fixed frame of architectural concerns and fills it from evidence, so absence has somewhere to appear.</p>
+  </div>
+
+  <div class="wrap rv" data-d="2" style="max-width:58rem">
+    <div class="cover">
+      <div class="cell" data-s="occupied"><span class="cn">Service runtime</span><span class="cs">Node 20 · Python 3.12</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">API edge</span><span class="cs">3 gateways</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">Identity and access</span><span class="cs">4 implementations</span></div>
+      <div class="cell" data-s="absent"><span class="cn">Secrets management</span><span class="cs">Absent · 61 repos</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">Observability</span><span class="cs">OpenTelemetry</span></div>
+      <div class="cell" data-s="n/a"><span class="cn">Stream processing</span><span class="cs">Not applicable</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">Data store</span><span class="cs">PostgreSQL + 2</span></div>
+      <div class="cell" data-s="absent"><span class="cn">Resilience policy</span><span class="cs">Absent · target v4</span></div>
+      <div class="cell" data-s="unevaluable"><span class="cn">Caching</span><span class="cs">Unevaluable</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">Build and delivery</span><span class="cs">GitHub Actions</span></div>
+      <div class="cell" data-s="unevaluable"><span class="cn">Infrastructure as code</span><span class="cs">9 repos unscanned</span></div>
+      <div class="cell" data-s="n/a"><span class="cn">Content delivery</span><span class="cs">Not applicable</span></div>
+      <div class="cell" data-s="occupied"><span class="cn">Background jobs</span><span class="cs">Celery + BullMQ</span></div>
+      <div class="cell" data-s="absent"><span class="cn">Feature management</span><span class="cs">Absent · target v4</span></div>
+      <div class="cell" data-s="unevaluable"><span class="cn">Batch and ETL</span><span class="cs">2 ecosystems unparsed</span></div>
+    </div>
+    <div class="legend">
+      <span><b style="background:#CFE9E5;border-color:#2A9D8F"></b>Occupied</span>
+      <span><b style="background:#F3D6D3;border-color:#B3261E"></b>Absent with sufficient evidence</span>
+      <span><b style="background:#E7E4DB;border-color:#CFCCC2"></b>Deliberately not applicable</span>
+      <span><b style="background:repeating-linear-gradient(135deg,#E7E4DB 0 4px,#FFF 4px 8px);border-style:dashed;border-color:#B8B5AB"></b>Not evaluable yet</span>
+    </div>
+  </div>
+
+  <div class="col">
+    <p class="rv" style="margin-top:2.5rem">Those last two states are the ones that matter. A cell marked not applicable was ruled out on purpose in a versioned tenant profile, with a record of who ruled it out. A cell marked not evaluable means StackGraph is telling you it cannot see, which is a different sentence from telling you there is nothing there.</p>
+    <p class="rv">The same honesty runs at estate level. An assurance score reports what share of the estate the platform can actually reason over, scored separately for scan freshness, analyzable ecosystems, evidence completeness, connector health, and repository availability, so a gap is attributed to the thing that caused it instead of being smoothed into an average.</p>
+    <p class="rv">Set a governed target profile beside the observed canvas and the difference between the architecture you approved and the architecture you have becomes a diff, versioned and auditable, rather than a slide somebody maintains by hand.</p>
+  </div>
+</section>
+
+<!-- ============ CLOSE ============ -->
+<section class="close night" id="start">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Begin</p>
+    <h2 class="rv">Point it at one repository.</h2>
+    <p class="dek rv" data-d="1">Grant read-only access, point StackGraph at a single repository, and watch it resolve into technologies, dependencies, deployment targets, and the capabilities it serves. The estate view is the same reading, repeated.</p>
+    <div class="close-cta rv" data-d="2">
+      <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
+      <a class="btn" href="#">Read the specification</a>
+    </div>
+    <p class="note rv" data-d="3" style="margin-top:3rem">Source content is not retained in model prompts, traces, or external systems beyond the data-handling policy you configure. Derived embeddings and caches stay tenant-isolated unless they came from public canonical artifacts. The OSS reference graph is shared; nothing about your estate is.</p>
+  </div>
+
+  <footer class="foot" style="margin-top:clamp(3.5rem,8vh,6rem)">
+    <div class="col foot-in">
+      <span>StackGraph · Software estate intelligence</span>
+      <span class="foot-links">
+        <a href="#discovery">Discovery</a><a href="#evidence">Evidence</a><a href="#ecosystem">Ecosystem</a><a href="#impact">Impact</a><a href="#portfolio">Portfolio</a>
+      </span>
+    </div>
+    <div class="col foot-by">
+      <span>Hari Venkataraman</span>
+      <a href="mailto:hariganesh@outlook.com">hariganesh@outlook.com</a>
+    </div>
+  </footer>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- hero node field ---------- */
+  (function(){
+    var svg = document.getElementById('heroField');
+    if(!svg) return;
+    var W = 1600, H = 900, N = 78;
+    var tones = ['#92A9C9','#92A9C9','#7FC4BC','#B09CCA','#E5CB8E'];
+    var rnd = (function(s){ return function(){ s = (s*1664525+1013904223)%4294967296; return s/4294967296; }; })(20260823);
+    var pts = [];
+    for(var i=0;i<N;i++){
+      var t = i/N;
+      // bias later nodes toward the right: the estate grows outward over time
+      var x = (0.18 + 0.86*rnd()*(0.35+0.9*t)) * W;
+      var y = (0.06 + 0.88*rnd()) * H;
+      pts.push({x:Math.min(x,W-30), y:y, t:t, c:tones[Math.floor(rnd()*tones.length)]});
+    }
+    var edges = [];
+    for(var a=0;a<pts.length;a++){
+      for(var b=a+1;b<pts.length;b++){
+        var dx=pts[a].x-pts[b].x, dy=(pts[a].y-pts[b].y)*1.6;
+        if(dx*dx+dy*dy < 175*175) edges.push([a,b]);
+      }
+    }
+    var eg = document.createElementNS('http://www.w3.org/2000/svg','g');
+    eg.setAttribute('stroke-width','1');
+    edges.forEach(function(e){
+      var l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1',pts[e[0]].x.toFixed(1)); l.setAttribute('y1',pts[e[0]].y.toFixed(1));
+      l.setAttribute('x2',pts[e[1]].x.toFixed(1)); l.setAttribute('y2',pts[e[1]].y.toFixed(1));
+      l.setAttribute('stroke',pts[e[0]].c);
+      l.style.setProperty('--o','.20');
+      if(reduce){ l.style.opacity='.20'; }
+      else { l.style.opacity='0'; l.style.animation='edgeIn .9s var(--ease) forwards'; l.style.animationDelay=(0.5+Math.max(pts[e[0]].t,pts[e[1]].t)*5.2).toFixed(2)+'s'; }
+      eg.appendChild(l);
+    });
+    svg.appendChild(eg);
+    pts.forEach(function(p,i){
+      var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx',p.x.toFixed(1)); c.setAttribute('cy',p.y.toFixed(1));
+      c.setAttribute('r', (i%7===0?5.5:3.2).toFixed(1));
+      c.setAttribute('fill',p.c);
+      c.style.setProperty('--o', i%7===0 ? '.95' : '.6');
+      if(reduce){ c.style.opacity = i%7===0 ? '.95' : '.6'; }
+      else { c.style.opacity='0'; c.style.animation='nodeIn .7s var(--ease) forwards'; c.style.animationDelay=(0.35+p.t*5.2).toFixed(2)+'s'; }
+      svg.appendChild(c);
+    });
+    if(!reduce){
+      var ticking=false;
+      window.addEventListener('scroll', function(){
+        if(ticking) return; ticking=true;
+        requestAnimationFrame(function(){
+          var y = window.scrollY;
+          if(y < window.innerHeight*1.2) svg.style.transform = 'translate3d(0,'+(y*0.14).toFixed(1)+'px,0)';
+          ticking=false;
+        });
+      }, {passive:true});
+    }
+  })();
+
+  /* ---------- reveal on scroll ---------- */
+  var revealer = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(!en.isIntersecting) return;
+      en.target.classList.add('on');
+      revealer.unobserve(en.target);
+    });
+  }, {rootMargin:'0px 0px -12% 0px', threshold:0.15});
+  document.querySelectorAll('.passage .rv, .quote .rv, .close .rv, .wrap.rv').forEach(function(el){ revealer.observe(el); });
+
+  /* ---------- viability bars ---------- */
+  var viab = document.getElementById('viabCard');
+  if(viab){
+    new IntersectionObserver(function(en, o){
+      if(en[0].isIntersecting){ viab.classList.add('on'); o.disconnect(); }
+    }, {threshold:0.35}).observe(viab);
+  }
+
+  /* ---------- scrollytelling stages ---------- */
+  document.querySelectorAll('.stage').forEach(function(stage){
+    var steps = Array.prototype.slice.call(stage.querySelectorAll('.step'));
+    var layers = Array.prototype.slice.call(stage.querySelectorAll('[data-layer]'));
+    if(!steps.length) return;
+
+    function apply(step){
+      var reveal = Number(step.dataset.reveal || step.dataset.index);
+      var cur = Number(step.dataset.index);
+      steps.forEach(function(s){ s.classList.toggle('cur', s === step); });
+      layers.forEach(function(l){
+        var n = Number(l.dataset.layer);
+        l.classList.toggle('is-on', n <= reveal);
+        l.classList.toggle('is-cur', n === reveal && l.classList.contains('plane'));
+      });
+      stage.dataset.step = cur;
+    }
+
+    apply(steps[0]);
+
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting) apply(en.target);
+      });
+    }, {rootMargin:'-45% 0px -45% 0px', threshold:0});
+    steps.forEach(function(s){ io.observe(s); });
+  });
+
+  /* ---------- masthead ---------- */
+  var mast = document.getElementById('mast');
+  var sections = Array.prototype.slice.call(document.querySelectorAll('main > section'));
+  function updateMast(){
+    var probe = 56, cur = null;
+    for(var k=0;k<sections.length;k++){
+      var r = sections[k].getBoundingClientRect();
+      if(r.top <= probe && r.bottom > probe){ cur = sections[k]; break; }
+    }
+    var scrolled = window.scrollY > 40;
+    var night = cur ? cur.classList.contains('night') || cur.classList.contains('hero') : true;
+    mast.classList.toggle('solid', scrolled && !night);
+    mast.classList.toggle('dark', scrolled && night);
+  }
+  var mTick = false;
+  window.addEventListener('scroll', function(){
+    if(mTick) return; mTick = true;
+    requestAnimationFrame(function(){ updateMast(); mTick = false; });
+  }, {passive:true});
+  window.addEventListener('resize', updateMast);
+  updateMast();
+})();
+</script>
+</body>
+</html>
