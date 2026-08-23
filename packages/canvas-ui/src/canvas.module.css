@@ -696,3 +696,31 @@ button.trayRow:focus-visible {
     transition: none;
   }
 }
+
+.trayNote {
+  margin: 0 0 var(--sg-space-2);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+}
+.trayWarning {
+  margin: 0;
+  padding: var(--sg-space-2);
+  background: var(--sg-color-domain-business-50);
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-business-200);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-color-domain-business-800);
+}
+:global(:root[data-theme="dark"]) .trayWarning {
+  background: transparent;
+  border-color: var(--sg-color-domain-business-700);
+  color: var(--sg-color-domain-business-200);
+}
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .trayWarning {
+    background: transparent;
+    border-color: var(--sg-color-domain-business-700);
+    color: var(--sg-color-domain-business-200);
+  }
+}

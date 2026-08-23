@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type {
-  ArchitectureReferenceModel,
-  CanvasComparison,
+  ArchitectureReferenceModelView,
+  CanvasComparisonView,
   CanvasPolicyIntent,
-  CanvasProjection,
-  CanvasTemplate,
+  CanvasProjectionView,
+  CanvasTemplateModel,
 } from "@stackgraph/shared";
 import { CanvasAspectRail } from "./CanvasAspectRail";
 import { CanvasBand } from "./CanvasBand";
@@ -24,10 +24,10 @@ import {
 import styles from "./canvas.module.css";
 
 export interface ArchitectureCanvasProps {
-  template: CanvasTemplate;
-  referenceModel: ArchitectureReferenceModel;
-  projection: CanvasProjection;
-  comparison?: CanvasComparison | null;
+  template: CanvasTemplateModel;
+  referenceModel: ArchitectureReferenceModelView;
+  projection: CanvasProjectionView;
+  comparison?: CanvasComparisonView | null;
   mode?: CanvasMode;
   density?: "comfortable" | "compact";
   emphasis?: CanvasEmphasis;
@@ -226,7 +226,6 @@ export function ArchitectureCanvas({
           resolved={resolved}
           onSelectOccupant={onSelectOccupant}
           onPolicyIntent={onPolicyIntent}
-          onSelectCell={(cellKey) => onSelectCell?.(cellKey)}
         />
       </div>
 

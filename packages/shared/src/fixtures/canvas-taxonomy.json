@@ -1,0 +1,764 @@
+{
+  "contract_version": "1.0.0",
+  "key": "stackgraph.technical-architecture",
+  "version": "2.0.0",
+  "name": "StackGraph Technical Architecture Taxonomy",
+  "description": "Canonical job-first taxonomy for architecture coverage, governance, and comparison.",
+  "domains": [
+    {
+      "key": "experience",
+      "label": "Experience & Channels",
+      "definition": "Human and external-client interaction surfaces.",
+      "question": "How do humans and external clients interact with the system?",
+      "order": 0
+    },
+    {
+      "key": "application",
+      "label": "Application & Services",
+      "definition": "Application behaviour and service responsibilities.",
+      "question": "Where do application behaviour and service responsibilities execute?",
+      "order": 1
+    },
+    {
+      "key": "integration",
+      "label": "Integration & Messaging",
+      "definition": "Boundary crossing through requests, events, messages, and workflows.",
+      "question": "How do requests, events, and workflows cross boundaries?",
+      "order": 2
+    },
+    {
+      "key": "data",
+      "label": "Data & Information",
+      "definition": "Information storage, retrieval, movement, and processing.",
+      "question": "How is information stored, retrieved, moved, and processed?",
+      "order": 3
+    },
+    {
+      "key": "platform",
+      "label": "Platform & Runtime",
+      "definition": "Runtime, compute, network, and managed platform foundations.",
+      "question": "On what runtime, compute, network, and platform does the system operate?",
+      "order": 4
+    },
+    {
+      "key": "delivery",
+      "label": "Delivery & Operations",
+      "definition": "Build, test, configuration, release, observability, and operation.",
+      "question": "How is software built, tested, released, observed, and operated?",
+      "order": 5
+    }
+  ],
+  "concerns": [
+    {
+      "key": "experience.ui",
+      "domain_key": "experience",
+      "label": "UI rendering & interaction",
+      "definition": "Render and update interactive user interfaces.",
+      "order": 0
+    },
+    {
+      "key": "experience.web",
+      "domain_key": "experience",
+      "label": "Web application boundary",
+      "definition": "Render, route, and serve web application experiences.",
+      "order": 1
+    },
+    {
+      "key": "experience.state",
+      "domain_key": "experience",
+      "label": "Experience state",
+      "definition": "Manage local and remote state consumed by user interfaces.",
+      "order": 2
+    },
+    {
+      "key": "experience.input",
+      "domain_key": "experience",
+      "label": "Input & validation",
+      "definition": "Capture and validate user or external input.",
+      "order": 3
+    },
+    {
+      "key": "experience.design",
+      "domain_key": "experience",
+      "label": "Design systems & accessibility",
+      "definition": "Provide consistent and accessible interface primitives.",
+      "order": 4
+    },
+    {
+      "key": "experience.channels",
+      "domain_key": "experience",
+      "label": "Client channels",
+      "definition": "Deliver experiences to browser, mobile, desktop, and embedded clients.",
+      "order": 5
+    },
+    {
+      "key": "application.service",
+      "domain_key": "application",
+      "label": "Service & API delivery",
+      "definition": "Host request-driven application services and APIs.",
+      "order": 0
+    },
+    {
+      "key": "application.logic",
+      "domain_key": "application",
+      "label": "Domain & application logic",
+      "definition": "Implement business rules and application behaviour.",
+      "order": 1
+    },
+    {
+      "key": "application.persistence",
+      "domain_key": "application",
+      "label": "Persistence adapters",
+      "definition": "Connect application models and queries to persistent stores.",
+      "order": 2
+    },
+    {
+      "key": "application.outbound",
+      "domain_key": "application",
+      "label": "Outbound adapters",
+      "definition": "Call external services and protocols from application code.",
+      "order": 3
+    },
+    {
+      "key": "application.background",
+      "domain_key": "application",
+      "label": "Background execution",
+      "definition": "Run deferred, scheduled, or asynchronous application work.",
+      "order": 4
+    },
+    {
+      "key": "application.workflow",
+      "domain_key": "application",
+      "label": "Workflow execution",
+      "definition": "Run long-lived and failure-tolerant application workflows.",
+      "order": 5
+    },
+    {
+      "key": "application.runtime",
+      "domain_key": "application",
+      "label": "Application runtime",
+      "definition": "Provide runtime and framework hosting for application code.",
+      "order": 6
+    },
+    {
+      "key": "integration.edge",
+      "domain_key": "integration",
+      "label": "Edge & API routing",
+      "definition": "Terminate, govern, and route inbound network requests.",
+      "order": 0
+    },
+    {
+      "key": "integration.contract",
+      "domain_key": "integration",
+      "label": "API contracts",
+      "definition": "Define machine-readable service interfaces and interchange.",
+      "order": 1
+    },
+    {
+      "key": "integration.connectivity",
+      "domain_key": "integration",
+      "label": "Service connectivity",
+      "definition": "Provide service-to-service traffic policy and connectivity.",
+      "order": 2
+    },
+    {
+      "key": "integration.messaging",
+      "domain_key": "integration",
+      "label": "Message routing",
+      "definition": "Queue, route, and acknowledge messages.",
+      "order": 3
+    },
+    {
+      "key": "integration.events",
+      "domain_key": "integration",
+      "label": "Durable event streams",
+      "definition": "Persist ordered and replayable streams of events.",
+      "order": 4
+    },
+    {
+      "key": "integration.stream-processing",
+      "domain_key": "integration",
+      "label": "Stream processing",
+      "definition": "Process stateful or windowed computations over streams.",
+      "order": 5
+    },
+    {
+      "key": "integration.orchestration",
+      "domain_key": "integration",
+      "label": "Integration orchestration",
+      "definition": "Coordinate integration and data movement workflows.",
+      "order": 6
+    },
+    {
+      "key": "integration.identity-access",
+      "domain_key": "integration",
+      "label": "Identity & access",
+      "definition": "Provide shared identity, authentication, authorization, and access-policy decisions.",
+      "order": 7
+    },
+    {
+      "key": "data.database",
+      "domain_key": "data",
+      "label": "Databases",
+      "definition": "Persist and query authoritative application data.",
+      "order": 0
+    },
+    {
+      "key": "data.cache-session",
+      "domain_key": "data",
+      "label": "Cache & session state",
+      "definition": "Keep reusable or session state close to consumers.",
+      "order": 1
+    },
+    {
+      "key": "data.search",
+      "domain_key": "data",
+      "label": "Search & retrieval",
+      "definition": "Index and retrieve text, structured, or vector data.",
+      "order": 2
+    },
+    {
+      "key": "data.object-storage",
+      "domain_key": "data",
+      "label": "Object & file storage",
+      "definition": "Store durable unstructured objects and files.",
+      "order": 3
+    },
+    {
+      "key": "data.analytics",
+      "domain_key": "data",
+      "label": "Warehouse, lake & analytics",
+      "definition": "Store and analyse large analytical data sets.",
+      "order": 4
+    },
+    {
+      "key": "data.processing",
+      "domain_key": "data",
+      "label": "Data processing",
+      "definition": "Transform data through batch or streaming computation.",
+      "order": 5
+    },
+    {
+      "key": "data.movement",
+      "domain_key": "data",
+      "label": "Data movement",
+      "definition": "Schedule, coordinate, and move data between systems.",
+      "order": 6
+    },
+    {
+      "key": "platform.runtime",
+      "domain_key": "platform",
+      "label": "Language & runtime",
+      "definition": "Execute application code in a language runtime.",
+      "order": 0
+    },
+    {
+      "key": "platform.artifact",
+      "domain_key": "platform",
+      "label": "Runtime artifacts",
+      "definition": "Package runnable application artifacts and images.",
+      "order": 1
+    },
+    {
+      "key": "platform.compute",
+      "domain_key": "platform",
+      "label": "Compute targets",
+      "definition": "Provide compute capacity for application workloads.",
+      "order": 2
+    },
+    {
+      "key": "platform.orchestration",
+      "domain_key": "platform",
+      "label": "Workload orchestration",
+      "definition": "Schedule and operate workloads across compute targets.",
+      "order": 3
+    },
+    {
+      "key": "platform.serverless",
+      "domain_key": "platform",
+      "label": "Serverless compute",
+      "definition": "Run managed event-driven functions and services.",
+      "order": 4
+    },
+    {
+      "key": "platform.network",
+      "domain_key": "platform",
+      "label": "Network & ingress",
+      "definition": "Connect workloads and expose platform ingress.",
+      "order": 5
+    },
+    {
+      "key": "platform.provider",
+      "domain_key": "platform",
+      "label": "Cloud & on-prem platform",
+      "definition": "Host workloads in managed cloud or on-premises environments.",
+      "order": 6
+    },
+    {
+      "key": "delivery.build",
+      "domain_key": "delivery",
+      "label": "Build & package",
+      "definition": "Transform and package source for execution.",
+      "order": 0
+    },
+    {
+      "key": "delivery.test",
+      "domain_key": "delivery",
+      "label": "Testing & quality",
+      "definition": "Execute automated tests and code-quality controls.",
+      "order": 1
+    },
+    {
+      "key": "delivery.cicd",
+      "domain_key": "delivery",
+      "label": "CI/CD automation",
+      "definition": "Automate integration, delivery, and deployment workflows.",
+      "order": 2
+    },
+    {
+      "key": "delivery.iac",
+      "domain_key": "delivery",
+      "label": "Infrastructure as code",
+      "definition": "Declare and reconcile infrastructure through code.",
+      "order": 3
+    },
+    {
+      "key": "delivery.configuration",
+      "domain_key": "delivery",
+      "label": "Configuration & secret delivery",
+      "definition": "Deliver runtime configuration and credentials safely.",
+      "order": 4
+    },
+    {
+      "key": "delivery.release",
+      "domain_key": "delivery",
+      "label": "Release & deployment",
+      "definition": "Promote and deploy versioned software releases.",
+      "order": 5
+    },
+    {
+      "key": "delivery.observability",
+      "domain_key": "delivery",
+      "label": "Telemetry & observability",
+      "definition": "Capture and operate on logs, metrics, and traces.",
+      "order": 6
+    },
+    {
+      "key": "delivery.reliability",
+      "domain_key": "delivery",
+      "label": "Reliability operations",
+      "definition": "Detect, respond to, and recover from service failure.",
+      "order": 7
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "ui-rendering",
+      "concern_key": "experience.ui",
+      "name": "UI rendering",
+      "definition": "Render interactive application state.",
+      "aliases": []
+    },
+    {
+      "key": "web-application-boundary",
+      "concern_key": "experience.web",
+      "name": "Web application boundary",
+      "definition": "Render and route web application experiences.",
+      "aliases": [
+        "server-side-rendering",
+        "application-routing"
+      ]
+    },
+    {
+      "key": "experience-state-management",
+      "concern_key": "experience.state",
+      "name": "Experience state management",
+      "definition": "Manage client-local and remotely authoritative state.",
+      "aliases": [
+        "server-state-management",
+        "client-state-management"
+      ]
+    },
+    {
+      "key": "input-validation",
+      "concern_key": "experience.input",
+      "name": "Input and validation",
+      "definition": "Capture form state and validate runtime input.",
+      "aliases": [
+        "runtime-validation",
+        "form-state",
+        "schema-validation"
+      ]
+    },
+    {
+      "key": "accessible-design-system",
+      "concern_key": "experience.design",
+      "name": "Accessible design system",
+      "definition": "Provide styling and accessible UI primitives.",
+      "aliases": [
+        "css-styling",
+        "accessible-ui-primitives"
+      ]
+    },
+    {
+      "key": "client-channel",
+      "concern_key": "experience.channels",
+      "name": "Client channel",
+      "definition": "Deliver browser, mobile, desktop, or embedded clients.",
+      "aliases": []
+    },
+    {
+      "key": "service-api-delivery",
+      "concern_key": "application.service",
+      "name": "Service and API delivery",
+      "definition": "Host request-driven services and APIs.",
+      "aliases": [
+        "http-web-api",
+        "web-application-framework"
+      ]
+    },
+    {
+      "key": "domain-application-logic",
+      "concern_key": "application.logic",
+      "name": "Domain and application logic",
+      "definition": "Implement business rules and application behaviour.",
+      "aliases": []
+    },
+    {
+      "key": "persistence-adapter",
+      "concern_key": "application.persistence",
+      "name": "Persistence adapter",
+      "definition": "Connect application code to persistent stores.",
+      "aliases": [
+        "orm-data-access",
+        "relational-database-access"
+      ]
+    },
+    {
+      "key": "outbound-service-client",
+      "concern_key": "application.outbound",
+      "name": "Outbound service client",
+      "definition": "Issue outbound calls to remote services.",
+      "aliases": [
+        "http-client"
+      ]
+    },
+    {
+      "key": "background-execution",
+      "concern_key": "application.background",
+      "name": "Background execution",
+      "definition": "Execute deferred, asynchronous, or scheduled work.",
+      "aliases": [
+        "background-jobs"
+      ]
+    },
+    {
+      "key": "application-workflow",
+      "concern_key": "application.workflow",
+      "name": "Application workflow",
+      "definition": "Run long-lived failure-tolerant workflows.",
+      "aliases": [
+        "durable-workflow"
+      ]
+    },
+    {
+      "key": "application-runtime",
+      "concern_key": "application.runtime",
+      "name": "Application runtime",
+      "definition": "Host application frameworks and runtime services.",
+      "aliases": [
+        "native-runtime-capability"
+      ]
+    },
+    {
+      "key": "edge-api-routing",
+      "concern_key": "integration.edge",
+      "name": "Edge and API routing",
+      "definition": "Proxy, govern, and route inbound traffic.",
+      "aliases": [
+        "reverse-proxy",
+        "api-gateway"
+      ]
+    },
+    {
+      "key": "machine-api-contract",
+      "concern_key": "integration.contract",
+      "name": "Machine API contract",
+      "definition": "Define machine-readable service interfaces.",
+      "aliases": [
+        "api-contract"
+      ]
+    },
+    {
+      "key": "service-connectivity",
+      "concern_key": "integration.connectivity",
+      "name": "Service connectivity",
+      "definition": "Manage service-to-service traffic and policy.",
+      "aliases": [
+        "service-mesh"
+      ]
+    },
+    {
+      "key": "message-routing",
+      "concern_key": "integration.messaging",
+      "name": "Message routing",
+      "definition": "Queue and route messages with delivery semantics.",
+      "aliases": [
+        "message-broker"
+      ]
+    },
+    {
+      "key": "durable-event-stream",
+      "concern_key": "integration.events",
+      "name": "Durable event stream",
+      "definition": "Persist ordered replayable event streams.",
+      "aliases": []
+    },
+    {
+      "key": "stream-processing",
+      "concern_key": "integration.stream-processing",
+      "name": "Stream processing",
+      "definition": "Process stateful computations over streams.",
+      "aliases": []
+    },
+    {
+      "key": "integration-orchestration",
+      "concern_key": "integration.orchestration",
+      "name": "Integration orchestration",
+      "definition": "Coordinate integration workflows across system boundaries.",
+      "aliases": []
+    },
+    {
+      "key": "identity-access-services",
+      "concern_key": "integration.identity-access",
+      "name": "Identity and access services",
+      "definition": "Provide shared identity, authentication, authorization, and access-policy decisions.",
+      "aliases": [
+        "identity-provider",
+        "authorization"
+      ]
+    },
+    {
+      "key": "database-storage",
+      "concern_key": "data.database",
+      "name": "Database storage",
+      "definition": "Persist and query authoritative data.",
+      "aliases": []
+    },
+    {
+      "key": "cache-session-storage",
+      "concern_key": "data.cache-session",
+      "name": "Cache and session storage",
+      "definition": "Store reusable and session state.",
+      "aliases": [
+        "cache",
+        "session-store"
+      ]
+    },
+    {
+      "key": "search-retrieval",
+      "concern_key": "data.search",
+      "name": "Search and retrieval",
+      "definition": "Index and retrieve text or vector data.",
+      "aliases": [
+        "full-text-search",
+        "vector-search"
+      ]
+    },
+    {
+      "key": "object-file-storage",
+      "concern_key": "data.object-storage",
+      "name": "Object and file storage",
+      "definition": "Store durable unstructured objects and files.",
+      "aliases": []
+    },
+    {
+      "key": "analytical-storage",
+      "concern_key": "data.analytics",
+      "name": "Analytical storage",
+      "definition": "Store data for warehouse, lake, and analytical use.",
+      "aliases": []
+    },
+    {
+      "key": "data-processing",
+      "concern_key": "data.processing",
+      "name": "Data processing",
+      "definition": "Transform data through batch and streaming computation.",
+      "aliases": []
+    },
+    {
+      "key": "data-movement",
+      "concern_key": "data.movement",
+      "name": "Data movement",
+      "definition": "Move and coordinate data between systems.",
+      "aliases": [
+        "data-orchestration"
+      ]
+    },
+    {
+      "key": "language-runtime",
+      "concern_key": "platform.runtime",
+      "name": "Language runtime",
+      "definition": "Execute code in a language runtime.",
+      "aliases": []
+    },
+    {
+      "key": "runtime-artifact",
+      "concern_key": "platform.artifact",
+      "name": "Runtime artifact",
+      "definition": "Package runnable application artifacts.",
+      "aliases": [
+        "deployment-container"
+      ]
+    },
+    {
+      "key": "compute-target",
+      "concern_key": "platform.compute",
+      "name": "Compute target",
+      "definition": "Provide compute capacity for workloads.",
+      "aliases": [
+        "virtual-machine-compute"
+      ]
+    },
+    {
+      "key": "workload-orchestration",
+      "concern_key": "platform.orchestration",
+      "name": "Workload orchestration",
+      "definition": "Schedule workloads across compute targets.",
+      "aliases": [
+        "kubernetes-orchestration"
+      ]
+    },
+    {
+      "key": "serverless-compute",
+      "concern_key": "platform.serverless",
+      "name": "Serverless compute",
+      "definition": "Run managed event-driven functions and services.",
+      "aliases": []
+    },
+    {
+      "key": "platform-networking",
+      "concern_key": "platform.network",
+      "name": "Platform networking",
+      "definition": "Connect workloads and expose ingress.",
+      "aliases": []
+    },
+    {
+      "key": "hosting-platform",
+      "concern_key": "platform.provider",
+      "name": "Hosting platform",
+      "definition": "Host workloads on managed or on-premises platforms.",
+      "aliases": []
+    },
+    {
+      "key": "build-package",
+      "concern_key": "delivery.build",
+      "name": "Build and package",
+      "definition": "Transform and package source for execution.",
+      "aliases": [
+        "build-bundling"
+      ]
+    },
+    {
+      "key": "automated-quality",
+      "concern_key": "delivery.test",
+      "name": "Automated testing and quality",
+      "definition": "Execute automated tests and quality controls.",
+      "aliases": [
+        "unit-testing",
+        "e2e-testing",
+        "automated-testing"
+      ]
+    },
+    {
+      "key": "cicd-automation",
+      "concern_key": "delivery.cicd",
+      "name": "CI/CD automation",
+      "definition": "Automate integration and delivery workflows.",
+      "aliases": []
+    },
+    {
+      "key": "infrastructure-as-code",
+      "concern_key": "delivery.iac",
+      "name": "Infrastructure as code",
+      "definition": "Declare and reconcile infrastructure through code.",
+      "aliases": []
+    },
+    {
+      "key": "configuration-secret-delivery",
+      "concern_key": "delivery.configuration",
+      "name": "Configuration and secret delivery",
+      "definition": "Deliver runtime configuration and credentials.",
+      "aliases": [
+        "secret-management"
+      ]
+    },
+    {
+      "key": "release-deployment",
+      "concern_key": "delivery.release",
+      "name": "Release and deployment",
+      "definition": "Promote and deploy versioned releases.",
+      "aliases": []
+    },
+    {
+      "key": "telemetry-observability",
+      "concern_key": "delivery.observability",
+      "name": "Telemetry and observability",
+      "definition": "Capture and operate on logs, metrics, and traces.",
+      "aliases": [
+        "observability-telemetry",
+        "application-logging"
+      ]
+    },
+    {
+      "key": "reliability-operations",
+      "concern_key": "delivery.reliability",
+      "name": "Reliability operations",
+      "definition": "Detect, respond to, and recover from failure.",
+      "aliases": []
+    }
+  ],
+  "aspects": [
+    {
+      "key": "security-privacy",
+      "label": "Security & privacy",
+      "definition": "Confidentiality, integrity, vulnerability, and privacy controls."
+    },
+    {
+      "key": "identity-access",
+      "label": "Identity & access",
+      "definition": "Authentication, authorization, and access governance."
+    },
+    {
+      "key": "governance-compliance",
+      "label": "Governance & compliance",
+      "definition": "Standards, policy, audit, and regulatory alignment."
+    },
+    {
+      "key": "reliability-resilience",
+      "label": "Reliability & resilience",
+      "definition": "Fault tolerance, recovery, continuity, and availability."
+    },
+    {
+      "key": "observability",
+      "label": "Observability",
+      "definition": "Telemetry and explainability of runtime behaviour."
+    },
+    {
+      "key": "developer-experience",
+      "label": "Developer experience",
+      "definition": "Build, test, delivery, and local-development effectiveness."
+    },
+    {
+      "key": "cost-efficiency",
+      "label": "Cost & efficiency",
+      "definition": "Resource, platform, and operational cost efficiency."
+    },
+    {
+      "key": "data-governance",
+      "label": "Data governance",
+      "definition": "Data ownership, quality, lineage, retention, and policy."
+    }
+  ],
+  "content_hash": "sha256:43019a76723c1d63dd29c50dd2cd06446c348f239a7ecbe503d83594becf0b30"
+}

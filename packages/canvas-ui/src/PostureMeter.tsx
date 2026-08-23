@@ -1,6 +1,6 @@
 "use client";
 
-import type { CanvasCellMeasures } from "@stackgraph/shared";
+import type { CanvasCellMeasuresView } from "@stackgraph/shared";
 import { POSTURE_LABEL, POSTURE_TICKS, POSTURE_TONE } from "./vocabulary";
 import styles from "./canvas.module.css";
 
@@ -14,7 +14,7 @@ export function PostureMeter({
   measures,
   labelled = true,
 }: {
-  measures: CanvasCellMeasures | null;
+  measures: CanvasCellMeasuresView | null;
   labelled?: boolean;
 }) {
   const band = measures?.posture_band ?? null;

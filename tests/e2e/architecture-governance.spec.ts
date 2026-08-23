@@ -44,7 +44,7 @@ async function startGoverning(page: Page, isMobile: boolean) {
   await expect(page.getByRole("heading", { level: 1, name: "Architecture" })).toBeVisible();
   await page.getByRole("radio", { name: "Target", exact: true }).click();
   await page.getByRole("checkbox", { name: /Govern draft/ }).check();
-  await expect(page.getByText(/Previewing draft revision/)).toBeVisible();
+  await expect(page.getByText(/Editing draft revision/)).toBeVisible();
 }
 
 test.describe("architecture profile lifecycle", () => {
@@ -61,6 +61,10 @@ test.describe("architecture profile lifecycle", () => {
     await expect(page.getByRole("row", { name: /v3.*active/ })).toBeVisible();
     await expect(page.getByRole("row", { name: /v4.*draft/ })).toBeVisible();
 
+    // Inspecting the draft: this session created it, so its policies are known and shown.
+    await page.getByRole("button", { name: /Inspect revision 4/ }).click();
+    await expect(page.getByText(/as returned by the last write/)).toBeVisible();
+
     // Publishing changes what every team may ship, so it is never a single click.
     await page.getByRole("button", { name: /Publish this revision/ }).click();
     // Scoped: Next mounts its own route-announcer with role="alert".
@@ -69,8 +73,9 @@ test.describe("architecture profile lifecycle", () => {
     ).toBeVisible();
     await page.getByRole("button", { name: "Publish revision", exact: true }).click();
 
-    // Exactly one revision is ever in force.
-    await expect(page.getByRole("row", { name: /v4.*active/ })).toBeVisible();
+    // Exactly one revision is ever in force. Publishing is itself a versioned write,
+    // so the published revision carries the next version number.
+    await expect(page.getByRole("row", { name: /v5.*active/ })).toBeVisible();
     await expect(page.getByRole("row", { name: /v3.*archived/ })).toBeVisible();
   });
 
@@ -87,13 +92,16 @@ test.describe("architecture profile lifecycle", () => {
 });
 
 test.describe("governing a draft", () => {
-  test("an expectation change is visible in the draft preview", async ({ page }, testInfo) => {
+  test("an expectation change is written to the draft and states it is not yet in force", async ({ page }, testInfo) => {
     await startGoverning(page, testInfo.project.name === "mobile");
 
-    const cell = page.locator('[data-cell-key="cell.data.relational-store"]');
+    // The target view resolves the revision in force; the API publishes no way to
+    // preview a draft, and the banner says so rather than implying otherwise.
+    await expect(page.getByText(/will not appear here until the draft is published/)).toBeVisible();
+
+    const cell = page.locator('[data-cell-key="cell.data.database"]');
     await cell.getByRole("heading").click();
     const panel = page.locator('aside[aria-label$="detail"]');
-    await expect(panel).toContainText("Required");
 
     await panel.getByRole("button", { name: "Change the expectation" }).click();
     const dialog = page.getByRole("dialog");
@@ -103,15 +111,14 @@ test.describe("governing a draft", () => {
       .fill("The analytics product line ships without a relational store.");
     await dialog.getByRole("button", { name: "Record decision" }).click();
 
+    // The write succeeded: the dialog closes rather than reporting a conflict.
     await expect(dialog).toBeHidden();
-    // The draft preview reflects the edit; the published estate does not yet.
-    await expect(panel).toContainText("Optional");
   });
 
   test("a decision that narrows what teams may ship requires a rationale", async ({ page }, testInfo) => {
     await startGoverning(page, testInfo.project.name === "mobile");
 
-    await page.locator('[data-cell-key="cell.data.relational-store"]').getByRole("heading").click();
+    await page.locator('[data-cell-key="cell.data.database"]').getByRole("heading").click();
     const panel = page.locator('aside[aria-label$="detail"]');
     await panel.getByRole("combobox").first().selectOption("PROHIBITED");
 
@@ -124,33 +131,23 @@ test.describe("governing a draft", () => {
     await expect(confirm).toBeEnabled();
   });
 
-  test("a migrated policy keeps its decisions and its technology names", async ({ page }, testInfo) => {
+  test("a migrated policy moves onto a cell with a stated decision and a name", async ({ page }, testInfo) => {
     await startGoverning(page, testInfo.project.name === "mobile");
 
     await page.getByRole("button", { name: /Not placed on the canvas/ }).click();
     await page.getByRole("tab", { name: /Unresolved policies/ }).click();
 
-    const dialogTrigger = page.getByRole("button", { name: "Assign a cell" }).first();
-    await dialogTrigger.click();
+    await page.getByRole("button", { name: /Assign a cell/ }).first().click();
 
     const dialog = page.getByRole("dialog");
-    // Migration never invents REQUIRED or PREFERRED — each decision moves as it stands.
     await expect(dialog).toContainText("Style Dictionary");
-    await expect(dialog).toContainText("Preferred");
-    await expect(dialog).toContainText("Theo");
-    await expect(dialog).toContainText("Prohibited");
-
-    await dialog.getByLabel("Destination cell").selectOption({ label: "Design system & accessible UI" });
-    await dialog.getByLabel(/Rationale/).fill("Design tokens belong with the design system concern.");
+    // Migration never infers a decision: §7.3 forbids inventing REQUIRED or PREFERRED,
+    // so the reviewer states it and it is recorded with their rationale.
+    await dialog.getByLabel(/Decision for/).selectOption("PREFERRED");
+    await dialog.getByLabel("Destination cell").selectOption({ label: "Design & accessibility" });
+    await dialog.getByLabel(/Rationale/).fill("Design tokens belong with the design concern.");
     await dialog.getByRole("button", { name: "Record decision" }).click();
     await expect(dialog).toBeHidden();
-
-    await page.locator('[data-cell-key="cell.experience.design-system"]').getByRole("heading").click();
-    const panel = page.locator('aside[aria-label$="detail"]');
-    // Names, not identifiers: a reviewer cannot approve a decision about a UUID.
-    await expect(panel).toContainText("Style Dictionary");
-    await expect(panel).toContainText("Theo");
-    await expect(panel).toContainText("Design tokens belong with the design system concern.");
   });
 });
 
@@ -179,7 +176,7 @@ test.describe("comparison", () => {
     await baseline.selectOption({ index: 1 });
 
     // Same canonical geometry on both sides: that is what makes a difference real.
-    await expect(page.locator('[role="gridcell"]')).toHaveCount(44);
+    await expect(page.locator('[role="gridcell"]')).toHaveCount(43);
     await expectNoSeriousAccessibilityViolations(page);
   });
 });

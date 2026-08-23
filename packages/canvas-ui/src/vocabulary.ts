@@ -1,5 +1,6 @@
 import type {
   CanvasCellState,
+  ObservationStatus,
   CanvasComparisonCellStatus,
   CanvasOccupantPolicyStatus,
   CanvasPostureBand,
@@ -73,6 +74,9 @@ export const POLICY_LABEL: Record<CanvasOccupantPolicyStatus, string> = {
   ALLOWED: "Allowed",
   DISCOURAGED: "Discouraged",
   PROHIBITED: "Prohibited",
+  // Carried by a policy exception rather than by the standing policy — a distinct
+  // fact from "allowed", and one a reviewer needs to see.
+  EXEMPTED: "Exempted",
   UNGOVERNED: "Ungoverned",
 };
 
@@ -81,6 +85,8 @@ export const POLICY_TONE: Record<CanvasOccupantPolicyStatus, CanvasTone> = {
   ALLOWED: "neutral",
   DISCOURAGED: "caution",
   PROHIBITED: "danger",
+  // An exception is a deliberate, time-boxed decision, not a problem: caution, not danger.
+  EXEMPTED: "caution",
   UNGOVERNED: "quiet",
 };
 
@@ -134,10 +140,9 @@ export const MEASURE_LABEL = {
   conformance: "Conformance",
 } as const;
 
-export const OBSERVATION_LABEL = {
+export const OBSERVATION_LABEL: Record<ObservationStatus, string> = {
   COMPLETE: "Complete",
   PARTIAL: "Partial",
-  STALE: "Stale",
-  UNSUPPORTED: "Unsupported",
-  ABSENT: "No observation",
-} as const;
+  MISSING: "No observation",
+  NOT_APPLICABLE: "Not applicable",
+};

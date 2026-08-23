@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { CanvasEmphasis, CanvasMode } from "@stackgraph/canvas-ui";
-import type { CanvasProjection } from "@stackgraph/shared";
+import type { CanvasProjectionView } from "@stackgraph/shared";
 import styles from "./architecture.module.css";
 
 export type CanvasView = "actual" | "target" | "drift" | "compare";
@@ -51,7 +51,7 @@ export function CanvasControls({
   canWritePolicy?: boolean;
   draftVersion?: number | null;
   canReview: boolean;
-  projection: CanvasProjection | null;
+  projection: CanvasProjectionView | null;
   summaryVisible?: boolean;
   subjectId?: string;
   baselineSubjectId: string | null;

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import type {
-  CanvasCellComparison,
-  CanvasCellProjection,
+  CanvasCellComparisonView,
+  CanvasCellProjectionView,
   CanvasPolicyDecision,
   CanvasPolicyIntent,
-  ArchitectureCellDefinition,
-  MeasureResult,
+  ArchitectureCellView,
+  MeasureResultModel,
 } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip } from "@stackgraph/design-system";
 import {
@@ -39,9 +39,9 @@ export function CanvasDetailPanel({
   onPolicyIntent,
   onRemoveException,
 }: {
-  definition: ArchitectureCellDefinition;
-  cell: CanvasCellProjection;
-  comparison: CanvasCellComparison | null;
+  definition: ArchitectureCellView;
+  cell: CanvasCellProjectionView;
+  comparison: CanvasCellComparisonView | null;
   canGovern: boolean;
   onClose: () => void;
   onPolicyIntent?: (intent: CanvasPolicyIntent) => void;
@@ -74,7 +74,6 @@ export function CanvasDetailPanel({
         {comparison ? (
           <p className={styles.panelBody}>
             <strong>{COMPARISON_LABEL[comparison.status]}</strong> — {comparison.status_reason}
-            {comparison.unevaluable_reason ? ` (${comparison.unevaluable_reason})` : ""}
           </p>
         ) : null}
       </section>
@@ -224,7 +223,7 @@ export function CanvasDetailPanel({
         </h3>
         <p className={styles.panelLead}>
           <strong>{OBSERVATION_LABEL[observation.status]}</strong> · {observation.subjects_observed} of{" "}
-          {observation.subjects_in_scope} subjects · {observation.freshness_status.toLowerCase()}
+          {observation.subjects_in_scope} subjects · {observation.subjects_fresh} fresh
         </p>
         <dl className={styles.panelFacts}>
           <div>
@@ -236,11 +235,6 @@ export function CanvasDetailPanel({
             <dd>{observation.supported_sensor_kinds.join(", ") || "none"}</dd>
           </div>
         </dl>
-        {observation.unsupported_ecosystems.length ? (
-          <p className={styles.panelBody}>
-            Not analyzable here: {observation.unsupported_ecosystems.join(", ")}
-          </p>
-        ) : null}
         {observation.missing_inputs.length ? (
           <ul className={styles.missingList}>
             {observation.missing_inputs.map((input) => (
@@ -264,12 +258,12 @@ export function CanvasDetailPanel({
             </p>
             <ul className={styles.measureList}>
               {(["coverage", "standardisation", "currency", "risk", "conformance"] as const).map((key) => {
-                const result: MeasureResult = measures.components[key];
+                const result: MeasureResultModel = measures.components[key];
                 return (
                   <li key={key} className={styles.measureRow}>
                     <span className={styles.measureName}>{MEASURE_LABEL[key]}</span>
                     <span className={styles.measureValue}>
-                      {result.value === null
+                      {result.value === null || result.value === undefined
                         ? MEASURE_STATUS_LABEL[result.status]
                         : `${Math.round(result.value * 100)}`}
                     </span>
@@ -307,7 +301,9 @@ export function CanvasDetailPanel({
             <ul className={styles.decisionList}>
               {cell.policy.decisions.map((decision) => (
                 <li key={`${decision.technology.id}:${decision.decision}`}>
-                  <span className={styles.decisionName}>{decision.technology.name}</span>
+                  <span className={decision.resolved ? styles.decisionName : styles.decisionUnresolved}>
+                    {decision.technology.name}
+                  </span>
                   <span className={styles.decisionState}>{POLICY_LABEL[decision.decision]}</span>
                 </li>
               ))}
@@ -319,17 +315,19 @@ export function CanvasDetailPanel({
                 <h4 className={styles.panelSubTitle}>Exceptions</h4>
                 <ul className={styles.exceptionList}>
                   {cell.policy.exceptions.map((exception) => (
-                    <li key={exception.id}>
+                    <li key={exception.key}>
                       <span className={styles.exceptionText}>
                         {exception.rationale}
                         {exception.effective_to ? ` (until ${exception.effective_to.slice(0, 10)})` : ""}
-                        {exception.owner ? ` — ${exception.owner}` : ""}
+                        {exception.subject_ids.length
+                          ? ` · ${exception.subject_ids.length} scoped subject${exception.subject_ids.length === 1 ? "" : "s"}`
+                          : " · estate-wide"}
                       </span>
                       {canGovern && onRemoveException ? (
                         <button
                           type="button"
                           className={styles.exceptionRemove}
-                          onClick={() => onRemoveException(cell.cell_key, exception.id)}
+                          onClick={() => onRemoveException(cell.cell_key, exception.key)}
                         >
                           Remove
                           <span className={styles.visuallyHidden}> exception: {exception.rationale}</span>
@@ -340,9 +338,12 @@ export function CanvasDetailPanel({
                 </ul>
               </>
             ) : null}
-            {cell.policy.migrated_function_keys.length ? (
+            {cell.policy.unresolved_decision_count ? (
               <p className={styles.panelMeta}>
-                Migrated from code policies: {cell.policy.migrated_function_keys.join(", ")}
+                {cell.policy.unresolved_decision_count} governed technolog
+                {cell.policy.unresolved_decision_count === 1 ? "y is" : "ies are"} not present in this
+                projection, so only an identifier is available
+                {cell.policy.unresolved_decision_count === 1 ? " for it." : " for them."}
               </p>
             ) : null}
           </>

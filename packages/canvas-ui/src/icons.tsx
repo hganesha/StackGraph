@@ -17,64 +17,95 @@ import {
  * An unknown key resolves to the neutral fallback and is reported by
  * `unknownIconKeys` so a template can be corrected rather than silently degraded.
  */
+/**
+ * Keyed by concern leaf (the last segment of a concern key), because that is the
+ * stable semantic handle the reference model publishes. Cells carry no icon on the
+ * wire: presentation choices do not cross the API boundary (spec §5.2).
+ *
+ * Several leaves repeat across domains — `runtime` and `orchestration` each appear
+ * twice — so keys are qualified where the domain changes the meaning.
+ */
 const REGISTRY: Record<string, TablerIcon> = {
-  activity: IconActivityHeartbeat,
-  alert: IconAlertTriangle,
-  api: IconApi,
-  archive: IconArchive,
-  "arrow-out": IconArrowUpRight,
-  bolt: IconBolt,
-  box: IconBox,
-  "building-warehouse": IconBuildingWarehouse,
-  "clock-cog": IconClockCog,
-  cloud: IconCloud,
-  "cloud-cog": IconCloudCog,
-  container: IconBrandDocker,
-  contract: IconLink,
-  cpu: IconCpu,
-  database: IconDatabase,
-  "database-cog": IconDatabaseCog,
-  "database-share": IconDatabaseShare,
-  devices: IconDevices,
-  "file-code": IconFileCode,
-  form: IconForms,
-  framework: IconWindow,
-  gateway: IconTopologyStar3,
-  key: IconKey,
-  logic: IconBinaryTree,
-  network: IconNetwork,
-  "network-share": IconShare,
-  orchestration: IconHierarchy2,
-  package: IconPackage,
-  palette: IconPalette,
-  pipeline: IconGitBranch,
-  queue: IconStack2,
-  rocket: IconRocket,
-  route: IconRoute,
-  search: IconSearch,
-  server: IconServer2,
-  sitemap: IconSitemap,
+  // experience
+  ui: IconWindow,
+  web: IconWindow,
   state: IconLayoutGrid,
-  stream: IconTransfer,
-  terminal: IconTerminal2,
+  input: IconForms,
+  design: IconPalette,
+  channels: IconDevices,
+  // application
+  service: IconApi,
+  logic: IconBinaryTree,
+  persistence: IconDatabaseCog,
+  outbound: IconArrowUpRight,
+  background: IconClockCog,
+  workflow: IconHierarchy2,
+  "application.runtime": IconBox,
+  // integration
+  edge: IconTopologyStar3,
+  contract: IconLink,
+  connectivity: IconNetwork,
+  messaging: IconStack2,
+  events: IconTransfer,
+  "stream-processing": IconWaveSine,
+  "integration.orchestration": IconSitemap,
+  "identity-access": IconKey,
+  // data
+  database: IconDatabase,
+  "cache-session": IconBolt,
+  search: IconSearch,
+  "object-storage": IconArchive,
+  analytics: IconBuildingWarehouse,
+  processing: IconCpu,
+  movement: IconTransfer,
+  // platform
+  "platform.runtime": IconTerminal2,
+  artifact: IconBrandDocker,
+  compute: IconServer2,
+  "platform.orchestration": IconHierarchy2,
+  serverless: IconCloudCog,
+  network: IconShare,
+  provider: IconCloud,
+  // delivery
+  build: IconPackage,
   test: IconTestPipe,
-  transfer: IconTransfer,
-  "ui-rendering": IconWindow,
-  waveform: IconWaveSine,
+  cicd: IconGitBranch,
+  iac: IconFileCode,
+  configuration: IconKey,
+  release: IconRocket,
+  observability: IconActivityHeartbeat,
+  reliability: IconAlertTriangle,
 };
 
 const FALLBACK = IconBox;
 
-export function isKnownIconKey(key: string): boolean {
-  return key in REGISTRY;
+/**
+ * Resolution tries the domain-qualified key first, so `runtime` under platform and
+ * under application can differ, then falls back to the bare leaf.
+ */
+function resolve(key: string, domainKey?: string): TablerIcon | undefined {
+  if (domainKey && REGISTRY[`${domainKey}.${key}`]) return REGISTRY[`${domainKey}.${key}`];
+  return REGISTRY[key];
+}
+
+export function isKnownIconKey(key: string, domainKey?: string): boolean {
+  return Boolean(resolve(key, domainKey));
 }
 
 export function unknownIconKeys(keys: string[]): string[] {
   return [...new Set(keys.filter((key) => !isKnownIconKey(key)))];
 }
 
-export function CellIcon({ name, size = 16 }: { name: string; size?: number }) {
-  const Component = REGISTRY[name] ?? FALLBACK;
+export function CellIcon({
+  name,
+  domainKey,
+  size = 16,
+}: {
+  name: string;
+  domainKey?: string;
+  size?: number;
+}) {
+  const Component = resolve(name, domainKey) ?? FALLBACK;
   // Decorative: the cell's accessible name comes from its heading, never the glyph.
   return <Component size={size} stroke={1.6} aria-hidden="true" />;
 }
