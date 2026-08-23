@@ -6,6 +6,7 @@ import {
   IconBrain,
   IconDatabase,
   IconFileCode,
+  IconLayoutGrid,
   IconPlugConnected,
   IconRefresh,
   IconScale,
@@ -21,6 +22,7 @@ import { ScanSection } from "@/components/admin/ScanSection";
 import { IntelligenceSection } from "@/components/admin/IntelligenceSection";
 import { GovernanceSection } from "@/components/admin/GovernanceSection";
 import { CodePoliciesSection } from "@/components/admin/CodePoliciesSection";
+import { ArchitectureProfilesSection } from "@/components/admin/ArchitectureProfilesSection";
 import { MembersSection } from "@/components/admin/MembersSection";
 import { ServicesSection } from "@/components/admin/ServicesSection";
 import styles from "@/components/admin/admin.module.css";
@@ -47,6 +49,7 @@ const INTELLIGENCE_VIEWS = [
 const GOVERNANCE_VIEWS = [
   { key: "modernization", label: "Modernization", detail: "Rules, eligibility, and calibration", icon: IconTrendingUp },
   { key: "code", label: "Code policies", detail: "Function technology boundaries", icon: IconFileCode },
+  { key: "architecture", label: "Architecture profile", detail: "Revisions, expectations, and publishing", icon: IconLayoutGrid },
 ] as const;
 
 function SectionTabs({
@@ -182,7 +185,11 @@ export default function AdminPage() {
                 <div id={`policy-panel-${governanceView}`} role="tabpanel" aria-labelledby={`policy-tab-${governanceView}`}>
             {governanceView === "modernization" ? (
               <GovernanceSection initialView={searchParams.get("area")} />
-            ) : <CodePoliciesSection />}
+            ) : governanceView === "code" ? (
+              <CodePoliciesSection />
+            ) : (
+              <ArchitectureProfilesSection />
+            )}
                 </div>
               </div>
             ) : null}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type {
   CanvasCellComparison,
   CanvasCellProjection,
+  CanvasPolicyDecision,
   CanvasPolicyIntent,
   ArchitectureCellDefinition,
   MeasureResult,
@@ -36,6 +37,7 @@ export function CanvasDetailPanel({
   canGovern,
   onClose,
   onPolicyIntent,
+  onRemoveException,
 }: {
   definition: ArchitectureCellDefinition;
   cell: CanvasCellProjection;
@@ -43,6 +45,7 @@ export function CanvasDetailPanel({
   canGovern: boolean;
   onClose: () => void;
   onPolicyIntent?: (intent: CanvasPolicyIntent) => void;
+  onRemoveException?: (cellKey: string, exceptionId: string) => void;
 }) {
   const openEvidence = useEvidenceStore((state) => state.open);
   const observation = cell.observation;
@@ -107,6 +110,26 @@ export function CanvasDetailPanel({
             {cell.expectation.owner ? ` — ${cell.expectation.owner}` : ""}
           </p>
         ) : null}
+        {canGovern && onPolicyIntent ? (
+          <button
+            type="button"
+            className={styles.panelAction}
+            onClick={() =>
+              onPolicyIntent({
+                kind: "SET_EXPECTATION",
+                cell_key: cell.cell_key,
+                expectation: {
+                  applicability: cell.expectation.applicability,
+                  minimum_implementations: cell.expectation.minimum_implementations,
+                  maximum_implementations: cell.expectation.maximum_implementations,
+                  allowed_diversity: cell.expectation.allowed_diversity,
+                },
+              })
+            }
+          >
+            Change the expectation
+          </button>
+        ) : null}
       </section>
 
       {cell.occupants.length ? (
@@ -143,21 +166,51 @@ export function CanvasDetailPanel({
                     />
                   ))}
                 </div>
-                {canGovern && onPolicyIntent && occupant.policy_status !== "PREFERRED" ? (
-                  <button
-                    type="button"
-                    className={styles.panelAction}
-                    onClick={() =>
-                      onPolicyIntent({
-                        kind: "PROMOTE_FROM_ACTUAL",
-                        cell_key: cell.cell_key,
-                        technology_id: occupant.technology.id,
-                        technology_name: occupant.technology.name,
-                      })
-                    }
-                  >
-                    Make this the standard
-                  </button>
+                {canGovern && onPolicyIntent ? (
+                  <div className={styles.decisionControls}>
+                    {occupant.policy_status !== "PREFERRED" ? (
+                      <button
+                        type="button"
+                        className={styles.panelAction}
+                        onClick={() =>
+                          onPolicyIntent({
+                            kind: "PROMOTE_FROM_ACTUAL",
+                            cell_key: cell.cell_key,
+                            technology_id: occupant.technology.id,
+                            technology_name: occupant.technology.name,
+                          })
+                        }
+                      >
+                        Make this the standard
+                      </button>
+                    ) : null}
+                    <label className={styles.decisionSelectLabel}>
+                      <span className={styles.visuallyHidden}>
+                        Target decision for {occupant.technology.name}
+                      </span>
+                      <select
+                        className={styles.decisionSelect}
+                        value={occupant.policy_status}
+                        onChange={(event) =>
+                          onPolicyIntent({
+                            kind: "SET_TECHNOLOGY_DECISION",
+                            cell_key: cell.cell_key,
+                            technology_id: occupant.technology.id,
+                            technology_name: occupant.technology.name,
+                            decision: event.target.value as CanvasPolicyDecision | "UNGOVERNED",
+                          })
+                        }
+                      >
+                        {(["PREFERRED", "ALLOWED", "DISCOURAGED", "PROHIBITED", "UNGOVERNED"] as const).map(
+                          (decision) => (
+                            <option key={decision} value={decision}>
+                              {POLICY_LABEL[decision]}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                  </div>
                 ) : null}
               </li>
             ))}
@@ -264,11 +317,24 @@ export function CanvasDetailPanel({
             {cell.policy.exceptions.length ? (
               <>
                 <h4 className={styles.panelSubTitle}>Exceptions</h4>
-                <ul className={styles.missingList}>
+                <ul className={styles.exceptionList}>
                   {cell.policy.exceptions.map((exception) => (
                     <li key={exception.id}>
-                      {exception.rationale}
-                      {exception.effective_to ? ` (until ${exception.effective_to.slice(0, 10)})` : ""}
+                      <span className={styles.exceptionText}>
+                        {exception.rationale}
+                        {exception.effective_to ? ` (until ${exception.effective_to.slice(0, 10)})` : ""}
+                        {exception.owner ? ` — ${exception.owner}` : ""}
+                      </span>
+                      {canGovern && onRemoveException ? (
+                        <button
+                          type="button"
+                          className={styles.exceptionRemove}
+                          onClick={() => onRemoveException(cell.cell_key, exception.id)}
+                        >
+                          Remove
+                          <span className={styles.visuallyHidden}> exception: {exception.rationale}</span>
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

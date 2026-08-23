@@ -53,6 +53,13 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
     await expectNoSeriousAccessibilityViolations(page);
   }
 
+  // Same WebKit caveat as the tab-order branch above: macOS WebKit routes Meta+K
+  // through the host's own key handling, so the document-level shortcut never fires
+  // under automation. The other desktop engines verify the binding for real.
+  if (testInfo.project.name !== "webkit") {
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await expect(page).toHaveURL(/\/ask$/);
+  }
   await page.keyboard.press("ControlOrMeta+k");
   await expect(page).toHaveURL(/\/ask\?view=ask$/);
 });
