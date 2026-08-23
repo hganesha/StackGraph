@@ -693,6 +693,9 @@ def test_architecture_catalog_endpoints_expose_versioned_canonical_artifacts() -
         app, "GET", "/api/v1/canvas/reference-models/architecture.stackgraph.reference?version=1.0.0",
     ))
     templates = asyncio.run(request(app, "GET", "/api/v1/canvas/templates"))
+    template = asyncio.run(request(
+        app, "GET", "/api/v1/canvas/templates/canvas.stackgraph.reference?version=1.0.0",
+    ))
 
     assert taxonomy.status_code == 200
     assert [domain["key"] for domain in taxonomy.json()["domains"]] == [
@@ -704,6 +707,24 @@ def test_architecture_catalog_endpoints_expose_versioned_canonical_artifacts() -
     assert len(reference_model.json()["cells"]) == 43
     assert templates.status_code == 200
     assert templates.json()["templates"][0]["reference_model_key"] == "architecture.stackgraph.reference"
+    assert template.status_code == 200
+    assert template.json()["key"] == "canvas.stackgraph.reference"
+    assert len(template.json()["bands"]) == 6
+
+
+def test_canvas_template_detail_returns_not_found_for_unknown_key_or_version() -> None:
+    app, _ = app_with_stubs()
+    unknown_key = asyncio.run(request(
+        app, "GET", "/api/v1/canvas/templates/unknown.template",
+    ))
+    unknown_version = asyncio.run(request(
+        app, "GET", "/api/v1/canvas/templates/canvas.stackgraph.reference?version=9.9.9",
+    ))
+
+    assert unknown_key.status_code == 404
+    assert unknown_key.json()["code"] == "CANVAS_TEMPLATE_NOT_FOUND"
+    assert unknown_version.status_code == 404
+    assert unknown_version.json()["code"] == "CANVAS_TEMPLATE_NOT_FOUND"
 
 
 def test_repository_detail_is_exposed_on_versioned_path() -> None:

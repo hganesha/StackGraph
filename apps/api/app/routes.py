@@ -43,6 +43,7 @@ from app.models import (
     CanvasProjectionScope,
     CanvasProjectionSelectorModel,
     CanvasTemplateList,
+    CanvasTemplateModel,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     DeterministicInsightList,
@@ -758,6 +759,29 @@ async def list_canvas_templates(request: Request) -> CanvasTemplateList:
     principal = await _principal(request)
     _require(principal, "view")
     return await _store(request).canvas_templates()
+
+
+@router.get(
+    "/canvas/templates/{key}", response_model=CanvasTemplateModel,
+    response_model_exclude_none=True, operation_id="getCanvasTemplate",
+    tags=["architecture-canvas"],
+)
+async def get_canvas_template(
+    key: str, request: Request, version: str | None = None,
+) -> CanvasTemplateModel:
+    principal = await _principal(request)
+    _require(principal, "view")
+    templates = await _store(request).canvas_templates()
+    template = next(
+        (
+            item for item in templates.templates
+            if item.key == key and (version is None or item.version == version)
+        ),
+        None,
+    )
+    if template is None:
+        raise APIError(404, "CANVAS_TEMPLATE_NOT_FOUND", "The canvas template was not found.")
+    return template
 
 
 @router.get(

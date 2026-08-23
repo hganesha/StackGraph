@@ -102,6 +102,7 @@ import type {
   TenantArchitectureProfileList,
   TenantArchitectureProfileUpdateRequest,
 } from "../contracts/canvas";
+import type * as ApiContract from "../contracts/openapi.generated";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
 // The golden fixture is contracts/v1/fixtures/estate-summary.json.
@@ -1481,6 +1482,274 @@ export class ApiRequestError extends Error {
   }
 }
 
+function canvasIconKey(cellKey: string): string {
+  const suffix = cellKey.split(".").at(-1) ?? "box";
+  const aliases: Record<string, string> = {
+    ui: "ui-rendering",
+    web: "framework",
+    input: "form",
+    design: "palette",
+    persistence: "database",
+    outbound: "arrow-out",
+    background: "clock-cog",
+    workflow: "route",
+    runtime: "server",
+    edge: "gateway",
+    contract: "contract",
+    connectivity: "network",
+    messaging: "queue",
+    events: "bolt",
+    "stream-processing": "stream",
+    orchestration: "orchestration",
+    "identity-access": "key",
+    database: "database",
+    "cache-session": "state",
+    search: "search",
+    "object-storage": "archive",
+    analytics: "activity",
+    processing: "cpu",
+    movement: "transfer",
+    artifact: "package",
+    compute: "cpu",
+    serverless: "cloud-cog",
+    network: "network",
+    provider: "cloud",
+    build: "terminal",
+    test: "test",
+    cicd: "pipeline",
+  };
+  return aliases[suffix] ?? "box";
+}
+
+function normalizeCanvasReferenceModel(
+  model: ApiContract.ArchitectureReferenceModel,
+  taxonomy: ApiContract.ArchitectureTaxonomyResponse,
+): ArchitectureReferenceModel {
+  const concerns = new Map(taxonomy.concerns.map((concern) => [concern.key, concern]));
+  return {
+    ...model,
+    contract_version: "1.0.0",
+    domains: taxonomy.domains.map((domain) => ({
+      key: domain.key,
+      label: domain.label,
+      question: domain.question,
+      order: domain.order,
+    })),
+    aspects: taxonomy.aspects.map((aspect, order) => ({ ...aspect, order })),
+    cells: model.cells.map((cell) => {
+      const domainKey = concerns.get(cell.concern_key)?.domain_key ?? cell.key.split(".")[1];
+      return {
+        ...cell,
+        domain_key: domainKey,
+        bindings: cell.bindings.map((binding) => {
+          if (binding.kind === "CAPABILITY") {
+            return { kind: "capability" as const, capability_keys: binding.keys ?? [] };
+          }
+          if (binding.kind === "RESOURCE_KIND") {
+            return { kind: "resource" as const, resource_kinds: binding.keys ?? [] };
+          }
+          if (binding.kind === "UNBOUND") {
+            return { kind: "unbound" as const, reason: binding.reason ?? "No canonical binding." };
+          }
+          return { kind: "role" as const, role_keys: binding.keys ?? [] };
+        }),
+        aspect_keys: cell.aspect_keys ?? [],
+        default_expectation: {
+          applicability: cell.default_expectation.applicability,
+          minimum_implementations: cell.default_expectation.minimum_implementations ?? null,
+          maximum_implementations: cell.default_expectation.maximum_implementations ?? null,
+          allowed_diversity: cell.default_expectation.allowed_diversity ?? null,
+        },
+        icon: canvasIconKey(cell.key),
+      };
+    }),
+  } as ArchitectureReferenceModel;
+}
+
+function normalizeCanvasTemplate(template: ApiContract.CanvasTemplateModel): CanvasTemplate {
+  return {
+    ...template,
+    contract_version: "1.0.0",
+    bands: template.bands.map((band) => ({
+      ...band,
+      cells: band.cells.map((cell) => ({ ...cell, span: cell.span ?? 1 })),
+    })),
+    aspect_rail: [],
+  } as CanvasTemplate;
+}
+
+function normalizeCanvasProjection(raw: ApiContract.CanvasProjection): CanvasProjection {
+  const cells: CanvasCellProjection[] = raw.cells.map((cell) => {
+    const observationStatus =
+      cell.observation.status === "COMPLETE"
+        ? "COMPLETE"
+        : cell.observation.status === "PARTIAL"
+          ? "PARTIAL"
+          : "ABSENT";
+    const occupants = cell.occupants.map((occupant) => ({
+      ...occupant,
+      policy_status: occupant.policy_status === "EXEMPTED" ? "ALLOWED" as const : occupant.policy_status,
+      adoption: {
+        applications: occupant.adoption_applications,
+        repositories: occupant.adoption_repositories,
+        deployments: occupant.adoption_deployments,
+      },
+    }));
+    const policy = cell.policy
+      ? {
+          governed: true,
+          profile_id: null,
+          profile_version: null,
+          decisions: ([
+            ["PREFERRED", cell.policy.preferred_technology_ids],
+            ["ALLOWED", cell.policy.allowed_technology_ids],
+            ["DISCOURAGED", cell.policy.discouraged_technology_ids],
+            ["PROHIBITED", cell.policy.prohibited_technology_ids],
+          ] as const).flatMap(([decision, ids]) =>
+            (ids ?? []).map((id) => ({
+              technology: occupants.find((entry) => entry.technology.id === id)?.technology ?? {
+                id,
+                kind: "Technology",
+                name: id,
+              },
+              decision,
+              rationale: cell.policy?.rationale || null,
+            })),
+          ),
+          exceptions: (cell.policy.exceptions ?? []).map((exception) => ({
+            id: exception.key,
+            scope_selector: { application_ids: exception.subject_ids },
+            rationale: exception.rationale,
+            owner: null,
+            effective_from: exception.effective_from ?? null,
+            effective_to: exception.effective_to ?? null,
+          })),
+          rationale: cell.policy.rationale || null,
+          owner: cell.policy.owner ?? null,
+          effective_from: cell.policy.effective_from ?? null,
+          effective_to: cell.policy.effective_to ?? null,
+          migrated_function_keys: [],
+          fingerprint: raw.tenant_profile_fingerprint ?? raw.input_fingerprint,
+        }
+      : null;
+    return {
+      ...cell,
+      occupants,
+      observation: {
+        rule_key: cell.observation.method_version,
+        status: observationStatus,
+        required_sensor_kinds: cell.observation.required_sensor_kinds,
+        supported_sensor_kinds: cell.observation.supported_sensor_kinds,
+        sensors: [],
+        subjects_in_scope: cell.observation.in_scope_subjects,
+        subjects_observed: cell.observation.observed_subjects,
+        freshness_status:
+          cell.observation.observed_subjects === 0
+            ? "UNKNOWN"
+            : cell.observation.fresh_subjects >= cell.observation.observed_subjects
+              ? "FRESH"
+              : "STALE",
+        unsupported_ecosystems: [],
+        missing_inputs: cell.observation.missing_inputs,
+        method_version: cell.observation.method_version,
+        input_fingerprint: cell.observation.input_fingerprint,
+      },
+      expectation: {
+        applicability: cell.expectation.applicability,
+        minimum_implementations: cell.expectation.minimum_implementations ?? null,
+        maximum_implementations: cell.expectation.maximum_implementations ?? null,
+        allowed_diversity: cell.expectation.allowed_diversity ?? null,
+        source: cell.policy ? "TENANT_PROFILE" : "REFERENCE_MODEL",
+        scope_selector: cell.policy?.scope_selector ?? null,
+        rationale: cell.policy?.rationale || null,
+        owner: cell.policy?.owner ?? null,
+        effective_from: cell.policy?.effective_from ?? null,
+        effective_to: cell.policy?.effective_to ?? null,
+      },
+      measures: cell.measures
+        ? {
+            posture_band: cell.measures.posture_band ?? null,
+            overall_score: cell.measures.overall_score ?? null,
+            components: {
+              coverage: { ...cell.measures.coverage, value: cell.measures.coverage.value == null ? null : cell.measures.coverage.value / 100 },
+              standardisation: { ...cell.measures.standardisation, value: cell.measures.standardisation.value == null ? null : cell.measures.standardisation.value / 100 },
+              currency: { ...cell.measures.currency, value: cell.measures.currency.value == null ? null : cell.measures.currency.value / 100 },
+              risk: { ...cell.measures.risk, value: cell.measures.risk.value == null ? null : cell.measures.risk.value / 100 },
+              conformance: { ...cell.measures.conformance, value: cell.measures.conformance.value == null ? null : cell.measures.conformance.value / 100 },
+            },
+            confidence: cell.measures.confidence,
+            confidence_label: cell.measures.confidence_label,
+            method_version: cell.measures.method_version,
+            missing_inputs: cell.measures.missing_inputs,
+          }
+        : null,
+      policy,
+    } as CanvasCellProjection;
+  });
+
+  const byPolicyStatus = {
+    PREFERRED: 0,
+    ALLOWED: 0,
+    DISCOURAGED: 0,
+    PROHIBITED: 0,
+    UNGOVERNED: 0,
+  };
+  for (const occupant of cells.flatMap((cell) => cell.occupants)) {
+    byPolicyStatus[occupant.policy_status] += 1;
+  }
+  const tray = raw.classification_tray;
+  return {
+    ...raw,
+    contract_version: "1.0.0",
+    tenant_profile_fingerprint: raw.tenant_profile_fingerprint ?? null,
+    subject: raw.subject ?? null,
+    cells,
+    classification_tray: {
+      unclassified_technologies: tray.items
+        .filter((item) => item.reason === "UNCLASSIFIED")
+        .map((item) => ({ technology: item.entity, reason: item.detail, ecosystem: null, citations: item.citations })),
+      ambiguous_observations: tray.items
+        .filter((item) => item.reason === "AMBIGUOUS")
+        .map((item) => ({ technology: item.entity, candidate_cell_keys: [], reason: item.detail, citations: item.citations })),
+      unresolved_policies: tray.items
+        .filter((item) => item.reason === "UNRESOLVED_POLICY")
+        .map((item) => ({
+          policy_key: item.entity.canonical_key ?? item.entity.id,
+          label: item.entity.name,
+          source: "CUSTOM" as const,
+          reason: item.detail,
+          technology_count: 0,
+          technologies: [],
+        })),
+      filtered_out_total: tray.filtered_count,
+    },
+    summary: {
+      cells_total: cells.length,
+      by_state: {
+        POPULATED: raw.summary.populated_cells,
+        EMPTY: raw.summary.empty_cells,
+        NOT_APPLICABLE: raw.summary.not_applicable_cells,
+        UNOBSERVED: raw.summary.unobserved_cells,
+        UNBOUND: raw.summary.unbound_cells,
+      },
+      by_posture_band: {
+        STRONG: raw.summary.strong,
+        ADEQUATE: raw.summary.adequate,
+        WEAK: raw.summary.weak,
+        AT_RISK: raw.summary.at_risk,
+        UNSCORED: Math.max(0, cells.length - raw.summary.strong - raw.summary.adequate - raw.summary.weak - raw.summary.at_risk),
+      },
+      by_policy_status: byPolicyStatus,
+      unique_technologies: raw.summary.unique_technologies,
+      placements_total: raw.summary.technology_cell_placements,
+      governed_cells: raw.summary.governed_cells,
+      unmapped_observations: tray.unclassified_count,
+      ambiguous_observations: tray.ambiguous_count,
+      unresolved_policies: tray.unresolved_policy_count,
+    },
+  } as CanvasProjection;
+}
+
 const liveClient: StackGraphClient = {
   getEstateSummary: (params) => {
     const query = new URLSearchParams();
@@ -1635,27 +1904,38 @@ const liveClient: StackGraphClient = {
     req(`/admin/rescans?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
   // ── Architecture Canvas ──────────────────────────────────────────────────
   listCanvasReferenceModels: () => req("/canvas/reference-models"),
-  getCanvasReferenceModel: (key, version) =>
-    req(`/canvas/reference-models/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
+  getCanvasReferenceModel: async (key, version) => {
+    const [model, taxonomy] = await Promise.all([
+      req<ApiContract.ArchitectureReferenceModel>(
+        `/canvas/reference-models/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`,
+      ),
+      req<ApiContract.ArchitectureTaxonomyResponse>("/canvas/taxonomy"),
+    ]);
+    return normalizeCanvasReferenceModel(model, taxonomy);
+  },
   listCanvasTemplates: (referenceModelKey) =>
     req(`/canvas/templates${referenceModelKey ? `?reference_model_key=${encodeURIComponent(referenceModelKey)}` : ""}`),
-  getCanvasTemplate: (key, version) =>
-    req(`/canvas/templates/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`),
-  getCanvasProjection: (params) => {
+  getCanvasTemplate: async (key, version) =>
+    normalizeCanvasTemplate(await req<ApiContract.CanvasTemplateModel>(
+      `/canvas/templates/${encodeURIComponent(key)}${version ? `?version=${encodeURIComponent(version)}` : ""}`,
+    )),
+  getCanvasProjection: async (params) => {
     const query = new URLSearchParams({ scope: params.scope });
     if (params.subjectId) query.set("subject_id", params.subjectId);
     if (params.referenceModelKey) query.set("reference_model_key", params.referenceModelKey);
     if (params.referenceModelVersion) query.set("reference_model_version", params.referenceModelVersion);
     if (params.templateKey) query.set("template_key", params.templateKey);
     if (params.asOf) query.set("as_of", params.asOf);
-    return req(`/canvas/projection?${query.toString()}`);
+    return normalizeCanvasProjection(await req<ApiContract.CanvasProjection>(`/canvas/projection?${query.toString()}`));
   },
-  getCanvasTargetProjection: (params) => {
+  getCanvasTargetProjection: async (params) => {
     const query = new URLSearchParams();
     if (params?.referenceModelKey) query.set("reference_model_key", params.referenceModelKey);
     if (params?.templateKey) query.set("template_key", params.templateKey);
     if (params?.profileId) query.set("profile_id", params.profileId);
-    return req(`/canvas/target-projection${query.size ? `?${query.toString()}` : ""}`);
+    return normalizeCanvasProjection(await req<ApiContract.CanvasProjection>(
+      `/canvas/target-projection${query.size ? `?${query.toString()}` : ""}`,
+    ));
   },
   createCanvasComparison: (body) =>
     req("/canvas/comparisons", {
