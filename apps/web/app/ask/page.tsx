@@ -176,7 +176,7 @@ export default function AskPage() {
   return (
     <div className={`${styles.page} ${mode === "overview" ? styles.pageWide : ""}`}>
       <header className={styles.head}>
-        <h1 className={styles.title}>Insights</h1>
+        <h1 className={styles.title}>Ask your estate</h1>
         <p className={styles.subtitle}>
           {mode === "overview"
             ? "Standing reports on enterprise risk, rationalization, and portfolio decisions, rebuilt from current graph facts."
@@ -220,7 +220,7 @@ export default function AskPage() {
                 setBusinessMapContext(null);
               }}
             >
-              Detach
+              Open in full
             </button>
           </div>
         ) : null}
@@ -328,7 +328,7 @@ function InsightOverview({
     );
   }
   if (error || !data) {
-    return <p className={styles.reportError}>Insight reports couldn’t be evaluated. Try refreshing this view.</p>;
+    return <p className={styles.reportError}>Couldn’t build the insight reports. Try refreshing.</p>;
   }
 
   return (

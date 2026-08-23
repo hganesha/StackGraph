@@ -133,7 +133,7 @@ function PolicyEditor({
       <div className={styles.policyBoundary}>
         <div>
           <h3 className={styles.subheading}>Technology boundary</h3>
-          <p className={styles.help}>A non-empty allowlist is exclusive. Prohibited always takes precedence.</p>
+          <p className={styles.help}>If you list anything as allowed, everything else is blocked. Prohibited always wins.</p>
         </div>
         <label className={styles.field}>
           <span className={styles.label}>Find detected or catalog technology</span>
@@ -161,9 +161,9 @@ function PolicyEditor({
               </label>
             );
           })}
-          {!visibleTechnologies.length ? <p className={styles.empty}>No matching technology. Try a catalog name or connect and scan the repository first.</p> : null}
+          {!visibleTechnologies.length ? <p className={styles.empty}>No match. Try the catalog name, or connect and scan the repository first.</p> : null}
         </div>
-        {state.technology_catalog_truncated ? <p className={styles.help}>The picker is limited to the first 2,000 detected and curated technologies.</p> : null}
+        {state.technology_catalog_truncated ? <p className={styles.help}>Showing the first 2,000 technologies — search to narrow it down.</p> : null}
       </div>
 
       <div className={styles.actions}>
@@ -173,7 +173,7 @@ function PolicyEditor({
         <span className={styles.help}>{allowedIds.length} allowed · {prohibitedIds.length} prohibited</span>
       </div>
       {save.isError ? <p className={styles.error} role="alert">{errorMessage(save.error)}</p> : null}
-      {save.isSuccess ? <p className={styles.success} role="status">Policy saved. Existing repository results are now stale until reevaluated.</p> : null}
+      {save.isSuccess ? <p className={styles.success} role="status">Saved. Re-run the evaluation to update repository results.</p> : null}
     </form>
   );
 }

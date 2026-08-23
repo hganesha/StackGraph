@@ -236,8 +236,8 @@ export function ArchitectureWorkspace({
           <div>
             <h1 className={styles.title}>Architecture</h1>
             <p className={styles.subtitle}>
-              A fixed frame of the concerns a stack must address, filled from evidence. Cells never move,
-              so the same picture compares an application, the estate, and the governed target.
+              The same picture every time: what a stack needs, and what you actually have. Because
+              nothing moves, you can compare one application against another — or against your standard.
             </p>
           </div>
         </header>
@@ -269,16 +269,15 @@ export function ArchitectureWorkspace({
 
       {governing && draftProfile ? (
         <p className={styles.draftBanner} role="status">
-          Editing draft revision v{draftProfile.version}. The cells below show the revision
-          currently in force — the API has no way to preview a draft — so changes will not appear
-          here until the draft is published.
+          Editing draft v{draftProfile.version}. The cells below still show the standard currently
+          in force, so your changes won&apos;t appear here until you publish the draft.
         </p>
       ) : null}
       {showingTarget && canGovern && draftProfile && !policy.writable ? (
         <p className={styles.draftBanner} role="status">
-          Draft v{draftProfile.version} exists but its contents were not loaded in this session, and
-          the API publishes no way to read a single revision back. Create or edit a draft here to
-          govern it, so an edit is never written over policies that could not be read.
+          Draft v{draftProfile.version} exists, but we didn&apos;t load its contents in this session.
+          Start a new draft to edit safely — otherwise a change here could overwrite decisions we
+          cannot see.
         </p>
       ) : null}
 
@@ -286,11 +285,11 @@ export function ArchitectureWorkspace({
         <Skeleton height="480px" />
       ) : isError || !referenceModel.data || !template.data || !projection.data ? (
         <div className={styles.empty} role="status">
-          <h2>Canvas unavailable</h2>
+          <h2>Couldn&apos;t load the canvas</h2>
           <p>
             {view === "target" && !canReview
-              ? "The governed target requires review access."
-              : "The reference model, layout, or projection could not be loaded. Graph and hierarchy views remain available."}
+              ? "Viewing your standard needs review access. Ask a workspace admin."
+              : "Couldn't load the canvas. Graph and hierarchy views still work — try again, or check the API connection."}
           </p>
         </div>
       ) : (

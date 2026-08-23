@@ -90,7 +90,7 @@ export default function ReviewsPage() {
                     expectedVersion={item.version}
                   />
                 ) : (
-                  <p className={styles.reviewHint}>Open the originating lens to review this finding.</p>
+                  <p className={styles.reviewHint}>Open where this was found to review it.</p>
                 )}
               </li>
             );

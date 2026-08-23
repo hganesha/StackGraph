@@ -10,7 +10,7 @@ import type {
   ArchitectureCellView,
   MeasureResultModel,
 } from "@stackgraph/shared";
-import { CitationChip, ConfidenceChip } from "@stackgraph/design-system";
+import { CitationChip, ConfidenceChip, Term } from "@stackgraph/design-system";
 import {
   APPLICABILITY_LABEL,
   CELL_STATE_DESCRIPTION,
@@ -124,7 +124,7 @@ export function CanvasDetailPanel({
 
       <section className={styles.panelSection} aria-labelledby="panel-state">
         <h3 className={styles.panelSectionTitle} id="panel-state">
-          State
+          What we found
         </h3>
         <p className={styles.panelLead}>
           <strong>{CELL_STATE_LABEL[cell.state]}</strong> — {CELL_STATE_DESCRIPTION[cell.state]}
@@ -139,27 +139,27 @@ export function CanvasDetailPanel({
 
       <section className={styles.panelSection} aria-labelledby="panel-expectation">
         <h3 className={styles.panelSectionTitle} id="panel-expectation">
-          Expectation
+          What's expected here
         </h3>
         <dl className={styles.panelFacts}>
           <div>
-            <dt>Applicability</dt>
+            <dt>Required?</dt>
             <dd>{APPLICABILITY_LABEL[cell.expectation.applicability]}</dd>
           </div>
           <div>
-            <dt>Implementations</dt>
+            <dt>How many</dt>
             <dd>
               {cell.expectation.minimum_implementations ?? "—"} to{" "}
               {cell.expectation.maximum_implementations ?? "unbounded"}
             </dd>
           </div>
           <div>
-            <dt>Allowed diversity</dt>
+            <dt>How many different</dt>
             <dd>{cell.expectation.allowed_diversity ?? "unbounded"}</dd>
           </div>
           <div>
-            <dt>Source</dt>
-            <dd>{cell.expectation.source === "TENANT_PROFILE" ? "Tenant profile" : "Reference model"}</dd>
+            <dt>Set by</dt>
+            <dd>{cell.expectation.source === "TENANT_PROFILE" ? "Your standard" : "StackGraph default"}</dd>
           </div>
         </dl>
         {cell.expectation.rationale ? (
@@ -185,7 +185,7 @@ export function CanvasDetailPanel({
               })
             }
           >
-            Change the expectation
+            Change what's expected
           </button>
         ) : null}
       </section>
@@ -193,7 +193,7 @@ export function CanvasDetailPanel({
       {cell.occupant_groups.length ? (
         <section className={styles.panelSection} aria-labelledby="panel-occupants">
           <h3 className={styles.panelSectionTitle} id="panel-occupants">
-            Implementations ({cell.occupant_groups.length} package
+            In use ({cell.occupant_groups.length} package
             {cell.occupant_groups.length === 1 ? "" : "s"}
             {cell.occupant_total > cell.occupant_groups.length
               ? `, ${cell.occupant_total} versions`
@@ -274,7 +274,7 @@ export function CanvasDetailPanel({
                     <>
                       {newest.placement_keys.length ? (
                         <p className={styles.occupantMeta}>
-                          Placed here by: {newest.placement_keys.join(", ")}
+                          <Term id="placement">Placed here</Term> by: {newest.placement_keys.join(", ")}
                         </p>
                       ) : null}
                       <div className={styles.citationRow}>
@@ -304,19 +304,22 @@ export function CanvasDetailPanel({
 
       <section className={styles.panelSection} aria-labelledby="panel-observation">
         <h3 className={styles.panelSectionTitle} id="panel-observation">
-          Observation
+          What we checked
         </h3>
+        <p className={styles.panelMeta}>
+          Based on <Term id="evidence">evidence</Term> from your connected repositories.
+        </p>
         <p className={styles.panelLead}>
           <strong>{OBSERVATION_LABEL[observation.status]}</strong> · {observation.subjects_observed} of{" "}
           {observation.subjects_in_scope} subjects · {observation.subjects_fresh} fresh
         </p>
         <dl className={styles.panelFacts}>
           <div>
-            <dt>Required sensors</dt>
+            <dt>Needs</dt>
             <dd>{observation.required_sensor_kinds.join(", ") || "—"}</dd>
           </div>
           <div>
-            <dt>Supported sensors</dt>
+            <dt>Available</dt>
             <dd>{observation.supported_sensor_kinds.join(", ") || "none"}</dd>
           </div>
         </dl>
@@ -334,8 +337,11 @@ export function CanvasDetailPanel({
 
       <section className={styles.panelSection} aria-labelledby="panel-measures">
         <h3 className={styles.panelSectionTitle} id="panel-measures">
-          Measures
+          Scores
         </h3>
+        <p className={styles.panelMeta}>
+          How this area&apos;s <Term id="posture">health</Term> is worked out.
+        </p>
         {measures ? (
           <>
             <p className={styles.panelLead}>
@@ -359,7 +365,7 @@ export function CanvasDetailPanel({
             </ul>
             {measures.missing_inputs.length ? (
               <>
-                <p className={styles.panelBody}>Not enough evidence for:</p>
+                <p className={styles.panelBody}>Not scored because we're missing:</p>
                 <ul className={styles.missingList}>
                   {measures.missing_inputs.map((input) => (
                     <li key={input}>{input}</li>
@@ -371,16 +377,18 @@ export function CanvasDetailPanel({
           </>
         ) : (
           <p className={styles.panelBody}>
-            No measures are produced for a cell in this state. Measurement requires an applicable
-            expectation and a completed observation.
+            Not scored yet — we need a completed scan and an applicable expectation first.
           </p>
         )}
       </section>
 
       <section className={styles.panelSection} aria-labelledby="panel-policy">
         <h3 className={styles.panelSectionTitle} id="panel-policy">
-          Target policy
+          Your standard
         </h3>
+        <p className={styles.panelMeta}>
+          From your <Term id="profile">architecture profile</Term>.
+        </p>
         {cell.policy?.governed ? (
           <>
             <ul className={styles.decisionList}>
@@ -432,8 +440,7 @@ export function CanvasDetailPanel({
           </>
         ) : (
           <p className={styles.panelBody}>
-            No target decision has been recorded for this concern. An ungoverned cell is never
-            reported as non-conformant.
+            No standard set for this area yet. That is never counted against you.
           </p>
         )}
         {canGovern && onPolicyIntent ? (
@@ -442,7 +449,7 @@ export function CanvasDetailPanel({
             className={styles.panelAction}
             onClick={() => onPolicyIntent({ kind: "EDIT_POLICY_DETAILS", cell_key: cell.cell_key })}
           >
-            {cell.policy?.governed ? "Edit target policy" : "Set a target policy"}
+            {cell.policy?.governed ? "Edit your standard" : "Set a standard"}
           </button>
         ) : null}
       </section>

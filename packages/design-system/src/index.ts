@@ -13,3 +13,6 @@ export { AssertionTag } from "./components/AssertionTag";
 export { EvidenceRow } from "./components/EvidenceRow";
 export { CitationChip } from "./components/CitationChip";
 export { Drawer } from "./components/Drawer";
+export { Term } from "./components/Term";
+export { GLOSSARY } from "./glossary/terms";
+export type { GlossaryKey, GlossaryEntry } from "./glossary/terms";

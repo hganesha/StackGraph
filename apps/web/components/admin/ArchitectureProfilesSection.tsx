@@ -53,21 +53,18 @@ export function ArchitectureProfilesSection() {
   }, [referenceModel.data]);
 
   // Which policies can we show for the selected revision, and can we vouch for them?
-  const { policies, provenance } = useMemo((): {
-    policies: TenantCellPolicyModel[] | null;
-    provenance: string;
-  } => {
-    if (!selected) return { policies: null, provenance: "" };
+  const policies = useMemo((): TenantCellPolicyModel[] | null => {
+    if (!selected) return null;
+    // Authoritative when this session wrote it; otherwise only the revision in force
+    // can be read back, since the API publishes no read for a single revision.
     if (selectedDetail?.id === selected.id && selectedDetail.version === selected.version) {
-      return { policies: selectedDetail.state.cell_policies ?? [], provenance: "as returned by the last write" };
+      return selectedDetail.state.cell_policies ?? [];
     }
-    if (selected.status === "ACTIVE") {
-      return { policies: activePolicies, provenance: "resolved from the effective target projection" };
-    }
-    return { policies: null, provenance: "" };
+    if (selected.status === "ACTIVE") return activePolicies;
+    return null;
   }, [activePolicies, selected, selectedDetail]);
 
-  if (profiles.isLoading) return <p className={styles.empty}>Loading architecture profiles…</p>;
+  if (profiles.isLoading) return <p className={styles.empty}>Loading your architecture standard…</p>;
   if (profiles.isError) {
     return <p className={styles.error} role="alert">{errorMessage(profiles.error)}</p>;
   }
@@ -75,17 +72,17 @@ export function ArchitectureProfilesSection() {
   return (
     <div className={styles.section}>
       <p className={styles.sectionNote}>
-        The tenant architecture profile overlays canonical reference-model defaults with this
-        workspace&apos;s applicability, expectations, and technology decisions. Canonical cell
-        meanings are owned by StackGraph and cannot be rebound here — only tailored.
+        Your workspace&apos;s architecture standard: which areas apply, how many implementations
+        each should have, and which technologies are preferred, allowed, discouraged, or
+        prohibited. StackGraph decides what each area means; you decide what belongs in it.
       </p>
 
       <section className={styles.governanceCard} aria-labelledby="architecture-profile-heading">
         <div className={styles.governanceCardHead}>
           <div>
-            <span className={styles.eyebrow}>Tenant profile</span>
+            <span className={styles.eyebrow}>Your standard</span>
             <h2 id="architecture-profile-heading" className={styles.cardTitle}>
-              Architecture profile revisions
+              Revisions
             </h2>
           </div>
           <span className={styles.statusMuted}>
@@ -95,8 +92,8 @@ export function ArchitectureProfilesSection() {
 
         {all.length === 0 ? (
           <p className={styles.empty}>
-            No profile exists yet. Until one is published every cell falls back to the reference
-            model&apos;s defaults and reports as ungoverned, which is a valid starting state.
+            No standard set yet. Until you publish one, every area uses StackGraph&apos;s defaults
+            and shows as ungoverned — which is a perfectly good place to start.
           </p>
         ) : (
           <table className={styles.table}>
@@ -181,34 +178,34 @@ export function ArchitectureProfilesSection() {
           </div>
 
           <p className={styles.sectionNote}>
-            Bound to reference model{" "}
+            Built on StackGraph reference model{" "}
             <span className="sg-mono">
               {selected.reference_model_key}@{selected.reference_model_version}
             </span>
-            . A revision can only be compared with another built on the same model major version.
+. Revisions can only be compared when they are built on the same model version.
           </p>
 
           {policies === null ? (
             <p className={styles.empty}>
-              This revision&apos;s policy contents are not retrievable: the profile list carries
-              metadata only, and the API publishes no read for a single revision&apos;s state. Its
-              metadata above is accurate; its policies can be seen by making it active, or by
-              editing it in this session.
+              We can&apos;t show what this revision contains — only the revision in force, or one
+              edited in this session, can be read back. The details above are accurate.
             </p>
           ) : policies.length === 0 ? (
             <p className={styles.empty}>
-              This revision overrides nothing, so every cell uses the reference model default.
+              Nothing customised yet — every area uses StackGraph’s defaults.
             </p>
           ) : (
             <>
-              <p className={styles.sectionNote}>{policies.length} governed cells, {provenance}.</p>
+              <p className={styles.sectionNote}>
+                {policies.length} area{policies.length === 1 ? "" : "s"} with a decision recorded.
+              </p>
               <table className={styles.table}>
-                <caption className={styles.visuallyHidden}>Cell policies in this revision</caption>
+                <caption className={styles.visuallyHidden}>Decisions in this revision</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Cell</th>
-                    <th scope="col">Applicability</th>
-                    <th scope="col">Implementations</th>
+                    <th scope="col">Area</th>
+                    <th scope="col">Required?</th>
+                    <th scope="col">How many</th>
                     <th scope="col">Decisions</th>
                     <th scope="col">Owner</th>
                   </tr>
@@ -249,9 +246,8 @@ export function ArchitectureProfilesSection() {
               {confirmingPublish === selected.id ? (
                 <>
                   <p className={styles.residencyWarn} role="alert">
-                    <IconChecklist size={15} stroke={1.5} aria-hidden="true" /> Publishing makes this
-                    revision effective for every scope immediately. Drift and conformance across the
-                    estate are recomputed against it.
+                    <IconChecklist size={15} stroke={1.5} aria-hidden="true" /> Publishing applies this standard
+                    everywhere, immediately. Your whole estate is re-checked against it.
                   </p>
                   <button
                     type="button"

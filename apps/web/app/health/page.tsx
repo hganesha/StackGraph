@@ -13,7 +13,7 @@ import {
 } from "@/lib/queries";
 import styles from "./health.module.css";
 
-/** Estate Health — observability surface (plan §11.4). Promotes the status strip into a full view. */
+/** Scan health — observability surface (plan §11.4). Promotes the status strip into a full view. */
 export default function HealthPage() {
   const { data, isLoading } = useEstateSummary();
   const insightReports = useEnterpriseInsightReports();
@@ -63,7 +63,7 @@ export default function HealthPage() {
   return (
     <div className={styles.page}>
       <header className={styles.head}>
-        <h1 className={styles.title}>Estate Health</h1>
+        <h1 className={styles.title}>Scan health</h1>
         <p className={styles.subtitle}>
           Scan coverage, fact freshness, and enrichment progress across the estate. Updated{" "}
           {formatRelative(data.as_of)}.
@@ -79,8 +79,8 @@ export default function HealthPage() {
       <section className={styles.coverage} aria-labelledby="assurance-coverage-heading">
         <div className={styles.coverageHead}>
           <div>
-            <span className={styles.coverageEyebrow}>Analytical assurance</span>
-            <h2 id="assurance-coverage-heading">Analytically covered estate</h2>
+            <span className={styles.coverageEyebrow}>Can we trust this data?</span>
+            <h2 id="assurance-coverage-heading">Repositories we can fully analyse</h2>
             <p>
               {assurance
                 ? assurance.status === "WAITING_FOR_DATA"
@@ -122,13 +122,13 @@ export default function HealthPage() {
 
       <section className={styles.insightReadiness} aria-labelledby="insight-readiness-heading">
         <div>
-          <span className={styles.insightEyebrow}>Decision intelligence</span>
-          <h2 id="insight-readiness-heading">Insight readiness</h2>
+          <span className={styles.insightEyebrow}>Ready to answer</span>
+          <h2 id="insight-readiness-heading">Questions we can answer now</h2>
           <p>
             {insightReports.data
               ? `${insightReports.data.total_reports - insightReports.data.answerable_reports} reports are waiting on governed capability, platform, or lifecycle data.`
               : insightReports.isError
-                ? "Insight readiness is temporarily unavailable."
+                ? "Questions we can answer now is temporarily unavailable."
                 : "Evaluating governed report coverage…"}
           </p>
         </div>
@@ -182,7 +182,7 @@ export default function HealthPage() {
           <div>
             <h2 id="operations-heading" className={styles.h2}>Enrichment &amp; scan runs</h2>
             <p className={styles.cardNote}>
-              Code acquisition and enrichment telemetry. Refreshes every 15 seconds.
+              Scan and enrichment activity. Updates every 15 seconds.
             </p>
           </div>
           <Link className={styles.adminLink} href="/admin?tab=operations">Manage operations <span aria-hidden="true">→</span></Link>
@@ -191,14 +191,14 @@ export default function HealthPage() {
         {scanStatus.isLoading || serviceStatus.isLoading ? (
           <div className={styles.operationLoading}><Skeleton height={68} /><Skeleton height={68} /></div>
         ) : scanStatus.isError || serviceStatus.isError ? (
-          <p className={styles.operationError} role="alert">Operational telemetry is temporarily unavailable.</p>
+          <p className={styles.operationError} role="alert">Can’t reach the operations data right now. Try again shortly.</p>
         ) : (
           <>
             <div className={styles.operationSummary}>
               <div><span>Scan policy</span><strong>{scanStatus.data?.policy.enabled ? scanStatus.data.policy.cadence.toLowerCase() : "paused"}</strong></div>
               <div><span>Active work</span><strong>{dataServices.reduce((sum, service) => sum + service.running, 0)}</strong></div>
               <div><span>Queued</span><strong>{dataServices.reduce((sum, service) => sum + service.pending, 0)}</strong></div>
-              <div><span>Unrecovered failures</span><strong>{dataServices.reduce((sum, service) => sum + service.failed, 0)}</strong></div>
+              <div><span>Failed, needs attention</span><strong>{dataServices.reduce((sum, service) => sum + service.failed, 0)}</strong></div>
             </div>
 
             <div className={styles.operationCols}>
@@ -217,7 +217,7 @@ export default function HealthPage() {
                       </li>
                     ))}
                   </ul>
-                ) : <p className={styles.emptyState}>No ingestion or enrichment services are configured.</p>}
+                ) : <p className={styles.emptyState}>No scan or enrichment services connected yet. Connect a source in Admin to start.</p>}
               </div>
 
               <div>
@@ -235,7 +235,7 @@ export default function HealthPage() {
                       </li>
                     ))}
                   </ul>
-                ) : <p className={styles.emptyState}>No manual rescans have been requested.</p>}
+                ) : <p className={styles.emptyState}>No manual rescans yet.</p>}
               </div>
             </div>
 

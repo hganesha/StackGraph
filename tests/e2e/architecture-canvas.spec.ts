@@ -134,10 +134,10 @@ test.describe("architecture canvas", () => {
 
     // The panel expands what the cell had to compress, including the parts that are
     // null: an unmeasured component states why, rather than rendering blank.
-    await expect(panel).toContainText("Observation");
-    await expect(panel).toContainText("Measures");
-    await expect(panel).toContainText("Target policy");
-    await expect(panel).toContainText("Placed here by:");
+    await expect(panel).toContainText("What we checked");
+    await expect(panel).toContainText("Scores");
+    await expect(panel).toContainText("Your standard");
+    await expect(panel).toContainText("by: client-state");
 
     await expectNoSeriousAccessibilityViolations(page);
 

@@ -1,0 +1,91 @@
+.wrap {
+  position: relative;
+  display: inline;
+}
+
+/* A dotted underline rather than a colour: the affordance has to read in both themes
+   and must not compete with the domain hues carrying meaning elsewhere. */
+.trigger {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  border-block-end: 1px dotted var(--sg-surface-border-strong);
+  font: inherit;
+  color: inherit;
+  cursor: help;
+  text-align: inherit;
+}
+.trigger:hover {
+  border-block-end-color: var(--sg-text-secondary);
+}
+.trigger:focus-visible {
+  outline: 2px solid var(--sg-color-domain-enterprise-500);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Clipped rather than removed, so aria-describedby still resolves the text when the
+   definition is closed. */
+.pop {
+  position: absolute;
+  /* The popover is nested wherever the term is used, including inside uppercase,
+     letter-spaced section headings. Reset the inherited type so a definition always
+     reads as prose. */
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  font-style: normal;
+  inset-block-start: calc(100% + var(--sg-space-2));
+  inset-inline-start: 0;
+  z-index: 30;
+  inline-size: max-content;
+  max-inline-size: min(22rem, 78vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-card);
+  box-shadow: var(--sg-elevation-raised);
+  text-align: start;
+  white-space: normal;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--sg-motion-hover);
+}
+.popOpen {
+  clip-path: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop {
+    transition: none;
+  }
+}
+
+.popTerm {
+  font-family: var(--sg-font-narrative);
+  font-size: var(--sg-type-small-size);
+  font-weight: 600;
+  color: var(--sg-text-primary);
+}
+.popBody {
+  font-family: var(--sg-font-narrative);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  font-weight: 400;
+  color: var(--sg-text-secondary);
+}
+.popNote {
+  font-family: var(--sg-font-narrative);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+  padding-block-start: var(--sg-space-1);
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
