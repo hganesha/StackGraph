@@ -21,7 +21,7 @@ import styles from "./about.module.css";
 const DOMAIN_NOTES: Record<Namespace, { code: string; body: string }> = {
   BUSINESS: {
     code: "BIZ",
-    body: "Capabilities, value streams, and the organisation functions they belong to — the layer a business map is drawn on.",
+    body: "Capabilities, value streams, and the organisation functions they belong to the layer a business map is drawn on.",
   },
   ENTERPRISE: {
     code: "ENT",
@@ -114,7 +114,7 @@ export default function AboutPage() {
           </h2>
           <p className={styles.sectionNote}>
             Every entity belongs to exactly one domain. The same glyph and two-letter code identify it
-            wherever it appears — in a table row, on a graph node, or in the navigation.
+            wherever it appears.
           </p>
         </div>
         <ul className={styles.domains}>
