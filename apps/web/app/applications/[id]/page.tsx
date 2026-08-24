@@ -8,6 +8,7 @@ import { ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system
 import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
 import { TechnologyWorkspace } from "./TechnologyWorkspace";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
+import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import styles from "./application.module.css";
 
 type ApplicationTab = "overview" | "technology" | "assessments" | "recommendations";
@@ -131,6 +132,14 @@ export default function ApplicationPage({
       >
         {activeTab === "overview" ? (
           <div className={styles.overviewLayout}>
+            <div className={styles.graphIntelligenceSection}>
+              <GraphIntelligenceSummary
+                entityId={id}
+                intelligence={data.graph_intelligence}
+                graphHref={`/applications/${id}/graph`}
+                similarityAvailable
+              />
+            </div>
             <section className={styles.overviewSection} aria-labelledby="application-overview-heading">
               <h2 id="application-overview-heading">Application overview</h2>
               <dl className={styles.overviewFacts}>

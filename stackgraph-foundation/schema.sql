@@ -1,5 +1,5 @@
 -- StackGraph authoritative PostgreSQL schema, contract v1.0.0.
--- PostgreSQL 15+ is required. Apache AGE is an asynchronous projection.
+-- PostgreSQL 15+ is authoritative. Neo4j is an asynchronous, disposable projection.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -55,7 +55,7 @@ CREATE TABLE service_heartbeat (
 );
 CREATE TABLE tenant_service_control (
   tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
-  service_key text NOT NULL CHECK(service_key IN ('github-webhook','github-control-loop','projection','intelligence')),
+  service_key text NOT NULL CHECK(service_key IN ('github-webhook','github-control-loop','projection','intelligence','graph-intelligence')),
   desired_state text NOT NULL DEFAULT 'RUNNING' CHECK(desired_state IN ('RUNNING','STOPPED')),
   updated_by text NOT NULL CHECK(updated_by<>''),created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(tenant_id,service_key)
@@ -450,9 +450,171 @@ CREATE TABLE projection_outbox (
 CREATE TABLE dead_letter(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid REFERENCES tenant(id),source_kind text NOT NULL,source_id text NOT NULL,error_class text NOT NULL,error_detail jsonb NOT NULL,replay_metadata jsonb NOT NULL DEFAULT '{}',failed_at timestamptz NOT NULL DEFAULT now(),replayed_at timestamptz,replay_run_id uuid REFERENCES ingest_run(id));
 CREATE TABLE freshness_state(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid REFERENCES tenant(id),ingest_target_id uuid NOT NULL REFERENCES ingest_target(id) ON DELETE CASCADE,expected_by timestamptz,last_observed_at timestamptz,last_source_revision text,status text NOT NULL CHECK(status IN ('FRESH','STALE','UNKNOWN','ERROR')),limitations jsonb NOT NULL DEFAULT '[]',updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(ingest_target_id));
 
-CREATE TABLE tenant_secret(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),secret_kind text NOT NULL CHECK(secret_kind IN ('AI_PROVIDER_KEY','GITHUB_TOKEN')),ciphertext bytea NOT NULL,fingerprint text NOT NULL CHECK(length(fingerprint)=4),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE tenant_secret(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id),secret_kind text NOT NULL CHECK(secret_kind IN ('AI_PROVIDER_KEY','GITHUB_TOKEN','NEO4J_PASSWORD')),ciphertext bytea NOT NULL,fingerprint text NOT NULL CHECK(length(fingerprint)=4),created_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),UNIQUE(id,tenant_id));
 CREATE UNIQUE INDEX uq_tenant_secret_github_token ON tenant_secret(tenant_id,secret_kind) WHERE secret_kind='GITHUB_TOKEN';
 CREATE TABLE tenant_ai_configuration(tenant_id uuid PRIMARY KEY REFERENCES tenant(id),provider text NOT NULL CHECK(provider IN ('openrouter','openai','anthropic')),model text NOT NULL DEFAULT '',credential_secret_id uuid REFERENCES tenant_secret(id) ON DELETE SET NULL,enabled boolean NOT NULL DEFAULT true,test_status text NOT NULL DEFAULT 'NOT_TESTED' CHECK(test_status IN ('NOT_TESTED','SUCCEEDED','FAILED')),tested_at timestamptz,last_error text,updated_by text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
+
+CREATE TABLE tenant_graph_deployment (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+ backend_kind text NOT NULL DEFAULT 'NEO4J' CHECK(backend_kind='NEO4J'),endpoint text NOT NULL CHECK(endpoint ~ '^neo4j(\+s|\+ssc)?://' AND endpoint !~ '@'),
+ database_name text NOT NULL DEFAULT 'neo4j' CHECK(database_name ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'),username text NOT NULL CHECK(username<>''),
+ credential_secret_id uuid,credential_reference text,deployment_state text NOT NULL DEFAULT 'PROVISIONING' CHECK(deployment_state IN ('PROVISIONING','ACTIVE','SUSPENDED','ERROR')),
+ schema_version integer NOT NULL DEFAULT 1 CHECK(schema_version>0),desired_outbox_id bigint NOT NULL DEFAULT 0 CHECK(desired_outbox_id>=0),projected_outbox_id bigint NOT NULL DEFAULT 0 CHECK(projected_outbox_id>=0),
+ projection_leased_by text,projection_leased_until timestamptz,last_reconciled_at timestamptz,last_error jsonb,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(tenant_id),UNIQUE(id,tenant_id),FOREIGN KEY(credential_secret_id,tenant_id) REFERENCES tenant_secret(id,tenant_id) ON DELETE RESTRICT,
+ CHECK((credential_secret_id IS NOT NULL) <> (credential_reference IS NOT NULL)),
+ CHECK(credential_reference IS NULL OR credential_reference ~ '^env://[A-Za-z0-9_]+$')
+);
+CREATE TABLE graph_projection_delivery (
+ outbox_id bigint NOT NULL REFERENCES projection_outbox(id) ON DELETE CASCADE,tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+ deployment_id uuid NOT NULL,status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','PROCESSING','PROCESSED','DEAD_LETTER')),
+ available_at timestamptz NOT NULL DEFAULT now(),leased_by text,leased_until timestamptz,attempt integer NOT NULL DEFAULT 0 CHECK(attempt>=0),last_error jsonb,
+ processed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(outbox_id,tenant_id),
+ FOREIGN KEY(deployment_id,tenant_id) REFERENCES tenant_graph_deployment(id,tenant_id) ON DELETE CASCADE
+);
+CREATE FUNCTION stackgraph_enqueue_graph_projection_deliveries() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.aggregate_type<>'FACT' THEN RETURN NEW; END IF;
+ INSERT INTO graph_projection_delivery(outbox_id,tenant_id,deployment_id)
+ SELECT NEW.id,deployment.tenant_id,deployment.id FROM tenant_graph_deployment deployment
+ WHERE deployment.deployment_state='ACTIVE' AND (NEW.tenant_id IS NULL OR NEW.tenant_id=deployment.tenant_id)
+ ON CONFLICT(outbox_id,tenant_id) DO NOTHING;
+ UPDATE tenant_graph_deployment deployment SET desired_outbox_id=greatest(deployment.desired_outbox_id,NEW.id),updated_at=now()
+ WHERE deployment.deployment_state='ACTIVE' AND (NEW.tenant_id IS NULL OR NEW.tenant_id=deployment.tenant_id);
+ RETURN NEW;
+END $$;
+CREATE TRIGGER projection_outbox_graph_delivery AFTER INSERT ON projection_outbox FOR EACH ROW EXECUTE FUNCTION stackgraph_enqueue_graph_projection_deliveries();
+CREATE FUNCTION stackgraph_backfill_graph_projection_deployment() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE maximum_outbox_id bigint;
+BEGIN
+ IF NEW.deployment_state<>'ACTIVE' OR (TG_OP='UPDATE' AND OLD.deployment_state='ACTIVE') THEN RETURN NEW; END IF;
+ IF NEW.projected_outbox_id=0 THEN
+  WITH applicable AS MATERIALIZED (
+   SELECT outbox.id FROM projection_outbox outbox JOIN fact_assertion fact ON fact.id=outbox.aggregate_id
+   WHERE outbox.aggregate_type='FACT' AND outbox.operation='UPSERT' AND fact.system_to IS NULL
+     AND (outbox.tenant_id IS NULL OR outbox.tenant_id=NEW.tenant_id)
+   UNION
+   SELECT max(outbox.id) FROM projection_outbox outbox WHERE outbox.aggregate_type='FACT'
+     AND (outbox.tenant_id IS NULL OR outbox.tenant_id=NEW.tenant_id) HAVING max(outbox.id) IS NOT NULL
+  )
+  INSERT INTO graph_projection_delivery(outbox_id,tenant_id,deployment_id)
+  SELECT applicable.id,NEW.tenant_id,NEW.id FROM applicable ON CONFLICT(outbox_id,tenant_id) DO NOTHING;
+ ELSE
+  INSERT INTO graph_projection_delivery(outbox_id,tenant_id,deployment_id)
+  SELECT outbox.id,NEW.tenant_id,NEW.id FROM projection_outbox outbox
+  WHERE outbox.aggregate_type='FACT' AND outbox.id>NEW.projected_outbox_id
+    AND (outbox.tenant_id IS NULL OR outbox.tenant_id=NEW.tenant_id)
+  ON CONFLICT(outbox_id,tenant_id) DO NOTHING;
+ END IF;
+ SELECT coalesce(max(delivery.outbox_id),NEW.projected_outbox_id) INTO maximum_outbox_id
+ FROM graph_projection_delivery delivery WHERE delivery.deployment_id=NEW.id;
+ UPDATE tenant_graph_deployment SET desired_outbox_id=greatest(desired_outbox_id,maximum_outbox_id),updated_at=now() WHERE id=NEW.id;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER tenant_graph_deployment_backfill AFTER INSERT OR UPDATE OF deployment_state ON tenant_graph_deployment FOR EACH ROW EXECUTE FUNCTION stackgraph_backfill_graph_projection_deployment();
+
+-- Governed Neo4j/GDS graph analysis. PostgreSQL owns scheduling and immutable result snapshots.
+CREATE TABLE graph_analysis_policy (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid REFERENCES tenant(id) ON DELETE CASCADE,
+ policy_key text NOT NULL CHECK(policy_key ~ '^[a-z][a-z0-9-]{2,63}$'),version integer NOT NULL CHECK(version>0),name text NOT NULL CHECK(name<>''),
+ status text NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','ACTIVE','RETIRED')),configuration jsonb NOT NULL CHECK(jsonb_typeof(configuration)='object'),
+ content_hash text NOT NULL CHECK(content_hash ~ '^sha256:[a-f0-9]{64}$'),created_by text NOT NULL CHECK(created_by<>''),created_at timestamptz NOT NULL DEFAULT now(),activated_at timestamptz,retired_at timestamptz,
+ UNIQUE NULLS NOT DISTINCT(tenant_id,policy_key,version),UNIQUE(id,policy_key),
+ CHECK(status<>'ACTIVE' OR activated_at IS NOT NULL),CHECK(status<>'RETIRED' OR retired_at IS NOT NULL),CHECK(retired_at IS NULL OR activated_at IS NOT NULL)
+);
+CREATE UNIQUE INDEX uq_graph_analysis_policy_active ON graph_analysis_policy(tenant_id,policy_key) NULLS NOT DISTINCT WHERE status='ACTIVE';
+CREATE TABLE graph_analysis_request (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,policy_id uuid NOT NULL REFERENCES graph_analysis_policy(id) ON DELETE RESTRICT,policy_key text NOT NULL,
+ requested_change_watermark bigint NOT NULL CHECK(requested_change_watermark>=0),reason text NOT NULL CHECK(reason<>''),status text NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','WAITING_FOR_PROJECTION','RUNNING','SUCCEEDED','FAILED','CANCELLED')),
+ available_at timestamptz NOT NULL DEFAULT now(),leased_by text,leased_until timestamptz,attempt integer NOT NULL DEFAULT 0 CHECK(attempt>=0),last_error jsonb,started_at timestamptz,completed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(policy_id,policy_key) REFERENCES graph_analysis_policy(id,policy_key) ON DELETE RESTRICT,UNIQUE(id,tenant_id,policy_id,policy_key),
+ CHECK((status='RUNNING')=(started_at IS NOT NULL AND completed_at IS NULL)),CHECK((status IN ('SUCCEEDED','FAILED','CANCELLED'))=(completed_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uq_graph_analysis_request_coalescing ON graph_analysis_request(tenant_id,policy_id) WHERE status IN ('PENDING','WAITING_FOR_PROJECTION');
+CREATE INDEX idx_graph_analysis_request_claim ON graph_analysis_request(status,available_at,tenant_id,created_at) WHERE status IN ('PENDING','WAITING_FOR_PROJECTION');
+CREATE TABLE graph_analysis_run (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,policy_id uuid NOT NULL REFERENCES graph_analysis_policy(id) ON DELETE RESTRICT,policy_key text NOT NULL,
+ request_id uuid NOT NULL UNIQUE REFERENCES graph_analysis_request(id) ON DELETE RESTRICT,requested_change_watermark bigint NOT NULL CHECK(requested_change_watermark>=0),neo4j_projection_watermark bigint NOT NULL CHECK(neo4j_projection_watermark>=0),
+ graph_source text NOT NULL DEFAULT 'NEO4J' CHECK(graph_source='NEO4J'),gds_graph_name text CHECK(gds_graph_name IS NULL OR gds_graph_name<>''),input_fingerprint text NOT NULL CHECK(input_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+ algorithm_versions jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(algorithm_versions)='object'),status text NOT NULL DEFAULT 'RUNNING' CHECK(status IN ('RUNNING','SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS','FAILED','CANCELLED')),
+ stage text NOT NULL DEFAULT 'PREPARING' CHECK(stage IN ('PREPARING','LIGHTWEIGHT','HEAVYWEIGHT','PERSISTING','COMPLETE')),node_count bigint CHECK(node_count IS NULL OR node_count>=0),edge_count bigint CHECK(edge_count IS NULL OR edge_count>=0),
+ coverage jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(coverage)='object'),resource_usage jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(resource_usage)='object'),limitations jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(limitations)='array'),error_detail jsonb,
+ worker_id text NOT NULL CHECK(worker_id<>''),lease_expires_at timestamptz NOT NULL,started_at timestamptz NOT NULL DEFAULT now(),completed_at timestamptz,created_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(id,tenant_id),UNIQUE(id,tenant_id,policy_key),FOREIGN KEY(policy_id,policy_key) REFERENCES graph_analysis_policy(id,policy_key) ON DELETE RESTRICT,
+ FOREIGN KEY(request_id,tenant_id,policy_id,policy_key) REFERENCES graph_analysis_request(id,tenant_id,policy_id,policy_key) ON DELETE RESTRICT,
+ CHECK((status='RUNNING')=(completed_at IS NULL)),CHECK((status='RUNNING')=(stage<>'COMPLETE'))
+);
+CREATE UNIQUE INDEX uq_graph_analysis_run_active_execution ON graph_analysis_run(tenant_id,policy_key) WHERE status='RUNNING';
+CREATE INDEX idx_graph_analysis_run_history ON graph_analysis_run(tenant_id,policy_key,started_at DESC);
+CREATE TABLE active_graph_analysis_run (
+ tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,policy_key text NOT NULL,run_id uuid NOT NULL,activated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(tenant_id,policy_key),
+ FOREIGN KEY(run_id,tenant_id,policy_key) REFERENCES graph_analysis_run(id,tenant_id,policy_key) ON DELETE RESTRICT
+);
+CREATE TABLE graph_entity_metric (
+ run_id uuid NOT NULL REFERENCES graph_analysis_run(id) ON DELETE CASCADE,tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ metric_key text NOT NULL CHECK(metric_key ~ '^[a-z][a-z0-9_.-]{1,63}$'),numeric_value double precision,percentile double precision CHECK(percentile IS NULL OR percentile BETWEEN 0 AND 1),rank bigint CHECK(rank IS NULL OR rank>0),
+ components jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(components)='object'),limitations jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(limitations)='array'),created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(run_id,entity_id,metric_key),FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_graph_entity_metric_lookup ON graph_entity_metric(tenant_id,entity_id,metric_key,run_id);
+CREATE INDEX idx_graph_entity_metric_ranking ON graph_entity_metric(tenant_id,run_id,metric_key,numeric_value DESC NULLS LAST);
+CREATE TABLE graph_edge_metric (
+ run_id uuid NOT NULL REFERENCES graph_analysis_run(id) ON DELETE CASCADE,tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,fact_assertion_id uuid NOT NULL REFERENCES fact_assertion(id) ON DELETE CASCADE,
+ subject_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,object_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,metric_key text NOT NULL CHECK(metric_key ~ '^[a-z][a-z0-9_.-]{1,63}$'),numeric_value double precision,
+ components jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(components)='object'),limitations jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(limitations)='array'),created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(run_id,fact_assertion_id,metric_key),FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_graph_edge_metric_lookup ON graph_edge_metric(tenant_id,fact_assertion_id,metric_key,run_id);
+CREATE TABLE graph_community_membership (
+ run_id uuid NOT NULL REFERENCES graph_analysis_run(id) ON DELETE CASCADE,tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ algorithm_key text NOT NULL CHECK(algorithm_key ~ '^[a-z][a-z0-9_.-]{1,63}$'),community_key text NOT NULL CHECK(community_key<>''),score double precision,metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(metadata)='object'),created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(run_id,entity_id,algorithm_key),FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_graph_community_membership_lookup ON graph_community_membership(tenant_id,run_id,algorithm_key,community_key);
+CREATE TABLE graph_impact_path (
+ run_id uuid NOT NULL REFERENCES graph_analysis_run(id) ON DELETE CASCADE,tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+ source_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,target_entity_id uuid NOT NULL REFERENCES entity(id) ON DELETE CASCADE,
+ impact_kind text NOT NULL CHECK(impact_kind<>''),distance integer NOT NULL CHECK(distance>0),path_entity_ids uuid[] NOT NULL,path_fact_ids uuid[] NOT NULL,
+ minimum_confidence double precision NOT NULL CHECK(minimum_confidence BETWEEN 0 AND 1),created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(run_id,source_entity_id,target_entity_id,impact_kind),FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE,
+ CHECK(source_entity_id<>target_entity_id),CHECK(cardinality(path_entity_ids)=distance+1),CHECK(cardinality(path_fact_ids)=distance),
+ CHECK(path_entity_ids[1]=source_entity_id),CHECK(path_entity_ids[cardinality(path_entity_ids)]=target_entity_id)
+);
+CREATE INDEX idx_graph_impact_path_source ON graph_impact_path(tenant_id,run_id,source_entity_id,distance,target_entity_id);
+CREATE INDEX idx_graph_impact_path_target ON graph_impact_path(tenant_id,run_id,target_entity_id,distance,source_entity_id);
+CREATE FUNCTION stackgraph_prevent_terminal_graph_run_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN IF OLD.status<>'RUNNING' THEN RAISE EXCEPTION 'terminal graph analysis run % is immutable',OLD.id USING ERRCODE='55000'; END IF; RETURN NEW; END $$;
+CREATE TRIGGER graph_analysis_run_immutable BEFORE UPDATE OR DELETE ON graph_analysis_run FOR EACH ROW EXECUTE FUNCTION stackgraph_prevent_terminal_graph_run_mutation();
+CREATE FUNCTION stackgraph_validate_active_graph_analysis_run() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE run_status text; BEGIN
+ SELECT status INTO run_status FROM graph_analysis_run WHERE id=NEW.run_id AND tenant_id=NEW.tenant_id AND policy_key=NEW.policy_key;
+ IF run_status IS NULL THEN RAISE EXCEPTION 'graph analysis run % does not match active snapshot scope',NEW.run_id USING ERRCODE='23503'; END IF;
+ IF run_status NOT IN ('SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS') THEN RAISE EXCEPTION 'graph analysis run % is not a successful terminal run',NEW.run_id USING ERRCODE='23514'; END IF; RETURN NEW;
+END $$;
+CREATE TRIGGER active_graph_analysis_run_complete BEFORE INSERT OR UPDATE ON active_graph_analysis_run FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_active_graph_analysis_run();
+CREATE FUNCTION stackgraph_request_graph_analysis(requested_tenant_id uuid,requested_watermark bigint,requested_reason text DEFAULT 'PROJECTION_ADVANCED') RETURNS integer LANGUAGE plpgsql AS $$
+DECLARE affected integer; BEGIN
+ IF requested_tenant_id IS NULL OR requested_watermark<0 OR requested_reason='' THEN RAISE EXCEPTION 'tenant, non-negative watermark, and reason are required'; END IF;
+ WITH effective_policy AS (
+  SELECT DISTINCT ON(policy.policy_key) policy.id,policy.policy_key FROM graph_analysis_policy policy
+  WHERE policy.status='ACTIVE' AND (policy.tenant_id IS NULL OR policy.tenant_id=requested_tenant_id)
+  ORDER BY policy.policy_key,(policy.tenant_id IS NOT NULL) DESC,policy.version DESC
+ )
+ INSERT INTO graph_analysis_request(tenant_id,policy_id,policy_key,requested_change_watermark,reason,status)
+ SELECT requested_tenant_id,policy.id,policy.policy_key,requested_watermark,requested_reason,'PENDING' FROM effective_policy policy
+ ON CONFLICT(tenant_id,policy_id) WHERE status IN ('PENDING','WAITING_FOR_PROJECTION') DO UPDATE SET
+ requested_change_watermark=greatest(graph_analysis_request.requested_change_watermark,EXCLUDED.requested_change_watermark),reason=EXCLUDED.reason,
+ status=CASE WHEN greatest(graph_analysis_request.requested_change_watermark,EXCLUDED.requested_change_watermark)<=(SELECT projected_outbox_id FROM tenant_graph_deployment WHERE tenant_id=requested_tenant_id) THEN 'PENDING' ELSE 'WAITING_FOR_PROJECTION' END,
+ available_at=now(),last_error=NULL,updated_at=now(); GET DIAGNOSTICS affected=ROW_COUNT; RETURN affected;
+END $$;
+WITH policy(policy_key,version,name,configuration) AS (VALUES
+ ('runtime-dependency',2,'Runtime dependency','{"assertion_classes":["CURATED","DECLARED","OBSERVED"],"confidence_minimum":0.5,"directions":{"BUILT_ON":"OUT","CALLS":"OUT","CONNECTS_TO":"BOTH","DEPENDS_ON":"OUT","ENABLED_BY":"OUT","IMPLEMENTED_BY":"OUT","IMPLEMENTS":"OUT","RUNS_ON":"OUT","USES":"OUT"},"entity_types":["API","Application","BusinessCapability","BusinessProcess","Component","Database","Deployment","InfrastructureResource","Package","Repository","Runtime","Service","Technology"],"global_nodes":"REFERENCED","identity_states":["CANONICAL","CONFIRMED"],"predicates":["BUILT_ON","CALLS","CONNECTS_TO","DEPENDS_ON","ENABLED_BY","IMPLEMENTED_BY","IMPLEMENTS","RUNS_ON","USES"],"projection_budget":{"max_edges":2000000,"max_nodes":500000,"timeout_seconds":900},"resource_class":"STANDARD"}'::jsonb),
+ ('business-alignment',1,'Business alignment','{"assertion_classes":["CURATED","DECLARED","OBSERVED"],"confidence_minimum":0.5,"directions":{"CONTAINS":"OUT","ENABLED_BY":"OUT","IMPLEMENTS":"OUT","OPERATES":"OUT","OWNS":"OUT","PROVIDES":"OUT"},"entity_types":["Application","BusinessCapability","BusinessFunction","BusinessProcess","BusinessUnit","Organization","Service"],"global_nodes":"REFERENCED","identity_states":["CANONICAL","CONFIRMED"],"predicates":["CONTAINS","ENABLED_BY","IMPLEMENTS","OPERATES","OWNS","PROVIDES"],"projection_budget":{"max_edges":1000000,"max_nodes":250000,"timeout_seconds":600},"resource_class":"STANDARD"}'::jsonb),
+ ('ownership',1,'Ownership','{"assertion_classes":["CURATED","DECLARED","OBSERVED"],"confidence_minimum":0.5,"directions":{"CONTAINS":"OUT","OPERATES":"OUT","OWNS":"OUT"},"entity_types":["Application","BusinessUnit","Component","Organization","Repository","Service"],"global_nodes":"REFERENCED","identity_states":["CANONICAL","CONFIRMED"],"predicates":["CONTAINS","OPERATES","OWNS"],"projection_budget":{"max_edges":500000,"max_nodes":250000,"timeout_seconds":300},"resource_class":"LIGHTWEIGHT"}'::jsonb),
+ ('technology-portfolio',1,'Technology portfolio','{"assertion_classes":["CURATED","DECLARED","OBSERVED"],"confidence_minimum":0.5,"directions":{"BUILT_ON":"OUT","HAS_VERSION":"OUT","IMPLEMENTED_BY":"OUT","RUNS_ON":"OUT","USES":"OUT"},"entity_types":["Application","Component","Database","Framework","Language","Package","PackageVersion","Runtime","Service","Technology"],"global_nodes":"REFERENCED","identity_states":["CANONICAL","CONFIRMED"],"predicates":["BUILT_ON","HAS_VERSION","IMPLEMENTED_BY","RUNS_ON","USES"],"projection_budget":{"max_edges":1500000,"max_nodes":500000,"timeout_seconds":600},"resource_class":"STANDARD"}'::jsonb)
+),prepared AS (SELECT policy_key,version,name,configuration,'sha256:'||encode(digest(configuration::text,'sha256'),'hex') content_hash FROM policy)
+INSERT INTO graph_analysis_policy(tenant_id,policy_key,version,name,status,configuration,content_hash,created_by,activated_at)
+SELECT NULL,policy_key,version,name,'ACTIVE',configuration,content_hash,'schema:v1',now() FROM prepared;
 
 -- Business Map persistence (migration 009). Catalog rows (function/process/capability) carry a
 -- nullable entity_id linking to the canonical BUSINESS-namespace ontology entity; shared groups
@@ -623,6 +785,560 @@ END; $$;
 CREATE TRIGGER source_snapshot_enqueue_repository_intelligence AFTER UPDATE OF status ON source_snapshot
 FOR EACH ROW EXECUTE FUNCTION enqueue_repository_intelligence_on_publish();
 
+
+-- Semantic, structural, and hybrid intelligence (migrations 032-033).
+CREATE EXTENSION IF NOT EXISTS vector;
+
+ALTER TABLE tenant_secret DROP CONSTRAINT tenant_secret_secret_kind_check;
+ALTER TABLE tenant_secret ADD CONSTRAINT tenant_secret_secret_kind_check
+  CHECK(secret_kind IN ('AI_PROVIDER_KEY','EMBEDDING_PROVIDER_KEY','GITHUB_TOKEN','NEO4J_PASSWORD'));
+ALTER TABLE entity ADD CONSTRAINT uq_entity_id_tenant UNIQUE(id,tenant_id);
+ALTER TABLE tenant_service_control
+  DROP CONSTRAINT tenant_service_control_service_key_check;
+ALTER TABLE tenant_service_control
+  ADD CONSTRAINT tenant_service_control_service_key_check
+  CHECK(service_key IN (
+    'github-webhook','github-control-loop','projection','intelligence','graph-intelligence','embeddings'
+  ));
+
+CREATE TABLE tenant_embedding_policy (
+  tenant_id uuid PRIMARY KEY REFERENCES tenant(id) ON DELETE CASCADE,
+  enabled boolean NOT NULL DEFAULT true,
+  provider text NOT NULL DEFAULT 'LOCAL' CHECK (provider IN ('LOCAL','OPENAI_COMPATIBLE')),
+  provider_base_url text,
+  credential_secret_id uuid REFERENCES tenant_secret(id) ON DELETE SET NULL,
+  model text NOT NULL DEFAULT 'stackgraph-hash-embedding-v1' CHECK (model<>''),
+  dimensions integer NOT NULL DEFAULT 384 CHECK (dimensions BETWEEN 8 AND 4096),
+  normalization text NOT NULL DEFAULT 'L2' CHECK (normalization IN ('L2','NONE')),
+  external_processing_allowed boolean NOT NULL DEFAULT false,
+  sensitive_content_allowed boolean NOT NULL DEFAULT false,
+  max_concurrency integer NOT NULL DEFAULT 2 CHECK (max_concurrency BETWEEN 1 AND 32),
+  requests_per_minute integer NOT NULL DEFAULT 60 CHECK (requests_per_minute BETWEEN 1 AND 10000),
+  retry_horizon interval NOT NULL DEFAULT interval '24 hours' CHECK (retry_horizon>interval '0'),
+  description_generation_allowed boolean NOT NULL DEFAULT false,
+  updated_by text NOT NULL DEFAULT 'system' CHECK (updated_by<>''),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE embedding_space (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  space_key text NOT NULL CHECK (space_key ~ '^[a-z][a-z0-9._-]{2,127}$'),
+  space_kind text NOT NULL CHECK (space_kind IN ('SEMANTIC_ENTITY','STRUCTURAL_GRAPH','CODE')),
+  provider text NOT NULL CHECK (provider<>''),
+  model_or_algorithm text NOT NULL CHECK (model_or_algorithm<>''),
+  dimensions integer NOT NULL CHECK (dimensions BETWEEN 8 AND 4096),
+  normalization text NOT NULL CHECK (normalization IN ('L2','NONE')),
+  template_version text NOT NULL CHECK (template_version<>''),
+  configuration jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(configuration)='object'),
+  content_hash text NOT NULL CHECK (content_hash ~ '^sha256:[a-f0-9]{64}$'),
+  lifecycle_state text NOT NULL DEFAULT 'SHADOW'
+    CHECK (lifecycle_state IN ('SHADOW','ACTIVE','RETIRED','FAILED')),
+  evaluation jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(evaluation)='object'),
+  coverage_ratio double precision NOT NULL DEFAULT 0 CHECK (coverage_ratio BETWEEN 0 AND 1),
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(tenant_id,space_key),
+  UNIQUE(id,tenant_id),
+  UNIQUE(id,tenant_id,dimensions)
+);
+
+CREATE TABLE active_embedding_space (
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  space_kind text NOT NULL CHECK (space_kind IN ('SEMANTIC_ENTITY','STRUCTURAL_GRAPH','CODE')),
+  embedding_space_id uuid NOT NULL,
+  activated_at timestamptz NOT NULL DEFAULT now(),
+  activated_by text NOT NULL DEFAULT 'system' CHECK (activated_by<>''),
+  PRIMARY KEY(tenant_id,space_kind),
+  FOREIGN KEY(embedding_space_id,tenant_id)
+    REFERENCES embedding_space(id,tenant_id) ON DELETE RESTRICT
+);
+
+CREATE OR REPLACE FUNCTION stackgraph_validate_active_embedding_space()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE candidate embedding_space%ROWTYPE;
+BEGIN
+  SELECT * INTO candidate FROM embedding_space WHERE id=NEW.embedding_space_id FOR SHARE;
+  IF candidate.id IS NULL OR candidate.tenant_id<>NEW.tenant_id OR candidate.space_kind<>NEW.space_kind THEN
+    RAISE EXCEPTION 'active embedding space must match tenant and space kind';
+  END IF;
+  IF candidate.lifecycle_state NOT IN ('SHADOW','ACTIVE') THEN
+    RAISE EXCEPTION 'active embedding space must be a successful shadow or active space';
+  END IF;
+  IF candidate.coverage_ratio<0.95 OR coalesce((candidate.evaluation->>'passed')::boolean,false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'active embedding space must pass coverage and evaluation gates';
+  END IF;
+  UPDATE embedding_space SET lifecycle_state='RETIRED',updated_at=now()
+   WHERE tenant_id=NEW.tenant_id AND space_kind=NEW.space_kind
+     AND lifecycle_state='ACTIVE' AND id<>NEW.embedding_space_id;
+  UPDATE embedding_space SET lifecycle_state='ACTIVE',updated_at=now()
+   WHERE id=NEW.embedding_space_id;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER active_embedding_space_validate
+BEFORE INSERT OR UPDATE ON active_embedding_space
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_active_embedding_space();
+
+CREATE TABLE embedding_document (
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  embedding_space_id uuid NOT NULL,
+  entity_id uuid NOT NULL,
+  entity_type text NOT NULL CHECK (entity_type<>''),
+  template_version text NOT NULL CHECK (template_version<>''),
+  rendered_content text NOT NULL CHECK (rendered_content<>''),
+  input_hash text NOT NULL CHECK (input_hash ~ '^sha256:[a-f0-9]{64}$'),
+  source_fact_ids uuid[] NOT NULL DEFAULT '{}',
+  sensitivity text NOT NULL DEFAULT 'INTERNAL'
+    CHECK (sensitivity IN ('PUBLIC','INTERNAL','CONFIDENTIAL','RESTRICTED')),
+  source_revision jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(source_revision)='object'),
+  rendered_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(embedding_space_id,entity_id),
+  FOREIGN KEY(embedding_space_id,tenant_id)
+    REFERENCES embedding_space(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(entity_id) REFERENCES entity(id) ON DELETE CASCADE
+);
+
+CREATE TABLE entity_embedding (
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  embedding_space_id uuid NOT NULL,
+  entity_id uuid NOT NULL,
+  dimensions integer NOT NULL CHECK (dimensions BETWEEN 8 AND 4096),
+  input_hash text NOT NULL CHECK (input_hash ~ '^sha256:[a-f0-9]{64}$'),
+  embedding vector NOT NULL,
+  token_count integer NOT NULL DEFAULT 0 CHECK (token_count>=0),
+  provider_latency_ms integer CHECK (provider_latency_ms IS NULL OR provider_latency_ms>=0),
+  provider_usage jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(provider_usage)='object'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(embedding_space_id,entity_id),
+  FOREIGN KEY(embedding_space_id,tenant_id,dimensions)
+    REFERENCES embedding_space(id,tenant_id,dimensions) ON DELETE CASCADE,
+  FOREIGN KEY(entity_id) REFERENCES entity(id) ON DELETE CASCADE,
+  CHECK (vector_dims(embedding)=dimensions)
+);
+
+CREATE INDEX idx_entity_embedding_tenant_entity
+  ON entity_embedding(tenant_id,entity_id);
+
+CREATE TABLE embedding_job (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  embedding_space_id uuid NOT NULL,
+  subject_kind text NOT NULL DEFAULT 'ENTITY' CHECK (subject_kind IN ('ENTITY')),
+  subject_id uuid NOT NULL,
+  input_hash text NOT NULL CHECK (input_hash ~ '^sha256:[a-f0-9]{64}$'),
+  status text NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING','RUNNING','SUCCEEDED','RETRY_WAIT','DEAD_LETTER','CANCELLED')),
+  attempt_count integer NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+  max_attempts integer NOT NULL DEFAULT 8 CHECK (max_attempts BETWEEN 1 AND 100),
+  available_at timestamptz NOT NULL DEFAULT now(),
+  lease_owner text,
+  lease_expires_at timestamptz,
+  heartbeat_at timestamptz,
+  retry_after_at timestamptz,
+  provider_request_id text,
+  last_error_class text,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(embedding_space_id,tenant_id)
+    REFERENCES embedding_space(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(subject_id) REFERENCES entity(id) ON DELETE CASCADE
+);
+
+CREATE OR REPLACE FUNCTION stackgraph_validate_visible_entity_reference()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=pg_catalog,public
+AS $$
+DECLARE
+  referenced_entity_id uuid;
+  referenced_tenant_id uuid;
+BEGIN
+  referenced_entity_id := (to_jsonb(NEW)->>TG_ARGV[0])::uuid;
+  SELECT entity.tenant_id INTO referenced_tenant_id
+  FROM public.entity
+  WHERE entity.id=referenced_entity_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'derived intelligence references an unknown entity %',referenced_entity_id
+      USING ERRCODE='23503';
+  END IF;
+  IF referenced_tenant_id IS NOT NULL AND referenced_tenant_id<>NEW.tenant_id THEN
+    RAISE EXCEPTION 'entity % is not visible to tenant %',referenced_entity_id,NEW.tenant_id
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER embedding_document_visible_entity
+BEFORE INSERT OR UPDATE OF tenant_id,entity_id ON embedding_document
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_visible_entity_reference('entity_id');
+CREATE TRIGGER entity_embedding_visible_entity
+BEFORE INSERT OR UPDATE OF tenant_id,entity_id ON entity_embedding
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_visible_entity_reference('entity_id');
+CREATE TRIGGER embedding_job_visible_entity
+BEFORE INSERT OR UPDATE OF tenant_id,subject_id ON embedding_job
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_visible_entity_reference('subject_id');
+
+CREATE UNIQUE INDEX idx_embedding_job_inflight
+  ON embedding_job(embedding_space_id,subject_id,input_hash)
+  WHERE status IN ('PENDING','RUNNING','RETRY_WAIT');
+CREATE INDEX idx_embedding_job_claim
+  ON embedding_job(status,available_at,tenant_id,created_at)
+  WHERE status IN ('PENDING','RETRY_WAIT');
+
+CREATE TABLE application_similarity_candidate (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  left_application_id uuid NOT NULL,
+  right_application_id uuid NOT NULL,
+  score double precision NOT NULL CHECK (score BETWEEN 0 AND 1),
+  method_version text NOT NULL CHECK (method_version<>''),
+  analysis_run_id uuid REFERENCES graph_analysis_run(id) ON DELETE SET NULL,
+  semantic_space_id uuid REFERENCES embedding_space(id) ON DELETE SET NULL,
+  structural_space_id uuid REFERENCES embedding_space(id) ON DELETE SET NULL,
+  components jsonb NOT NULL CHECK (jsonb_typeof(components)='object'),
+  overlap_features jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(overlap_features)='object'),
+  differences jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(differences)='object'),
+  coverage jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(coverage)='object'),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(limitations)='array'),
+  review_state text NOT NULL DEFAULT 'UNREVIEWED'
+    CHECK (review_state IN ('UNREVIEWED','CONFIRMED_SIMILAR','CONFIRMED_DISTINCT','CONSOLIDATION_CANDIDATE','DISMISSED')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (left_application_id<right_application_id),
+  FOREIGN KEY(left_application_id,tenant_id) REFERENCES entity(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(right_application_id,tenant_id) REFERENCES entity(id,tenant_id) ON DELETE CASCADE,
+  UNIQUE(tenant_id,left_application_id,right_application_id,method_version)
+);
+
+CREATE INDEX idx_application_similarity_subject
+  ON application_similarity_candidate(tenant_id,left_application_id,score DESC);
+CREATE INDEX idx_application_similarity_peer
+  ON application_similarity_candidate(tenant_id,right_application_id,score DESC);
+
+CREATE TABLE application_similarity_feedback (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  candidate_id uuid NOT NULL REFERENCES application_similarity_candidate(id) ON DELETE CASCADE,
+  decision text NOT NULL
+    CHECK (decision IN ('CONFIRMED_SIMILAR','CONFIRMED_DISTINCT','CONSOLIDATION_CANDIDATE','DISMISSED')),
+  reason_code text NOT NULL CHECK (reason_code<>''),
+  rationale text NOT NULL DEFAULT '',
+  candidate_method_version text NOT NULL CHECK (candidate_method_version<>''),
+  candidate_score double precision NOT NULL CHECK (candidate_score BETWEEN 0 AND 1),
+  actor_key text NOT NULL CHECK (actor_key<>''),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION stackgraph_similarity_feedback_immutable()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'application similarity feedback is append-only'; END $$;
+CREATE TRIGGER application_similarity_feedback_immutable
+BEFORE UPDATE OR DELETE ON application_similarity_feedback
+FOR EACH ROW EXECUTE FUNCTION stackgraph_similarity_feedback_immutable();
+
+CREATE OR REPLACE FUNCTION stackgraph_enqueue_entity_embedding()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO embedding_job(tenant_id,embedding_space_id,subject_id,input_hash)
+  SELECT space.tenant_id,space.id,NEW.id,
+         'sha256:'||encode(digest(concat_ws(E'\n',NEW.entity_type,NEW.name,NEW.canonical_key,
+           NEW.properties::text,space.template_version),'sha256'),'hex')
+  FROM embedding_space space
+  WHERE (space.tenant_id=NEW.tenant_id OR (
+      NEW.tenant_id IS NULL AND NEW.entity_type=ANY(ARRAY['Technology','Runtime','Database','Package'])
+    ))
+    AND space.space_kind='SEMANTIC_ENTITY' AND space.lifecycle_state IN ('SHADOW','ACTIVE')
+  ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER entity_embedding_enqueue
+AFTER INSERT OR UPDATE OF name,canonical_key,properties ON entity
+FOR EACH ROW EXECUTE FUNCTION stackgraph_enqueue_entity_embedding();
+
+CREATE OR REPLACE FUNCTION stackgraph_enqueue_fact_embedding()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO embedding_job(tenant_id,embedding_space_id,subject_id,input_hash)
+  SELECT space.tenant_id,space.id,entity_row.id,
+         'sha256:'||encode(digest(concat_ws(':',
+           entity_row.id::text,NEW.id::text,NEW.predicate,
+           coalesce(NEW.object_entity_id::text,''),coalesce(NEW.object_value::text,''),
+           NEW.confidence::text,coalesce(NEW.system_to::text,''),space.template_version
+         ),'sha256'),'hex')
+  FROM entity entity_row
+  JOIN embedding_space space ON (
+    space.tenant_id=entity_row.tenant_id OR (
+      entity_row.tenant_id IS NULL
+      AND entity_row.entity_type=ANY(ARRAY['Technology','Runtime','Database','Package'])
+    )
+  )
+  WHERE entity_row.id IN (NEW.subject_entity_id,NEW.object_entity_id)
+    AND (NEW.tenant_id IS NULL OR NEW.tenant_id=space.tenant_id)
+    AND space.space_kind='SEMANTIC_ENTITY' AND space.lifecycle_state IN ('SHADOW','ACTIVE')
+  ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER fact_embedding_enqueue
+AFTER INSERT OR UPDATE OF system_to,confidence,object_value ON fact_assertion
+FOR EACH ROW EXECUTE FUNCTION stackgraph_enqueue_fact_embedding();
+
+INSERT INTO tenant_service_control(tenant_id,service_key,desired_state,updated_by)
+SELECT id,'embeddings','RUNNING','migration-032' FROM tenant
+ON CONFLICT(tenant_id,service_key) DO NOTHING;
+
+CREATE TABLE structural_embedding_run (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  analysis_run_id uuid NOT NULL,
+  embedding_space_id uuid NOT NULL,
+  algorithm_key text NOT NULL CHECK (algorithm_key<>''),
+  algorithm_version text NOT NULL CHECK (algorithm_version<>''),
+  configuration jsonb NOT NULL CHECK (jsonb_typeof(configuration)='object'),
+  input_fingerprint text NOT NULL CHECK (input_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+  status text NOT NULL CHECK (status IN ('SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS','FAILED')),
+  node_count integer NOT NULL DEFAULT 0 CHECK (node_count>=0),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(limitations)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(analysis_run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(embedding_space_id,tenant_id) REFERENCES embedding_space(id,tenant_id) ON DELETE CASCADE,
+  UNIQUE(analysis_run_id,algorithm_key)
+);
+
+CREATE TABLE graph_community_alignment (
+  run_id uuid NOT NULL,
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  entity_id uuid NOT NULL,
+  algorithm_key text NOT NULL CHECK (algorithm_key<>''),
+  community_key text NOT NULL CHECK (community_key<>''),
+  governed_domain_key text,
+  mismatch_score double precision NOT NULL CHECK (mismatch_score BETWEEN 0 AND 1),
+  cohort jsonb NOT NULL CHECK (jsonb_typeof(cohort)='object'),
+  reasons jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(reasons)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(run_id,entity_id,algorithm_key),
+  FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(entity_id) REFERENCES entity(id) ON DELETE CASCADE
+);
+
+CREATE TABLE graph_anomaly (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL,
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  entity_id uuid NOT NULL,
+  anomaly_key text NOT NULL CHECK (anomaly_key<>''),
+  score double precision NOT NULL CHECK (score BETWEEN 0 AND 1),
+  cohort_key text NOT NULL CHECK (cohort_key<>''),
+  cohort_definition jsonb NOT NULL CHECK (jsonb_typeof(cohort_definition)='object'),
+  observed_components jsonb NOT NULL CHECK (jsonb_typeof(observed_components)='object'),
+  reasons jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(reasons)='array'),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(limitations)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE,
+  FOREIGN KEY(entity_id) REFERENCES entity(id) ON DELETE CASCADE,
+  UNIQUE(run_id,entity_id,anomaly_key,cohort_key)
+);
+
+CREATE TRIGGER graph_community_alignment_visible_entity
+BEFORE INSERT OR UPDATE OF tenant_id,entity_id ON graph_community_alignment
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_visible_entity_reference('entity_id');
+CREATE TRIGGER graph_anomaly_visible_entity
+BEFORE INSERT OR UPDATE OF tenant_id,entity_id ON graph_anomaly
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_visible_entity_reference('entity_id');
+
+CREATE TABLE graph_motif (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL,
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  motif_key text NOT NULL CHECK (motif_key IN (
+    'CIRCULAR_DEPENDENCY','SHARED_DATABASE','DIRECT_DATABASE_BYPASS',
+    'LEGACY_MIDDLEWARE_CHAIN','CROSS_DOMAIN_BRIDGE','DISTRIBUTED_MONOLITH'
+  )),
+  entity_ids uuid[] NOT NULL CHECK (cardinality(entity_ids)>=2),
+  supporting_fact_ids uuid[] NOT NULL CHECK (cardinality(supporting_fact_ids)>=1),
+  confidence double precision NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+  components jsonb NOT NULL DEFAULT '{}' CHECK (jsonb_typeof(components)='object'),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(limitations)='array'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  FOREIGN KEY(run_id,tenant_id) REFERENCES graph_analysis_run(id,tenant_id) ON DELETE CASCADE,
+  UNIQUE(run_id,motif_key,entity_ids,supporting_fact_ids)
+);
+
+CREATE TABLE application_description_proposal (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  application_id uuid NOT NULL,
+  proposed_text text NOT NULL CHECK (proposed_text<>''),
+  sentence_provenance jsonb NOT NULL CHECK (jsonb_typeof(sentence_provenance)='array'),
+  source_revision_fingerprint text NOT NULL CHECK (source_revision_fingerprint ~ '^sha256:[a-f0-9]{64}$'),
+  model_configuration jsonb NOT NULL CHECK (jsonb_typeof(model_configuration)='object'),
+  sensitivity text NOT NULL CHECK (sensitivity IN ('PUBLIC','INTERNAL','CONFIDENTIAL','RESTRICTED')),
+  confidence double precision NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+  limitations jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(limitations)='array'),
+  review_state text NOT NULL DEFAULT 'UNREVIEWED'
+    CHECK (review_state IN ('UNREVIEWED','APPROVED','REJECTED','SUPERSEDED')),
+  created_by text NOT NULL CHECK (created_by<>''),
+  reviewed_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  reviewed_at timestamptz,
+  FOREIGN KEY(application_id,tenant_id) REFERENCES entity(id,tenant_id) ON DELETE CASCADE
+);
+
+UPDATE graph_analysis_policy
+SET status='RETIRED',retired_at=now()
+WHERE tenant_id IS NULL AND policy_key='runtime-dependency' AND status='ACTIVE';
+
+WITH prepared AS (
+  SELECT '{
+    "assertion_classes":["CURATED","DECLARED","OBSERVED"],
+    "confidence_minimum":0.5,
+    "directions":{"BUILT_ON":"OUT","CALLS":"OUT","CONNECTS_TO":"BOTH","DEPENDS_ON":"OUT","ENABLED_BY":"OUT","IMPLEMENTED_BY":"OUT","IMPLEMENTS":"OUT","RUNS_ON":"OUT","USES":"OUT"},
+    "entity_types":["API","Application","BusinessCapability","BusinessProcess","Component","Database","Deployment","InfrastructureResource","Package","Repository","Runtime","Service","Technology"],
+    "global_nodes":"REFERENCED",
+    "identity_states":["CANONICAL","CONFIRMED"],
+    "predicates":["BUILT_ON","CALLS","CONNECTS_TO","DEPENDS_ON","ENABLED_BY","IMPLEMENTED_BY","IMPLEMENTS","RUNS_ON","USES"],
+    "projection_budget":{"max_edges":2000000,"max_nodes":500000,"timeout_seconds":900},
+    "resource_class":"STANDARD",
+    "structural_embedding":{"enabled":true,"algorithm":"gds.node2vec","dimensions":128,"walk_length":80,"walks_per_node":10,"random_seed":42,"max_nodes":200000}
+  }'::jsonb AS configuration
+)
+INSERT INTO graph_analysis_policy(
+  tenant_id,policy_key,version,name,status,configuration,content_hash,created_by,activated_at
+)
+SELECT NULL,'runtime-dependency',3,'Runtime dependency','ACTIVE',configuration,
+       'sha256:'||encode(digest(configuration::text,'sha256'),'hex'),'migration:033',now()
+FROM prepared;
+
+
+-- Reviewed relevance corpus and activation gate (migration 034).
+CREATE TABLE embedding_relevance_case (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+  case_key text NOT NULL CHECK (case_key ~ '^[a-z][a-z0-9._-]{2,127}$'),
+  query_text text NOT NULL CHECK (query_text<>''),
+  relevant_entity_ids uuid[] NOT NULL CHECK (cardinality(relevant_entity_ids)>=1),
+  hard_negative_entity_ids uuid[] NOT NULL DEFAULT '{}',
+  evaluation_k integer NOT NULL DEFAULT 10 CHECK (evaluation_k BETWEEN 1 AND 100),
+  status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RETIRED')),
+  rationale text NOT NULL DEFAULT '',
+  created_by text NOT NULL CHECK (created_by<>''),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(tenant_id,case_key),
+  CHECK (NOT relevant_entity_ids && hard_negative_entity_ids)
+);
+
+CREATE OR REPLACE FUNCTION stackgraph_validate_embedding_relevance_case()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE entity_id uuid;
+BEGIN
+  FOREACH entity_id IN ARRAY NEW.relevant_entity_ids||NEW.hard_negative_entity_ids LOOP
+    IF NOT EXISTS (SELECT 1 FROM entity WHERE id=entity_id AND tenant_id=NEW.tenant_id) THEN
+      RAISE EXCEPTION 'embedding relevance case entity % is outside tenant %',entity_id,NEW.tenant_id;
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER embedding_relevance_case_validate
+BEFORE INSERT OR UPDATE ON embedding_relevance_case
+FOR EACH ROW EXECUTE FUNCTION stackgraph_validate_embedding_relevance_case();
+
+CREATE INDEX idx_embedding_relevance_case_active
+  ON embedding_relevance_case(tenant_id,status,case_key);
+
+
+-- Relevance-corpus invalidation and retention (migration 035).
+CREATE OR REPLACE FUNCTION stackgraph_validate_embedding_relevance_case()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE entity_id uuid;
+BEGIN
+  FOREACH entity_id IN ARRAY NEW.relevant_entity_ids||NEW.hard_negative_entity_ids LOOP
+    IF NOT EXISTS (SELECT 1 FROM entity WHERE id=entity_id AND tenant_id=NEW.tenant_id) THEN
+      RAISE EXCEPTION 'embedding relevance case entity % is outside tenant %',entity_id,NEW.tenant_id;
+    END IF;
+  END LOOP;
+  UPDATE embedding_space
+  SET evaluation=jsonb_build_object(
+        'passed',false,
+        'method_version','embedding-space-relevance/v2',
+        'reason','RELEVANCE_CORPUS_CHANGED_REEVALUATION_REQUIRED'
+      ),updated_at=now()
+  WHERE tenant_id=NEW.tenant_id AND space_kind='SEMANTIC_ENTITY'
+    AND lifecycle_state IN ('SHADOW','ACTIVE');
+  RETURN NEW;
+END $$;
+
+CREATE OR REPLACE FUNCTION stackgraph_embedding_relevance_case_no_delete()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'embedding relevance cases are retained; set status to RETIRED';
+END $$;
+
+CREATE TRIGGER embedding_relevance_case_no_delete
+BEFORE DELETE ON embedding_relevance_case
+FOR EACH ROW EXECUTE FUNCTION stackgraph_embedding_relevance_case_no_delete();
+
+
+-- Correct fact-change embedding tokens (migration 036).
+CREATE OR REPLACE FUNCTION stackgraph_enqueue_fact_embedding()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO embedding_job(tenant_id,embedding_space_id,subject_id,input_hash)
+  SELECT entity_row.tenant_id,space.id,entity_row.id,
+         'sha256:'||encode(digest(concat_ws(':',
+           entity_row.id::text,NEW.id::text,NEW.predicate,
+           coalesce(NEW.object_entity_id::text,''),coalesce(NEW.object_value::text,''),
+           NEW.confidence::text,coalesce(NEW.system_to::text,''),space.template_version
+         ),'sha256'),'hex')
+  FROM entity entity_row
+  JOIN embedding_space space ON space.tenant_id=entity_row.tenant_id
+  WHERE entity_row.id IN (NEW.subject_entity_id,NEW.object_entity_id)
+    AND space.space_kind='SEMANTIC_ENTITY' AND space.lifecycle_state IN ('SHADOW','ACTIVE')
+  ON CONFLICT DO NOTHING;
+  RETURN NEW;
+END $$;
+
+
+-- Fail-closed upgrade to reviewed relevance evaluation (migration 037).
+UPDATE embedding_space
+SET evaluation = jsonb_build_object(
+      'passed', false,
+      'method_version', 'embedding-space-relevance/v2',
+      'reason', 'RELEVANCE_V2_REEVALUATION_REQUIRED'
+    ),
+    updated_at = now()
+WHERE space_kind = 'SEMANTIC_ENTITY'
+  AND lifecycle_state IN ('SHADOW', 'ACTIVE')
+  AND coalesce(evaluation->>'method_version', '') <> 'embedding-space-relevance/v2';
+
+
+-- Observable Neo4j blue/green rebuild state (migration 038).
+ALTER TABLE tenant_graph_deployment
+  ADD COLUMN rebuild_state text NOT NULL DEFAULT 'IDLE'
+    CHECK(rebuild_state IN ('IDLE','RUNNING','FAILED')),
+  ADD COLUMN candidate_database_name text
+    CHECK(candidate_database_name IS NULL OR candidate_database_name ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'),
+  ADD COLUMN prior_database_name text
+    CHECK(prior_database_name IS NULL OR prior_database_name ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$'),
+  ADD COLUMN rebuild_started_outbox_id bigint CHECK(rebuild_started_outbox_id>=0),
+  ADD COLUMN candidate_projected_outbox_id bigint CHECK(candidate_projected_outbox_id>=0),
+  ADD COLUMN rebuild_started_at timestamptz,
+  ADD COLUMN last_rebuild_at timestamptz,
+  ADD COLUMN rebuild_metadata jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(rebuild_metadata)='object'),
+  ADD CONSTRAINT tenant_graph_deployment_rebuild_state_shape CHECK(
+    (rebuild_state='RUNNING' AND candidate_database_name IS NOT NULL AND rebuild_started_at IS NOT NULL)
+    OR rebuild_state IN ('IDLE','FAILED')
+  );
+
 CREATE INDEX idx_ingest_run_claim ON ingest_run(status,available_at,lease_expires_at);
 CREATE INDEX idx_ingest_item_claim ON ingest_item(status,available_at,lease_expires_at);
 CREATE INDEX idx_ingest_target_due ON ingest_target(enabled,next_due_at,priority);
@@ -642,6 +1358,8 @@ CREATE INDEX idx_dependency_usage_snapshot ON dependency_usage_summary(source_sn
 CREATE INDEX idx_assessment_subject ON assessment(subject_entity_id,assessment_type,dimension,status);
 CREATE INDEX idx_recommendation_subject ON recommendation(subject_entity_id,status);
 CREATE INDEX idx_projection_outbox_claim ON projection_outbox(processed_at,available_at,leased_until);
+CREATE INDEX idx_graph_projection_delivery_claim ON graph_projection_delivery(deployment_id,status,outbox_id,available_at);
+CREATE INDEX idx_graph_projection_delivery_lag ON graph_projection_delivery(tenant_id,outbox_id) WHERE status<>'PROCESSED';
 CREATE INDEX idx_intelligence_job_claim ON intelligence_job(status,available_at,leased_until,created_at);
 CREATE INDEX idx_modernization_candidate_repository ON modernization_candidate(tenant_id,repository_entity_id,source_revision,review_state);
 CREATE INDEX idx_modernization_option_candidate ON modernization_option(modernization_candidate_id,rank);
@@ -692,8 +1410,10 @@ CREATE INDEX idx_business_map_revision_map ON business_map_revision(tenant_id,bu
 ALTER TABLE tenant ENABLE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON tenant USING(id=stackgraph_current_tenant_id()) WITH CHECK(id=stackgraph_current_tenant_id());
 DO $$ DECLARE t text; BEGIN FOREACH t IN ARRAY ARRAY[
- 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','modernization_calibration_corpus','modernization_portfolio_policy','ecosystem_admission','projection_outbox','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_application_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','github_installation_setup','auth_token_revocation','api_rate_limit_window','tenant_service_control','tenant_code_function','tenant_code_policy','repository_code_policy_evaluation','tenant_architecture_profile','tenant_architecture_profile_revision','deterministic_insight_rule_policy','deterministic_insight_rule_policy_revision'
+ 'source_system','connector_account','package_registry','package_registry_scope','ingest_target','ingest_cursor','webhook_delivery','ingest_run','ingest_item','source_artifact','raw_observation','source_snapshot','entity','entity_identity','package_registry_identity','entity_alias','identity_assertion','identity_assertion_review','fact_assertion','evidence','dependency_resolution','package_api_surface','dependency_usage_summary','assessment','assessment_input','recommendation','recommendation_evidence','recommendation_review','ai_prompt_template','ai_model_invocation','capability_taxonomy_version','capability_inference','capability_inference_review','duplicate_capability_candidate','duplicate_capability_candidate_review','intelligence_job','modernization_candidate','modernization_option','modernization_recommendation','modernization_recommendation_review','code_implementation_summary','modernization_policy','modernization_internal_component','modernization_option_evaluation','modernization_impact','modernization_validation_outcome','modernization_candidate_review','modernization_calibration_corpus','modernization_portfolio_policy','ecosystem_admission','projection_outbox','graph_projection_delivery','dead_letter','freshness_state','tenant_secret','tenant_ai_configuration','tenant_graph_deployment','graph_analysis_request','graph_analysis_run','active_graph_analysis_run','graph_entity_metric','graph_edge_metric','graph_community_membership','graph_impact_path','tenant_embedding_policy','embedding_space','active_embedding_space','embedding_document','entity_embedding','embedding_job','application_similarity_candidate','application_similarity_feedback','structural_embedding_run','graph_community_alignment','graph_anomaly','graph_motif','application_description_proposal','embedding_relevance_case','business_map','business_map_lane','business_map_function','business_map_process','business_map_capability','business_map_placement','business_map_shared_group','business_map_shared_group_member','business_map_function_assignment','business_map_application_assignment','business_map_revision','tenant_member','connector','scan_policy','rescan_job','connector_quota','admin_audit_log','github_installation_setup','auth_token_revocation','api_rate_limit_window','tenant_service_control','tenant_code_function','tenant_code_policy','repository_code_policy_evaluation','tenant_architecture_profile','tenant_architecture_profile_revision','deterministic_insight_rule_policy','deterministic_insight_rule_policy_revision'
 ] LOOP EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',t); EXECUTE format('CREATE POLICY tenant_isolation ON %I USING (tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK (tenant_id=stackgraph_current_tenant_id())',t); END LOOP; END; $$;
+ALTER TABLE graph_analysis_policy ENABLE ROW LEVEL SECURITY;
+CREATE POLICY graph_analysis_policy_visibility ON graph_analysis_policy USING(tenant_id IS NULL OR tenant_id=stackgraph_current_tenant_id()) WITH CHECK(tenant_id=stackgraph_current_tenant_id());
 ALTER TABLE capability_definition ENABLE ROW LEVEL SECURITY;
 CREATE POLICY capability_definition_visibility ON capability_definition USING(EXISTS(SELECT 1 FROM capability_taxonomy_version t WHERE t.id=taxonomy_version_id AND (t.tenant_id IS NULL OR t.tenant_id=stackgraph_current_tenant_id())));
 ALTER TABLE capability_mapping ENABLE ROW LEVEL SECURITY;
@@ -724,5 +1444,20 @@ INSERT INTO schema_migration(version,checksum) VALUES
  ('022_deterministic_insight_indexes.sql','b0e13c29673c0eccf72f8617d2b7dcf5555b23b6efee101ce72794d6eb2acaaf'), -- gitleaks:allow; migration checksum, not a credential
  ('023_phase2_code_context.sql','c119f0aaf866a6b27b1529c626a6edebb8f7856364052777153b42b35af525e9'), -- gitleaks:allow; migration checksum, not a credential
  ('024_tenant_github_token.sql','6fd0c1bcc1a04eb9b31ecf0ec05855276b74c7c7e0f1883b73713c81ab22abb5'), -- gitleaks:allow; migration checksum, not a credential
- ('025_architecture_canvas_profiles.sql','1dc9c85f92c0ebc4c5d67b5dd36ec9401d01ad7cdd1e9480086f1a011aa3696a'); -- gitleaks:allow; migration checksum, not a credential
+ ('025_architecture_canvas_profiles.sql','1dc9c85f92c0ebc4c5d67b5dd36ec9401d01ad7cdd1e9480086f1a011aa3696a'), -- gitleaks:allow; migration checksum, not a credential
+ ('026_neo4j_projection_control_plane.sql','980acaba12c2d2b3950ce46be8b0d689d1d785000cfe07068ff3c6c681e6d933'), -- gitleaks:allow; migration checksum, not a credential
+ ('027_compact_neo4j_initial_backfill.sql','7d67f345bd00e18d6f6c062487a22ea4af95bf43116a64d4aeda15e482b76c5e'), -- gitleaks:allow; migration checksum, not a credential
+ ('028_neo4j_credential_reference_contract.sql','3f474cbcfe092790f0d99d6b1d781db5644da4f800ff360b6d6c6cfc4a355ebb'), -- gitleaks:allow; migration checksum, not a credential
+ ('029_graph_analysis_control_plane.sql','eabd6772b36d47075dc1e05ff21a364826da978998b279b0076b27945378c513'), -- gitleaks:allow; migration checksum, not a credential
+ ('030_graph_analysis_invariants.sql','f36542cf18490b020edb44aaa675d93ed084267f3fd8baeb50c4c680636b8e54'), -- gitleaks:allow; migration checksum, not a credential
+ ('031_graph_impact_paths_and_service_control.sql','ebfb37050b82d0a983cc1cca017f55a59d1168413157b44673dcbf71e7c071f8'), -- gitleaks:allow; migration checksum, not a credential
+ ('032_semantic_embeddings_and_similarity.sql','61799df7bc0f51504b9b303bf017c38fc81bf3e5a5cdeb4bee0c0daa3f54c556'), -- gitleaks:allow; migration checksum, not a credential
+ ('033_structural_embeddings_and_advanced_intelligence.sql','1f8f774b97c113b6590e94f4ab5be6c58a7b3d8ec39a226df6c689423a1eee9a'), -- gitleaks:allow; migration checksum, not a credential
+ ('034_embedding_relevance_evaluation.sql','de38a22bd1575b38007722c23d4834508656b3afc2fb80dd4c0b3083a6986f72'), -- gitleaks:allow; migration checksum, not a credential
+ ('035_invalidate_embedding_space_on_corpus_change.sql','f2758784115d856b444ad8a6216b3964c14e1a5da6da8280f220c319911020ea'), -- gitleaks:allow; migration checksum, not a credential
+ ('036_fix_fact_embedding_change_token.sql','11404076269d06943e158edba69c0afee612196f5f3fea56cd7682508cae41dd'), -- gitleaks:allow; migration checksum, not a credential
+ ('037_require_relevance_v2_reevaluation.sql','6d093530f200c01c86f512cc5a78f532ee7b3abeb451c1dd826fe77de41e1155'), -- gitleaks:allow; migration checksum, not a credential
+ ('038_neo4j_blue_green_rebuild.sql','5337762f059910b7e32b83325ccb532231387e5d9809960482003542169f6705'), -- gitleaks:allow; migration checksum, not a credential
+ ('039_allow_tenant_visible_global_derived_entities.sql','a5fa1bb937bc994ee1c877276b15aa177be173a33df3dc77f845254b62ae912c'), -- gitleaks:allow; migration checksum, not a credential
+ ('040_global_semantic_catalog_fanout.sql','1ab71b6dbe5a3593f50d699e7291052ef66a4468550dbacfa4c4c172740d7067'); -- gitleaks:allow; migration checksum, not a credential
 COMMIT;

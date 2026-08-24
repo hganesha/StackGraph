@@ -85,6 +85,17 @@ import type {
   RescanJobList,
   Namespace,
   EntitySummary,
+  EntityGraphIntelligence,
+  GraphBlastRadius,
+  GraphCommunityList,
+  GraphIntelligenceStatus,
+  GraphRiskList,
+  SemanticSearchRequest,
+  SemanticSearchResponse,
+  EmbeddingStatus,
+  ApplicationSimilarityList,
+  ApplicationSimilarityReviewRequest,
+  ApplicationSimilarityReviewResult,
 } from "../contracts/read-models";
 import type {
   ArchitectureProfileCreateRequest,
@@ -164,6 +175,15 @@ export interface StackGraphClient {
   optimizeModernizationScenario(body: ModernizationScenarioRequest): Promise<ModernizationScenarioResult>;
   ask(body: AskRequest): Promise<AskResponse>;
   getGraphNeighborhood(centerId: string, depth?: number): Promise<GraphNeighborhood>;
+  getGraphIntelligenceStatus(): Promise<GraphIntelligenceStatus>;
+  getEntityGraphMetrics(id: string): Promise<EntityGraphIntelligence>;
+  getEntityBlastRadius(id: string): Promise<GraphBlastRadius>;
+  listGraphIntelligenceRisks(limit?: number): Promise<GraphRiskList>;
+  listGraphIntelligenceCommunities(policyKey?: string, limit?: number): Promise<GraphCommunityList>;
+  semanticSearch(body: SemanticSearchRequest): Promise<SemanticSearchResponse>;
+  getEmbeddingStatus(): Promise<EmbeddingStatus>;
+  listSimilarApplications(id: string, limit?: number): Promise<ApplicationSimilarityList>;
+  reviewApplicationSimilarity(id: string, body: ApplicationSimilarityReviewRequest): Promise<ApplicationSimilarityReviewResult>;
   getFactEvidence(factId: string): Promise<EvidenceDetail>;
   reviewIdentityAssertion(id: string, body: IdentityReviewRequest): Promise<IdentityReviewResult>;
   getCapabilityTaxonomy(version?: string): Promise<CapabilityTaxonomy>;
@@ -557,6 +577,126 @@ function applyProfileToTarget(
 }
 
 
+function fixtureEntityGraphIntelligence(id: string): EntityGraphIntelligence {
+  const asOf = "2026-08-23T12:00:00Z";
+  const entity = { ...applicationDetail.application, id };
+  const snapshot = {
+    analysis_run_id: "90000000-0000-4000-8000-000000000001",
+    policy_key: "runtime-dependency",
+    policy_version: 2,
+    policy_hash: `sha256:${"a".repeat(64)}`,
+    status: "SUCCEEDED" as const,
+    as_of: asOf,
+    requested_change_watermark: 142,
+    neo4j_projection_watermark: 142,
+    node_count: 148,
+    edge_count: 231,
+    coverage: { entity_types: ["Application", "Repository", "Service", "Technology"] },
+    limitations: [],
+  };
+  return {
+    contract_version: "1.0.0",
+    entity,
+    primary_status: "STRUCTURALLY_CRITICAL",
+    reasons: [
+      "Upstream impact is in the top 10% of the observed estate.",
+      "This application bridges otherwise separate runtime components.",
+    ],
+    snapshots: [snapshot],
+    metrics: [
+      { analysis_run_id: snapshot.analysis_run_id, policy_key: snapshot.policy_key, metric_key: "reachability.upstream_impact", numeric_value: 24, percentile: 0.92, rank: 3, components: { maximum_depth: 4 }, limitations: [] },
+      { analysis_run_id: snapshot.analysis_run_id, policy_key: snapshot.policy_key, metric_key: "reachability.downstream_dependencies", numeric_value: 17, percentile: 0.81, rank: 7, components: { maximum_depth: 3 }, limitations: [] },
+      { analysis_run_id: snapshot.analysis_run_id, policy_key: snapshot.policy_key, metric_key: "centrality.pagerank", numeric_value: 0.031, percentile: 0.88, rank: 5, components: {}, limitations: [] },
+      { analysis_run_id: snapshot.analysis_run_id, policy_key: snapshot.policy_key, metric_key: "structure.articulation_point", numeric_value: 1, percentile: 0.95, rank: 2, components: {}, limitations: [] },
+    ],
+    community_keys: ["runtime:12"],
+    as_of: asOf,
+    limitations: [],
+  };
+}
+
+function fixtureGraphStatus(): GraphIntelligenceStatus {
+  const intelligence = fixtureEntityGraphIntelligence(applicationDetail.application.id);
+  return {
+    contract_version: "1.0.0",
+    as_of: intelligence.as_of,
+    deployment_state: "ACTIVE",
+    desired_change_watermark: 142,
+    neo4j_projection_watermark: 142,
+    projection_lag: 0,
+    pending_requests: 0,
+    running_requests: 0,
+    failed_requests: 0,
+    oldest_pending_at: null,
+    snapshots: intelligence.snapshots,
+    limitations: [],
+  };
+}
+
+function fixtureEmbeddingStatus(): EmbeddingStatus {
+  const now = new Date().toISOString();
+  return {
+    contract_version: "1.0.0",
+    as_of: now,
+    enabled: true,
+    provider: "deterministic-local",
+    model: "hash-embedding-v1",
+    pending_jobs: 0,
+    running_jobs: 0,
+    failed_jobs: 0,
+    active_spaces: [{
+      id: "00000000-0000-4000-8000-000000000701",
+      space_key: "entity-semantic",
+      space_kind: "SEMANTIC_ENTITY",
+      lifecycle_state: "ACTIVE",
+      provider: "deterministic-local",
+      model_or_algorithm: "hash-embedding-v1",
+      dimensions: 384,
+      template_version: "entity-document/v1",
+      coverage_ratio: 1,
+      evaluation: { passed: true, fixture: true },
+      updated_at: now,
+    }],
+    shadow_spaces: [],
+    limitations: [],
+  };
+}
+
+function fixtureApplicationSimilarity(id: string): ApplicationSimilarityList {
+  const now = new Date().toISOString();
+  return {
+    contract_version: "1.0.0",
+    subject: { ...applicationDetail.application, id },
+    candidates: [{
+      id: "00000000-0000-4000-8000-000000000702",
+      application: {
+        id: "00000000-0000-4000-8000-000000000703",
+        kind: "Application",
+        name: "Ledger API",
+        canonical_key: "application:ledger-api",
+      },
+      score: 0.82,
+      method_version: "application-similarity/v1",
+      components: { semantic: 0.79, dependencies: 0.88, capabilities: 0.8 },
+      overlaps: {
+        capabilities: ["Billing and invoicing"],
+        technologies: ["Node.js", "PostgreSQL"],
+        dependencies: ["payments-events"],
+      },
+      differences: {
+        capabilities: ["Ledger API also owns financial reconciliation"],
+        technologies: ["Ledger API uses Kafka; Billing API uses SQS"],
+      },
+      coverage: { semantic: 1, dependencies: 1, capabilities: 1 },
+      limitations: [],
+      review_state: "UNREVIEWED",
+      created_at: now,
+    }],
+    as_of: now,
+    limitations: [],
+  };
+}
+
 const fixtureClient: StackGraphClient = {
   async getEstateSummary(params) {
     await delay();
@@ -579,7 +719,10 @@ const fixtureClient: StackGraphClient = {
   },
   async getApplication() {
     await delay();
-    return applicationDetail as ApplicationDetail;
+    return {
+      ...(applicationDetail as ApplicationDetail),
+      graph_intelligence: fixtureEntityGraphIntelligence(applicationDetail.application.id),
+    };
   },
   async getRepository() {
     await delay();
@@ -670,6 +813,87 @@ const fixtureClient: StackGraphClient = {
   async getGraphNeighborhood() {
     await delay();
     return graphNeighborhood as GraphNeighborhood;
+  },
+  async getGraphIntelligenceStatus() {
+    await delay();
+    return fixtureGraphStatus();
+  },
+  async getEntityGraphMetrics(id) {
+    await delay();
+    return fixtureEntityGraphIntelligence(id);
+  },
+  async getEntityBlastRadius(id) {
+    await delay();
+    const intelligence = fixtureEntityGraphIntelligence(id);
+    return {
+      contract_version: "1.0.0",
+      entity: intelligence.entity,
+      snapshot: intelligence.snapshots[0] ?? null,
+      affected_entity_count: 4,
+      maximum_depth: 3,
+      impacts: [],
+      as_of: intelligence.as_of,
+      limitations: [{ code: "FIXTURE_PATHS_OMITTED", message: "Fixture mode does not include supporting path facts." }],
+    };
+  },
+  async listGraphIntelligenceRisks(limit = 20) {
+    await delay();
+    const intelligence = fixtureEntityGraphIntelligence(applicationDetail.application.id);
+    return {
+      contract_version: "1.0.0",
+      snapshot: intelligence.snapshots[0] ?? null,
+      risks: [{
+        entity: intelligence.entity,
+        systemic_risk: 0.86,
+        component_metrics: intelligence.metrics,
+        reasons: intelligence.reasons,
+      }].slice(0, limit),
+      as_of: intelligence.as_of,
+      limitations: [],
+    };
+  },
+  async listGraphIntelligenceCommunities() {
+    await delay();
+    const intelligence = fixtureEntityGraphIntelligence(applicationDetail.application.id);
+    return {
+      contract_version: "1.0.0",
+      snapshot: intelligence.snapshots[0] ?? null,
+      algorithm_key: "wcc",
+      communities: [{
+        community_key: intelligence.community_keys[0] ?? "runtime:0",
+        member_count: 14,
+        representative_entities: [intelligence.entity],
+      }],
+      as_of: intelligence.as_of,
+      limitations: [],
+    };
+  },
+  async semanticSearch(body) {
+    await delay();
+    const now = new Date().toISOString();
+    return {
+      contract_version: "1.0.0",
+      space_id: fixtureEmbeddingStatus().active_spaces[0]!.id,
+      space_key: "entity-semantic",
+      model_or_algorithm: "hash-embedding-v1",
+      template_version: "entity-document/v1",
+      query_hash: `fixture:${body.query.length}`,
+      hits: [{ entity: applicationDetail.application, score: 0.86, input_hash: "fixture", sensitivity: "INTERNAL" }],
+      as_of: now,
+      limitations: [],
+    };
+  },
+  async getEmbeddingStatus() {
+    await delay();
+    return fixtureEmbeddingStatus();
+  },
+  async listSimilarApplications(id) {
+    await delay();
+    return fixtureApplicationSimilarity(id);
+  },
+  async reviewApplicationSimilarity(id, body) {
+    await delay();
+    return { contract_version: "1.0.0", candidate_id: id, review_state: body.decision, reviewed_at: new Date().toISOString() };
   },
   async getFactEvidence() {
     await delay();
@@ -813,6 +1037,7 @@ const fixtureClient: StackGraphClient = {
       counts: {
         IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 0, DUPLICATE_CAPABILITY: 0,
         MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 0,
+        APPLICATION_SIMILARITY: 0,
       },
       items: [{
         item_id: "00000000-0000-4000-8000-000000000501",
@@ -1242,19 +1467,27 @@ const fixtureClient: StackGraphClient = {
       contract_version: "1.0.0", as_of: now,
       services: [
         ["web", "Web UI", "CORE"], ["api", "API", "CORE"],
-        ["database", "PostgreSQL / AGE", "CORE"],
+        ["database", "PostgreSQL / pgvector", "CORE"],
         ["github-webhook", "GitHub webhooks", "INGESTION"],
         ["github-control-loop", "GitHub discovery", "INGESTION"],
         ["depsdev", "deps.dev enrichment", "ENRICHMENT"],
         ["osv", "OSV vulnerability enrichment", "ENRICHMENT"],
         ["projection", "Graph projection", "GRAPH"],
+        ["graph-intelligence", "Graph intelligence", "GRAPH"],
         ["intelligence", "Modernization intelligence", "INTELLIGENCE"],
+        ["embeddings", "Semantic embeddings", "INTELLIGENCE"],
       ].map(([key, name, category]) => ({
         key, name, category: category as ServiceStatusList["services"][number]["category"],
         state: (adminServiceStates.get(key) === "STOPPED" ? "STOPPED" : "IDLE") as ServiceStatus["state"],
         desired_state: adminServiceStates.get(key) ?? "RUNNING",
-        controllable: ["github-webhook", "github-control-loop", "projection", "intelligence"].includes(key),
-        management_scope: ["github-webhook", "github-control-loop", "projection", "intelligence"].includes(key)
+        controllable: [
+          "github-webhook", "github-control-loop", "projection", "intelligence",
+          "graph-intelligence", "embeddings",
+        ].includes(key),
+        management_scope: [
+          "github-webhook", "github-control-loop", "projection", "intelligence",
+          "graph-intelligence", "embeddings",
+        ].includes(key)
           ? "This workspace" : category === "CORE" ? "Docker / deployment platform" : "Shared OSS catalog pipeline",
         detail: adminServiceStates.get(key) === "STOPPED"
           ? "Stopped for this workspace; durable queued work is preserved."
@@ -1545,6 +1778,22 @@ const liveClient: StackGraphClient = {
   ask: (body) => req("/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getGraphNeighborhood: (centerId, depth = 1) =>
     req(`/graph/neighborhood?center_id=${encodeURIComponent(centerId)}&depth=${depth}`),
+  getGraphIntelligenceStatus: () => req("/graph-intelligence/status"),
+  getEntityGraphMetrics: (id) => req(`/entities/${encodeURIComponent(id)}/graph-metrics`),
+  getEntityBlastRadius: (id) => req(`/entities/${encodeURIComponent(id)}/blast-radius`),
+  listGraphIntelligenceRisks: (limit = 20) => req(`/graph-intelligence/risks?limit=${limit}`),
+  listGraphIntelligenceCommunities: (policyKey = "runtime-dependency", limit = 50) =>
+    req(`/graph-intelligence/communities?policy_key=${encodeURIComponent(policyKey)}&limit=${limit}`),
+  semanticSearch: (body) => req("/search/semantic", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  }),
+  getEmbeddingStatus: () => req("/embeddings/status"),
+  listSimilarApplications: (id, limit = 10) =>
+    req(`/entities/${encodeURIComponent(id)}/similar?limit=${limit}`),
+  reviewApplicationSimilarity: (id, body) =>
+    req(`/similarity-candidates/${encodeURIComponent(id)}/review`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   getFactEvidence: (factId) => req(`/facts/${factId}/evidence`),
   reviewIdentityAssertion: (id, body) =>
     req(`/identity-assertions/${id}/review`, {

@@ -1,4 +1,4 @@
-.PHONY: app-up app-down app-logs backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify oss-catalog-import depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 pilot-live operations-snapshot recovery-drill fresh-integration production-config production-up production-down production-alert-test
+.PHONY: app-up app-down app-logs backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify database-graph-intelligence-verify neo4j-register neo4j-project neo4j-verify neo4j-rebuild graph-intelligence-test graph-embeddings-benchmark oss-catalog-import depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 pilot-live operations-snapshot recovery-drill fresh-integration production-config production-up production-down production-alert-test
 
 app-up:
 	./scripts/start_docker.sh
@@ -7,8 +7,8 @@ app-down:
 	docker compose --profile pipeline down
 
 app-logs:
-	docker compose --profile pipeline logs -f database api web github-webhook github-control-loop \
-		depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline logs -f database neo4j api web github-webhook github-control-loop \
+		depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 
 PRODUCTION_COMPOSE = docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml --profile pipeline
 
@@ -61,11 +61,39 @@ database-seed-test:
 database-seed-verify:
 	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/seed-smoke.sql'
 
-database-project: database-migrate
-	docker compose run --rm projection
+database-project: neo4j-project
+
+neo4j-register: database-migrate
+	docker compose up -d --wait database neo4j
+	docker compose run --rm neo4j-register
+
+neo4j-project: neo4j-register
+	docker compose run --rm neo4j-projection
+
+neo4j-rebuild: neo4j-register
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	@test -n "$(CANDIDATE_DATABASE)" || (echo "CANDIDATE_DATABASE is required" >&2; exit 2)
+	docker compose run --rm neo4j-projection rebuild --tenant-id "$(TENANT_ID)" --candidate-database "$(CANDIDATE_DATABASE)"
+
+graph-embeddings-benchmark: neo4j-register
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	docker compose run --rm --entrypoint python neo4j-projection -m stackgraph_data.benchmark_graph_embeddings --tenant-id "$(TENANT_ID)" --iterations "$${ITERATIONS:-20}" --synthetic-vector-count "$${SYNTHETIC_VECTOR_COUNT:-0}" --synthetic-vector-dimensions "$${SYNTHETIC_VECTOR_DIMENSIONS:-128}"
 
 database-project-verify:
-	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/projection-smoke.sql'
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/neo4j-projection-smoke.sql'
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -c "SELECT tenant_id,deployment_state,desired_outbox_id,projected_outbox_id FROM tenant_graph_deployment"'
+	docker compose exec -T neo4j cypher-shell -u neo4j -p "$${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}" 'MATCH (entity:Entity) OPTIONAL MATCH ()-[relationship:Relationship]->() RETURN count(DISTINCT entity) AS graph_entities,count(DISTINCT relationship) AS graph_relationships'
+
+database-graph-intelligence-verify:
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/graph-analysis-control-plane-smoke.sql'
+	docker compose exec -T database sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -f /stackgraph/tests/embedding-control-plane-smoke.sql'
+
+graph-intelligence-test:
+	docker compose --profile tools build neo4j-projection graph-intelligence
+	docker compose --profile tools run --rm --no-deps --entrypoint python neo4j-projection -m unittest tests.test_neo4j_project -v
+	docker compose --profile tools run --rm --no-deps --entrypoint python graph-intelligence -m unittest discover -s tests -v
+
+neo4j-verify: database-project-verify
 
 oss-catalog-import: database-migrate
 	docker compose run --rm oss-catalog $(OSS_CATALOG_ARGS)
@@ -159,13 +187,13 @@ github-pipeline-work: database-migrate
 pipeline-up: database-migrate
 	@test -n "$$GITHUB_WEBHOOK_SECRET" || (echo "GITHUB_WEBHOOK_SECRET is required" >&2; exit 2)
 	@test -n "$$GITHUB_INSTALLATION_TOKEN" || { test -n "$$GITHUB_APP_ID" && { test -n "$$GITHUB_APP_PRIVATE_KEY" || test -n "$$GITHUB_APP_PRIVATE_KEY_FILE"; }; } || (echo "set GitHub App credentials or GITHUB_INSTALLATION_TOKEN" >&2; exit 2)
-	docker compose --profile pipeline up --build -d github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline up --build -d neo4j github-webhook github-control-loop depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 
 pipeline-down:
-	docker compose --profile pipeline stop github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline stop github-webhook github-control-loop depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 
 pipeline-logs:
-	docker compose --profile pipeline logs -f github-webhook github-control-loop depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+	docker compose --profile pipeline logs -f neo4j github-webhook github-control-loop depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 
 pilot-100:
 	mkdir -p artifacts/pilot

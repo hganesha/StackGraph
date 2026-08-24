@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm --filter @stackgraph/web build && pnpm --filter @stackgraph/web exec next start -p ${port}`,
     url: `http://127.0.0.1:${port}/estate`,
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
       NEXT_PUBLIC_DATA_SOURCE: process.env.E2E_DATA_SOURCE ?? "fixtures",

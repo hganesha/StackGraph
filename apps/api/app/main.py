@@ -283,7 +283,7 @@ def create_app(
         current_database: DatabaseProtocol = request.app.state.database
         readiness = await current_database.check_readiness()
         payload = {
-            "status": "ok" if readiness.connected and readiness.age_installed and readiness.schema_installed else "not_ready",
+            "status": "ok" if readiness.connected and readiness.vector_installed and readiness.schema_installed else "not_ready",
             "database": readiness.as_dict(),
         }
         if payload["status"] == "not_ready":

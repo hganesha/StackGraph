@@ -54,7 +54,7 @@ def test_readiness_reports_initialized_database() -> None:
                 connected=True,
                 database="stackgraph",
                 postgres_version="16.10",
-                age_installed=True,
+                vector_installed=True,
                 schema_installed=True,
             )
         ),

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     github_manual_binding_enabled: bool = True
     development_actor_key: str = "local-user"
     contracts_dir: Path = Path("/contracts/v1")
-    graph_read_mode: Literal["auto", "age", "sql"] = "auto"
+    graph_read_mode: Literal["auto", "neo4j", "age", "sql"] = "auto"
     graph_discovery_limit: int = Field(default=5000, ge=50, le=50000)
     graph_age_timeout_seconds: float = Field(default=3.0, ge=0.1, le=30.0)
     ai_ask_enabled: bool = False

@@ -132,6 +132,54 @@
   gap: var(--sg-space-3);
 }
 
+.riskGrid,
+.riskLoading {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sg-space-3);
+}
+
+.riskCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-4);
+  color: var(--sg-text-primary);
+  background: linear-gradient(135deg, var(--sg-color-domain-intelligence-50), var(--sg-surface-card));
+  border: var(--sg-border-hairline) solid var(--sg-color-domain-intelligence-200);
+  border-radius: var(--sg-radius-card);
+}
+
+.riskCard:hover {
+  border-color: var(--sg-color-domain-intelligence-500);
+}
+
+.riskCard > span {
+  color: var(--sg-color-domain-intelligence-800);
+  font-size: 24px;
+}
+
+.riskCard strong {
+  font-size: var(--sg-type-small-size);
+  font-weight: 600;
+}
+
+.riskCard p,
+.riskCard small,
+.riskLimitation {
+  margin-block-start: var(--sg-space-1);
+  color: var(--sg-text-muted);
+  font-size: 10px;
+}
+
+.riskLoading span {
+  min-block-size: 92px;
+  background: var(--sg-surface-sunken);
+  border-radius: var(--sg-radius-card);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .reportCard {
   display: grid;
   grid-template-rows: auto auto auto auto minmax(42px, auto) auto auto;
@@ -510,7 +558,9 @@
   }
 
   .reportGrid,
-  .reportLoading {
+  .reportLoading,
+  .riskGrid,
+  .riskLoading {
     grid-template-columns: 1fr;
   }
 
@@ -525,7 +575,9 @@
 
 @media (min-width: 641px) and (max-width: 960px) {
   .reportGrid,
-  .reportLoading {
+  .reportLoading,
+  .riskGrid,
+  .riskLoading {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

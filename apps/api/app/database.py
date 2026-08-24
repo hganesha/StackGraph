@@ -17,6 +17,7 @@ class DatabaseReadiness:
     database: str | None = None
     postgres_version: str | None = None
     age_installed: bool = False
+    vector_installed: bool = False
     schema_installed: bool = False
     error: str | None = None
 
@@ -84,6 +85,9 @@ class Database:
                             EXISTS (
                                 SELECT 1 FROM pg_extension WHERE extname = 'age'
                             ) AS age_installed,
+                            EXISTS (
+                                SELECT 1 FROM pg_extension WHERE extname = 'vector'
+                            ) AS vector_installed,
                             to_regclass('public.entity') IS NOT NULL AS schema_installed
                         """
                     )
@@ -99,5 +103,6 @@ class Database:
             database=row["database"],
             postgres_version=row["postgres_version"],
             age_installed=row["age_installed"],
+            vector_installed=row["vector_installed"],
             schema_installed=row["schema_installed"],
         )

@@ -275,6 +275,207 @@ export interface ApplicationDetail {
   assessments: AssessmentSummary[];
   recommendations: RecommendationSummary[];
   freshness: Freshness;
+  graph_intelligence?: EntityGraphIntelligence | null;
+}
+
+export interface GraphLimitation {
+  code?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface GraphAnalysisSnapshot {
+  analysis_run_id: UUID;
+  policy_key: string;
+  policy_version: number;
+  policy_hash: string;
+  status: "SUCCEEDED" | "SUCCEEDED_WITH_LIMITATIONS";
+  as_of: Timestamp;
+  requested_change_watermark: number;
+  neo4j_projection_watermark: number;
+  node_count: number;
+  edge_count: number;
+  coverage: Record<string, unknown>;
+  limitations: GraphLimitation[];
+}
+
+export interface GraphMetric {
+  analysis_run_id: UUID;
+  policy_key: string;
+  metric_key: string;
+  numeric_value?: number | null;
+  percentile?: number | null;
+  rank?: number | null;
+  components: Record<string, unknown>;
+  limitations: GraphLimitation[];
+}
+
+export interface EntityGraphIntelligence {
+  contract_version: "1.0.0";
+  entity: EntitySummary;
+  primary_status: "STRUCTURALLY_CRITICAL" | "ELEVATED" | "TYPICAL" | "WAITING_FOR_DATA";
+  reasons: string[];
+  snapshots: GraphAnalysisSnapshot[];
+  metrics: GraphMetric[];
+  community_keys: string[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface GraphIntelligenceStatus {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  deployment_state: "PROVISIONING" | "ACTIVE" | "SUSPENDED" | "ERROR" | "UNCONFIGURED";
+  desired_change_watermark: number;
+  neo4j_projection_watermark: number;
+  projection_lag: number;
+  pending_requests: number;
+  running_requests: number;
+  failed_requests: number;
+  oldest_pending_at?: Timestamp | null;
+  snapshots: GraphAnalysisSnapshot[];
+  limitations: GraphLimitation[];
+}
+
+export interface GraphImpactPath {
+  target: EntitySummary;
+  distance: number;
+  minimum_confidence: number;
+  entity_ids: UUID[];
+  supporting_fact_ids: UUID[];
+}
+
+export interface GraphBlastRadius {
+  contract_version: "1.0.0";
+  entity: EntitySummary;
+  snapshot?: GraphAnalysisSnapshot | null;
+  affected_entity_count: number;
+  maximum_depth: number;
+  impacts: GraphImpactPath[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface GraphRiskItem {
+  entity: EntitySummary;
+  systemic_risk: number;
+  component_metrics: GraphMetric[];
+  reasons: string[];
+}
+
+export interface GraphRiskList {
+  contract_version: "1.0.0";
+  snapshot?: GraphAnalysisSnapshot | null;
+  risks: GraphRiskItem[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface GraphCommunity {
+  community_key: string;
+  member_count: number;
+  representative_entities: EntitySummary[];
+}
+
+export interface GraphCommunityList {
+  contract_version: "1.0.0";
+  snapshot?: GraphAnalysisSnapshot | null;
+  algorithm_key: string;
+  communities: GraphCommunity[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface SemanticSearchRequest {
+  query: string;
+  entity_types?: string[];
+  limit?: number;
+}
+
+export interface SemanticSearchHit {
+  entity: EntitySummary;
+  score: number;
+  input_hash: string;
+  sensitivity: "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
+}
+
+export interface SemanticSearchResponse {
+  contract_version: "1.0.0";
+  space_id: UUID;
+  space_key: string;
+  model_or_algorithm: string;
+  template_version: string;
+  query_hash: string;
+  hits: SemanticSearchHit[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface EmbeddingSpaceSnapshot {
+  id: UUID;
+  space_key: string;
+  space_kind: "SEMANTIC_ENTITY" | "STRUCTURAL_GRAPH" | "CODE";
+  lifecycle_state: "SHADOW" | "ACTIVE" | "RETIRED" | "FAILED";
+  provider: string;
+  model_or_algorithm: string;
+  dimensions: number;
+  template_version: string;
+  coverage_ratio: number;
+  evaluation: Record<string, unknown>;
+  updated_at: Timestamp;
+}
+
+export interface EmbeddingStatus {
+  contract_version: "1.0.0";
+  as_of: Timestamp;
+  enabled: boolean;
+  provider: string;
+  model: string;
+  pending_jobs: number;
+  running_jobs: number;
+  failed_jobs: number;
+  active_spaces: EmbeddingSpaceSnapshot[];
+  shadow_spaces: EmbeddingSpaceSnapshot[];
+  limitations: GraphLimitation[];
+}
+
+export type ApplicationSimilarityReviewState =
+  | "UNREVIEWED" | "CONFIRMED_SIMILAR" | "CONFIRMED_DISTINCT"
+  | "CONSOLIDATION_CANDIDATE" | "DISMISSED";
+
+export interface ApplicationSimilarityCandidate {
+  id: UUID;
+  application: EntitySummary;
+  score: number;
+  method_version: string;
+  components: Record<string, unknown>;
+  overlaps: Record<string, unknown>;
+  differences: Record<string, unknown>;
+  coverage: Record<string, unknown>;
+  limitations: GraphLimitation[];
+  review_state: ApplicationSimilarityReviewState;
+  created_at: Timestamp;
+}
+
+export interface ApplicationSimilarityList {
+  contract_version: "1.0.0";
+  subject: EntitySummary;
+  candidates: ApplicationSimilarityCandidate[];
+  as_of: Timestamp;
+  limitations: GraphLimitation[];
+}
+
+export interface ApplicationSimilarityReviewRequest {
+  decision: Exclude<ApplicationSimilarityReviewState,"UNREVIEWED">;
+  reason_code: string;
+  rationale?: string;
+}
+
+export interface ApplicationSimilarityReviewResult {
+  contract_version: "1.0.0";
+  candidate_id: UUID;
+  review_state: ApplicationSimilarityReviewState;
+  reviewed_at: Timestamp;
 }
 
 export interface RepositoryProfile {
@@ -967,7 +1168,8 @@ export type ReviewQueueItemType =
   | "CAPABILITY_INFERENCE"
   | "DUPLICATE_CAPABILITY"
   | "MODERNIZATION_CANDIDATE"
-  | "MODERNIZATION_RECOMMENDATION";
+  | "MODERNIZATION_RECOMMENDATION"
+  | "APPLICATION_SIMILARITY";
 
 export interface ReviewQueueItem {
   item_id: string;

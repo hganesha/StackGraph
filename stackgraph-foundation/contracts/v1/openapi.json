@@ -405,6 +405,16 @@
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
           },
+          "graph_intelligence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityGraphIntelligence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recommendations": {
             "items": {
               "$ref": "#/components/schemas/RecommendationSummary"
@@ -476,6 +486,199 @@
           "components"
         ],
         "title": "ApplicationRepositoryDependencyHierarchy",
+        "type": "object"
+      },
+      "ApplicationSimilarityCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "application": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "components": {
+            "additionalProperties": true,
+            "title": "Components",
+            "type": "object"
+          },
+          "coverage": {
+            "additionalProperties": true,
+            "title": "Coverage",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "differences": {
+            "additionalProperties": true,
+            "title": "Differences",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "method_version": {
+            "title": "Method Version",
+            "type": "string"
+          },
+          "overlaps": {
+            "additionalProperties": true,
+            "title": "Overlaps",
+            "type": "object"
+          },
+          "review_state": {
+            "enum": [
+              "UNREVIEWED",
+              "CONFIRMED_SIMILAR",
+              "CONFIRMED_DISTINCT",
+              "CONSOLIDATION_CANDIDATE",
+              "DISMISSED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "score": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "application",
+          "score",
+          "method_version",
+          "components",
+          "overlaps",
+          "differences",
+          "coverage",
+          "review_state",
+          "created_at"
+        ],
+        "title": "ApplicationSimilarityCandidate",
+        "type": "object"
+      },
+      "ApplicationSimilarityList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationSimilarityCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "subject",
+          "as_of"
+        ],
+        "title": "ApplicationSimilarityList",
+        "type": "object"
+      },
+      "ApplicationSimilarityReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "CONFIRMED_SIMILAR",
+              "CONFIRMED_DISTINCT",
+              "CONSOLIDATION_CANDIDATE",
+              "DISMISSED"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "rationale": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "reason_code": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "reason_code"
+        ],
+        "title": "ApplicationSimilarityReviewRequest",
+        "type": "object"
+      },
+      "ApplicationSimilarityReviewResult": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "review_state": {
+            "enum": [
+              "UNREVIEWED",
+              "CONFIRMED_SIMILAR",
+              "CONFIRMED_DISTINCT",
+              "CONSOLIDATION_CANDIDATE",
+              "DISMISSED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "review_state",
+          "reviewed_at"
+        ],
+        "title": "ApplicationSimilarityReviewResult",
         "type": "object"
       },
       "ApplicationTechnologyFunction": {
@@ -5278,6 +5481,163 @@
         "title": "EcosystemAdmissionSummary",
         "type": "object"
       },
+      "EmbeddingSpaceSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_ratio": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Coverage Ratio",
+            "type": "number"
+          },
+          "dimensions": {
+            "maximum": 4096.0,
+            "minimum": 8.0,
+            "title": "Dimensions",
+            "type": "integer"
+          },
+          "evaluation": {
+            "additionalProperties": true,
+            "title": "Evaluation",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lifecycle_state": {
+            "enum": [
+              "SHADOW",
+              "ACTIVE",
+              "RETIRED",
+              "FAILED"
+            ],
+            "title": "Lifecycle State",
+            "type": "string"
+          },
+          "model_or_algorithm": {
+            "title": "Model Or Algorithm",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "space_key": {
+            "title": "Space Key",
+            "type": "string"
+          },
+          "space_kind": {
+            "enum": [
+              "SEMANTIC_ENTITY",
+              "STRUCTURAL_GRAPH",
+              "CODE"
+            ],
+            "title": "Space Kind",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "space_key",
+          "space_kind",
+          "lifecycle_state",
+          "provider",
+          "model_or_algorithm",
+          "dimensions",
+          "template_version",
+          "coverage_ratio",
+          "updated_at"
+        ],
+        "title": "EmbeddingSpaceSnapshot",
+        "type": "object"
+      },
+      "EmbeddingStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "active_spaces": {
+            "items": {
+              "$ref": "#/components/schemas/EmbeddingSpaceSnapshot"
+            },
+            "title": "Active Spaces",
+            "type": "array"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "failed_jobs": {
+            "minimum": 0.0,
+            "title": "Failed Jobs",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pending_jobs": {
+            "minimum": 0.0,
+            "title": "Pending Jobs",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "running_jobs": {
+            "minimum": 0.0,
+            "title": "Running Jobs",
+            "type": "integer"
+          },
+          "shadow_spaces": {
+            "items": {
+              "$ref": "#/components/schemas/EmbeddingSpaceSnapshot"
+            },
+            "title": "Shadow Spaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "enabled",
+          "provider",
+          "model",
+          "pending_jobs",
+          "running_jobs",
+          "failed_jobs"
+        ],
+        "title": "EmbeddingStatus",
+        "type": "object"
+      },
       "EnterpriseInsightReport": {
         "additionalProperties": false,
         "properties": {
@@ -5418,6 +5778,78 @@
           "reports"
         ],
         "title": "EnterpriseInsightReportList",
+        "type": "object"
+      },
+      "EntityGraphIntelligence": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "community_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Community Keys",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/GraphMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "primary_status": {
+            "enum": [
+              "STRUCTURALLY_CRITICAL",
+              "ELEVATED",
+              "TYPICAL",
+              "WAITING_FOR_DATA"
+            ],
+            "title": "Primary Status",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entity",
+          "primary_status",
+          "as_of"
+        ],
+        "title": "EntityGraphIntelligence",
         "type": "object"
       },
       "EntitySummary": {
@@ -5983,6 +6415,233 @@
         "title": "GitHubTokenUpdateRequest",
         "type": "object"
       },
+      "GraphAnalysisSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_run_id": {
+            "format": "uuid",
+            "title": "Analysis Run Id",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "coverage": {
+            "additionalProperties": true,
+            "title": "Coverage",
+            "type": "object"
+          },
+          "edge_count": {
+            "minimum": 0.0,
+            "title": "Edge Count",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "neo4j_projection_watermark": {
+            "minimum": 0.0,
+            "title": "Neo4J Projection Watermark",
+            "type": "integer"
+          },
+          "node_count": {
+            "minimum": 0.0,
+            "title": "Node Count",
+            "type": "integer"
+          },
+          "policy_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Policy Hash",
+            "type": "string"
+          },
+          "policy_key": {
+            "minLength": 1,
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "policy_version": {
+            "minimum": 1.0,
+            "title": "Policy Version",
+            "type": "integer"
+          },
+          "requested_change_watermark": {
+            "minimum": 0.0,
+            "title": "Requested Change Watermark",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "SUCCEEDED",
+              "SUCCEEDED_WITH_LIMITATIONS"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analysis_run_id",
+          "policy_key",
+          "policy_version",
+          "policy_hash",
+          "status",
+          "as_of",
+          "requested_change_watermark",
+          "neo4j_projection_watermark",
+          "node_count",
+          "edge_count"
+        ],
+        "title": "GraphAnalysisSnapshot",
+        "type": "object"
+      },
+      "GraphBlastRadius": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_entity_count": {
+            "minimum": 0.0,
+            "title": "Affected Entity Count",
+            "type": "integer"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "impacts": {
+            "items": {
+              "$ref": "#/components/schemas/GraphImpactPath"
+            },
+            "title": "Impacts",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "maximum_depth": {
+            "minimum": 0.0,
+            "title": "Maximum Depth",
+            "type": "integer"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entity",
+          "affected_entity_count",
+          "maximum_depth",
+          "as_of"
+        ],
+        "title": "GraphBlastRadius",
+        "type": "object"
+      },
+      "GraphCommunity": {
+        "additionalProperties": false,
+        "properties": {
+          "community_key": {
+            "minLength": 1,
+            "title": "Community Key",
+            "type": "string"
+          },
+          "member_count": {
+            "minimum": 1.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "representative_entities": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Representative Entities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "community_key",
+          "member_count"
+        ],
+        "title": "GraphCommunity",
+        "type": "object"
+      },
+      "GraphCommunityList": {
+        "additionalProperties": false,
+        "properties": {
+          "algorithm_key": {
+            "minLength": 1,
+            "title": "Algorithm Key",
+            "type": "string"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "communities": {
+            "items": {
+              "$ref": "#/components/schemas/GraphCommunity"
+            },
+            "title": "Communities",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "algorithm_key",
+          "as_of"
+        ],
+        "title": "GraphCommunityList",
+        "type": "object"
+      },
       "GraphEdge": {
         "additionalProperties": false,
         "properties": {
@@ -6053,6 +6712,224 @@
           "citation_fact_ids"
         ],
         "title": "GraphEdge",
+        "type": "object"
+      },
+      "GraphImpactPath": {
+        "additionalProperties": false,
+        "properties": {
+          "distance": {
+            "minimum": 1.0,
+            "title": "Distance",
+            "type": "integer"
+          },
+          "entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Entity Ids",
+            "type": "array"
+          },
+          "minimum_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Confidence",
+            "type": "number"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "target",
+          "distance",
+          "minimum_confidence",
+          "entity_ids",
+          "supporting_fact_ids"
+        ],
+        "title": "GraphImpactPath",
+        "type": "object"
+      },
+      "GraphIntelligenceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "deployment_state": {
+            "enum": [
+              "PROVISIONING",
+              "ACTIVE",
+              "SUSPENDED",
+              "ERROR",
+              "UNCONFIGURED"
+            ],
+            "title": "Deployment State",
+            "type": "string"
+          },
+          "desired_change_watermark": {
+            "minimum": 0.0,
+            "title": "Desired Change Watermark",
+            "type": "integer"
+          },
+          "failed_requests": {
+            "minimum": 0.0,
+            "title": "Failed Requests",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "neo4j_projection_watermark": {
+            "minimum": 0.0,
+            "title": "Neo4J Projection Watermark",
+            "type": "integer"
+          },
+          "oldest_pending_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending At"
+          },
+          "pending_requests": {
+            "minimum": 0.0,
+            "title": "Pending Requests",
+            "type": "integer"
+          },
+          "projection_lag": {
+            "minimum": 0.0,
+            "title": "Projection Lag",
+            "type": "integer"
+          },
+          "running_requests": {
+            "minimum": 0.0,
+            "title": "Running Requests",
+            "type": "integer"
+          },
+          "snapshots": {
+            "items": {
+              "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+            },
+            "title": "Snapshots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "deployment_state",
+          "desired_change_watermark",
+          "neo4j_projection_watermark",
+          "projection_lag",
+          "pending_requests",
+          "running_requests",
+          "failed_requests"
+        ],
+        "title": "GraphIntelligenceStatus",
+        "type": "object"
+      },
+      "GraphMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_run_id": {
+            "format": "uuid",
+            "title": "Analysis Run Id",
+            "type": "string"
+          },
+          "components": {
+            "additionalProperties": true,
+            "title": "Components",
+            "type": "object"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "metric_key": {
+            "minLength": 1,
+            "title": "Metric Key",
+            "type": "string"
+          },
+          "numeric_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numeric Value"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          },
+          "policy_key": {
+            "minLength": 1,
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          }
+        },
+        "required": [
+          "analysis_run_id",
+          "policy_key",
+          "metric_key"
+        ],
+        "title": "GraphMetric",
         "type": "object"
       },
       "GraphNeighborhood": {
@@ -6195,6 +7072,86 @@
           "aggregate"
         ],
         "title": "GraphNode",
+        "type": "object"
+      },
+      "GraphRiskItem": {
+        "additionalProperties": false,
+        "properties": {
+          "component_metrics": {
+            "items": {
+              "$ref": "#/components/schemas/GraphMetric"
+            },
+            "title": "Component Metrics",
+            "type": "array"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "systemic_risk": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Systemic Risk",
+            "type": "number"
+          }
+        },
+        "required": [
+          "entity",
+          "systemic_risk"
+        ],
+        "title": "GraphRiskItem",
+        "type": "object"
+      },
+      "GraphRiskList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "risks": {
+            "items": {
+              "$ref": "#/components/schemas/GraphRiskItem"
+            },
+            "title": "Risks",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "as_of"
+        ],
+        "title": "GraphRiskList",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -9260,7 +10217,8 @@
                 "CAPABILITY_INFERENCE",
                 "DUPLICATE_CAPABILITY",
                 "MODERNIZATION_CANDIDATE",
-                "MODERNIZATION_RECOMMENDATION"
+                "MODERNIZATION_RECOMMENDATION",
+                "APPLICATION_SIMILARITY"
               ]
             },
             "title": "Counts",
@@ -9320,7 +10278,8 @@
               "CAPABILITY_INFERENCE",
               "DUPLICATE_CAPABILITY",
               "MODERNIZATION_CANDIDATE",
-              "MODERNIZATION_RECOMMENDATION"
+              "MODERNIZATION_RECOMMENDATION",
+              "APPLICATION_SIMILARITY"
             ],
             "title": "Item Type",
             "type": "string"
@@ -9538,6 +10497,137 @@
           "method_version"
         ],
         "title": "Score",
+        "type": "object"
+      },
+      "SemanticSearchHit": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "input_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Hash",
+            "type": "string"
+          },
+          "score": {
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "sensitivity": {
+            "enum": [
+              "PUBLIC",
+              "INTERNAL",
+              "CONFIDENTIAL",
+              "RESTRICTED"
+            ],
+            "title": "Sensitivity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "score",
+          "input_hash",
+          "sensitivity"
+        ],
+        "title": "SemanticSearchHit",
+        "type": "object"
+      },
+      "SemanticSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Entity Types",
+            "type": "array"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 2,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SemanticSearchRequest",
+        "type": "object"
+      },
+      "SemanticSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticSearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "model_or_algorithm": {
+            "title": "Model Or Algorithm",
+            "type": "string"
+          },
+          "query_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Query Hash",
+            "type": "string"
+          },
+          "space_id": {
+            "format": "uuid",
+            "title": "Space Id",
+            "type": "string"
+          },
+          "space_key": {
+            "title": "Space Key",
+            "type": "string"
+          },
+          "template_version": {
+            "title": "Template Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "space_id",
+          "space_key",
+          "model_or_algorithm",
+          "template_version",
+          "query_hash",
+          "as_of"
+        ],
+        "title": "SemanticSearchResponse",
         "type": "object"
       },
       "ServiceControlRequest": {
@@ -13370,6 +14460,168 @@
         ]
       }
     },
+    "/embeddings/status": {
+      "get": {
+        "operationId": "getEmbeddingStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Embedding Status",
+        "tags": [
+          "embeddings"
+        ]
+      }
+    },
+    "/entities/{id}/blast-radius": {
+      "get": {
+        "operationId": "getEntityBlastRadius",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphBlastRadius"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entity Blast Radius",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
+    "/entities/{id}/graph-metrics": {
+      "get": {
+        "operationId": "getEntityGraphMetrics",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntityGraphIntelligence"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entity Graph Metrics",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
+    "/entities/{id}/similar": {
+      "get": {
+        "operationId": "listSimilarApplications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationSimilarityList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Similar Applications",
+        "tags": [
+          "embeddings"
+        ]
+      }
+    },
     "/estate/summary": {
       "get": {
         "operationId": "getEstateSummary",
@@ -13498,6 +14750,128 @@
         "summary": "Get Fact Evidence",
         "tags": [
           "evidence"
+        ]
+      }
+    },
+    "/graph-intelligence/communities": {
+      "get": {
+        "operationId": "listGraphIntelligenceCommunities",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "policy_key",
+            "required": false,
+            "schema": {
+              "default": "runtime-dependency",
+              "pattern": "^[a-z][a-z0-9-]{2,63}$",
+              "title": "Policy Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphCommunityList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Graph Intelligence Communities",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
+    "/graph-intelligence/risks": {
+      "get": {
+        "operationId": "listGraphIntelligenceRisks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphRiskList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Graph Intelligence Risks",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
+    "/graph-intelligence/status": {
+      "get": {
+        "operationId": "getGraphIntelligenceStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphIntelligenceStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Graph Intelligence Status",
+        "tags": [
+          "graph-intelligence"
         ]
       }
     },
@@ -14285,7 +15659,8 @@
                       "CAPABILITY_INFERENCE",
                       "DUPLICATE_CAPABILITY",
                       "MODERNIZATION_CANDIDATE",
-                      "MODERNIZATION_RECOMMENDATION"
+                      "MODERNIZATION_RECOMMENDATION",
+                      "APPLICATION_SIMILARITY"
                     ],
                     "type": "string"
                   },
@@ -14372,6 +15747,47 @@
         ]
       }
     },
+    "/search/semantic": {
+      "post": {
+        "operationId": "semanticSearch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SemanticSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Semantic Search",
+        "tags": [
+          "embeddings"
+        ]
+      }
+    },
     "/session": {
       "get": {
         "operationId": "getSession",
@@ -14390,6 +15806,59 @@
         "summary": "Get Session",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/similarity-candidates/{id}/review": {
+      "post": {
+        "operationId": "reviewApplicationSimilarity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplicationSimilarityReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationSimilarityReviewResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Application Similarity",
+        "tags": [
+          "embeddings"
         ]
       }
     },

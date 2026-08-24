@@ -265,7 +265,63 @@
         "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
         "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},
-        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
+        "graph_intelligence": {
+          "oneOf": [
+            {"$ref": "#/$defs/entityGraphIntelligence"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "graphAnalysisSnapshot": {
+      "type": "object",
+      "required": ["analysis_run_id", "policy_key", "policy_version", "policy_hash", "status", "as_of", "requested_change_watermark", "neo4j_projection_watermark", "node_count", "edge_count"],
+      "properties": {
+        "analysis_run_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "policy_key": {"type": "string", "minLength": 1},
+        "policy_version": {"type": "integer", "minimum": 1},
+        "policy_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "status": {"enum": ["SUCCEEDED", "SUCCEEDED_WITH_LIMITATIONS"]},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "requested_change_watermark": {"type": "integer", "minimum": 0},
+        "neo4j_projection_watermark": {"type": "integer", "minimum": 0},
+        "node_count": {"type": "integer", "minimum": 0},
+        "edge_count": {"type": "integer", "minimum": 0},
+        "coverage": {"type": "object"},
+        "limitations": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "graphMetric": {
+      "type": "object",
+      "required": ["analysis_run_id", "policy_key", "metric_key"],
+      "properties": {
+        "analysis_run_id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "policy_key": {"type": "string", "minLength": 1},
+        "metric_key": {"type": "string", "minLength": 1},
+        "numeric_value": {"type": ["number", "null"]},
+        "percentile": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "rank": {"type": ["integer", "null"], "minimum": 1},
+        "components": {"type": "object"},
+        "limitations": {"type": "array", "items": {"type": "object"}}
+      },
+      "additionalProperties": false
+    },
+    "entityGraphIntelligence": {
+      "type": "object",
+      "required": ["contract_version", "entity", "primary_status", "reasons", "snapshots", "metrics", "community_keys", "as_of", "limitations"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "entity": {"$ref": "#/$defs/entitySummary"},
+        "primary_status": {"enum": ["STRUCTURALLY_CRITICAL", "ELEVATED", "TYPICAL", "WAITING_FOR_DATA"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "snapshots": {"type": "array", "items": {"$ref": "#/$defs/graphAnalysisSnapshot"}},
+        "metrics": {"type": "array", "items": {"$ref": "#/$defs/graphMetric"}},
+        "community_keys": {"type": "array", "items": {"type": "string"}},
+        "as_of": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "limitations": {"type": "array", "items": {"type": "object"}}
       },
       "additionalProperties": false
     },
