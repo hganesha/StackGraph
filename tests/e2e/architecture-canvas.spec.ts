@@ -217,6 +217,33 @@ test.describe("architecture canvas", () => {
     }
   });
 
+  test("occupant chips stay inside their cells in the wide canvas layout", async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1290 });
+    await page.goto("/architecture");
+    await waitForCanvas(page);
+
+    const chips = page.locator(`${CANVAS_CELL} li > button`);
+    expect(await chips.count()).toBeGreaterThan(0);
+
+    const overflow = await chips.evaluateAll((nodes) =>
+      nodes.flatMap((node) => {
+        const cell = node.closest('[role="gridcell"]');
+        if (!cell) return ["chip has no grid cell"];
+
+        const chipRect = node.getBoundingClientRect();
+        const cellRect = cell.getBoundingClientRect();
+        const epsilon = 0.5;
+        return chipRect.left < cellRect.left - epsilon || chipRect.right > cellRect.right + epsilon
+          ? [
+              `${node.getAttribute("aria-label")}: chip ${chipRect.left}-${chipRect.right}, cell ${cellRect.left}-${cellRect.right}`,
+            ]
+          : [];
+      }),
+    );
+
+    expect(overflow).toEqual([]);
+  });
+
   test("unplaced observations are surfaced, never dropped", async ({ page }) => {
     await page.goto("/architecture");
     await waitForCanvas(page);

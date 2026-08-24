@@ -342,10 +342,13 @@
 /* ---- occupant chip ---- */
 
 .chip {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   gap: var(--sg-space-1);
+  min-inline-size: 0;
   max-inline-size: 100%;
+  overflow: hidden;
   padding: 2px var(--sg-space-2);
   background: var(--sg-surface-base);
   border: var(--sg-border-hairline) solid var(--sg-surface-border);
