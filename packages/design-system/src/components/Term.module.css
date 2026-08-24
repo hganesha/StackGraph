@@ -26,8 +26,10 @@
   border-radius: 2px;
 }
 
-/* Clipped rather than removed, so aria-describedby still resolves the text when the
-   definition is closed. */
+/* Collapsed rather than removed, so aria-describedby still resolves the text when the
+   definition is closed. At full size it would keep widening the scrollable area of a
+   narrow container even while invisible, which is a horizontal scrollbar with nothing
+   in it. */
 .pop {
   position: absolute;
   /* The popover is nested wherever the term is used, including inside uppercase,
@@ -38,10 +40,15 @@
   font-weight: 400;
   font-style: normal;
   inset-block-start: calc(100% + var(--sg-space-2));
-  inset-inline-start: 0;
+  /* Shifted back towards its word by however much it would otherwise hang outside
+     whatever clips it. Term measures that as it opens; unmeasured, it sits flush with
+     the word as before. */
+  inset-inline-start: var(--sg-term-shift, 0);
   z-index: 30;
   inline-size: max-content;
-  max-inline-size: min(22rem, 78vw);
+  max-inline-size: 1px;
+  max-block-size: 1px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--sg-space-1);
@@ -58,6 +65,11 @@
   transition: opacity var(--sg-motion-hover);
 }
 .popOpen {
+  /* Never wider than the space inside whatever would clip it, so a definition in a
+     360px panel stays readable instead of being cut off mid-sentence. */
+  max-inline-size: min(22rem, var(--sg-term-available, 78vw));
+  max-block-size: none;
+  overflow: visible;
   clip-path: none;
   opacity: 1;
   pointer-events: auto;
