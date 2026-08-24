@@ -9,7 +9,9 @@ It supports public repositories without authentication and private/customer repo
 - Resolves the repository's immutable GitHub ID and current default branch.
 - Resolves the default branch to an exact commit and tree SHA.
 - Stops before tree or blob retrieval when `--previous-revision` matches.
-- Lists the Git tree, selects known JavaScript/TypeScript and Python dependency and source files, and downloads blobs serially.
+- Lists the Git tree and downloads known JavaScript/TypeScript and Python dependency,
+  source, and repository-hygiene files such as README, LICENSE, CODEOWNERS, CI,
+  lockfiles, and test configuration.
 - Enforces per-file, total-byte, and file-count limits.
 - Marks snapshots `PARTIAL` when GitHub truncates the tree or a configured limit skips a target file.
 - Writes an immutable, revision-addressed directory containing retrieved files, `snapshot.json`, and a contract-v1 `raw-observation.json` envelope.
@@ -70,6 +72,9 @@ contract. It emits purl-based dependency facts from npm and Python manifests and
 locks, then independently records declared, resolved, referenced, statically
 reachable, and optionally runtime-observed use. Unused and narrow-use candidates
 are emitted only for complete source scans and always include limitations.
+Repository profiles also record deterministic README, license, ownership, CI,
+dependency-lockfile, and test-presence signals. Downstream absence rules evaluate
+those signals only when the source snapshot is `COMPLETE`.
 When the request contains the snapshot `blob_uri`, checksum, and size descriptor,
 every file evidence reference points to its exact archive member.
 

@@ -4838,7 +4838,13 @@
               "DEPENDENCY_CONFUSION",
               "LICENSE_OBLIGATION",
               "CROSS_REPOSITORY_CLONE",
-              "VENDORED_SOURCE_OUTSIDE_MANAGEMENT"
+              "VENDORED_SOURCE_OUTSIDE_MANAGEMENT",
+              "MISSING_README",
+              "MISSING_LICENSE",
+              "MISSING_CODEOWNERS",
+              "MISSING_CI_CONFIGURATION",
+              "MISSING_DEPENDENCY_LOCKFILE",
+              "MISSING_TESTS"
             ],
             "title": "Kind",
             "type": "string"

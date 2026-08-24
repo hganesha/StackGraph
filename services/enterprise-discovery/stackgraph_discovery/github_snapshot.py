@@ -34,6 +34,11 @@ COMPOSE_FILE = re.compile(r"^(?:docker-)?compose(?:\.[a-z0-9_-]+)*\.ya?ml$", re.
 
 EXACT_MANIFEST_NAMES = {
     ".npmrc": "NPM_CONFIG",
+    ".travis.yml": "CI_CONFIGURATION",
+    "CODEOWNERS": "REPOSITORY_GOVERNANCE",
+    "Jenkinsfile": "CI_CONFIGURATION",
+    "pytest.ini": "TEST_CONFIGURATION",
+    "tox.ini": "TEST_CONFIGURATION",
     "package.json": "NPM_MANIFEST",
     "package-lock.json": "NPM_LOCK",
     "npm-shrinkwrap.json": "NPM_LOCK",
@@ -532,6 +537,29 @@ def manifest_kind(path: str) -> str | None:
     if name in EXACT_MANIFEST_NAMES:
         return EXACT_MANIFEST_NAMES[name]
     lower_name = name.lower()
+    lowered_parts = tuple(part.lower() for part in pure_path.parts)
+    if lower_name == "codeowners":
+        return "REPOSITORY_GOVERNANCE"
+    if (
+        (lower_name == "license" or lower_name.startswith("license.")
+         or lower_name == "copying" or lower_name.startswith("copying."))
+        and pure_path.suffix.lower() in README_SUFFIXES
+    ):
+        return "REPOSITORY_GOVERNANCE"
+    if (
+        lower_name in {
+            ".gitlab-ci.yml", ".gitlab-ci.yaml", "azure-pipelines.yml",
+            "azure-pipelines.yaml", "bitbucket-pipelines.yml",
+            "bitbucket-pipelines.yaml",
+        }
+        or (lowered_parts[:1] == (".circleci",) and lower_name in {"config.yml", "config.yaml"})
+    ):
+        return "CI_CONFIGURATION"
+    if re.fullmatch(
+        r"(?:jest|vitest|playwright|cypress)\.config\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts)",
+        lower_name,
+    ):
+        return "TEST_CONFIGURATION"
     if lower_name == "dockerfile" or lower_name.startswith("dockerfile."):
         return "DEPLOYMENT_CONFIG"
     if COMPOSE_FILE.fullmatch(lower_name):
@@ -562,7 +590,6 @@ def manifest_kind(path: str) -> str | None:
         return SOURCE_SUFFIXES[pure_path.suffix.lower()]
     if pure_path.suffix.lower() == ".tf":
         return "INFRASTRUCTURE_CONFIG"
-    lowered_parts = tuple(part.lower() for part in pure_path.parts)
     if pure_path.suffix.lower() in {".yaml", ".yml", ".toml", ".json", ".properties"} and any(
         part in {".github", "workflows", "deploy", "deployment", "k8s", "kubernetes", "config"}
         for part in lowered_parts

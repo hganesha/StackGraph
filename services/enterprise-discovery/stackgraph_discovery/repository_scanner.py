@@ -26,7 +26,7 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.8.0"
+SCANNER_VERSION = "1.9.0"
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -1885,6 +1885,7 @@ def _repository_profile_facts(
     })
     operational_signals = _repository_operational_signals(contents)
     key_files = _repository_key_files(contents)
+    hygiene = _repository_hygiene(contents)
     evidence_sources = list(description_sources[:8])
     evidenced_paths = {source.path for source in evidence_sources}
     for path in key_files:
@@ -1908,6 +1909,7 @@ def _repository_profile_facts(
         "languages": languages,
         "components": components,
         "key_files": key_files,
+        "hygiene": hygiene,
         "operational_signals": operational_signals,
         "limitations": [
             "purpose is reported only when README or manifest text states it",
@@ -2113,6 +2115,11 @@ def _repository_key_files(contents: Mapping[str, bytes]) -> list[str]:
     values = [
         path for path in contents
         if _is_readme(path)
+        or _is_license(path)
+        or _is_codeowners(path)
+        or _is_ci_configuration(path)
+        or _is_test_file(path)
+        or _is_test_configuration(path)
         or PurePosixPath(path).name in {
             "package.json", "pyproject.toml", "requirements.txt", "Pipfile", "Dockerfile", "Makefile",
         }
@@ -2121,6 +2128,143 @@ def _repository_key_files(contents: Mapping[str, bytes]) -> list[str]:
         or PurePosixPath(path).suffix.lower() == ".tf"
     ]
     return sorted(values, key=lambda path: (len(PurePosixPath(path).parts), path))[:24]
+
+
+def _repository_hygiene(contents: Mapping[str, bytes]) -> dict[str, dict[str, Any]]:
+    paths = tuple(contents)
+    root_readmes = sorted(path for path in paths if len(PurePosixPath(path).parts) == 1 and _is_readme(path))
+    licenses = sorted(path for path in paths if len(PurePosixPath(path).parts) == 1 and _is_license(path))
+    codeowners = sorted(path for path in paths if _is_codeowners(path))
+    ci_configurations = sorted(path for path in paths if _is_ci_configuration(path))
+    test_files = sorted(path for path in paths if _is_test_file(path))
+    test_configurations = sorted(path for path in paths if _is_test_configuration(path))
+    source_files = sorted(path for path in paths if _is_source(path) and not _is_test_file(path))
+    dependency_components = _dependency_component_lock_status(contents)
+    missing_locks = [
+        component["path"] for component in dependency_components if not component["lockfile_present"]
+    ]
+    return {
+        "readme": {"present": bool(root_readmes), "paths": root_readmes},
+        "license": {"present": bool(licenses), "paths": licenses},
+        "codeowners": {"present": bool(codeowners), "paths": codeowners},
+        "ci": {"present": bool(ci_configurations), "paths": ci_configurations},
+        "dependency_lockfile": {
+            "applicable": bool(dependency_components),
+            "present": bool(dependency_components) and not missing_locks,
+            "missing_component_paths": missing_locks,
+            "components": dependency_components,
+        },
+        "tests": {
+            "applicable": bool(source_files),
+            "present": bool(test_files or test_configurations),
+            "paths": (test_files + test_configurations)[:24],
+        },
+    }
+
+
+def _is_license(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    lower = pure_path.name.lower()
+    return (
+        lower in {"license", "copying"}
+        or lower.startswith("license.")
+        or lower.startswith("copying.")
+    ) and pure_path.suffix.lower() in README_SUFFIXES
+
+
+def _is_codeowners(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    if pure_path.name.casefold() != "codeowners":
+        return False
+    parent = tuple(part.casefold() for part in pure_path.parts[:-1])
+    return parent in {(), (".github",), ("docs",)}
+
+
+def _is_ci_configuration(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    lower = pure_path.name.casefold()
+    parts = tuple(part.casefold() for part in pure_path.parts)
+    return (
+        (len(parts) >= 3 and parts[0:2] == (".github", "workflows")
+         and pure_path.suffix.lower() in {".yml", ".yaml"})
+        or parts in {(".circleci", "config.yml"), (".circleci", "config.yaml")}
+        or (len(parts) == 1 and lower in {
+            ".gitlab-ci.yml", ".gitlab-ci.yaml", ".travis.yml", "jenkinsfile",
+            "azure-pipelines.yml", "azure-pipelines.yaml", "bitbucket-pipelines.yml",
+            "bitbucket-pipelines.yaml",
+        })
+    )
+
+
+def _is_test_file(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    parts = tuple(part.casefold() for part in pure_path.parts[:-1])
+    name = pure_path.name.casefold()
+    stem = pure_path.stem.casefold()
+    return (
+        bool(set(parts) & {"test", "tests", "__tests__", "spec", "specs"})
+        or name.startswith("test_")
+        or stem.endswith("_test")
+        or stem.endswith((".test", ".spec"))
+    ) and _is_source(path)
+
+
+def _is_test_configuration(path: str) -> bool:
+    pure_path = PurePosixPath(path)
+    lower = pure_path.name.casefold()
+    return (
+        lower in {"pytest.ini", "tox.ini"}
+        or re.fullmatch(
+            r"(?:jest|vitest|playwright|cypress)\.config\.(?:js|jsx|mjs|cjs|ts|tsx|mts|cts)",
+            lower,
+        ) is not None
+    )
+
+
+def _dependency_component_lock_status(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
+    components: list[dict[str, Any]] = []
+    for path in sorted(contents):
+        name = PurePosixPath(path).name
+        if name not in {"package.json", "pyproject.toml", "Pipfile"}:
+            continue
+        if not _manifest_declares_dependencies(name, contents[path]):
+            continue
+        directory = str(PurePosixPath(path).parent)
+        lock_names = {
+            "package.json": ("package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"),
+            "pyproject.toml": ("poetry.lock", "uv.lock"),
+            "Pipfile": ("Pipfile.lock",),
+        }[name]
+        lock_path = _nearest_file(contents, directory, lock_names)
+        components.append({
+            "path": "." if directory == "." else directory,
+            "manifest_path": path,
+            "lockfile_present": lock_path is not None,
+            "lockfile_path": lock_path,
+        })
+    return components
+
+
+def _manifest_declares_dependencies(name: str, content: bytes) -> bool:
+    try:
+        if name == "package.json":
+            document = json.loads(content)
+            return isinstance(document, Mapping) and any(
+                isinstance(document.get(field), (Mapping, list)) and bool(document.get(field))
+                for field in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+            )
+        if name == "pyproject.toml":
+            document = tomllib.loads(content.decode("utf-8"))
+            project = document.get("project") if isinstance(document, Mapping) else None
+            tool = document.get("tool") if isinstance(document, Mapping) else None
+            poetry = tool.get("poetry") if isinstance(tool, Mapping) else None
+            return bool(
+                (isinstance(project, Mapping) and project.get("dependencies"))
+                or (isinstance(poetry, Mapping) and poetry.get("dependencies"))
+            )
+        return bool(re.search(r"^\s*\[(?:packages|dev-packages)\]\s*$", content.decode("utf-8"), re.M))
+    except (UnicodeDecodeError, json.JSONDecodeError, tomllib.TOMLDecodeError):
+        return False
 
 
 def _application_boundary_facts(

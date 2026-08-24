@@ -104,6 +104,22 @@ def commit_response() -> HttpResponse:
 
 
 class GitHubAcquisitionTests(unittest.TestCase):
+    def test_repository_hygiene_files_are_acquisition_targets(self) -> None:
+        expected = {
+            "LICENSE.md": "REPOSITORY_GOVERNANCE",
+            ".github/CODEOWNERS": "REPOSITORY_GOVERNANCE",
+            ".github/workflows/ci.yml": "BUILD_OR_DEPLOYMENT_CONFIG",
+            ".gitlab-ci.yml": "CI_CONFIGURATION",
+            ".circleci/config.yml": "CI_CONFIGURATION",
+            "pytest.ini": "TEST_CONFIGURATION",
+            "vitest.config.ts": "TEST_CONFIGURATION",
+        }
+
+        self.assertEqual(
+            {path: manifest_kind(path) for path in expected},
+            expected,
+        )
+
     def test_acquires_only_target_files_and_writes_contract_envelope(self) -> None:
         readme = b"# Widgets\n"
         package = b'{"dependencies":{"react":"19.1.0"}}\n'

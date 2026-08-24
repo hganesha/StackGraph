@@ -12,6 +12,10 @@ from app.insight_rule_expansion import (
     EXPANDED_RULE_CATALOG,
     expanded_rule_queries,
 )
+from app.repository_hygiene import (
+    REPOSITORY_HYGIENE_RULE_CATALOG,
+    repository_hygiene_queries,
+)
 from app.models import (
     DeterministicInsight,
     DeterministicInsightList,
@@ -55,7 +59,9 @@ _CORE_RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
      "severity": "MEDIUM", "readiness": "NEEDS_DATA",
      "missing": ("Approved golden-stack baselines",)},
 )
-RULE_CATALOG: tuple[Mapping[str, Any], ...] = _CORE_RULE_CATALOG + EXPANDED_RULE_CATALOG
+RULE_CATALOG: tuple[Mapping[str, Any], ...] = (
+    _CORE_RULE_CATALOG + EXPANDED_RULE_CATALOG + REPOSITORY_HYGIENE_RULE_CATALOG
+)
 
 _SEVERITY_BASE = {"CRITICAL": 62.0, "HIGH": 48.0, "MEDIUM": 34.0, "LOW": 20.0, "INFO": 8.0}
 _CACHE_TTL_SECONDS = 30.0
@@ -132,7 +138,7 @@ async def list_deterministic_insights(
             ("dependency.unused-direct", _UNUSED_SQL, (tenant_id,)),
             ("dependency.version-fragmentation", _FRAGMENTATION_SQL, (tenant_id,)),
             ("capability.technology-diversity", _CAPABILITY_DIVERSITY_SQL, (tenant_id,)),
-        ) + expanded_rule_queries(tenant_id, policies)
+        ) + expanded_rule_queries(tenant_id, policies) + repository_hygiene_queries(tenant_id)
         for key, sql, params in queries:
             policy = policies[key]
             if not policy["enabled"] or (rule_key is not None and rule_key != key):

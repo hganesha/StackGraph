@@ -178,6 +178,68 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(profile_fact["object_value"]["languages"], ["Python"])
         self.assertEqual(profile_fact["assertion_class"], "INFERRED")
 
+    def test_repository_profile_records_hygiene_signals(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "README.md").write_text("Nested documentation only.\n")
+            (root / ".github" / "CODEOWNERS").write_text("* @acme/platform\n")
+            (root / ".github" / "workflows" / "ci.yml").write_text("name: CI\n")
+            (root / "LICENSE.md").write_text("Internal use only.\n")
+            (root / "package.json").write_text(json.dumps({
+                "name": "billing-api",
+                "dependencies": {"fastify": "5.5.0"},
+            }))
+            (root / "package-lock.json").write_text(json.dumps({
+                "lockfileVersion": 3,
+                "packages": {},
+            }))
+            (root / "src.ts").write_text("export const bill = true;\n")
+            (root / "src.test.ts").write_text("export const tested = true;\n")
+
+            result = scan_repository(request(root))
+
+        profile = next(
+            fact["object_value"] for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "repository_profile"
+        )
+        hygiene = profile["hygiene"]
+        self.assertFalse(hygiene["readme"]["present"])
+        self.assertTrue(hygiene["license"]["present"])
+        self.assertTrue(hygiene["codeowners"]["present"])
+        self.assertTrue(hygiene["ci"]["present"])
+        self.assertTrue(hygiene["dependency_lockfile"]["applicable"])
+        self.assertTrue(hygiene["dependency_lockfile"]["present"])
+        self.assertTrue(hygiene["tests"]["applicable"])
+        self.assertTrue(hygiene["tests"]["present"])
+
+    def test_repository_profile_marks_applicable_missing_lockfile_and_tests(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "README.md").write_text("# Billing API\n\nRuns billing workflows.\n")
+            (root / "package.json").write_text(json.dumps({
+                "name": "billing-api",
+                "dependencies": {"fastify": "5.5.0"},
+            }))
+            (root / "src.ts").write_text("export const bill = true;\n")
+
+            result = scan_repository(request(root))
+
+        profile = next(
+            fact["object_value"] for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "repository_profile"
+        )
+        hygiene = profile["hygiene"]
+        self.assertTrue(hygiene["readme"]["present"])
+        self.assertFalse(hygiene["license"]["present"])
+        self.assertFalse(hygiene["codeowners"]["present"])
+        self.assertFalse(hygiene["ci"]["present"])
+        self.assertTrue(hygiene["dependency_lockfile"]["applicable"])
+        self.assertFalse(hygiene["dependency_lockfile"]["present"])
+        self.assertEqual(hygiene["dependency_lockfile"]["missing_component_paths"], ["."])
+        self.assertTrue(hygiene["tests"]["applicable"])
+        self.assertFalse(hygiene["tests"]["present"])
+
     def test_custom_registry_manifest_emits_internal_package_publication(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
