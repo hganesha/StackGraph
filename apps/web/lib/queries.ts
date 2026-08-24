@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import { stackGraphClient, type EstateSummary, type Namespace } from "@stackgraph/shared";
+import type { SimilarityDecision } from "./reviews";
 
 export function useEstateSummary() {
   return useQuery({
@@ -143,17 +144,33 @@ export function useSimilarApplications(entityId: string, enabled = true, limit =
   });
 }
 
-export function useReviewApplicationSimilarity(entityId: string) {
+/**
+ * Record a similarity decision. The reason and rationale come from the reviewer:
+ * `application_similarity_feedback` is append-only and stores both, so a decision
+ * saved without them is a decision nobody can later explain.
+ *
+ * `entityId` is optional because the review queue decides candidates without an
+ * application in context.
+ */
+export function useReviewApplicationSimilarity(entityId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ candidateId, decision }: {
+    mutationFn: ({ candidateId, decision, reasonCode, rationale }: {
       candidateId: string;
-      decision: "CONFIRMED_SIMILAR" | "CONFIRMED_DISTINCT" | "CONSOLIDATION_CANDIDATE" | "DISMISSED";
+      decision: SimilarityDecision;
+      reasonCode: string;
+      rationale?: string;
     }) => stackGraphClient.reviewApplicationSimilarity(candidateId, {
-      decision,reason_code: "APPLICATION_DETAIL_REVIEW",
+      decision, reason_code: reasonCode, rationale: rationale?.trim() || undefined,
     }),
     onSuccess: () => Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["embeddings", "similar-applications", entityId] }),
+      // Without an entity in context, invalidate every similarity list rather than a
+      // key ending in undefined, which would match nothing.
+      queryClient.invalidateQueries({
+        queryKey: entityId
+          ? ["embeddings", "similar-applications", entityId]
+          : ["embeddings", "similar-applications"],
+      }),
       queryClient.invalidateQueries({ queryKey: ["reviews", "queue"] }),
     ]),
   });

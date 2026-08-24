@@ -90,3 +90,32 @@ test("architecture risk findings open the impacted application", async ({ page }
   await expect(page).toHaveURL(billingApplication);
   await expect(page.getByRole("heading", { name: "Billing API" })).toBeVisible();
 });
+
+test("a similarity candidate is decided in the queue, with a reason", async ({ page }) => {
+  await page.goto("/reviews");
+
+  const candidate = page.locator("li").filter({ hasText: "Billing API ↔ Ledger API" });
+  await expect(candidate).toBeVisible();
+
+  // The decision used to be impossible here: the row said "Open where this was found
+  // to review it" and offered no link.
+  await candidate.getByRole("button", { name: "Consider consolidating" }).click();
+
+  // A reason is required, so the submit stays disabled until one is chosen.
+  const submit = candidate.getByRole("button", { name: /^Record consider consolidating$/ });
+  await expect(submit).toBeDisabled();
+
+  await candidate.getByRole("radio", { name: "Their functions overlap enough to merge" }).check();
+  await candidate.getByRole("textbox", { name: /future reader/ }).fill("Both settle the same ledger.");
+  await expect(submit).toBeEnabled();
+
+  await submit.click();
+  await expect(candidate.getByText(/Recorded as consolidation candidate/)).toBeVisible();
+});
+
+test("queue findings decided elsewhere link to where they were found", async ({ page }) => {
+  await page.goto("/reviews");
+
+  const recommendation = page.locator("li").filter({ hasText: "Replace bespoke retry helper" });
+  await expect(recommendation.getByRole("link", { name: /Open the repository/ })).toBeVisible();
+});

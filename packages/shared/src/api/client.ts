@@ -1054,8 +1054,8 @@ const fixtureClient: StackGraphClient = {
       as_of: now,
       counts: {
         IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 0, DUPLICATE_CAPABILITY: 0,
-        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 0,
-        APPLICATION_SIMILARITY: 0,
+        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 1,
+        APPLICATION_SIMILARITY: 1,
       },
       items: [{
         item_id: "00000000-0000-4000-8000-000000000501",
@@ -1063,6 +1063,26 @@ const fixtureClient: StackGraphClient = {
         title: "stripe ↔ stripe-node", confidence: 0.72, confidence_band: "MEDIUM",
         version: 1, created_at: now,
         review_path: "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+      }, {
+        // The queue routes similarity candidates, so fixture mode has to carry one:
+        // it is the only type besides identity that is decided in the queue itself.
+        item_id: "00000000-0000-4000-8000-000000000502",
+        item_type: "APPLICATION_SIMILARITY", review_state: "UNREVIEWED",
+        title: "Billing API ↔ Ledger API", confidence: 0.83, confidence_band: "MEDIUM",
+        summary: "Explainable application similarity 83 percent",
+        version: 1, created_at: now,
+        review_path: "/similarity-candidates/00000000-0000-4000-8000-000000000502/review",
+      }, {
+        // A type that is still decided where it was found, so the queue's link out
+        // stays exercised too.
+        item_id: "00000000-0000-4000-8000-000000000503",
+        item_type: "MODERNIZATION_RECOMMENDATION", review_state: "UNREVIEWED",
+        title: "Replace bespoke retry helper with the platform client",
+        summary: "Consolidates three internal implementations onto one supported client",
+        confidence: 0.66, confidence_band: "MEDIUM",
+        repository_id: repositoryDetail.repository.id,
+        version: 1, created_at: now,
+        review_path: "/modernization-recommendations/00000000-0000-4000-8000-000000000503/review",
       }],
       page_info: { has_next_page: false },
     };

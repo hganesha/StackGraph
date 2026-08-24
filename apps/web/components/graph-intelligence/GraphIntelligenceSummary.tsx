@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatRelative, type EntityGraphIntelligence, type GraphMetric } from "@stackgraph/shared";
 import { Drawer, Skeleton, Term, type GlossaryKey } from "@stackgraph/design-system";
-import { useEntityBlastRadius, useReviewApplicationSimilarity, useSimilarApplications } from "@/lib/queries";
+import { useEntityBlastRadius, useSimilarApplications } from "@/lib/queries";
+import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./graph-intelligence-summary.module.css";
 
@@ -109,7 +110,6 @@ export function GraphIntelligenceSummary({
   const [showSimilarity, setShowSimilarity] = useState(false);
   const blastRadius = useEntityBlastRadius(entityId, showBlastRadius);
   const similarity = useSimilarApplications(entityId, showSimilarity && similarityAvailable);
-  const similarityReview = useReviewApplicationSimilarity(entityId);
   const openEvidence = useEvidenceStore((state) => state.open);
   const metrics = useMemo(
     () => (intelligence?.metrics ?? [])
@@ -255,14 +255,14 @@ export function GraphIntelligenceSummary({
                     />
                     <div className={styles.candidateActions}>
                       <Link href={`/applications/${candidate.application.id}`}>Open application</Link>
-                      {candidate.review_state === "UNREVIEWED" ? (
-                        <>
-                          <button type="button" disabled={similarityReview.isPending} onClick={() => similarityReview.mutate({ candidateId:candidate.id,decision:"CONFIRMED_SIMILAR" })}>Confirm match</button>
-                          <button type="button" disabled={similarityReview.isPending} onClick={() => similarityReview.mutate({ candidateId:candidate.id,decision:"CONFIRMED_DISTINCT" })}>Mark distinct</button>
-                          <button type="button" disabled={similarityReview.isPending} onClick={() => similarityReview.mutate({ candidateId:candidate.id,decision:"CONSOLIDATION_CANDIDATE" })}>Consider consolidation</button>
-                        </>
-                      ) : null}
                     </div>
+                    {candidate.review_state === "UNREVIEWED" ? (
+                      <SimilarityDecision
+                        candidateId={candidate.id}
+                        confidence={candidate.score}
+                        entityId={entityId}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ol>
@@ -270,7 +270,6 @@ export function GraphIntelligenceSummary({
                 limitations={similarity.data.limitations}
                 fallback="This result has a coverage limitation."
               />
-              {similarityReview.isError ? <p className={styles.limitation} role="alert">The review could not be saved. Your current similarity results are unchanged.</p> : null}
             </>
           ) : <p className={styles.waiting}>No sufficiently similar applications are present in the evaluated candidate set.</p>}
         </div>
