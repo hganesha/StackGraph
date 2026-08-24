@@ -537,3 +537,51 @@
     margin-inline-start: var(--sg-space-2);
   }
 }
+
+/* ---- graph view: fill the workspace instead of a boxed, fixed-height panel ---- */
+.pageGraph {
+  max-inline-size: none;
+  block-size: 100%;
+  min-block-size: 0;
+}
+.graphWorkspace {
+  align-items: stretch;
+}
+.pageGraph .graphWorkspace {
+  flex: 1;
+  min-block-size: 0;
+}
+.pageGraph .graphPanel {
+  block-size: 100%;
+  min-block-size: 0;
+}
+.pageGraph .graphCanvas {
+  min-block-size: 0;
+}
+.pageGraph .inspector {
+  block-size: 100%;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+.pageGraph .inspector > * {
+  /* Scroll the inspector; do not let flex shrink squash its sections. */
+  flex-shrink: 0;
+}
+
+@media (max-width: 860px) {
+  /* Stacked layout: a viewport-locked height would squash both panels. */
+  .pageGraph {
+    block-size: auto;
+  }
+  .pageGraph .graphPanel {
+    block-size: auto;
+    min-block-size: 560px;
+  }
+  .pageGraph .graphCanvas {
+    min-block-size: 500px;
+  }
+  .pageGraph .inspector {
+    block-size: auto;
+    overflow-y: visible;
+  }
+}
