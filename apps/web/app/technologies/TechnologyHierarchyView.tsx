@@ -117,7 +117,7 @@ function TechnologyGraphWorkspace({
     : null;
 
   return (
-    <div className={styles.workspace}>
+    <div className={`${styles.workspace} ${styles.graphWorkspace}`}>
       <section className={styles.graphPanel} aria-label={`${center.technology.name} dependency graph`}>
         <header className={styles.panelHead}>
           <div>
@@ -253,8 +253,10 @@ export function TechnologyHierarchyView() {
   const selected = selectedId ? nodesById.get(selectedId) ?? null : null;
   const roots = childrenByParent.get(ROOT) ?? [];
 
+  const graphView = view === "graph" && selected != null;
+
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${graphView ? styles.pageGraph : ""}`}>
       <header className={styles.head}>
         <div>
           <h1 className={styles.title}>Technologies</h1>
@@ -309,7 +311,7 @@ export function TechnologyHierarchyView() {
           <h2>No technologies have been observed yet.</h2>
           <p>Connect and scan a Git repository to build the tenant-scoped technology hierarchy.</p>
         </div>
-      ) : view === "graph" && selected ? (
+      ) : graphView && selected ? (
         <TechnologyGraphWorkspace key={selected.technology.id} center={selected} nodesById={nodesById} />
       ) : (
         <div className={styles.workspace}>
