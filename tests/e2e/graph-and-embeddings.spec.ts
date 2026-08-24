@@ -1,6 +1,20 @@
-import { expect, test } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
 
 const billingApplication = "/applications/00000000-0000-4000-8000-000000000201";
+
+// Graph intelligence opens two drawers over the page, and a hand-rolled modal is exactly
+// where focus and aria-modal defects hide, so the drawers are checked open rather than
+// only the page behind them.
+async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  const violations = results.violations.filter(
+    ({ impact }) => impact === "serious" || impact === "critical",
+  );
+  expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
+}
 
 test("application overview exposes snapshot intelligence and explainable similarity", async ({ page }) => {
   await page.goto(billingApplication);
@@ -13,7 +27,8 @@ test("application overview exposes snapshot intelligence and explainable similar
   await panel.getByRole("button", { name: "View blast radius" }).click();
   const blast = page.getByRole("dialog", { name: "Blast radius" });
   await expect(blast.getByText("Affected entities")).toBeVisible();
-  await blast.getByRole("button", { name: "Close blast radius" }).click();
+  await expectNoSeriousAccessibilityViolations(page);
+  await blast.getByRole("button", { name: "Close drawer" }).click();
 
   await panel.getByRole("button", { name: "Similar applications" }).click();
   const similarity = page.getByRole("dialog", { name: "Similar applications" });
@@ -22,6 +37,36 @@ test("application overview exposes snapshot intelligence and explainable similar
   await expect(similarity.getByRole("heading", { name: "What is different" })).toBeVisible();
   await expect(similarity.getByText("Billing and invoicing")).toBeVisible();
   await expect(similarity.getByText(/financial reconciliation/)).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("structural vocabulary is defined where it is used", async ({ page }, testInfo) => {
+  await page.goto(billingApplication);
+
+  const panel = page.getByRole("region", { name: "Structurally critical" });
+  const term = panel.getByRole("button", { name: "Bridge / SPOF" });
+  await expect(term).toBeVisible();
+
+  // Closed by default, so a screen reader reading the metric does not hear the whole
+  // definition spliced into it.
+  await expect(term).toHaveAttribute("aria-expanded", "false");
+
+  if (testInfo.project.name !== "mobile") {
+    await term.focus();
+    await expect(term).toHaveAttribute("aria-expanded", "true");
+    await expect(panel.getByRole("tooltip")).toContainText("split the graph");
+  }
+});
+
+test("blast-radius evidence opens on top of the drawer that raised it", async ({ page }) => {
+  await page.goto(billingApplication);
+
+  const panel = page.getByRole("region", { name: "Structurally critical" });
+  await panel.getByRole("button", { name: "View blast radius" }).click();
+  const blast = page.getByRole("dialog", { name: "Blast radius" });
+
+  await blast.getByRole("button", { name: /^Evidence / }).first().click();
+  await expect(page.getByRole("dialog", { name: /Blast-radius path fact/ })).toBeVisible();
 });
 
 test("scan health reports graph and semantic readiness", async ({ page }) => {

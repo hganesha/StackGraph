@@ -825,15 +825,32 @@ const fixtureClient: StackGraphClient = {
   async getEntityBlastRadius(id) {
     await delay();
     const intelligence = fixtureEntityGraphIntelligence(id);
+    // A path with its supporting facts, because the empty case exercised none of the
+    // rendering that matters here — the hops, the confidence floor, and the evidence
+    // that has to open on top of the drawer showing it.
     return {
       contract_version: "1.0.0",
       entity: intelligence.entity,
       snapshot: intelligence.snapshots[0] ?? null,
       affected_entity_count: 4,
       maximum_depth: 3,
-      impacts: [],
+      impacts: [
+        {
+          target: applicationDetail.application,
+          distance: 2,
+          minimum_confidence: 0.78,
+          entity_ids: [id, repositoryDetail.repository.id, applicationDetail.application.id],
+          supporting_fact_ids: [
+            "70000000-0000-4000-8000-000000000011",
+            "70000000-0000-4000-8000-000000000012",
+          ],
+        },
+      ],
       as_of: intelligence.as_of,
-      limitations: [{ code: "FIXTURE_PATHS_OMITTED", message: "Fixture mode does not include supporting path facts." }],
+      limitations: [{
+        code: "PARTIAL_COVERAGE",
+        message: "Deployment relationships were not covered by this snapshot, so runtime-only impact may be understated.",
+      }],
     };
   },
   async listGraphIntelligenceRisks(limit = 20) {
