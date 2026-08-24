@@ -10,7 +10,7 @@ from uuid import UUID
 from psycopg import Error as PsycopgError
 
 from app.errors import APIError
-from app.models import AskRequest, AskResponse, Citation
+from app.models import AskRequest, AskResponse, Citation, ResolvedEntity, SemanticSearchRequest
 from stackgraph_ai.errors import AIServiceError
 from stackgraph_ai.models import PromptInvocation, ToolDefinition
 
@@ -38,6 +38,10 @@ QUERY_KINDS = (
     "technology_introduction",
     "business_dark_capability",
     "decision_lag",
+    "blast_radius",
+    "structural_criticality",
+    "community_membership",
+    "circular_dependencies",
 )
 
 ESTATE_QUERY_TOOL = ToolDefinition(
@@ -57,6 +61,23 @@ ESTATE_QUERY_TOOL = ToolDefinition(
         },
         "required": ["query_kind"],
         "additionalProperties": False,
+    },
+)
+
+RESOLVE_ENTITIES_TOOL = ToolDefinition(
+    name="resolve_entities",
+    description=(
+        "Resolve a short entity mention from the question to tenant-scoped candidate IDs. "
+        "The server performs governed semantic retrieval; the model only identifies the text span."
+    ),
+    input_schema={
+        "type":"object",
+        "properties":{
+            "text_span":{"type":"string","minLength":2,"maxLength":500},
+            "entity_types":{"type":"array","items":{"type":"string"},"maxItems":10},
+        },
+        "required":["text_span","entity_types"],
+        "additionalProperties":False,
     },
 )
 
@@ -141,12 +162,18 @@ class AIAskOrchestrator:
     async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse:
         deterministic_result: AskResponse | None = None
         try:
+            resolved = await self._resolve_entities(request,tenant_id=tenant_id)
+            effective_request = request.model_copy(update={
+                "context_entity_ids":request.context_entity_ids or [
+                    item.entity.id for item in resolved
+                ],
+            })
             selection = await self.ai.invoke(
                 "ask.estate",
                 {
                     "question": request.question,
                     "context": {
-                        "entity_ids": [str(entity_id) for entity_id in (request.context_entity_ids or [])],
+                        "entity_ids": [str(entity_id) for entity_id in (effective_request.context_entity_ids or [])],
                     },
                 },
                 route=self.route,
@@ -157,9 +184,13 @@ class AIAskOrchestrator:
             )
             query_kind = self._selected_query_kind(selection)
             deterministic_result = await self.deterministic.ask(
-                self._tool_request(query_kind, request),
+                self._tool_request(query_kind, effective_request),
                 tenant_id=tenant_id,
             )
+            if resolved:
+                deterministic_result = deterministic_result.model_copy(update={
+                    "resolved_entities":resolved,
+                })
             if deterministic_result.result_kind == "UNSUPPORTED":
                 return deterministic_result
 
@@ -186,6 +217,45 @@ class AIAskOrchestrator:
             if deterministic_result is not None:
                 return deterministic_result
             return await self.deterministic.ask(request, tenant_id=tenant_id)
+
+    async def _resolve_entities(
+        self,request: AskRequest,*,tenant_id: UUID | None,
+    ) -> list[ResolvedEntity]:
+        resolver = getattr(self.deterministic,"semantic_search",None)
+        if request.context_entity_ids or tenant_id is None or not callable(resolver):
+            return []
+        invocation = await self.ai.invoke(
+            "ask.resolve",{"question":request.question},route=self.route,tenant_id=tenant_id,
+            tools=(RESOLVE_ENTITIES_TOOL,),tool_choice="auto",
+            metadata={"workload":"api.ask.entity_resolution"},
+        )
+        calls = invocation.response.tool_calls
+        if not calls:
+            return []
+        if len(calls)!=1 or calls[0].name!=RESOLVE_ENTITIES_TOOL.name:
+            raise ValueError("AI Ask entity resolution returned an invalid tool call")
+        arguments = dict(calls[0].arguments)
+        if set(arguments)!={"text_span","entity_types"}:
+            raise ValueError("AI Ask entity resolution returned invalid arguments")
+        text_span = arguments["text_span"]
+        entity_types = arguments["entity_types"]
+        if not isinstance(text_span,str) or not isinstance(entity_types,list):
+            raise ValueError("AI Ask entity resolution returned invalid argument types")
+        try:
+            result = await resolver(SemanticSearchRequest(
+                query=text_span,entity_types=[str(item) for item in entity_types],
+                min_score=0.35,limit=5,
+            ),tenant_id=tenant_id)
+        except APIError as error:
+            if error.code in {
+                "SEMANTIC_SPACE_UNAVAILABLE","SEMANTIC_PROVIDER_DISABLED",
+                "SEMANTIC_PROVIDER_UNCONFIGURED","SEMANTIC_PROVIDER_UNAVAILABLE",
+            }:
+                return []
+            raise
+        return [ResolvedEntity(
+            entity=hit.entity,score=hit.score,matched_terms=hit.matched_terms,
+        ) for hit in result.hits]
 
     @staticmethod
     def _selected_query_kind(invocation: PromptInvocation) -> str:
@@ -220,6 +290,10 @@ class AIAskOrchestrator:
             "technology_introduction": "technologies introduced into the estate in the last 90 days",
             "business_dark_capability": "critical business capabilities with no application behind them",
             "decision_lag": "accepted decisions not implemented decision lag",
+            "blast_radius": "graph blast radius",
+            "structural_criticality": "graph structural criticality",
+            "community_membership": "graph community membership",
+            "circular_dependencies": "graph circular dependencies",
         }
         return AskRequest(
             question=f"{prefixes[query_kind]}: {request.question}",
@@ -271,4 +345,5 @@ class AIAskOrchestrator:
             result_kind=result.result_kind,
             rows=result.rows,
             graph_highlight=result.graph_highlight,
+            resolved_entities=result.resolved_entities,
         )

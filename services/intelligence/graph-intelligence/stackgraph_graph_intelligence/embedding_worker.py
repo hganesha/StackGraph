@@ -605,11 +605,11 @@ def rebuild_similarity_candidates(
         connection.execute(
             """
             INSERT INTO application_similarity_candidate(
-              tenant_id,left_application_id,right_application_id,score,method_version,
+              tenant_id,left_entity_id,right_entity_id,entity_kind,score,method_version,
               components,overlap_features,differences,coverage,limitations,
               semantic_space_id,structural_space_id
-            ) VALUES (%s,%s,%s,%s,'application-similarity/v1',%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT(tenant_id,left_application_id,right_application_id,method_version)
+            ) VALUES (%s,%s,%s,'Application',%s,'application-similarity/v1',%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT(tenant_id,left_entity_id,right_entity_id,method_version)
             DO UPDATE SET score=EXCLUDED.score,components=EXCLUDED.components,
               overlap_features=EXCLUDED.overlap_features,differences=EXCLUDED.differences,
               coverage=EXCLUDED.coverage,limitations=EXCLUDED.limitations,
@@ -624,7 +624,94 @@ def rebuild_similarity_candidates(
             ),
         )
         persisted += 1
-    return {"applications":len(features),"pairs_evaluated":evaluated,"candidates_persisted":persisted}
+
+    generalized_counts: dict[str,int] = {}
+    for entity_kind,method_version in (
+        ("Technology","technology-similarity/v1"),
+        ("Capability","capability-similarity/v1"),
+        ("BusinessCapability","capability-similarity/v1"),
+    ):
+        generic_rows = connection.execute(
+            """
+            WITH subjects AS (
+              SELECT id FROM entity
+              WHERE (tenant_id=%s OR tenant_id IS NULL) AND entity_type=%s
+            )
+            SELECT subject.id subject_id,relationship.relationship_type,
+                   related.id related_id,related.namespace,related.entity_type,
+                   related.canonical_key
+            FROM subjects subject
+            LEFT JOIN current_relationship relationship
+              ON relationship.source_entity_id=subject.id OR relationship.target_entity_id=subject.id
+            LEFT JOIN entity related ON related.id=CASE
+              WHEN relationship.source_entity_id=subject.id THEN relationship.target_entity_id
+              ELSE relationship.source_entity_id END
+            ORDER BY subject.id,related.id,relationship.relationship_type
+            """,
+            (tenant_id,entity_kind),
+        ).fetchall()
+        generic_mutable: dict[str,dict[str,set[str]]] = {}
+        for row in generic_rows:
+            groups=generic_mutable.setdefault(str(row["subject_id"]),{
+                "dependencies":set(),"transitive_dependencies":set(),"capabilities":set(),
+                "technologies":set(),"owners":set(),"deployments":set(),
+            })
+            if row["related_id"] is None:
+                continue
+            identity=str(row["canonical_key"] or row["related_id"])
+            if row["namespace"] in {"TECHNOLOGY","OSS"}:
+                groups["technologies"].add(identity)
+                if row["relationship_type"] in {"DEPENDS_ON","USES","BUILT_ON","RUNS_ON","HAS_VERSION"}:
+                    groups["dependencies"].add(identity)
+            elif row["namespace"]=="BUSINESS":
+                groups["capabilities"].add(identity)
+            elif row["namespace"]=="DEPLOYMENT":
+                groups["deployments"].add(identity)
+            elif row["entity_type"] in {"Organization","BusinessUnit","Team"}:
+                groups["owners"].add(identity)
+            elif entity_kind in {"Capability","BusinessCapability"} and row["entity_type"]=="Application":
+                groups["dependencies"].add(identity)
+        generic_features={
+            key:ApplicationFeatures(**{
+                name:frozenset(values) for name,values in groups.items()
+            }) for key,groups in generic_mutable.items()
+        }
+        generic_frequencies=dependency_frequencies(generic_features)
+        generic_pairs=candidate_pairs(generic_features,max_pairs=max_pairs)
+        generalized_counts[entity_kind]=len(generic_features)
+        for left,right in generic_pairs:
+            deterministic=deterministic_application_similarity(
+                generic_features[left],generic_features[right],
+                dependency_frequency=generic_frequencies,corpus_size=len(generic_features),
+            )
+            result=hybrid_application_similarity(deterministic)
+            evaluated+=1
+            if float(result["score"])<minimum_score:
+                continue
+            connection.execute(
+                """
+                INSERT INTO application_similarity_candidate(
+                  tenant_id,left_entity_id,right_entity_id,entity_kind,score,method_version,
+                  components,overlap_features,differences,coverage,limitations
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,left_entity_id,right_entity_id,method_version)
+                DO UPDATE SET score=EXCLUDED.score,components=EXCLUDED.components,
+                  overlap_features=EXCLUDED.overlap_features,differences=EXCLUDED.differences,
+                  coverage=EXCLUDED.coverage,limitations=EXCLUDED.limitations,updated_at=now()
+                """,
+                (
+                    tenant_id,left,right,entity_kind,result["score"],method_version,
+                    Jsonb(result["components"]),Jsonb(result["overlaps"]),
+                    Jsonb(result["differences"]),Jsonb(result["coverage"]),
+                    Jsonb(result["limitations"]),
+                ),
+            )
+            persisted+=1
+    return {
+        "applications":len(features),"technologies":generalized_counts.get("Technology",0),
+        "capabilities":generalized_counts.get("Capability",0)+generalized_counts.get("BusinessCapability",0),
+        "pairs_evaluated":evaluated,"candidates_persisted":persisted,
+    }
 
 
 def record_embedding_heartbeat(database_url: str,worker_id: str,metadata: Mapping[str,object]) -> None:

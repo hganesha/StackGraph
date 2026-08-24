@@ -21,6 +21,7 @@ THRESHOLDS: dict[str, tuple[int, str]] = {
     "failed_graph_analysis_requests": (0, "graph-intelligence-on-call"),
     "graph_snapshot_age_seconds": (1800, "graph-intelligence-on-call"),
     "failed_graph_rebuilds": (0, "graph-intelligence-on-call"),
+    "graph_risk_materialization_gap": (0, "graph-intelligence-on-call"),
     "embedding_queue_age_seconds": (600, "intelligence-on-call"),
     "expired_embedding_leases": (0, "intelligence-on-call"),
     "dead_letter_embedding_jobs": (0, "intelligence-on-call"),
@@ -72,6 +73,13 @@ SELECT
             FROM graph_analysis_run WHERE status IN ('SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS')),0)
     graph_snapshot_age_seconds,
   (SELECT count(*) FROM tenant_graph_deployment WHERE rebuild_state='FAILED') failed_graph_rebuilds,
+  (SELECT count(*) FROM active_graph_analysis_run active
+   JOIN graph_analysis_run run ON run.id=active.run_id
+   WHERE run.policy_key='runtime-dependency' AND coalesce(run.node_count,0)>0
+     AND NOT EXISTS (
+       SELECT 1 FROM graph_entity_risk risk
+       WHERE risk.tenant_id=active.tenant_id AND risk.run_id=active.run_id
+     )) graph_risk_materialization_gap,
   (SELECT count(*) FROM tenant_graph_deployment WHERE rebuild_state='RUNNING') active_graph_rebuilds,
   coalesce((SELECT extract(epoch FROM now()-min(created_at))::bigint
             FROM embedding_job WHERE status IN ('PENDING','RETRY_WAIT')),0)

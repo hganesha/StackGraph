@@ -60,6 +60,13 @@ class RankedItem(ContractModel):
     parent_application_id: UUID | None = None
     parent_application_name: str | None = None
     dependency_tier: int | None = Field(default=None, ge=1, le=2)
+    systemic_risk: float | None = Field(default=None, ge=0, le=1)
+    upstream_impact: float | None = Field(default=None, ge=0)
+    dependency_depth: int | None = Field(default=None, ge=0)
+    community_key: str | None = None
+    structural_status: Literal[
+        "STRUCTURALLY_CRITICAL", "ELEVATED", "TYPICAL", "WAITING_FOR_DATA",
+    ] | None = None
     freshness: Freshness
     citations: list[Citation] | None = None
 
@@ -85,6 +92,7 @@ class EstateSummary(ContractModel):
     ranked_items: list[RankedItem]
     coverage: Coverage
     page_info: PageInfo | None = None
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class EntitySummary(ContractModel):
@@ -341,6 +349,9 @@ class GraphRiskItem(ContractModel):
     impacted_applications: list[EntitySummary] = Field(default_factory=list)
     systemic_risk: float = Field(ge=0, le=1)
     component_metrics: list[GraphMetric] = Field(default_factory=list)
+    component_contributions: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    renormalized_families: list[str] = Field(default_factory=list)
+    method_version: str = "graph-systemic-risk/v2"
     reasons: list[str] = Field(default_factory=list)
 
 
@@ -350,6 +361,7 @@ class GraphRiskList(ContractModel):
     risks: list[GraphRiskItem] = Field(default_factory=list)
     as_of: datetime
     limitations: list[dict[str, Any]] = Field(default_factory=list)
+    page_info: PageInfo | None = None
 
 
 class GraphCommunity(ContractModel):
@@ -367,9 +379,71 @@ class GraphCommunityList(ContractModel):
     limitations: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class GraphAnomaly(ContractModel):
+    id: UUID
+    entity: EntitySummary
+    anomaly_key: str = Field(min_length=1)
+    score: float = Field(ge=0, le=1)
+    cohort_key: str = Field(min_length=1)
+    cohort_size: int = Field(ge=1)
+    percentile: float = Field(ge=0, le=1)
+    observed_components: dict[str, Any] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+    supporting_fact_ids: list[UUID] = Field(default_factory=list)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphAnomalyList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    snapshot: GraphAnalysisSnapshot | None = None
+    anomalies: list[GraphAnomaly] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphMotif(ContractModel):
+    id: UUID
+    motif_key: str = Field(min_length=1)
+    members: list[EntitySummary] = Field(min_length=2)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    minimum_confidence: float = Field(ge=0, le=1)
+    components: dict[str, Any] = Field(default_factory=dict)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphMotifList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    snapshot: GraphAnalysisSnapshot | None = None
+    motifs: list[GraphMotif] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CriticalGraphEdge(ContractModel):
+    fact_id: UUID
+    source: EntitySummary
+    target: EntitySummary
+    metric_key: str = "spof.bridge"
+    score: float = Field(ge=0)
+    components: dict[str, Any] = Field(default_factory=dict)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class CriticalGraphEdgeList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    entity: EntitySummary
+    snapshot: GraphAnalysisSnapshot | None = None
+    edges: list[CriticalGraphEdge] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class SemanticSearchRequest(ContractModel):
     query: str = Field(min_length=2,max_length=2000)
     entity_types: list[str] = Field(default_factory=list,max_length=20)
+    namespace: list[Namespace] = Field(default_factory=list,max_length=6)
+    min_score: float = Field(default=-1,ge=-1,le=1)
     limit: int = Field(default=20,ge=1,le=100)
 
 
@@ -378,6 +452,10 @@ class SemanticSearchHit(ContractModel):
     score: float = Field(ge=-1,le=1)
     input_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     sensitivity: Literal["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"]
+    matched_terms: list[str] = Field(default_factory=list)
+    excerpt: str | None = Field(default=None,max_length=500)
+    source_fact_ids: list[UUID] = Field(default_factory=list)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class SemanticSearchResponse(ContractModel):
@@ -446,11 +524,12 @@ class ApplicationSimilarityList(ContractModel):
     candidates: list[ApplicationSimilarityCandidate] = Field(default_factory=list)
     as_of: datetime
     limitations: list[dict[str,Any]] = Field(default_factory=list)
+    page_info: PageInfo | None = None
 
 
 class ApplicationSimilarityReviewRequest(ContractModel):
     decision: Literal[
-        "CONFIRMED_SIMILAR","CONFIRMED_DISTINCT","CONSOLIDATION_CANDIDATE","DISMISSED",
+        "CONFIRMED_SIMILAR","CONFIRMED_DISTINCT","CONSOLIDATION_CANDIDATE","DISMISSED","REOPENED",
     ]
     reason_code: str = Field(min_length=1,max_length=100)
     rationale: str = Field(default="",max_length=4000)
@@ -486,6 +565,7 @@ class RepositoryDetail(ContractModel):
     technologies: list[EntitySummary]
     deployments: list[EntitySummary]
     freshness: Freshness
+    graph_intelligence: EntityGraphIntelligence | None = None
 
 
 class InternalUsage(ContractModel):
@@ -515,6 +595,7 @@ class TechnologyDetail(ContractModel):
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]
     freshness: Freshness
+    graph_intelligence: EntityGraphIntelligence | None = None
 
 
 class ModernizationList(ContractModel):
@@ -608,6 +689,11 @@ class GraphNode(ContractModel):
     aggregate: bool
     member_count: int | None = Field(default=None, ge=1)
     confidence: float | None = Field(default=None, ge=0, le=1)
+    structural_status: Literal[
+        "STRUCTURALLY_CRITICAL", "ELEVATED", "TYPICAL", "WAITING_FOR_DATA",
+    ] | None = None
+    systemic_risk: float | None = Field(default=None, ge=0, le=1)
+    community_key: str | None = None
 
 
 class GraphEdge(ContractModel):
@@ -619,6 +705,7 @@ class GraphEdge(ContractModel):
     assertion_class: Literal["DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED"]
     review_state: Literal["CONFIRMED", "POSSIBLE", "REJECTED", "NOT_APPLICABLE"]
     citation_fact_ids: list[UUID] = Field(min_length=1)
+    is_bridge: bool | None = None
 
 
 class GraphNeighborhood(ContractModel):
@@ -656,6 +743,12 @@ class AskRequest(ContractModel):
     context_entity_ids: list[UUID] | None = Field(default=None, max_length=20)
 
 
+class ResolvedEntity(ContractModel):
+    entity: EntitySummary
+    score: float = Field(ge=-1,le=1)
+    matched_terms: list[str] = Field(default_factory=list)
+
+
 class AskResponse(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     text: str = Field(min_length=1)
@@ -663,6 +756,7 @@ class AskResponse(ContractModel):
     result_kind: Literal["ANSWER", "TABLE", "GRAPH", "UNSUPPORTED"]
     rows: list[dict[str, Any]] | None = None
     graph_highlight: GraphNeighborhood | None = None
+    resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
 
 
 EnterpriseInsightCategory = Literal[
@@ -2206,6 +2300,43 @@ class RescanJobList(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     jobs: list[RescanJob]
     page_info: PageInfo
+
+
+class GraphAnalysisRequestCreate(ContractModel):
+    policy_key: str = Field(default="runtime-dependency",pattern=r"^[a-z][a-z0-9-]{2,63}$")
+    reason: str = Field(default="OPERATOR_REQUEST",min_length=1,max_length=500)
+
+
+class GraphAnalysisRequestResult(ContractModel):
+    id: UUID
+    policy_key: str
+    requested_change_watermark: int = Field(ge=0)
+    status: Literal["PENDING","WAITING_FOR_PROJECTION"]
+    created_at: datetime
+
+
+class EmbeddingBackfillRequest(ContractModel):
+    embedding_space_id: UUID | None = None
+    entity_ids: list[UUID] = Field(default_factory=list,max_length=500)
+    entity_types: list[str] = Field(default_factory=list,max_length=20)
+    limit: int = Field(default=500,ge=1,le=500)
+
+
+class EmbeddingBackfillResult(ContractModel):
+    embedding_space_id: UUID
+    queued_jobs: int = Field(ge=0)
+    requested_at: datetime
+
+
+class EmbeddingSpacePromotionRequest(ContractModel):
+    action: Literal["PROMOTE","ROLLBACK"] = "PROMOTE"
+
+
+class EmbeddingSpacePromotionResult(ContractModel):
+    embedding_space_id: UUID
+    space_kind: Literal["SEMANTIC_ENTITY","STRUCTURAL_GRAPH","CODE"]
+    action: Literal["PROMOTE","ROLLBACK"]
+    activated_at: datetime
 
 
 QuotaStatus = Literal["OK", "THROTTLED", "EXHAUSTED"]

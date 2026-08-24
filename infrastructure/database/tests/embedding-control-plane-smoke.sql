@@ -66,6 +66,13 @@ UPDATE active_embedding_space
 SET embedding_space_id='10000000-0000-4000-8000-000000000021',activated_by='smoke-swap',activated_at=now()
 WHERE tenant_id='10000000-0000-4000-8000-000000000001' AND space_kind='SEMANTIC_ENTITY';
 
+UPDATE active_embedding_space
+SET embedding_space_id='10000000-0000-4000-8000-000000000020',activated_by='smoke-rollback',activated_at=now()
+WHERE tenant_id='10000000-0000-4000-8000-000000000001' AND space_kind='SEMANTIC_ENTITY';
+UPDATE active_embedding_space
+SET embedding_space_id='10000000-0000-4000-8000-000000000021',activated_by='smoke-forward',activated_at=now()
+WHERE tenant_id='10000000-0000-4000-8000-000000000001' AND space_kind='SEMANTIC_ENTITY';
+
 UPDATE entity SET properties='{"catalog_revision":"smoke-v2"}'
 WHERE id='30000000-0000-4000-8000-000000000010';
 DO $$
@@ -123,12 +130,12 @@ BEGIN
 END $$;
 
 INSERT INTO application_similarity_candidate(
-  id,tenant_id,left_application_id,right_application_id,score,method_version,
+  id,tenant_id,left_entity_id,right_entity_id,entity_kind,score,method_version,
   components,overlap_features,differences,coverage
 ) VALUES(
   '10000000-0000-4000-8000-000000000030','10000000-0000-4000-8000-000000000001',
   '10000000-0000-4000-8000-000000000010','10000000-0000-4000-8000-000000000011',
-  0.8,'smoke-v1','{}','{}','{}','{}'
+  'Application',0.8,'smoke-v1','{}','{}','{}','{}'
 );
 INSERT INTO application_similarity_feedback(
   id,tenant_id,candidate_id,decision,reason_code,candidate_method_version,candidate_score,actor_key
@@ -147,6 +154,14 @@ BEGIN
     IF SQLERRM='append-only feedback was mutable' THEN RAISE; END IF;
   END;
 END $$;
+
+INSERT INTO application_similarity_feedback(
+  tenant_id,candidate_id,decision,reason_code,candidate_method_version,candidate_score,actor_key
+) VALUES(
+  '10000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000030','REOPENED','operator-correction',
+  'smoke-v1',0.8,'smoke'
+);
 
 CREATE ROLE embedding_smoke_reader NOLOGIN;
 GRANT USAGE ON SCHEMA public TO embedding_smoke_reader;

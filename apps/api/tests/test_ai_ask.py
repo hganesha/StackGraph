@@ -1,14 +1,20 @@
 import asyncio
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
 
-from app.ai_ask import AIAskOrchestrator, ESTATE_QUERY_TOOL, QUERY_KINDS
+from app.ai_ask import (
+    AIAskOrchestrator, ESTATE_QUERY_TOOL, QUERY_KINDS, RESOLVE_ENTITIES_TOOL,
+)
 from app.errors import APIError
-from app.models import AskRequest, AskResponse, Citation
+from app.models import (
+    AskRequest, AskResponse, Citation, EntitySummary, SemanticSearchHit,
+    SemanticSearchResponse,
+)
 from stackgraph_ai.errors import ProviderRequestError
 from stackgraph_ai.catalog import LocalPromptCatalog
 from stackgraph_ai.models import ModelResponse, ModelRoute, ToolCall
@@ -74,6 +80,42 @@ def explanation(*, text: str = "Billing API uses Node.js.", fact_ids: list[str] 
             "citation_fact_ids": fact_ids if fact_ids is not None else [str(FACT_ID)],
         },
     )
+
+
+def test_ai_ask_resolves_named_entity_before_deterministic_query() -> None:
+    entity_id=UUID("00000000-0000-4000-8000-000000000201")
+
+    class ResolvingAsk(StubDeterministicAsk):
+        async def semantic_search(self,request,*,tenant_id):
+            return SemanticSearchResponse(
+                space_id=UUID("00000000-0000-4000-8000-000000000801"),
+                space_key="semantic-v1",model_or_algorithm="local-v1",
+                template_version="semantic-entity/v1",query_hash="sha256:"+"a"*64,
+                hits=[SemanticSearchHit(
+                    entity=EntitySummary(id=entity_id,kind="Application",name="Billing API"),
+                    score=0.91,input_hash="sha256:"+"b"*64,sensitivity="INTERNAL",
+                    matched_terms=["billing"],
+                )],as_of=datetime.now(UTC),
+            )
+
+    resolution=SimpleNamespace(
+        tool_calls=(ToolCall(
+            id="resolve-1",name="resolve_entities",
+            arguments={"text_span":"Billing API","entity_types":["Application"]},
+        ),),structured_output=None,
+    )
+    deterministic=ResolvingAsk()
+    ai=StubAI([resolution,selection(),explanation()])
+
+    result=asyncio.run(AIAskOrchestrator(
+        deterministic=deterministic,ai=ai,
+    ).ask(AskRequest(question="What does Billing API use?"),tenant_id=TENANT_ID))
+
+    assert deterministic.requests[0][0].context_entity_ids==[entity_id]
+    assert result.resolved_entities[0].entity.id==entity_id
+    assert result.resolved_entities[0].score==0.91
+    assert ai.calls[0][0]=="ask.resolve"
+    assert ai.calls[0][2]["tools"]==(RESOLVE_ENTITIES_TOOL,)
 
 
 def test_ai_ask_selects_deterministic_tool_and_validates_explanation_citations() -> None:

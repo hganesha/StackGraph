@@ -86,6 +86,12 @@ from app.models import (
     RescanJob,
     RescanJobList,
     RescanRequest,
+    GraphAnalysisRequestCreate,
+    GraphAnalysisRequestResult,
+    EmbeddingBackfillRequest,
+    EmbeddingBackfillResult,
+    EmbeddingSpacePromotionRequest,
+    EmbeddingSpacePromotionResult,
     ReviewQueue,
     ReviewQueueItem,
     ReviewQueueItemType,
@@ -3551,6 +3557,172 @@ class AdminReadModelsMixin:
                 detail={"cadence": request.cadence, "enabled": request.enabled},
             )
         return self._scan_policy(row)
+
+    async def request_graph_analysis(
+        self,request: GraphAnalysisRequestCreate,*,tenant_id: UUID | None,actor_key: str,
+    ) -> tuple[GraphAnalysisRequestResult,bool]:
+        if tenant_id is None:
+            raise APIError(400,"TENANT_REQUIRED","A tenant ID is required to request graph analysis.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT policy.id,policy.policy_key,deployment.desired_outbox_id,
+                       deployment.projected_outbox_id
+                FROM graph_analysis_policy policy
+                JOIN tenant_graph_deployment deployment ON deployment.tenant_id=%s
+                WHERE policy.status='ACTIVE' AND policy.policy_key=%s
+                  AND (policy.tenant_id IS NULL OR policy.tenant_id=%s)
+                ORDER BY (policy.tenant_id IS NOT NULL) DESC,policy.version DESC LIMIT 1
+                """,
+                (tenant_id,request.policy_key,tenant_id),
+            )
+            policy = await cursor.fetchone()
+            if policy is None:
+                raise APIError(
+                    404,"GRAPH_POLICY_NOT_FOUND",
+                    "No active graph-analysis policy or deployment was found for this key.",
+                )
+            watermark=int(policy["desired_outbox_id"] or 0)
+            status=(
+                "PENDING" if int(policy["projected_outbox_id"] or 0)>=watermark
+                else "WAITING_FOR_PROJECTION"
+            )
+            cursor = await connection.execute(
+                """
+                INSERT INTO graph_analysis_request(
+                  tenant_id,policy_id,policy_key,requested_change_watermark,reason,status
+                ) VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,policy_id)
+                  WHERE status IN ('PENDING','WAITING_FOR_PROJECTION')
+                DO UPDATE SET requested_change_watermark=greatest(
+                    graph_analysis_request.requested_change_watermark,
+                    EXCLUDED.requested_change_watermark
+                  ),reason=EXCLUDED.reason,status=EXCLUDED.status,available_at=now(),
+                  last_error=NULL,updated_at=now()
+                RETURNING *,xmax=0 created
+                """,
+                (tenant_id,policy["id"],policy["policy_key"],watermark,request.reason,status),
+            )
+            row = await cursor.fetchone()
+            assert row is not None
+            await self._write_admin_audit(
+                connection,tenant_id=tenant_id,actor_key=actor_key,
+                action="graph_analysis.request",target_kind="graph_analysis_request",
+                target_id=row["id"],detail={
+                    "policy_key":row["policy_key"],"watermark":row["requested_change_watermark"],
+                    "coalesced":not bool(row["created"]),
+                },
+            )
+        return GraphAnalysisRequestResult(
+            id=row["id"],policy_key=row["policy_key"],
+            requested_change_watermark=row["requested_change_watermark"],
+            status=row["status"],created_at=row["created_at"],
+        ),bool(row["created"])
+
+    async def request_embedding_backfill(
+        self,request: EmbeddingBackfillRequest,*,tenant_id: UUID | None,actor_key: str,
+    ) -> EmbeddingBackfillResult:
+        if tenant_id is None:
+            raise APIError(400,"TENANT_REQUIRED","A tenant ID is required to request an embedding backfill.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT space.* FROM embedding_space space
+                WHERE space.tenant_id=%s AND space.space_kind='SEMANTIC_ENTITY'
+                  AND space.lifecycle_state IN ('SHADOW','ACTIVE')
+                  AND space.id=coalesce(%s::uuid,(
+                    SELECT embedding_space_id FROM active_embedding_space
+                    WHERE tenant_id=%s AND space_kind='SEMANTIC_ENTITY'
+                  ))
+                """,
+                (tenant_id,request.embedding_space_id,tenant_id),
+            )
+            space = await cursor.fetchone()
+            if space is None:
+                raise APIError(
+                    404,"EMBEDDING_SPACE_NOT_FOUND",
+                    "No eligible semantic embedding space was found for this backfill.",
+                )
+            cursor = await connection.execute(
+                """
+                WITH selected AS (
+                  SELECT entity.* FROM entity
+                  WHERE (entity.tenant_id=%s OR entity.tenant_id IS NULL)
+                    AND (cardinality(%s::uuid[])=0 OR entity.id=ANY(%s::uuid[]))
+                    AND (cardinality(%s::text[])=0 OR entity.entity_type=ANY(%s::text[]))
+                  ORDER BY entity.updated_at,entity.id LIMIT %s
+                )
+                INSERT INTO embedding_job(tenant_id,embedding_space_id,subject_id,input_hash)
+                SELECT %s,%s,selected.id,
+                  'sha256:'||encode(digest(concat_ws(E'\n',selected.entity_type,selected.name,
+                    selected.canonical_key,selected.properties::text,%s),'sha256'),'hex')
+                FROM selected
+                ON CONFLICT DO NOTHING RETURNING id
+                """,
+                (
+                    tenant_id,request.entity_ids,request.entity_ids,
+                    request.entity_types,request.entity_types,request.limit,
+                    tenant_id,space["id"],space["template_version"],
+                ),
+            )
+            queued=len(await cursor.fetchall())
+            await self._write_admin_audit(
+                connection,tenant_id=tenant_id,actor_key=actor_key,
+                action="embedding.backfill",target_kind="embedding_space",
+                target_id=space["id"],detail={"queued_jobs":queued,"limit":request.limit},
+            )
+        return EmbeddingBackfillResult(
+            embedding_space_id=space["id"],queued_jobs=queued,requested_at=datetime.now(UTC),
+        )
+
+    async def promote_embedding_space(
+        self,space_id: UUID,request: EmbeddingSpacePromotionRequest,
+        *,tenant_id: UUID | None,actor_key: str,
+    ) -> EmbeddingSpacePromotionResult:
+        if tenant_id is None:
+            raise APIError(400,"TENANT_REQUIRED","A tenant ID is required to promote an embedding space.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """
+                SELECT * FROM embedding_space WHERE id=%s AND tenant_id=%s FOR UPDATE
+                """,
+                (space_id,tenant_id),
+            )
+            space = await cursor.fetchone()
+            if space is None:
+                raise APIError(404,"EMBEDDING_SPACE_NOT_FOUND","The embedding space was not found.")
+            failed_gates=[]
+            if float(space["coverage_ratio"])<0.95:
+                failed_gates.append("coverage_ratio>=0.95")
+            if (space.get("evaluation") or {}).get("passed") is not True:
+                failed_gates.append("evaluation.passed")
+            if failed_gates:
+                raise APIError(
+                    409,"EMBEDDING_PROMOTION_GATES_FAILED",
+                    "The embedding space cannot be activated until every promotion gate passes.",
+                    {"failed_gates":failed_gates,"coverage_ratio":space["coverage_ratio"]},
+                )
+            await connection.execute(
+                """
+                INSERT INTO active_embedding_space(
+                  tenant_id,space_kind,embedding_space_id,activated_by
+                ) VALUES (%s,%s,%s,%s)
+                ON CONFLICT(tenant_id,space_kind) DO UPDATE SET
+                  embedding_space_id=EXCLUDED.embedding_space_id,activated_at=now(),
+                  activated_by=EXCLUDED.activated_by
+                """,
+                (tenant_id,space["space_kind"],space_id,actor_key),
+            )
+            await self._write_admin_audit(
+                connection,tenant_id=tenant_id,actor_key=actor_key,
+                action=f"embedding_space.{request.action.lower()}",
+                target_kind="embedding_space",target_id=space_id,
+                detail={"space_kind":space["space_kind"],"coverage_ratio":space["coverage_ratio"]},
+            )
+        return EmbeddingSpacePromotionResult(
+            embedding_space_id=space_id,space_kind=space["space_kind"],
+            action=request.action,activated_at=datetime.now(UTC),
+        )
 
     async def request_rescan(
         self, request: RescanRequest, *, tenant_id: UUID | None, actor_key: str,

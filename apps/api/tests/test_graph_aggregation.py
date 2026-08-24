@@ -35,6 +35,8 @@ class GraphDatabaseStub:
         }
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
+        if "FROM active_graph_analysis_run active" in query:
+            return []
         if "count(*)::integer member_count" in query:
             kept_real_count = params[-1]
             return [{

@@ -1,17 +1,63 @@
 import unittest
+from types import SimpleNamespace
+from uuid import UUID
 
 from stackgraph_graph_intelligence.algorithms import (
     articulation_points_and_bridges,
     circular_dependency_motifs,
     cohort_percentile_anomalies,
     materialize_impact_paths,
+    RankedMetric,
     rank_metrics,
     reachability_metrics,
 )
-from stackgraph_graph_intelligence.worker import validate_projection_budget
+from stackgraph_graph_intelligence.worker import (
+    AnalysisRequest, AnalysisResult, GraphIntelligenceWorker, validate_projection_budget,
+)
 
 
 class GraphAlgorithmTests(unittest.TestCase):
+    def test_materialized_risk_renormalizes_only_observed_families(self) -> None:
+        entity_id="00000000-0000-4000-8000-000000000201"
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001")
+
+        class SignalConnection:
+            def execute(self,query,params):
+                return SimpleNamespace(fetchall=lambda:[{
+                    "entity_id":UUID(entity_id),"business_score":None,
+                    "exposure_score":None,"exposure_fact_ids":[],"lifecycle_score":None,
+                }])
+
+        worker=object.__new__(GraphIntelligenceWorker)
+        worker.connection=SignalConnection()
+        request=AnalysisRequest(
+            id=UUID("00000000-0000-4000-8000-000000000101"),tenant_id=tenant_id,
+            policy_id=UUID("00000000-0000-4000-8000-000000000102"),
+            policy_key="runtime-dependency",policy_version=4,policy_hash="sha256:"+"a"*64,
+            configuration={"risk_weights":{
+                "families":{"structural":0.4,"business":0.25,"exposure":0.25,"lifecycle":0.1},
+                "structural_metrics":{"pagerank":1.0},
+            }},requested_watermark=1,projected_watermark=1,
+            run_id=UUID("00000000-0000-4000-8000-000000000103"),
+            deployment_id=UUID("00000000-0000-4000-8000-000000000104"),
+            endpoint="neo4j://example",database_name="neo4j",username="neo4j",password="secret",
+            attempt=1,
+        )
+        result=AnalysisResult(
+            graph_name="graph",node_count=1,edge_count=0,
+            metrics=(RankedMetric(
+                entity_id=entity_id,metric_key="pagerank",numeric_value=1,
+                percentile=0.8,rank=1,components={},
+            ),),edge_metrics=(),communities=(),impact_paths=(),algorithm_versions={},
+            coverage={},resource_usage={},limitations=(),
+        )
+
+        rows=worker._materialized_risks(request,result)
+
+        self.assertEqual(rows[0][3],0.8)
+        self.assertEqual(rows[0][5],["business","exposure","lifecycle"])
+        self.assertEqual(rows[0][6],"graph-systemic-risk/v2")
+
     def test_rank_metrics_is_deterministic_and_uses_competition_rank(self) -> None:
         ranked = rank_metrics(
             "pagerank",[("c",1.0,{}),("b",2.0,{}),("a",2.0,{})]

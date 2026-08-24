@@ -5,6 +5,13 @@ BEGIN;
 INSERT INTO tenant(id,tenant_key,name)
 VALUES ('11000000-0000-4000-8000-000000000001','graph-analysis-smoke','Graph analysis smoke');
 
+INSERT INTO entity(id,tenant_id,namespace,entity_type,canonical_key,name)
+VALUES (
+  '11000000-0000-4000-8000-000000000010',
+  '11000000-0000-4000-8000-000000000001','ENTERPRISE','Application',
+  'application:graph-analysis-smoke','Graph analysis smoke application'
+);
+
 INSERT INTO tenant_graph_deployment(
   tenant_id,endpoint,database_name,username,credential_reference,deployment_state
 ) VALUES (
@@ -141,6 +148,13 @@ BEGIN
   INSERT INTO active_graph_analysis_run(tenant_id,policy_key,run_id)
   VALUES (request_row.tenant_id,request_row.policy_key,run_id);
 
+  INSERT INTO graph_entity_risk(
+    run_id,tenant_id,entity_id,systemic_risk,contributions,renormalized_families
+  ) VALUES (
+    run_id,request_row.tenant_id,'11000000-0000-4000-8000-000000000010',0.75,
+    '{"structural":{"score":0.75,"normalized_contribution":0.75}}','{business,exposure,lifecycle}'
+  );
+
   BEGIN
     UPDATE graph_analysis_run SET node_count=1 WHERE id=run_id;
     RAISE EXCEPTION 'terminal run accepted a mutation';
@@ -148,6 +162,21 @@ BEGIN
   END;
 END
 $$;
+
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO graph_analysis_policy(
+      tenant_id,policy_key,version,name,status,configuration,content_hash,created_by
+    ) VALUES (
+      '11000000-0000-4000-8000-000000000001','invalid-risk',1,'Invalid risk','DRAFT',
+      '{"risk_weights":{"families":{},"structural_metrics":{}}}',
+      'sha256:'||repeat('f',64),'smoke'
+    );
+    RAISE EXCEPTION 'invalid graph risk weights were accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END $$;
 
 ROLLBACK;
 

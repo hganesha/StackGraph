@@ -71,6 +71,11 @@ export interface RankedItem {
   parent_application_name?: string;
   /** Technology estate tier: 1 is direct; 2 is transitive through another library. */
   dependency_tier?: 1 | 2;
+  systemic_risk?: number;
+  upstream_impact?: number;
+  dependency_depth?: number;
+  community_key?: string;
+  structural_status?: "STRUCTURALLY_CRITICAL" | "ELEVATED" | "TYPICAL" | "WAITING_FOR_DATA";
   freshness: Freshness;
   citations?: Citation[];
 }
@@ -96,6 +101,7 @@ export interface EstateSummary {
   ranked_items: RankedItem[];
   coverage: EstateCoverage;
   page_info?: PageInfo;
+  limitations?: GraphLimitation[];
 }
 
 export interface EntitySummary {
@@ -361,6 +367,9 @@ export interface GraphRiskItem {
   impacted_applications: EntitySummary[];
   systemic_risk: number;
   component_metrics: GraphMetric[];
+  component_contributions?: Record<string, Record<string, unknown>>;
+  renormalized_families?: string[];
+  method_version?: string;
   reasons: string[];
 }
 
@@ -370,6 +379,7 @@ export interface GraphRiskList {
   risks: GraphRiskItem[];
   as_of: Timestamp;
   limitations: GraphLimitation[];
+  page_info?: PageInfo;
 }
 
 export interface GraphCommunity {
@@ -390,6 +400,8 @@ export interface GraphCommunityList {
 export interface SemanticSearchRequest {
   query: string;
   entity_types?: string[];
+  namespace?: Namespace[];
+  min_score?: number;
   limit?: number;
 }
 
@@ -398,6 +410,10 @@ export interface SemanticSearchHit {
   score: number;
   input_hash: string;
   sensitivity: "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
+  matched_terms?: string[];
+  excerpt?: string;
+  source_fact_ids?: UUID[];
+  limitations?: GraphLimitation[];
 }
 
 export interface SemanticSearchResponse {
@@ -464,10 +480,11 @@ export interface ApplicationSimilarityList {
   candidates: ApplicationSimilarityCandidate[];
   as_of: Timestamp;
   limitations: GraphLimitation[];
+  page_info?: PageInfo;
 }
 
 export interface ApplicationSimilarityReviewRequest {
-  decision: Exclude<ApplicationSimilarityReviewState,"UNREVIEWED">;
+  decision: Exclude<ApplicationSimilarityReviewState,"UNREVIEWED"> | "REOPENED";
   reason_code: string;
   rationale?: string;
 }
@@ -502,6 +519,7 @@ export interface RepositoryDetail {
   technologies: EntitySummary[];
   deployments: EntitySummary[];
   freshness: Freshness;
+  graph_intelligence?: EntityGraphIntelligence;
 }
 
 export interface PackageSource {
@@ -529,6 +547,7 @@ export interface TechnologyDetail {
   assessments: AssessmentSummary[];
   recommendations: RecommendationSummary[];
   freshness: Freshness;
+  graph_intelligence?: EntityGraphIntelligence;
 }
 
 export interface ModernizationList {
@@ -660,6 +679,9 @@ export interface GraphNode {
   aggregate: boolean;
   member_count?: number;
   confidence?: Confidence;
+  structural_status?: "STRUCTURALLY_CRITICAL" | "ELEVATED" | "TYPICAL" | "WAITING_FOR_DATA";
+  systemic_risk?: number;
+  community_key?: string;
 }
 
 export type ReviewState = "CONFIRMED" | "POSSIBLE" | "REJECTED" | "NOT_APPLICABLE";
@@ -673,6 +695,7 @@ export interface GraphEdge {
   assertion_class: AssertionClass;
   review_state: ReviewState;
   citation_fact_ids: UUID[];
+  is_bridge?: boolean;
 }
 
 export interface GraphNeighborhood {
@@ -714,6 +737,11 @@ export interface AskResponse {
   result_kind: AskResultKind;
   rows?: Array<Record<string, unknown>>;
   graph_highlight?: GraphNeighborhood;
+  resolved_entities?: Array<{
+    entity: EntitySummary;
+    score: number;
+    matched_terms: string[];
+  }>;
 }
 
 export type EnterpriseInsightCategory =

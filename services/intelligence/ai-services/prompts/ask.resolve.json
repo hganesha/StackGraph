@@ -1,0 +1,24 @@
+{
+  "key": "ask.resolve",
+  "version": "1.0.0",
+  "status": "ACTIVE",
+  "input_variables": ["question"],
+  "messages": [
+    {
+      "role": "system",
+      "content": "Identify a concrete estate entity mention only when the question names one. Call resolve_entities with the exact text span and likely entity types. Do not invent IDs. If the question is aggregate or names no entity, make no tool call.\n\nPolicy: evidence-first-resolution/v1"
+    },
+    {
+      "role": "user",
+      "content": "Question:\n${question}"
+    }
+  ],
+  "model_parameters": {
+    "max_output_tokens": 300,
+    "temperature": 0
+  },
+  "metadata": {
+    "purpose": "tenant_scoped_entity_resolution",
+    "policy_version": "evidence-first-resolution/v1"
+  }
+}

@@ -920,6 +920,177 @@ class GraphIntelligenceWorker:
                     digest.update(b"\n")
         return "sha256:"+digest.hexdigest()
 
+    def _materialized_risks(
+        self,request: AnalysisRequest,result: AnalysisResult,
+    ) -> list[tuple[UUID,UUID,str,float,Jsonb,list[str],str]]:
+        configured = dict(request.configuration.get("risk_weights") or {})
+        family_weights = {
+            key:float(value) for key,value in dict(configured.get("families") or {
+                "structural":0.40,"business":0.25,"exposure":0.25,"lifecycle":0.10,
+            }).items()
+        }
+        structural_weights = {
+            key:float(value) for key,value in dict(configured.get("structural_metrics") or {
+                "reachability.upstream_impact":0.40,"betweenness":0.30,
+                "spof.articulation":0.20,"pagerank":0.10,
+            }).items()
+        }
+        if sum(family_weights.values())<=0 or sum(structural_weights.values())<=0:
+            raise ValueError("risk weights must have a positive total")
+        metrics_by_entity: dict[str,dict[str,RankedMetric]] = {}
+        for metric in result.metrics:
+            if metric.metric_key in structural_weights and metric.percentile is not None:
+                metrics_by_entity.setdefault(str(metric.entity_id),{})[metric.metric_key]=metric
+        entity_ids = sorted(metrics_by_entity)
+        if not entity_ids:
+            return []
+        signal_rows = self.connection.execute(
+            """
+            WITH requested AS (SELECT unnest(%s::uuid[]) entity_id), signals AS (
+              SELECT requested.entity_id,
+                (
+                  WITH RECURSIVE nearby(id,depth,path) AS (
+                    SELECT requested.entity_id,0,ARRAY[requested.entity_id]
+                    UNION ALL
+                    SELECT CASE WHEN relationship.source_entity_id=nearby.id
+                             THEN relationship.target_entity_id ELSE relationship.source_entity_id END,
+                           nearby.depth+1,
+                           nearby.path||CASE WHEN relationship.source_entity_id=nearby.id
+                             THEN relationship.target_entity_id ELSE relationship.source_entity_id END
+                    FROM nearby
+                    JOIN current_relationship relationship
+                      ON relationship.source_entity_id=nearby.id
+                      OR relationship.target_entity_id=nearby.id
+                    WHERE nearby.depth<2
+                      AND relationship.tenant_id=%s
+                      AND relationship.relationship_type IN (
+                        'DEPENDS_ON','USES','BUILT_ON','RUNS_ON','IMPLEMENTED_BY','IMPLEMENTS','CONTAINS'
+                      )
+                      AND NOT (CASE WHEN relationship.source_entity_id=nearby.id
+                        THEN relationship.target_entity_id ELSE relationship.source_entity_id END)=ANY(nearby.path)
+                  )
+                  SELECT CASE WHEN count(mapping.application_entity_id)=0
+                    AND count(*) FILTER (WHERE application.properties->>'tier' ~ '^[1-5]$')=0
+                    THEN NULL ELSE greatest(
+                    coalesce(max(mapping.criticality)::double precision/5.0,0),
+                    coalesce(max(CASE
+                      WHEN application.properties->>'tier' ~ '^[1-5]$'
+                        THEN (6-(application.properties->>'tier')::integer)::double precision/5.0
+                      ELSE 0 END),0)
+                  ) END
+                  FROM nearby
+                  JOIN entity application ON application.id=nearby.id
+                  LEFT JOIN current_capability_application_relationship mapping
+                    ON mapping.application_entity_id=application.id
+                  WHERE application.entity_type='Application'
+                ) business_score,
+                (
+                  SELECT CASE WHEN count(*)=0 THEN NULL ELSE least(1.0,
+                    count(DISTINCT affected.object_entity_id)::double precision*0.20
+                    +max(CASE WHEN usage.static_reachability='OBSERVED' THEN 0.25 ELSE 0 END)
+                    +max(CASE WHEN usage.runtime_observed='OBSERVED' THEN 0.30 ELSE 0 END)
+                    +max(CASE WHEN deployment.id IS NOT NULL THEN 0.25 ELSE 0 END)
+                  ) END
+                  FROM fact_assertion dependency
+                  LEFT JOIN dependency_usage_summary usage
+                    ON usage.dependency_fact_assertion_id=dependency.id
+                  LEFT JOIN fact_assertion affected
+                    ON affected.subject_entity_id=requested.entity_id
+                   AND affected.predicate='AFFECTED_BY' AND affected.system_to IS NULL
+                  LEFT JOIN fact_assertion deployment
+                    ON deployment.subject_entity_id=dependency.subject_entity_id
+                   AND deployment.predicate='DEPLOYED_AS' AND deployment.system_to IS NULL
+                  WHERE dependency.object_entity_id=requested.entity_id
+                    AND dependency.predicate='DEPENDS_ON' AND dependency.system_to IS NULL
+                    AND dependency.tenant_id=%s
+                ) exposure_score,
+                ARRAY(
+                  SELECT DISTINCT fact_id FROM (
+                    SELECT dependency.id fact_id FROM fact_assertion dependency
+                    WHERE dependency.object_entity_id=requested.entity_id
+                      AND dependency.predicate='DEPENDS_ON' AND dependency.system_to IS NULL
+                      AND dependency.tenant_id=%s
+                    UNION ALL
+                    SELECT affected.id FROM fact_assertion affected
+                    WHERE affected.subject_entity_id=requested.entity_id
+                      AND affected.predicate='AFFECTED_BY' AND affected.system_to IS NULL
+                      AND (affected.tenant_id IS NULL OR affected.tenant_id=%s)
+                  ) evidence
+                ) exposure_fact_ids,
+                (
+                  SELECT CASE
+                    WHEN bool_or(lower(coalesce(
+                      fact.object_value->>'is_deprecated',fact.object_value->>'deprecated','false'
+                    )) IN ('true','1','yes')) THEN 1.0
+                    WHEN bool_or(upper(coalesce(
+                      assessment.categorical_value,entity.properties->>'support_status',''
+                    )) IN ('UNSUPPORTED','END_OF_LIFE','EOL')) THEN 0.9
+                    WHEN count(assessment.id)>0 THEN greatest(0,least(1,1-coalesce(avg(assessment.score),0)/100.0))
+                    ELSE NULL
+                  END
+                  FROM entity
+                  LEFT JOIN fact_assertion fact ON fact.subject_entity_id=entity.id
+                    AND fact.predicate='HAS_PROPERTY' AND fact.system_to IS NULL
+                  LEFT JOIN assessment ON assessment.subject_entity_id=entity.id
+                    AND assessment.status='CURRENT'
+                    AND lower(assessment.dimension) IN ('viability','supportability','runtime_support','package_support')
+                  WHERE entity.id=requested.entity_id
+                ) lifecycle_score
+              FROM requested
+            ) SELECT * FROM signals
+            """,
+            (
+                entity_ids,request.tenant_id,request.tenant_id,
+                request.tenant_id,request.tenant_id,
+            ),
+        ).fetchall()
+        signals = {str(row["entity_id"]):row for row in signal_rows}
+        persisted = []
+        for entity_id,metric_map in metrics_by_entity.items():
+            available_structural = {
+                key:metric for key,metric in metric_map.items() if metric.percentile is not None
+            }
+            structural_total = sum(structural_weights[key] for key in available_structural)
+            structural_score = (
+                sum(structural_weights[key]*float(metric.percentile or 0)
+                    for key,metric in available_structural.items())/structural_total
+                if structural_total else None
+            )
+            row = signals.get(entity_id,{})
+            raw_scores: dict[str,float | None] = {
+                "structural":structural_score,
+                "business":float(row["business_score"]) if row.get("business_score") is not None else None,
+                "exposure":float(row["exposure_score"]) if row.get("exposure_score") is not None else None,
+                "lifecycle":float(row["lifecycle_score"]) if row.get("lifecycle_score") is not None else None,
+            }
+            available = {key:value for key,value in raw_scores.items() if value is not None}
+            total = sum(family_weights[key] for key in available)
+            if total<=0:
+                continue
+            normalized = {key:family_weights[key]/total for key in available}
+            contributions: dict[str,dict[str,object]] = {}
+            for key,value in available.items():
+                contribution: dict[str,object] = {
+                    "score":value,"weight":normalized[key],
+                    "normalized_contribution":value*normalized[key],
+                }
+                if key=="structural":
+                    contribution["metric_keys"]=sorted(available_structural)
+                elif key=="exposure":
+                    contribution["fact_ids"]=[str(item) for item in (row.get("exposure_fact_ids") or [])]
+                elif key=="business":
+                    contribution["metric_keys"]=["business.criticality","application.tier"]
+                elif key=="lifecycle":
+                    contribution["metric_keys"]=["lifecycle.deprecation","lifecycle.support","catalog.viability"]
+                contributions[key]=contribution
+            score=sum(float(available[key])*normalized[key] for key in available)
+            persisted.append((
+                request.run_id,request.tenant_id,entity_id,max(0,min(1,score)),
+                Jsonb(contributions),sorted(set(family_weights)-set(available)),
+                "graph-systemic-risk/v2",
+            ))
+        return persisted
+
     def _persist(self, request: AnalysisRequest, result: AnalysisResult, fingerprint: str) -> None:
         terminal_status = "SUCCEEDED_WITH_LIMITATIONS" if result.limitations else "SUCCEEDED"
         with self.connection.transaction():
@@ -944,6 +1115,15 @@ class GraphIntelligenceWorker:
                             Jsonb(metric.components),Jsonb(list(metric.limitations)),
                         ) for metric in result.metrics
                     ),
+                )
+                cursor.executemany(
+                    """
+                    INSERT INTO graph_entity_risk(
+                      run_id,tenant_id,entity_id,systemic_risk,contributions,
+                      renormalized_families,method_version
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    self._materialized_risks(request,result),
                 )
                 cursor.executemany(
                     """

@@ -10,7 +10,7 @@ import httpx
 import pytest
 
 from app.errors import APIError
-from app.models import AskResponse
+from app.models import AskResponse, SemanticSearchRequest
 from app.read_models import (
     ReadModelStore,
     _confidence_label,
@@ -24,6 +24,45 @@ from app.read_models import (
 
 
 NOW = datetime(2026, 8, 19, 14, 10, tzinfo=UTC)
+
+
+def test_semantic_search_withholds_restricted_excerpt_but_keeps_provenance() -> None:
+    tenant_id=UUID("00000000-0000-4000-8000-000000000001")
+    entity_id=UUID("00000000-0000-4000-8000-000000000201")
+    fact_id=UUID("00000000-0000-4000-8000-000000000701")
+
+    class SemanticDatabase:
+        async def fetch_one(self,query,params=None,*,tenant_id=None):
+            return {
+                "id":UUID("00000000-0000-4000-8000-000000000801"),
+                "space_key":"semantic-v1","provider":"LOCAL",
+                "model_or_algorithm":"stackgraph-hash-embedding-v1","dimensions":8,
+                "normalization":"L2","template_version":"semantic-entity/v1",
+                "external_processing_allowed":False,"sensitive_content_allowed":False,
+                "provider_base_url":None,"api_key":None,
+            }
+
+        async def fetch_all(self,query,params=None,*,tenant_id=None):
+            assert "document.rendered_content" in query
+            assert params[-2]==0.2
+            return [{
+                "id":entity_id,"entity_type":"Application","name":"Billing API",
+                "canonical_key":"application:billing","summary":"Payments",
+                "input_hash":"sha256:"+"a"*64,"sensitivity":"RESTRICTED",
+                "rendered_content":"Billing API processes payment records.",
+                "source_fact_ids":[fact_id],"score":0.91,
+            }]
+
+    result=asyncio.run(ReadModelStore(SemanticDatabase()).semantic_search(
+        SemanticSearchRequest(
+            query="billing payments",namespace=["ENTERPRISE"],min_score=0.2,limit=5,
+        ),tenant_id=tenant_id,
+    ))
+
+    assert result.hits[0].matched_terms==["billing"]
+    assert result.hits[0].excerpt is None
+    assert result.hits[0].source_fact_ids==[fact_id]
+    assert result.hits[0].limitations[0]["code"]=="RESTRICTED_EXCERPT_WITHHELD"
 
 
 def test_graph_risk_applications_group_governed_application_context() -> None:
@@ -98,6 +137,8 @@ class EstateDatabaseStub:
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
         self.queries.append(query)
+        if "FROM active_graph_analysis_run active" in query:
+            return []
         if "GROUP BY 1 ORDER BY 1" in query or "WITH matched AS" in query:
             return []
         if "FROM entity e" in query and "priority_score" in query:
@@ -113,6 +154,7 @@ class EstateDatabaseStub:
                     "priority_confidence": Decimal("0.91"),
                     "priority_method": "priority-v1",
                     "viability_score": None,
+                    "sort_value": Decimal("81"),
                 },
                 {
                     "id": UUID("00000000-0000-4000-8000-000000000220"),
@@ -126,6 +168,7 @@ class EstateDatabaseStub:
                     "priority_method": "priority-v1",
                     "viability_score": None,
                     "dependency_tier": 2,
+                    "sort_value": Decimal("70"),
                 },
             ]
         raise AssertionError(f"unexpected query: {query}")
@@ -208,6 +251,8 @@ class RepositoryDetailDatabaseStub:
         raise AssertionError(f"unexpected query: {query}")
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
+        if "FROM active_graph_analysis_run active" in query:
+            return []
         assert "FROM current_relationship" in query
         return [{
             "id": UUID("00000000-0000-4000-8000-000000000403"),
@@ -978,7 +1023,8 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert cursor == {
         "v": 1,
         "kind": "estate",
-        "score": "81",
+        "sort": "priority",
+        "value": "81",
         "name": "Billing API",
         "id": "00000000-0000-4000-8000-000000000201",
     }

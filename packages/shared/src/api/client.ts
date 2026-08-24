@@ -894,7 +894,11 @@ const fixtureClient: StackGraphClient = {
   },
   async reviewApplicationSimilarity(id, body) {
     await delay();
-    return { contract_version: "1.0.0", candidate_id: id, review_state: body.decision, reviewed_at: new Date().toISOString() };
+    return {
+      contract_version: "1.0.0", candidate_id: id,
+      review_state: body.decision === "REOPENED" ? "UNREVIEWED" : body.decision,
+      reviewed_at: new Date().toISOString(),
+    };
   },
   async getFactEvidence() {
     await delay();

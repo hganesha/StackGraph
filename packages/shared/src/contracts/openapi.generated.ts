@@ -94,11 +94,12 @@ export interface ApplicationSimilarityList {
   candidates?: Array<ApplicationSimilarityCandidate>;
   contract_version?: "1.0.0";
   limitations?: Array<Record<string, unknown>>;
+  page_info?: PageInfo | null;
   subject: EntitySummary;
 }
 
 export interface ApplicationSimilarityReviewRequest {
-  decision: "CONFIRMED_SIMILAR" | "CONFIRMED_DISTINCT" | "CONSOLIDATION_CANDIDATE" | "DISMISSED";
+  decision: "CONFIRMED_SIMILAR" | "CONFIRMED_DISTINCT" | "CONSOLIDATION_CANDIDATE" | "DISMISSED" | "REOPENED";
   rationale?: string;
   reason_code: string;
 }
@@ -280,6 +281,7 @@ export interface AskResponse {
   citations: Array<Citation>;
   contract_version?: "1.0.0";
   graph_highlight?: GraphNeighborhood | null;
+  resolved_entities?: Array<ResolvedEntity>;
   result_kind: "ANSWER" | "TABLE" | "GRAPH" | "UNSUPPORTED";
   rows?: Array<Record<string, unknown>> | null;
   text: string;
@@ -805,6 +807,26 @@ export interface Coverage {
   repositories_total: number;
 }
 
+export interface CriticalGraphEdge {
+  components?: Record<string, unknown>;
+  fact_id: string;
+  limitations?: Array<Record<string, unknown>>;
+  metric_key?: string;
+  score: number;
+  source: EntitySummary;
+  supporting_fact_ids: Array<string>;
+  target: EntitySummary;
+}
+
+export interface CriticalGraphEdgeList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  edges?: Array<CriticalGraphEdge>;
+  entity: EntitySummary;
+  limitations?: Array<Record<string, unknown>>;
+  snapshot?: GraphAnalysisSnapshot | null;
+}
+
 export interface DeterministicInsight {
   affected_application_count: number;
   affected_deployment_count: number;
@@ -941,6 +963,30 @@ export interface EcosystemAdmissionSummary {
   status: "NOT_EVALUATED" | "PROPOSED" | "ADMITTED" | "RETIRED" | "STALE";
 }
 
+export interface EmbeddingBackfillRequest {
+  embedding_space_id?: string | null;
+  entity_ids?: Array<string>;
+  entity_types?: Array<string>;
+  limit?: number;
+}
+
+export interface EmbeddingBackfillResult {
+  embedding_space_id: string;
+  queued_jobs: number;
+  requested_at: string;
+}
+
+export interface EmbeddingSpacePromotionRequest {
+  action?: "PROMOTE" | "ROLLBACK";
+}
+
+export interface EmbeddingSpacePromotionResult {
+  action: "PROMOTE" | "ROLLBACK";
+  activated_at: string;
+  embedding_space_id: string;
+  space_kind: "SEMANTIC_ENTITY" | "STRUCTURAL_GRAPH" | "CODE";
+}
+
 export interface EmbeddingSpaceSnapshot {
   coverage_ratio: number;
   dimensions: number;
@@ -1026,6 +1072,7 @@ export interface EstateSummary {
   counts: EstateCounts;
   coverage: Coverage;
   distributions: Record<string, number>;
+  limitations?: Array<Record<string, unknown>>;
   page_info?: PageInfo | null;
   ranked_items: Array<RankedItem>;
 }
@@ -1104,6 +1151,19 @@ export interface GitHubTokenUpdateRequest {
   token: string;
 }
 
+export interface GraphAnalysisRequestCreate {
+  policy_key?: string;
+  reason?: string;
+}
+
+export interface GraphAnalysisRequestResult {
+  created_at: string;
+  id: string;
+  policy_key: string;
+  requested_change_watermark: number;
+  status: "PENDING" | "WAITING_FOR_PROJECTION";
+}
+
 export interface GraphAnalysisSnapshot {
   analysis_run_id: string;
   as_of: string;
@@ -1117,6 +1177,28 @@ export interface GraphAnalysisSnapshot {
   policy_version: number;
   requested_change_watermark: number;
   status: "SUCCEEDED" | "SUCCEEDED_WITH_LIMITATIONS";
+}
+
+export interface GraphAnomaly {
+  anomaly_key: string;
+  cohort_key: string;
+  cohort_size: number;
+  entity: EntitySummary;
+  id: string;
+  limitations?: Array<Record<string, unknown>>;
+  observed_components?: Record<string, unknown>;
+  percentile: number;
+  reasons?: Array<string>;
+  score: number;
+  supporting_fact_ids?: Array<string>;
+}
+
+export interface GraphAnomalyList {
+  anomalies?: Array<GraphAnomaly>;
+  as_of: string;
+  contract_version?: "1.0.0";
+  limitations?: Array<Record<string, unknown>>;
+  snapshot?: GraphAnalysisSnapshot | null;
 }
 
 export interface GraphBlastRadius {
@@ -1150,6 +1232,7 @@ export interface GraphEdge {
   citation_fact_ids: Array<string>;
   confidence: number;
   id: string;
+  is_bridge?: boolean | null;
   predicate: string;
   review_state: "CONFIRMED" | "POSSIBLE" | "REJECTED" | "NOT_APPLICABLE";
   source: string;
@@ -1190,6 +1273,24 @@ export interface GraphMetric {
   rank?: number | null;
 }
 
+export interface GraphMotif {
+  components?: Record<string, unknown>;
+  id: string;
+  limitations?: Array<Record<string, unknown>>;
+  members: Array<EntitySummary>;
+  minimum_confidence: number;
+  motif_key: string;
+  supporting_fact_ids: Array<string>;
+}
+
+export interface GraphMotifList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  limitations?: Array<Record<string, unknown>>;
+  motifs?: Array<GraphMotif>;
+  snapshot?: GraphAnalysisSnapshot | null;
+}
+
 export interface GraphNeighborhood {
   center_id: string;
   contract_version?: "1.0.0";
@@ -1202,20 +1303,26 @@ export interface GraphNeighborhood {
 
 export interface GraphNode {
   aggregate: boolean;
+  community_key?: string | null;
   confidence?: number | null;
   id: string;
   key: string;
   label: string;
   member_count?: number | null;
   namespace: "BUSINESS" | "ENTERPRISE" | "TECHNOLOGY" | "OSS" | "DEPLOYMENT" | "INTELLIGENCE";
+  structural_status?: "STRUCTURALLY_CRITICAL" | "ELEVATED" | "TYPICAL" | "WAITING_FOR_DATA" | null;
+  systemic_risk?: number | null;
   type: string;
 }
 
 export interface GraphRiskItem {
+  component_contributions?: Record<string, Record<string, unknown>>;
   component_metrics?: Array<GraphMetric>;
   entity: EntitySummary;
   impacted_applications?: Array<EntitySummary>;
+  method_version?: string;
   reasons?: Array<string>;
+  renormalized_families?: Array<string>;
   systemic_risk: number;
 }
 
@@ -1223,6 +1330,7 @@ export interface GraphRiskList {
   as_of: string;
   contract_version?: "1.0.0";
   limitations?: Array<Record<string, unknown>>;
+  page_info?: PageInfo | null;
   risks?: Array<GraphRiskItem>;
   snapshot?: GraphAnalysisSnapshot | null;
 }
@@ -1584,6 +1692,8 @@ export interface ProviderQuota {
 
 export interface RankedItem {
   citations?: Array<Citation> | null;
+  community_key?: string | null;
+  dependency_depth?: number | null;
   dependency_tier?: number | null;
   domain: "BUSINESS" | "ENTERPRISE" | "TECHNOLOGY" | "OSS" | "DEPLOYMENT" | "INTELLIGENCE";
   freshness: Freshness;
@@ -1593,7 +1703,10 @@ export interface RankedItem {
   parent_application_id?: string | null;
   parent_application_name?: string | null;
   priority: Score;
+  structural_status?: "STRUCTURALLY_CRITICAL" | "ELEVATED" | "TYPICAL" | "WAITING_FOR_DATA" | null;
   summary?: string | null;
+  systemic_risk?: number | null;
+  upstream_impact?: number | null;
   viability?: Score | null;
 }
 
@@ -1637,6 +1750,7 @@ export interface RepositoryDetail {
   contract_version?: "1.0.0";
   deployments: Array<EntitySummary>;
   freshness: Freshness;
+  graph_intelligence?: EntityGraphIntelligence | null;
   profile?: RepositoryProfile | null;
   repository: EntitySummary;
   technologies: Array<EntitySummary>;
@@ -1687,6 +1801,12 @@ export interface RescanRequest {
   connector_id?: string | null;
   idempotency_key: string;
   reason?: string;
+}
+
+export interface ResolvedEntity {
+  entity: EntitySummary;
+  matched_terms?: Array<string>;
+  score: number;
 }
 
 export interface ReviewQueue {
@@ -1741,14 +1861,20 @@ export interface Score {
 
 export interface SemanticSearchHit {
   entity: EntitySummary;
+  excerpt?: string | null;
   input_hash: string;
+  limitations?: Array<Record<string, unknown>>;
+  matched_terms?: Array<string>;
   score: number;
   sensitivity: "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
+  source_fact_ids?: Array<string>;
 }
 
 export interface SemanticSearchRequest {
   entity_types?: Array<string>;
   limit?: number;
+  min_score?: number;
+  namespace?: Array<"BUSINESS" | "ENTERPRISE" | "TECHNOLOGY" | "OSS" | "DEPLOYMENT" | "INTELLIGENCE">;
   query: string;
 }
 
@@ -1831,6 +1957,7 @@ export interface TechnologyDetail {
   catalog_profile?: TechnologyCatalogProfile | null;
   contract_version?: "1.0.0";
   freshness: Freshness;
+  graph_intelligence?: EntityGraphIntelligence | null;
   internal_usage: InternalUsage;
   migration_patterns?: Array<EntitySummary> | null;
   packages: Array<EntitySummary>;

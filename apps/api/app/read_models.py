@@ -17,6 +17,7 @@ import httpx
 from stackgraph_graph_intelligence.embeddings import (
     LocalHashEmbeddingAdapter,
     OpenAICompatibleEmbeddingAdapter,
+    TOKEN_PATTERN,
     content_hash as embedding_content_hash,
     vector_literal,
 )
@@ -128,6 +129,12 @@ from app.models import (
     GraphBlastRadius,
     GraphCommunity,
     GraphCommunityList,
+    GraphAnomaly,
+    GraphAnomalyList,
+    GraphMotif,
+    GraphMotifList,
+    CriticalGraphEdge,
+    CriticalGraphEdgeList,
     GraphImpactPath,
     GraphIntelligenceStatus,
     GraphMetric,
@@ -1116,6 +1123,26 @@ def _decode_cursor(cursor: str | None, kind: str) -> dict[str, Any] | None:
         raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
 
 
+def _semantic_match_details(query: str, content: str) -> tuple[list[str], str]:
+    query_terms = {term.casefold() for term in TOKEN_PATTERN.findall(query)}
+    content_terms = [term.casefold() for term in TOKEN_PATTERN.findall(content)]
+    matched = sorted(query_terms.intersection(content_terms))[:20]
+    if not content:
+        return matched, ""
+    first = min(
+        (content.casefold().find(term) for term in matched if content.casefold().find(term) >= 0),
+        default=0,
+    )
+    start = max(0,first-120)
+    end = min(len(content),start+400)
+    excerpt = content[start:end].strip()
+    if start:
+        excerpt = "…"+excerpt
+    if end<len(content):
+        excerpt += "…"
+    return matched,excerpt
+
+
 def _aggregate_node_id(center_id: UUID, depth: int, namespace: str, entity_type: str) -> UUID:
     return uuid5(
         NAMESPACE_URL,
@@ -1168,14 +1195,38 @@ class ReadModelStore(AdminReadModelsMixin):
         cursor: str | None,
         limit: int,
         namespaces: list[str] | None = None,
+        sort: str = "priority",
     ) -> EstateSummary:
         cursor_data = _decode_cursor(cursor, "estate")
         try:
-            cursor_score = Decimal(cursor_data["score"]) if cursor_data else None
+            cursor_score = Decimal(str(cursor_data.get("value",cursor_data.get("score")))) if cursor_data else None
             cursor_name = str(cursor_data["name"]) if cursor_data else None
             cursor_id = UUID(cursor_data["id"]) if cursor_data else None
+            cursor_sort = str(cursor_data.get("sort","priority")) if cursor_data else sort
         except (KeyError, TypeError, ValueError) as error:
             raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
+        if cursor_sort!=sort:
+            raise APIError(
+                400,"CURSOR_SORT_MISMATCH","The pagination cursor belongs to a different sort.",
+                {"cursor_sort":cursor_sort,"requested_sort":sort},
+            )
+        sort_expressions = {
+            "priority":"coalesce(p.score,0)",
+            "systemic_risk":"coalesce(risk.systemic_risk,0)",
+            "upstream_impact":"coalesce(upstream.numeric_value,0)",
+            "dependency_depth":"coalesce(depth_metric.numeric_value,0)",
+        }
+        sort_expression = sort_expressions[sort]
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        snapshot = self._graph_snapshot(snapshot_rows[0]) if snapshot_rows else None
+        if sort!="priority" and snapshot is None:
+            raise APIError(
+                400,"GRAPH_SORT_UNAVAILABLE",
+                "The requested graph ranking requires an active runtime-dependency snapshot.",
+                {"sort":sort},
+            )
         counts_row = await self.database.fetch_one(
             _OBSERVED_TECHNOLOGY_CTE + """
             SELECT
@@ -1257,13 +1308,16 @@ class ReadModelStore(AdminReadModelsMixin):
         )
 
         rows = await self.database.fetch_all(
-            _OBSERVED_TECHNOLOGY_CTE + """
+            _OBSERVED_TECHNOLOGY_CTE + f"""
             SELECT e.*, coalesce(e.last_seen_at,e.updated_at,e.created_at) observed_at,
                    p.id priority_id,p.score priority_score,p.confidence priority_confidence,p.method_version priority_method,
                    v.score viability_score,v.confidence viability_confidence,v.method_version viability_method,
                    dependency.dependency_tier,
                    parent_application.id parent_application_id,
-                   parent_application.name parent_application_name
+                   parent_application.name parent_application_name,
+                   risk.systemic_risk,upstream.numeric_value upstream_impact,
+                   depth_metric.numeric_value dependency_depth,
+                   community.community_key,{sort_expression} sort_value
             FROM entity e
             LEFT JOIN LATERAL (
               SELECT * FROM assessment a WHERE a.subject_entity_id=e.id AND a.status='CURRENT' AND lower(a.dimension)='priority'
@@ -1289,6 +1343,17 @@ class ReadModelStore(AdminReadModelsMixin):
               ORDER BY application.name,application.id
               LIMIT 1
             ) parent_application ON true
+            LEFT JOIN graph_entity_risk risk
+              ON risk.run_id=%s::uuid AND risk.tenant_id=%s AND risk.entity_id=e.id
+            LEFT JOIN graph_entity_metric upstream
+              ON upstream.run_id=%s::uuid AND upstream.tenant_id=%s AND upstream.entity_id=e.id
+             AND upstream.metric_key='reachability.upstream_impact'
+            LEFT JOIN graph_entity_metric depth_metric
+              ON depth_metric.run_id=%s::uuid AND depth_metric.tenant_id=%s
+             AND depth_metric.entity_id=e.id AND depth_metric.metric_key='reachability.upstream_depth'
+            LEFT JOIN graph_community_membership community
+              ON community.run_id=%s::uuid AND community.tenant_id=%s
+             AND community.entity_id=e.id AND community.algorithm_key='wcc'
             WHERE (
                 (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service')
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
@@ -1306,14 +1371,18 @@ class ReadModelStore(AdminReadModelsMixin):
               AND (%s::text[] IS NULL OR e.namespace=ANY(%s::text[]))
               AND (
                 %s::numeric IS NULL
-                OR coalesce(p.score,0)<%s::numeric
-                OR (coalesce(p.score,0)=%s::numeric AND (e.name,e.id)>(%s::text,%s::uuid))
+                OR {sort_expression}<%s::numeric
+                OR ({sort_expression}=%s::numeric AND (e.name,e.id)>(%s::text,%s::uuid))
               )
-            ORDER BY coalesce(p.score,0) DESC,e.name,e.id
+            ORDER BY {sort_expression} DESC,e.name,e.id
             LIMIT %s
             """,
             (
                 tenant_id,
+                snapshot.analysis_run_id if snapshot else None,tenant_id,
+                snapshot.analysis_run_id if snapshot else None,tenant_id,
+                snapshot.analysis_run_id if snapshot else None,tenant_id,
+                snapshot.analysis_run_id if snapshot else None,tenant_id,
                 namespaces or None,
                 namespaces or None,
                 cursor_score,
@@ -1362,6 +1431,24 @@ class ReadModelStore(AdminReadModelsMixin):
                         int(row["dependency_tier"])
                         if row.get("dependency_tier") is not None else None
                     ),
+                    systemic_risk=(
+                        _number(row["systemic_risk"])
+                        if row.get("systemic_risk") is not None else None
+                    ),
+                    upstream_impact=(
+                        _number(row["upstream_impact"])
+                        if row.get("upstream_impact") is not None else None
+                    ),
+                    dependency_depth=(
+                        int(row["dependency_depth"])
+                        if row.get("dependency_depth") is not None else None
+                    ),
+                    community_key=row.get("community_key"),
+                    structural_status=(
+                        "STRUCTURALLY_CRITICAL" if _number(row.get("systemic_risk"))>=0.8
+                        else "ELEVATED" if _number(row.get("systemic_risk"))>=0.6
+                        else "TYPICAL" if row.get("systemic_risk") is not None else None
+                    ),
                     freshness=_freshness(row.get("observed_at")),
                     citations=citations_by_entity.get(row["id"], []),
                 )
@@ -1377,13 +1464,18 @@ class ReadModelStore(AdminReadModelsMixin):
                 next_cursor=(
                     _encode_cursor(
                         "estate",
-                        score=str(rows[-1].get("priority_score") or 0),
+                        sort=sort,
+                        value=str(rows[-1].get("sort_value") or 0),
                         name=rows[-1]["name"],
                         id=str(rows[-1]["id"]),
                     )
                     if has_next else None
                 ),
             ),
+            limitations=(list(snapshot.limitations) if snapshot else [{
+                "code":"NO_ACTIVE_GRAPH_SNAPSHOT",
+                "message":"Graph ranking fields are omitted until a runtime-dependency snapshot is active.",
+            }]),
         )
 
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail:
@@ -1799,7 +1891,9 @@ class ReadModelStore(AdminReadModelsMixin):
         return applications
 
     async def graph_risks(
-        self,*,tenant_id: UUID | None,limit: int,
+        self,*,tenant_id: UUID | None,entity_type: str | None=None,
+        namespace: str | None=None,community_key: str | None=None,min_score: float=0,
+        cursor: str | None=None,limit: int,
     ) -> GraphRiskList:
         snapshot_rows = await self._active_graph_snapshots(
             tenant_id,policy_key="runtime-dependency",
@@ -1810,52 +1904,76 @@ class ReadModelStore(AdminReadModelsMixin):
                 limitations=[{"code":"NO_ACTIVE_RUNTIME_SNAPSHOT","message":"Systemic graph risk is not ready."}],
             )
         snapshot = self._graph_snapshot(snapshot_rows[0])
+        cursor_data = _decode_cursor(cursor,"graph-risks")
+        try:
+            cursor_score = float(cursor_data["score"]) if cursor_data else None
+            cursor_id = UUID(cursor_data["id"]) if cursor_data else None
+        except (KeyError,TypeError,ValueError) as error:
+            raise APIError(400,"INVALID_CURSOR","The pagination cursor is invalid.") from error
         rows = await self.database.fetch_all(
             """
             SELECT entity.id,entity.entity_type,entity.name,entity.canonical_key,
-                   entity.properties->>'summary' AS summary,metric.metric_key,
-                   metric.numeric_value,metric.percentile,metric.rank,
-                   metric.components,metric.limitations
-            FROM graph_entity_metric metric
-            JOIN entity ON entity.id=metric.entity_id
-            WHERE metric.run_id=%s AND metric.tenant_id=%s
-              AND metric.metric_key IN ('reachability.upstream_impact','betweenness','spof.articulation','pagerank')
-            ORDER BY entity.id,metric.metric_key
+                   entity.properties->>'summary' AS summary,risk.systemic_risk,
+                   risk.contributions,risk.renormalized_families,risk.method_version,
+                   community.community_key
+            FROM graph_entity_risk risk
+            JOIN entity ON entity.id=risk.entity_id
+            LEFT JOIN graph_community_membership community
+              ON community.run_id=risk.run_id AND community.entity_id=risk.entity_id
+             AND community.algorithm_key='wcc'
+            WHERE risk.run_id=%s AND risk.tenant_id=%s
+              AND (%s::text IS NULL OR entity.entity_type=%s)
+              AND (%s::text IS NULL OR entity.namespace=%s)
+              AND (%s::text IS NULL OR community.community_key=%s)
+              AND risk.systemic_risk>=%s
+              AND (
+                %s::double precision IS NULL OR risk.systemic_risk<%s
+                OR (risk.systemic_risk=%s AND risk.entity_id>%s::uuid)
+              )
+            ORDER BY risk.systemic_risk DESC,risk.entity_id LIMIT %s
             """,
-            (snapshot.analysis_run_id,tenant_id),tenant_id=tenant_id,
+            (
+                snapshot.analysis_run_id,tenant_id,entity_type,entity_type,
+                namespace,namespace,community_key,community_key,min_score,
+                cursor_score,cursor_score,cursor_score,cursor_id,limit+1,
+            ),tenant_id=tenant_id,
         )
-        grouped: dict[UUID, dict[str, Any]] = {}
-        for row in rows:
-            bucket = grouped.setdefault(row["id"],{"entity":row,"metrics":[]})
-            bucket["metrics"].append(GraphMetric(
+        has_next = len(rows)>limit
+        rows = rows[:limit]
+        metric_rows = await self.database.fetch_all(
+            """
+            SELECT metric.* FROM graph_entity_metric metric
+            WHERE metric.run_id=%s AND metric.tenant_id=%s
+              AND metric.entity_id=ANY(%s::uuid[])
+              AND metric.metric_key IN (
+                'reachability.upstream_impact','betweenness','spof.articulation','pagerank'
+              )
+            ORDER BY metric.entity_id,metric.metric_key
+            """,
+            (snapshot.analysis_run_id,tenant_id,[row["id"] for row in rows]),tenant_id=tenant_id,
+        ) if rows else []
+        metrics_by_entity: dict[UUID,list[GraphMetric]] = defaultdict(list)
+        for metric in metric_rows:
+            metrics_by_entity[metric["entity_id"]].append(GraphMetric(
                 analysis_run_id=snapshot.analysis_run_id,policy_key=snapshot.policy_key,
-                metric_key=row["metric_key"],numeric_value=row.get("numeric_value"),
-                percentile=row.get("percentile"),rank=row.get("rank"),
-                components=row.get("components") or {},limitations=row.get("limitations") or [],
+                metric_key=metric["metric_key"],numeric_value=metric.get("numeric_value"),
+                percentile=metric.get("percentile"),rank=metric.get("rank"),
+                components=metric.get("components") or {},limitations=metric.get("limitations") or [],
             ))
-        weights = {
-            "reachability.upstream_impact":0.4,"betweenness":0.3,
-            "spof.articulation":0.2,"pagerank":0.1,
-        }
-        risk_items: list[GraphRiskItem] = []
-        for bucket in grouped.values():
-            metrics = bucket["metrics"]
-            available = [metric for metric in metrics if metric.percentile is not None]
-            weight_total = sum(weights[metric.metric_key] for metric in available)
-            score = (
-                sum(weights[metric.metric_key]*(metric.percentile or 0) for metric in available)
-                / weight_total if weight_total else 0
-            )
-            reasons = [
-                f"{metric.metric_key} is at the {round((metric.percentile or 0)*100)}th estate percentile."
-                for metric in sorted(available,key=lambda item:item.percentile or 0,reverse=True)[:2]
-            ]
-            risk_items.append(GraphRiskItem(
-                entity=_entity(bucket["entity"]),systemic_risk=score,
-                component_metrics=metrics,reasons=reasons,
-            ))
-        risk_items.sort(key=lambda item:(-item.systemic_risk,item.entity.name.lower(),str(item.entity.id)))
-        risk_items = risk_items[:limit]
+        risk_items = [GraphRiskItem(
+            entity=_entity(row),systemic_risk=row["systemic_risk"],
+            component_metrics=metrics_by_entity[row["id"]],
+            component_contributions=row.get("contributions") or {},
+            renormalized_families=row.get("renormalized_families") or [],
+            method_version=row.get("method_version") or "graph-systemic-risk/v2",
+            reasons=[
+                f"{key.title()} contributes {round(float(value.get('normalized_contribution') or 0)*100)}% of the normalized score."
+                for key,value in sorted(
+                    (row.get("contributions") or {}).items(),
+                    key=lambda item:float(item[1].get("normalized_contribution") or 0),reverse=True,
+                )[:2]
+            ],
+        ) for row in rows]
         applications = await self._graph_risk_applications(
             [item.entity.id for item in risk_items],tenant_id,
         )
@@ -1867,9 +1985,17 @@ class ReadModelStore(AdminReadModelsMixin):
         ]
         return GraphRiskList(
             snapshot=snapshot,risks=risk_items,as_of=snapshot.as_of,
-            limitations=list(snapshot.limitations)+[
-                {"code":"RENORMALIZED_COMPOSITE","message":"Business criticality and incident/vulnerability overlays are unavailable; structural weights were renormalized.","method_version":"graph-systemic-risk/v1"}
-            ],
+            limitations=list(snapshot.limitations)+([{
+                "code":"RENORMALIZED_COMPOSITE",
+                "message":"One or more signal families were absent for at least one result; configured weights were renormalized over observed families.",
+                "method_version":"graph-systemic-risk/v2",
+            }] if any(item.renormalized_families for item in risk_items) else []),
+            page_info=PageInfo(
+                has_next_page=has_next,
+                next_cursor=(_encode_cursor(
+                    "graph-risks",score=rows[-1]["systemic_risk"],id=str(rows[-1]["id"]),
+                ) if has_next else None),
+            ),
         )
 
     async def graph_communities(
@@ -1917,6 +2043,141 @@ class ReadModelStore(AdminReadModelsMixin):
         return GraphCommunityList(
             snapshot=snapshot,algorithm_key="wcc",communities=list(grouped.values()),
             as_of=snapshot.as_of,limitations=list(snapshot.limitations),
+        )
+
+    async def graph_anomalies(
+        self,*,tenant_id: UUID | None,cohort_key: str | None,limit: int,
+    ) -> GraphAnomalyList:
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return GraphAnomalyList(
+                as_of=datetime.now(UTC),limitations=[{
+                    "code":"NO_ACTIVE_POLICY_SNAPSHOT",
+                    "message":"Anomaly data is not ready for the runtime-dependency policy.",
+                }],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            SELECT anomaly.*,entity.id entity_id,entity.entity_type,entity.name,
+                   entity.canonical_key,entity.properties->>'summary' summary
+            FROM graph_anomaly anomaly
+            JOIN entity ON entity.id=anomaly.entity_id
+            WHERE anomaly.run_id=%s AND anomaly.tenant_id=%s
+              AND (%s::text IS NULL OR anomaly.cohort_key=%s)
+            ORDER BY anomaly.score DESC,entity.name,anomaly.id LIMIT %s
+            """,
+            (snapshot.analysis_run_id,tenant_id,cohort_key,cohort_key,limit),tenant_id=tenant_id,
+        )
+        provenance_limitation = {
+            "code":"ANOMALY_FACT_PROVENANCE_UNAVAILABLE",
+            "message":"This anomaly snapshot predates fact-level anomaly provenance; metric components are returned without invented evidence IDs.",
+        }
+        return GraphAnomalyList(
+            snapshot=snapshot,
+            anomalies=[GraphAnomaly(
+                id=row["id"],entity=EntitySummary(
+                    id=row["entity_id"],kind=row["entity_type"],name=row["name"],
+                    canonical_key=row.get("canonical_key"),summary=row.get("summary"),
+                ),anomaly_key=row["anomaly_key"],score=row["score"],
+                cohort_key=row["cohort_key"],
+                cohort_size=int((row.get("cohort_definition") or {}).get("cohort_size") or 1),
+                percentile=row["score"],observed_components=row.get("observed_components") or {},
+                reasons=row.get("reasons") or [],supporting_fact_ids=[],
+                limitations=[*(row.get("limitations") or []),provenance_limitation],
+            ) for row in rows],
+            as_of=snapshot.as_of,
+            limitations=[*snapshot.limitations,provenance_limitation],
+        )
+
+    async def graph_motifs(
+        self,*,tenant_id: UUID | None,motif_key: str | None,limit: int,
+    ) -> GraphMotifList:
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return GraphMotifList(
+                as_of=datetime.now(UTC),limitations=[{
+                    "code":"NO_ACTIVE_POLICY_SNAPSHOT",
+                    "message":"Motif data is not ready for the runtime-dependency policy.",
+                }],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            SELECT motif.*,
+              jsonb_agg(jsonb_build_object(
+                'id',entity.id,'entity_type',entity.entity_type,'name',entity.name,
+                'canonical_key',entity.canonical_key,
+                'summary',entity.properties->>'summary'
+              ) ORDER BY member.ordinality) members
+            FROM graph_motif motif
+            CROSS JOIN LATERAL unnest(motif.entity_ids) WITH ORDINALITY member(entity_id,ordinality)
+            JOIN entity ON entity.id=member.entity_id
+            WHERE motif.run_id=%s AND motif.tenant_id=%s
+              AND (%s::text IS NULL OR motif.motif_key=%s)
+            GROUP BY motif.id,motif.run_id,motif.tenant_id,motif.motif_key,motif.entity_ids,
+                     motif.supporting_fact_ids,motif.confidence,motif.components,
+                     motif.limitations,motif.created_at
+            ORDER BY motif.confidence DESC,motif.id LIMIT %s
+            """,
+            (snapshot.analysis_run_id,tenant_id,motif_key,motif_key,limit),tenant_id=tenant_id,
+        )
+        return GraphMotifList(
+            snapshot=snapshot,motifs=[GraphMotif(
+                id=row["id"],motif_key=row["motif_key"],
+                members=[_entity(member) for member in row["members"]],
+                supporting_fact_ids=row["supporting_fact_ids"],
+                minimum_confidence=row["confidence"],components=row.get("components") or {},
+                limitations=row.get("limitations") or [],
+            ) for row in rows],as_of=snapshot.as_of,limitations=list(snapshot.limitations),
+        )
+
+    async def critical_edges(
+        self,entity_id: UUID,*,tenant_id: UUID | None,
+    ) -> CriticalGraphEdgeList:
+        entity_row = await self._get_entity(entity_id,tenant_id)
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return CriticalGraphEdgeList(
+                entity=_entity(entity_row),as_of=datetime.now(UTC),limitations=[{
+                    "code":"NO_ACTIVE_POLICY_SNAPSHOT",
+                    "message":"Critical-edge data is not ready for the runtime-dependency policy.",
+                }],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            SELECT metric.*,source.entity_type source_type,source.name source_name,
+                   source.canonical_key source_key,source.properties->>'summary' source_summary,
+                   target.entity_type target_type,target.name target_name,
+                   target.canonical_key target_key,target.properties->>'summary' target_summary
+            FROM graph_edge_metric metric
+            JOIN entity source ON source.id=metric.subject_entity_id
+            JOIN entity target ON target.id=metric.object_entity_id
+            WHERE metric.run_id=%s AND metric.tenant_id=%s AND metric.metric_key='spof.bridge'
+              AND %s IN (metric.subject_entity_id,metric.object_entity_id)
+            ORDER BY metric.numeric_value DESC NULLS LAST,metric.fact_assertion_id
+            """,
+            (snapshot.analysis_run_id,tenant_id,entity_id),tenant_id=tenant_id,
+        )
+        return CriticalGraphEdgeList(
+            entity=_entity(entity_row),snapshot=snapshot,edges=[CriticalGraphEdge(
+                fact_id=row["fact_assertion_id"],source=EntitySummary(
+                    id=row["subject_entity_id"],kind=row["source_type"],name=row["source_name"],
+                    canonical_key=row.get("source_key"),summary=row.get("source_summary"),
+                ),target=EntitySummary(
+                    id=row["object_entity_id"],kind=row["target_type"],name=row["target_name"],
+                    canonical_key=row.get("target_key"),summary=row.get("target_summary"),
+                ),score=_number(row.get("numeric_value")),components=row.get("components") or {},
+                supporting_fact_ids=[row["fact_assertion_id"]],
+                limitations=row.get("limitations") or [],
+            ) for row in rows],as_of=snapshot.as_of,limitations=list(snapshot.limitations),
         )
 
     async def semantic_search(
@@ -1969,32 +2230,53 @@ class ReadModelStore(AdminReadModelsMixin):
                 {"error_type":type(error).__name__},
             ) from error
         entity_types = sorted(set(request.entity_types))
+        namespaces = sorted(set(request.namespace))
         rows = await self.database.fetch_all(
             """
-            SELECT entity.id,entity.entity_type,entity.name,entity.canonical_key,
-                   entity.properties->>'summary' AS summary,document.input_hash,document.sensitivity,
-                   1-(embedding.embedding<=>%s::vector) AS score
-            FROM entity_embedding embedding
-            JOIN embedding_document document ON document.embedding_space_id=embedding.embedding_space_id
-              AND document.entity_id=embedding.entity_id
-            JOIN entity ON entity.id=embedding.entity_id
-            WHERE embedding.tenant_id=%s AND embedding.embedding_space_id=%s
-              AND (cardinality(%s::text[])=0 OR entity.entity_type=ANY(%s::text[]))
-            ORDER BY embedding.embedding<=>%s::vector,entity.id LIMIT %s
+            WITH scored AS (
+              SELECT entity.id,entity.entity_type,entity.name,entity.canonical_key,
+                     entity.properties->>'summary' AS summary,document.input_hash,
+                     document.sensitivity,document.rendered_content,
+                     document.source_fact_ids,
+                     1-(embedding.embedding<=>%s::vector) AS score
+              FROM entity_embedding embedding
+              JOIN embedding_document document
+                ON document.embedding_space_id=embedding.embedding_space_id
+               AND document.entity_id=embedding.entity_id
+              JOIN entity ON entity.id=embedding.entity_id
+              WHERE embedding.tenant_id=%s AND embedding.embedding_space_id=%s
+                AND (cardinality(%s::text[])=0 OR entity.entity_type=ANY(%s::text[]))
+                AND (cardinality(%s::text[])=0 OR entity.namespace=ANY(%s::text[]))
+            )
+            SELECT * FROM scored WHERE score>=%s
+            ORDER BY score DESC,id LIMIT %s
             """,
             (
                 vector_literal(embedded.values),tenant_id,space["id"],entity_types,entity_types,
-                vector_literal(embedded.values),request.limit,
+                namespaces,namespaces,request.min_score,request.limit,
             ),tenant_id=tenant_id,
         )
+        hits: list[SemanticSearchHit] = []
+        for row in rows:
+            matched_terms,excerpt = _semantic_match_details(
+                request.query,str(row.get("rendered_content") or ""),
+            )
+            restricted = row["sensitivity"]=="RESTRICTED"
+            hits.append(SemanticSearchHit(
+                entity=_entity(row),score=max(-1,min(1,_number(row["score"]))),
+                input_hash=row["input_hash"],sensitivity=row["sensitivity"],
+                matched_terms=matched_terms,excerpt=None if restricted else excerpt,
+                source_fact_ids=row.get("source_fact_ids") or [],
+                limitations=([{
+                    "code":"RESTRICTED_EXCERPT_WITHHELD",
+                    "message":"The matched document is restricted; text was not returned.",
+                }] if restricted else []),
+            ))
         return SemanticSearchResponse(
             space_id=space["id"],space_key=space["space_key"],
             model_or_algorithm=space["model_or_algorithm"],template_version=space["template_version"],
             query_hash=embedding_content_hash(request.query),
-            hits=[SemanticSearchHit(
-                entity=_entity(row),score=max(-1,min(1,_number(row["score"]))),
-                input_hash=row["input_hash"],sensitivity=row["sensitivity"],
-            ) for row in rows],
+            hits=hits,
             as_of=datetime.now(UTC),
             limitations=[{
                 "code":"EXACT_SEARCH","message":"Results use exact tenant-filtered cosine search; no approximate index was used."
@@ -2065,11 +2347,23 @@ class ReadModelStore(AdminReadModelsMixin):
         )
 
     async def similar_applications(
-        self,application_id: UUID,*,tenant_id: UUID | None,limit: int,
+        self,application_id: UUID,*,tenant_id: UUID | None,
+        review_state: str | None=None,cursor: str | None=None,limit: int,
     ) -> ApplicationSimilarityList:
-        subject_row = await self._get_entity(
-            application_id,tenant_id,namespace="ENTERPRISE",entity_type="Application",
-        )
+        subject_row = await self._get_entity(application_id,tenant_id)
+        if subject_row["entity_type"] not in {
+            "Application","Technology","Capability","BusinessCapability",
+        }:
+            raise APIError(
+                400,"SIMILARITY_ENTITY_TYPE_UNSUPPORTED",
+                "Similarity is available for applications, technologies, and capabilities.",
+            )
+        cursor_data = _decode_cursor(cursor,"similarity")
+        try:
+            cursor_score = float(cursor_data["score"]) if cursor_data else None
+            cursor_id = UUID(cursor_data["id"]) if cursor_data else None
+        except (KeyError,TypeError,ValueError) as error:
+            raise APIError(400,"INVALID_CURSOR","The pagination cursor is invalid.") from error
         rows = await self.database.fetch_all(
             """
             SELECT candidate.id,candidate.score,candidate.method_version,candidate.components,
@@ -2078,14 +2372,26 @@ class ReadModelStore(AdminReadModelsMixin):
                    peer.id AS peer_id,peer.entity_type AS peer_entity_type,peer.name AS peer_name,
                    peer.canonical_key AS peer_canonical_key,peer.properties->>'summary' AS peer_summary
             FROM application_similarity_candidate candidate
-            JOIN entity peer ON peer.id=CASE WHEN candidate.left_application_id=%s
-              THEN candidate.right_application_id ELSE candidate.left_application_id END
+            JOIN entity peer ON peer.id=CASE WHEN candidate.left_entity_id=%s
+              THEN candidate.right_entity_id ELSE candidate.left_entity_id END
             WHERE candidate.tenant_id=%s
-              AND %s IN (candidate.left_application_id,candidate.right_application_id)
+              AND candidate.entity_kind=%s
+              AND %s IN (candidate.left_entity_id,candidate.right_entity_id)
+              AND (%s::text IS NULL OR candidate.review_state=%s)
+              AND (
+                %s::double precision IS NULL OR candidate.score<%s
+                OR (candidate.score=%s AND candidate.id>%s::uuid)
+              )
             ORDER BY candidate.score DESC,candidate.id LIMIT %s
             """,
-            (application_id,tenant_id,application_id,limit),tenant_id=tenant_id,
+            (
+                application_id,tenant_id,subject_row["entity_type"],application_id,
+                review_state,review_state,cursor_score,cursor_score,cursor_score,cursor_id,
+                limit+1,
+            ),tenant_id=tenant_id,
         )
+        has_next = len(rows)>limit
+        rows = rows[:limit]
         return ApplicationSimilarityList(
             subject=_entity(subject_row),
             candidates=[ApplicationSimilarityCandidate(
@@ -2100,8 +2406,14 @@ class ReadModelStore(AdminReadModelsMixin):
             ) for row in rows],
             as_of=datetime.now(UTC),
             limitations=[] if rows else [{
-                "code":"SIMILARITY_NOT_EVALUATED","message":"No explainable application-similarity candidates are available yet."
+                "code":"SIMILARITY_NOT_EVALUATED","message":"No explainable similarity candidates are available for this entity and filter."
             }],
+            page_info=PageInfo(
+                has_next_page=has_next,
+                next_cursor=(_encode_cursor(
+                    "similarity",score=rows[-1]["score"],id=str(rows[-1]["id"]),
+                ) if has_next else None),
+            ),
         )
 
     async def review_application_similarity(
@@ -2133,10 +2445,12 @@ class ReadModelStore(AdminReadModelsMixin):
             )
             await connection.execute(
                 "UPDATE application_similarity_candidate SET review_state=%s,updated_at=now() WHERE id=%s",
-                (review.decision,candidate_id),
+                ("UNREVIEWED" if review.decision=="REOPENED" else review.decision,candidate_id),
             )
         return ApplicationSimilarityReviewResult(
-            candidate_id=candidate_id,review_state=review.decision,reviewed_at=datetime.now(UTC),
+            candidate_id=candidate_id,
+            review_state="UNREVIEWED" if review.decision=="REOPENED" else review.decision,
+            reviewed_at=datetime.now(UTC),
         )
 
     async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse:
@@ -3134,6 +3448,9 @@ class ReadModelStore(AdminReadModelsMixin):
             technologies=_dedupe_summaries(technologies),
             deployments=_dedupe_summaries(deployments),
             freshness=_freshness(observed_at, source_key),
+            graph_intelligence=await self.entity_graph_metrics(
+                repository_id,tenant_id=tenant_id,entity_row=repository,
+            ),
         )
 
     async def technology_estate_hierarchy(
@@ -3417,6 +3734,9 @@ class ReadModelStore(AdminReadModelsMixin):
             assessments=await self._assessments(technology_id, tenant_id),
             recommendations=await self._recommendations(technology_id, tenant_id),
             freshness=_freshness(technology.get("observed_at")),
+            graph_intelligence=await self.entity_graph_metrics(
+                technology_id,tenant_id=tenant_id,entity_row=technology,
+            ),
         )
 
     async def modernization(
@@ -3941,7 +4261,7 @@ class ReadModelStore(AdminReadModelsMixin):
         visible_node_ids = set(node_ids) | {node.id for node in aggregate_nodes}
         if any(node_id not in visible_node_ids for node_id in highlighted_path):
             highlighted_path = []
-        return GraphNeighborhood(
+        neighborhood = GraphNeighborhood(
             center_id=center_id,
             nodes=[
                 GraphNode(
@@ -3964,6 +4284,7 @@ class ReadModelStore(AdminReadModelsMixin):
             truncated=truncated,
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
+        return await self._with_graph_structure(neighborhood,tenant_id=tenant_id)
 
     async def _build_projected_graph_neighborhood(
         self,
@@ -4122,7 +4443,7 @@ class ReadModelStore(AdminReadModelsMixin):
         visible_node_ids = kept_ids | {node.id for node in aggregate_nodes}
         if any(node_id not in visible_node_ids for node_id in highlighted_path):
             highlighted_path = []
-        return GraphNeighborhood(
+        neighborhood = GraphNeighborhood(
             center_id=center_id,
             nodes=[
                 GraphNode(
@@ -4135,6 +4456,70 @@ class ReadModelStore(AdminReadModelsMixin):
             truncated=truncated,
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
+        return await self._with_graph_structure(neighborhood,tenant_id=tenant_id)
+
+    async def _with_graph_structure(
+        self,neighborhood: GraphNeighborhood,*,tenant_id: UUID | None,
+    ) -> GraphNeighborhood:
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return neighborhood
+        run_id = snapshot_rows[0]["analysis_run_id"]
+        real_node_ids = [node.id for node in neighborhood.nodes if not node.aggregate]
+        rows = await self.database.fetch_all(
+            """
+            SELECT entity.id,risk.systemic_risk,community.community_key
+            FROM entity
+            LEFT JOIN graph_entity_risk risk
+              ON risk.run_id=%s AND risk.tenant_id=%s AND risk.entity_id=entity.id
+            LEFT JOIN graph_community_membership community
+              ON community.run_id=%s AND community.tenant_id=%s
+             AND community.entity_id=entity.id AND community.algorithm_key='wcc'
+            WHERE entity.id=ANY(%s::uuid[])
+            ORDER BY entity.id
+            """,
+            (run_id,tenant_id,run_id,tenant_id,real_node_ids),tenant_id=tenant_id,
+        )
+        structure = {row["id"]:row for row in rows}
+        fact_ids = [
+            edge.citation_fact_ids[0] for edge in neighborhood.edges
+            if len(edge.citation_fact_ids)==1
+        ]
+        bridge_rows = await self.database.fetch_all(
+            """
+            SELECT fact_assertion_id FROM graph_edge_metric
+            WHERE run_id=%s AND tenant_id=%s AND metric_key='spof.bridge'
+              AND fact_assertion_id=ANY(%s::uuid[])
+            """,
+            (run_id,tenant_id,fact_ids),tenant_id=tenant_id,
+        ) if fact_ids else []
+        bridges = {row["fact_assertion_id"] for row in bridge_rows}
+        real_ids = set(real_node_ids)
+        return neighborhood.model_copy(update={
+            "nodes":[node if node.aggregate else node.model_copy(update={
+                "systemic_risk":(
+                    _number(structure[node.id]["systemic_risk"])
+                    if structure.get(node.id,{}).get("systemic_risk") is not None else None
+                ),
+                "community_key":structure.get(node.id,{}).get("community_key"),
+                "structural_status":(
+                    "STRUCTURALLY_CRITICAL"
+                    if _number(structure.get(node.id,{}).get("systemic_risk"))>=0.8
+                    else "ELEVATED"
+                    if _number(structure.get(node.id,{}).get("systemic_risk"))>=0.6
+                    else "TYPICAL"
+                    if structure.get(node.id,{}).get("systemic_risk") is not None else None
+                ),
+            }) for node in neighborhood.nodes],
+            "edges":[edge.model_copy(update={
+                "is_bridge":edge.citation_fact_ids[0] in bridges,
+            }) if (
+                len(edge.citation_fact_ids)==1
+                and edge.source in real_ids and edge.target in real_ids
+            ) else edge for edge in neighborhood.edges],
+        })
 
     @staticmethod
     def _shortest_graph_path(
@@ -4561,6 +4946,23 @@ class ReadModelStore(AdminReadModelsMixin):
         normalized = " ".join(request.question.lower().split())
         context_ids = request.context_entity_ids or []
 
+        if "graph blast radius" in normalized:
+            return await self._ask_graph_snapshot_query(
+                "blast_radius",context_ids=context_ids,tenant_id=tenant_id,
+            )
+        if "graph structural criticality" in normalized:
+            return await self._ask_graph_snapshot_query(
+                "structural_criticality",context_ids=context_ids,tenant_id=tenant_id,
+            )
+        if "graph community membership" in normalized:
+            return await self._ask_graph_snapshot_query(
+                "community_membership",context_ids=context_ids,tenant_id=tenant_id,
+            )
+        if "graph circular dependencies" in normalized:
+            return await self._ask_graph_snapshot_query(
+                "circular_dependencies",context_ids=context_ids,tenant_id=tenant_id,
+            )
+
         if "systemic dependency risk" in normalized or (
             "top" in normalized and "dependenc" in normalized and "enterprise risk" in normalized
         ):
@@ -4944,120 +5346,125 @@ class ReadModelStore(AdminReadModelsMixin):
             citations=[], result_kind="UNSUPPORTED",
         )
 
-    async def _ask_systemic_dependency_risk(self, *, tenant_id: UUID | None) -> AskResponse:
+    async def _ask_graph_snapshot_query(
+        self,kind: str,*,context_ids: list[UUID],tenant_id: UUID | None,
+    ) -> AskResponse:
+        if kind=="circular_dependencies":
+            motifs = await self.graph_motifs(
+                tenant_id=tenant_id,motif_key="CIRCULAR_DEPENDENCY",limit=50,
+            )
+            if motifs.snapshot is not None:
+                selected = [
+                    motif for motif in motifs.motifs
+                    if not context_ids or any(member.id in context_ids for member in motif.members)
+                ]
+                citations = await self._ask_citations(
+                    [fact_id for motif in selected for fact_id in motif.supporting_fact_ids],
+                    tenant_id=tenant_id,
+                )
+                return AskResponse(
+                    text=f"I found {len(selected)} circular dependency motifs in the active snapshot.",
+                    citations=citations,result_kind="TABLE",rows=[{
+                        "members":[member.name for member in motif.members],
+                        "minimum_confidence":motif.minimum_confidence,
+                        "analysis_run_id":str(motifs.snapshot.analysis_run_id),
+                    } for motif in selected],
+                )
+        elif not context_ids:
+            return AskResponse(
+                text="This structural question needs a resolved or explicitly selected entity.",
+                citations=[],result_kind="UNSUPPORTED",
+            )
+        elif kind=="blast_radius":
+            result = await self.graph_blast_radius(context_ids[0],tenant_id=tenant_id)
+            if result.snapshot is not None:
+                citations = await self._ask_citations(
+                    [fact_id for path in result.impacts for fact_id in path.supporting_fact_ids],
+                    tenant_id=tenant_id,
+                )
+                return AskResponse(
+                    text=f"{result.entity.name} can affect {result.affected_entity_count} graph entities across at most {result.maximum_depth} hops.",
+                    citations=citations,result_kind="GRAPH",rows=[{
+                        "entity":result.entity.name,"affected_entities":result.affected_entity_count,
+                        "maximum_depth":result.maximum_depth,
+                        "analysis_run_id":str(result.snapshot.analysis_run_id),
+                    }],
+                )
+        elif kind=="structural_criticality":
+            risks = await self.graph_risks(tenant_id=tenant_id,limit=100)
+            if risks.snapshot is not None:
+                selected = [item for item in risks.risks if item.entity.id in context_ids]
+                return AskResponse(
+                    text=f"I found structural risk scores for {len(selected)} selected entities.",
+                    citations=[],result_kind="TABLE",rows=[{
+                        "entity":item.entity.name,"systemic_risk":item.systemic_risk,
+                        "renormalized_families":item.renormalized_families,
+                        "analysis_run_id":str(risks.snapshot.analysis_run_id),
+                    } for item in selected],
+                )
+        elif kind=="community_membership":
+            result = await self.entity_graph_metrics(context_ids[0],tenant_id=tenant_id)
+            if result.snapshots:
+                return AskResponse(
+                    text=f"{result.entity.name} belongs to {len(result.community_keys)} active graph communities.",
+                    citations=[],result_kind="TABLE",rows=[{
+                        "entity":result.entity.name,"community_keys":result.community_keys,
+                        "structural_status":result.primary_status,
+                    }],
+                )
+
+        # Snapshot coverage is incomplete: state the authoritative SQL fallback explicitly.
         rows = await self.database.fetch_all(
             """
-            WITH dependency AS (
-              SELECT fact.id fact_id,fact.subject_entity_id repository_id,
-                     fact.object_entity_id dependency_id,
-                     coalesce(usage.static_reachability,'UNKNOWN') static_reachability,
-                     coalesce(usage.runtime_observed,'UNKNOWN') runtime_observed
-              FROM fact_assertion fact
-              JOIN entity repository ON repository.id=fact.subject_entity_id
-                AND repository.namespace='ENTERPRISE' AND repository.entity_type='Repository'
-              LEFT JOIN dependency_usage_summary usage
-                ON usage.dependency_fact_assertion_id=fact.id
-              WHERE fact.tenant_id=%s AND fact.predicate='DEPENDS_ON' AND fact.system_to IS NULL
-            ), vulnerability AS (
-              SELECT affected.subject_entity_id dependency_id,
-                     count(DISTINCT affected.object_entity_id)::integer vulnerability_count,
-                     array_agg(DISTINCT affected.id) vulnerability_fact_ids
-              FROM fact_assertion affected
-              JOIN entity vulnerability ON vulnerability.id=affected.object_entity_id
-                AND vulnerability.entity_type='Vulnerability'
-              WHERE affected.predicate='AFFECTED_BY' AND affected.system_to IS NULL
-                AND (affected.tenant_id IS NULL OR affected.tenant_id=%s)
-              GROUP BY affected.subject_entity_id
-            ), deprecated AS (
-              SELECT metadata.subject_entity_id dependency_id,true deprecated,
-                     array_agg(DISTINCT metadata.id) metadata_fact_ids
-              FROM fact_assertion metadata
-              WHERE metadata.predicate='HAS_PROPERTY' AND metadata.system_to IS NULL
-                AND lower(coalesce(
-                  metadata.object_value->>'is_deprecated',
-                  metadata.object_value->>'deprecated','false'
-                )) IN ('true','1','yes')
-              GROUP BY metadata.subject_entity_id
-            ), application_context AS (
-              SELECT dependency.repository_id,application.subject_entity_id application_id,
-                     max(mapping.criticality)::integer criticality
-              FROM dependency
-              JOIN fact_assertion application
-                ON application.object_entity_id=dependency.repository_id
-               AND application.predicate='IMPLEMENTED_BY' AND application.system_to IS NULL
-               AND application.tenant_id=%s
-              LEFT JOIN current_capability_application_relationship mapping
-                ON mapping.application_entity_id=application.subject_entity_id
-              GROUP BY dependency.repository_id,application.subject_entity_id
-            ), production AS (
-              SELECT deployment.subject_entity_id repository_id,
-                     true code_production
-              FROM fact_assertion deployment
-              WHERE deployment.tenant_id=%s AND deployment.predicate='DEPLOYED_AS'
-                AND deployment.system_to IS NULL
-                AND coalesce(deployment.properties->>'source_kind','') IN ('KUBERNETES','COMPOSE','DOCKERFILE')
-              GROUP BY deployment.subject_entity_id
-            ), scored AS (
-              SELECT entity.id dependency_id,entity.name dependency,
-                     entity.canonical_key,
-                     count(DISTINCT dependency.repository_id)::integer repositories,
-                     count(DISTINCT dependency.repository_id)
-                       FILTER (WHERE dependency.static_reachability='OBSERVED')::integer reachable_repositories,
-                     count(DISTINCT dependency.repository_id)
-                       FILTER (WHERE dependency.runtime_observed='OBSERVED')::integer runtime_repositories,
-                     count(DISTINCT dependency.repository_id)
-                       FILTER (WHERE production.code_production)::integer code_production_repositories,
-                     count(DISTINCT application_context.application_id)
-                       FILTER (WHERE application_context.criticality>=4)::integer critical_applications,
-                     coalesce(vulnerability.vulnerability_count,0)::integer vulnerabilities,
-                     coalesce(deprecated.deprecated,false) deprecated,
-                     array_agg(DISTINCT dependency.fact_id)
-                       ||coalesce(vulnerability.vulnerability_fact_ids,'{}'::uuid[])
-                       ||coalesce(deprecated.metadata_fact_ids,'{}'::uuid[]) fact_ids
-              FROM dependency
-              JOIN entity ON entity.id=dependency.dependency_id
-              LEFT JOIN vulnerability ON vulnerability.dependency_id=dependency.dependency_id
-              LEFT JOIN deprecated ON deprecated.dependency_id=dependency.dependency_id
-              LEFT JOIN application_context ON application_context.repository_id=dependency.repository_id
-              LEFT JOIN production ON production.repository_id=dependency.repository_id
-              GROUP BY entity.id,entity.name,entity.canonical_key,
-                       vulnerability.vulnerability_count,vulnerability.vulnerability_fact_ids,
-                       deprecated.deprecated,deprecated.metadata_fact_ids
-            )
-            SELECT scored.*,
-                   least(100,
-                     vulnerabilities*15 + repositories*4 + reachable_repositories*6
-                     + runtime_repositories*8 + code_production_repositories*6
-                     + critical_applications*7 + CASE WHEN deprecated THEN 10 ELSE 0 END
-                   )::integer risk_score
-            FROM scored
-            WHERE vulnerabilities>0 OR deprecated OR repositories>1
-            ORDER BY risk_score DESC,repositories DESC,dependency
-            LIMIT 20
+            SELECT source.name source,target.name target,relationship.relationship_type,
+                   relationship.fact_assertion_id fact_id
+            FROM current_relationship relationship
+            JOIN entity source ON source.id=relationship.source_entity_id
+            JOIN entity target ON target.id=relationship.target_entity_id
+            WHERE (%s::uuid[]='{}'::uuid[] OR relationship.source_entity_id=ANY(%s::uuid[])
+                   OR relationship.target_entity_id=ANY(%s::uuid[]))
+            ORDER BY source.name,target.name,relationship.fact_assertion_id LIMIT 100
             """,
-            (tenant_id, tenant_id, tenant_id, tenant_id),
-            tenant_id=tenant_id,
+            (context_ids,context_ids,context_ids),tenant_id=tenant_id,
         )
-        fact_ids = [fact_id for row in rows for fact_id in (row.get("fact_ids") or [])]
-        citations = await self._ask_citations(fact_ids, tenant_id=tenant_id)
-        result_rows = [{
-            "dependency": row["dependency"],
-            "risk_score": int(row["risk_score"]),
-            "repositories": int(row["repositories"]),
-            "vulnerabilities": int(row["vulnerabilities"]),
-            "reachable_repositories": int(row["reachable_repositories"]),
-            "runtime_repositories": int(row["runtime_repositories"]),
-            "code_deployable_repositories": int(row["code_production_repositories"]),
-            "critical_applications": int(row["critical_applications"]),
-            "deprecated": bool(row["deprecated"]),
-        } for row in rows]
+        citations = await self._ask_citations(
+            [row["fact_id"] for row in rows],tenant_id=tenant_id,
+        )
         return AskResponse(
             text=(
-                f"I ranked {len(rows)} dependencies by deterministic systemic risk across "
-                "vulnerability, reachability, runtime, code-declared deployability, business criticality, and estate breadth."
-                if rows else "I found no dependencies with enough admitted evidence to calculate systemic risk."
-            ),
-            citations=citations, result_kind="TABLE", rows=result_rows,
+                "No complete active graph snapshot covered the question. "
+                "These rows use the current tenant-scoped SQL relationship view and do not claim structural metrics."
+            ),citations=citations,result_kind="TABLE",rows=[{
+                "source":row["source"],"target":row["target"],
+                "predicate":row["relationship_type"],"limitation":"SQL_FALLBACK_NO_STRUCTURAL_SNAPSHOT",
+            } for row in rows],
+        )
+
+    async def _ask_systemic_dependency_risk(self, *, tenant_id: UUID | None) -> AskResponse:
+        risk_list = await self.graph_risks(tenant_id=tenant_id,limit=20)
+        fact_ids = [
+            fact_id
+            for item in risk_list.risks
+            for contribution in item.component_contributions.values()
+            for raw_id in contribution.get("fact_ids",[])
+            if (fact_id := UUID(str(raw_id)))
+        ]
+        citations = await self._ask_citations(fact_ids,tenant_id=tenant_id)
+        result_rows = [{
+            "dependency":item.entity.name,
+            "risk_score":round(item.systemic_risk*100,2),
+            "impacted_applications":len(item.impacted_applications),
+            "signal_families":sorted(item.component_contributions),
+            "renormalized_families":item.renormalized_families,
+            "method_version":item.method_version,
+            "policy_hash":risk_list.snapshot.policy_hash if risk_list.snapshot else None,
+        } for item in risk_list.risks]
+        return AskResponse(
+            text=(
+                f"I ranked {len(result_rows)} dependencies with the governed graph systemic-risk composite."
+                if result_rows else
+                "I found no dependencies in an active graph-risk snapshot."
+            ),citations=citations,result_kind="TABLE",rows=result_rows,
         )
 
     async def _ask_reachable_vulnerabilities(self, *, tenant_id: UUID | None) -> AskResponse:
