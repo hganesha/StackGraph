@@ -7,6 +7,7 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -105,6 +106,90 @@ class GitHubControlLoopUnitTests(unittest.TestCase):
             raw_observation=raw_observation,
             source_revision="cached-revision",
         )
+
+    def test_missing_adapter_cache_forces_full_acquisition(self) -> None:
+        claimed = ClaimedRun(
+            run_id=uuid4(),
+            target_id=uuid4(),
+            tenant_id=uuid4(),
+            tenant_key="adapter-upgrade",
+            target_kind="REPOSITORY",
+            target_key="github:repo:9876/1234",
+            refresh_policy={
+                "provider": "github",
+                "installation_id": "9876",
+                "repository_id": "1234",
+                "owner": "acme",
+                "name": "billing",
+                "full_name": "acme/billing",
+            },
+            credential_reference="secret://github",
+            attempt=1,
+            lease_owner="adapter-upgrade-test",
+            lease_seconds=300,
+        )
+        stored = SimpleNamespace(
+            uri="file:///evidence/fresh.json",
+            content_hash="sha256:" + "a" * 64,
+            size_bytes=42,
+        )
+        snapshot = SimpleNamespace(
+            default_branch="main",
+            observed_at="2026-08-24T00:00:00Z",
+            raw_observation=lambda tenant_key, evidence: {
+                "tenant_key": tenant_key,
+                "content": {"blob_uri": evidence.uri},
+            },
+        )
+        acquisition = SimpleNamespace(
+            status="CHANGED",
+            repository_id="1234",
+            canonical_key=claimed.target_key,
+            source_revision="cached-revision",
+            snapshot=snapshot,
+            output_path=Path("/snapshots/fresh"),
+            stored_evidence=stored,
+            rate_limit_remaining=4990,
+            rate_limit_limit=5000,
+            rate_limit_reset=1900000000,
+        )
+
+        with patch(
+            "stackgraph_discovery.github_control_loop._previous_revision",
+            return_value="cached-revision",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._scanner_snapshot_exists",
+            return_value=False,
+        ), patch(
+            "stackgraph_discovery.github_control_loop._cached_scanner_request",
+            side_effect=FileNotFoundError,
+        ), patch(
+            "stackgraph_discovery.github_control_loop.resolve_runtime_credential",
+            return_value="github-token",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._client",
+        ), patch(
+            "stackgraph_discovery.github_control_loop.evidence_store_from_environment",
+        ), patch(
+            "stackgraph_discovery.github_control_loop.GitHubRepositoryAcquirer.acquire",
+            return_value=acquisition,
+        ) as acquire, patch(
+            "stackgraph_discovery.github_control_loop._record_github_quota",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._renew_lease",
+        ), patch(
+            "stackgraph_discovery.github_control_loop._scan_publish_request",
+            return_value="freshly-acquired",
+        ):
+            result = _acquire_scan_publish(
+                "postgresql://database/stackgraph",
+                claimed,
+                snapshot_root=Path("/snapshots"),
+                evidence_root=Path("/evidence"),
+            )
+
+        self.assertEqual(result, "freshly-acquired")
+        self.assertIsNone(acquire.call_args.kwargs["previous_revision"])
 
     def test_retry_policy_honors_provider_and_exponential_delays(self) -> None:
         self.assertEqual(_retry_delay(GitHubTransportError("network"), 3), 8)

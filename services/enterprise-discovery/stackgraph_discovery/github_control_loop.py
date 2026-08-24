@@ -22,7 +22,11 @@ from .github_installation import InstallationRepositoryDiscovery
 from .github_installation_store import (
     reconcile_installation,
 )
-from .github_snapshot import GitHubRepositoryAcquirer, SnapshotLimits
+from .github_snapshot import (
+    GitHubRepositoryAcquirer,
+    SnapshotLimits,
+    materialized_snapshot_path,
+)
 from .repository_scanner import SCANNER_KEY, SCANNER_VERSION, scan_repository
 from .service_heartbeat import record_service_heartbeat
 
@@ -362,6 +366,7 @@ def _acquire_scan_publish(
         raise ValueError("refresh policy repository_id must be a non-empty string")
     full_name = _required_policy_string(policy, "full_name")
     previous_revision = _previous_revision(database_url, claimed.target_id)
+    acquisition_previous_revision = previous_revision
     if (
         previous_revision is not None
         and repository_id is not None
@@ -377,7 +382,7 @@ def _acquire_scan_publish(
         except FileNotFoundError:
             # The durable source artifact may have been aged out. In that case the
             # provider is the only safe way to materialize the revision again.
-            pass
+            acquisition_previous_revision = None
         else:
             _renew_lease(database_url, claimed)
             return _scan_publish_request(
@@ -400,7 +405,7 @@ def _acquire_scan_publish(
     _renew_lease(database_url, claimed)
     result = GitHubRepositoryAcquirer(_client(token)).acquire(
         full_name,
-        previous_revision=previous_revision,
+        previous_revision=acquisition_previous_revision,
         installation_id=installation_id,
         output_root=snapshot_root,
         tenant_key=claimed.tenant_key,
@@ -566,8 +571,8 @@ def _cached_scanner_request(
     source_revision: str,
     snapshot_root: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    materialized = (
-        snapshot_root.resolve() / f"github-repo-{repository_id}" / source_revision
+    materialized = materialized_snapshot_path(
+        snapshot_root, repository_id, source_revision,
     ).resolve()
     if not materialized.is_relative_to(snapshot_root.resolve()):
         raise ValueError("cached snapshot path escapes the snapshot root")

@@ -26,7 +26,7 @@ from .github_client import (
 )
 
 
-ADAPTER_VERSION = "github-repository-snapshot/1.2.0"
+ADAPTER_VERSION = "github-repository-snapshot/1.3.0"
 REPOSITORY_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSTALLATION_ID = re.compile(r"^[0-9]+$")
 GIT_OBJECT_ID = re.compile(r"^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$")
@@ -611,7 +611,9 @@ def materialize_snapshot(
     repository_root = repository_root.resolve()
     if not repository_root.is_relative_to(root):
         raise ValueError("snapshot repository directory escapes output root")
-    destination = repository_root / snapshot.source_revision
+    revision_root = repository_root / snapshot.source_revision
+    revision_root.mkdir(exist_ok=True)
+    destination = revision_root / _adapter_cache_key(ADAPTER_VERSION)
     if destination.exists():
         return _validate_existing_snapshot(destination, snapshot.source_revision)
 
@@ -642,6 +644,26 @@ def materialize_snapshot(
         shutil.rmtree(temporary, ignore_errors=True)
         raise
     return destination
+
+
+def materialized_snapshot_path(
+    output_root: Path,
+    repository_id: str,
+    source_revision: str,
+    *,
+    adapter_version: str = ADAPTER_VERSION,
+) -> Path:
+    """Return the adapter-scoped location for a materialized repository snapshot."""
+    return (
+        output_root.resolve()
+        / f"github-repo-{repository_id}"
+        / source_revision
+        / _adapter_cache_key(adapter_version)
+    )
+
+
+def _adapter_cache_key(adapter_version: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", adapter_version).strip("-")
 
 
 def _validate_existing_snapshot(destination: Path, source_revision: str) -> Path:

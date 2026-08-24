@@ -854,8 +854,15 @@ def _upsert_source_artifact(
     assert row is not None
     if row["content_hash"] != reference.get("content_hash"):
         raise ValueError("source artifact content changed for an immutable revision")
-    if reference.get("uri") is not None and row["blob_uri"] != reference["uri"]:
-        raise ValueError("source artifact URI changed for an immutable revision")
+    if (
+        reference.get("uri") is not None
+        and row["blob_uri"] != reference["uri"]
+        and reference.get("content_hash") is None
+    ):
+        raise ValueError("source artifact URI changed without immutable content identity")
+    # An adapter upgrade may store a new repository-snapshot envelope at a new
+    # content-addressed URI while referencing the same immutable file bytes. Keep
+    # the first durable URI when the file content hash proves the artifact identity.
     return row["id"]
 
 
