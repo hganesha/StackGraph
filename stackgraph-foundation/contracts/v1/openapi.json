@@ -598,6 +598,16 @@
             "title": "Limitations",
             "type": "array"
           },
+          "page_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "subject": {
             "$ref": "#/components/schemas/EntitySummary"
           }
@@ -617,7 +627,8 @@
               "CONFIRMED_SIMILAR",
               "CONFIRMED_DISTINCT",
               "CONSOLIDATION_CANDIDATE",
-              "DISMISSED"
+              "DISMISSED",
+              "REOPENED"
             ],
             "title": "Decision",
             "type": "string"
@@ -1608,6 +1619,13 @@
                 "type": "null"
               }
             ]
+          },
+          "resolved_entities": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvedEntity"
+            },
+            "title": "Resolved Entities",
+            "type": "array"
           },
           "result_kind": {
             "enum": [
@@ -4656,6 +4674,113 @@
         "title": "Coverage",
         "type": "object"
       },
+      "CriticalGraphEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "additionalProperties": true,
+            "title": "Components",
+            "type": "object"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "metric_key": {
+            "default": "spof.bridge",
+            "title": "Metric Key",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "fact_id",
+          "source",
+          "target",
+          "score",
+          "supporting_fact_ids"
+        ],
+        "title": "CriticalGraphEdge",
+        "type": "object"
+      },
+      "CriticalGraphEdgeList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/CriticalGraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entity",
+          "as_of"
+        ],
+        "title": "CriticalGraphEdgeList",
+        "type": "object"
+      },
       "DeterministicInsight": {
         "additionalProperties": false,
         "properties": {
@@ -5481,6 +5606,132 @@
         "title": "EcosystemAdmissionSummary",
         "type": "object"
       },
+      "EmbeddingBackfillRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "embedding_space_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Space Id"
+          },
+          "entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 500,
+            "title": "Entity Ids",
+            "type": "array"
+          },
+          "entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Entity Types",
+            "type": "array"
+          },
+          "limit": {
+            "default": 500,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "EmbeddingBackfillRequest",
+        "type": "object"
+      },
+      "EmbeddingBackfillResult": {
+        "additionalProperties": false,
+        "properties": {
+          "embedding_space_id": {
+            "format": "uuid",
+            "title": "Embedding Space Id",
+            "type": "string"
+          },
+          "queued_jobs": {
+            "minimum": 0.0,
+            "title": "Queued Jobs",
+            "type": "integer"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "embedding_space_id",
+          "queued_jobs",
+          "requested_at"
+        ],
+        "title": "EmbeddingBackfillResult",
+        "type": "object"
+      },
+      "EmbeddingSpacePromotionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "default": "PROMOTE",
+            "enum": [
+              "PROMOTE",
+              "ROLLBACK"
+            ],
+            "title": "Action",
+            "type": "string"
+          }
+        },
+        "title": "EmbeddingSpacePromotionRequest",
+        "type": "object"
+      },
+      "EmbeddingSpacePromotionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "PROMOTE",
+              "ROLLBACK"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "embedding_space_id": {
+            "format": "uuid",
+            "title": "Embedding Space Id",
+            "type": "string"
+          },
+          "space_kind": {
+            "enum": [
+              "SEMANTIC_ENTITY",
+              "STRUCTURAL_GRAPH",
+              "CODE"
+            ],
+            "title": "Space Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "embedding_space_id",
+          "space_kind",
+          "action",
+          "activated_at"
+        ],
+        "title": "EmbeddingSpacePromotionResult",
+        "type": "object"
+      },
       "EmbeddingSpaceSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -5961,6 +6212,14 @@
             "title": "Distributions",
             "type": "object"
           },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
           "page_info": {
             "anyOf": [
               {
@@ -6415,6 +6674,67 @@
         "title": "GitHubTokenUpdateRequest",
         "type": "object"
       },
+      "GraphAnalysisRequestCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "policy_key": {
+            "default": "runtime-dependency",
+            "pattern": "^[a-z][a-z0-9-]{2,63}$",
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "reason": {
+            "default": "OPERATOR_REQUEST",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "title": "GraphAnalysisRequestCreate",
+        "type": "object"
+      },
+      "GraphAnalysisRequestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "policy_key": {
+            "title": "Policy Key",
+            "type": "string"
+          },
+          "requested_change_watermark": {
+            "minimum": 0.0,
+            "title": "Requested Change Watermark",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "WAITING_FOR_PROJECTION"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "policy_key",
+          "requested_change_watermark",
+          "status",
+          "created_at"
+        ],
+        "title": "GraphAnalysisRequestResult",
+        "type": "object"
+      },
       "GraphAnalysisSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -6498,6 +6818,131 @@
           "edge_count"
         ],
         "title": "GraphAnalysisSnapshot",
+        "type": "object"
+      },
+      "GraphAnomaly": {
+        "additionalProperties": false,
+        "properties": {
+          "anomaly_key": {
+            "minLength": 1,
+            "title": "Anomaly Key",
+            "type": "string"
+          },
+          "cohort_key": {
+            "minLength": 1,
+            "title": "Cohort Key",
+            "type": "string"
+          },
+          "cohort_size": {
+            "minimum": 1.0,
+            "title": "Cohort Size",
+            "type": "integer"
+          },
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "observed_components": {
+            "additionalProperties": true,
+            "title": "Observed Components",
+            "type": "object"
+          },
+          "percentile": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Percentile",
+            "type": "number"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "entity",
+          "anomaly_key",
+          "score",
+          "cohort_key",
+          "cohort_size",
+          "percentile"
+        ],
+        "title": "GraphAnomaly",
+        "type": "object"
+      },
+      "GraphAnomalyList": {
+        "additionalProperties": false,
+        "properties": {
+          "anomalies": {
+            "items": {
+              "$ref": "#/components/schemas/GraphAnomaly"
+            },
+            "title": "Anomalies",
+            "type": "array"
+          },
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "as_of"
+        ],
+        "title": "GraphAnomalyList",
         "type": "object"
       },
       "GraphBlastRadius": {
@@ -6675,6 +7120,17 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "is_bridge": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Bridge"
           },
           "predicate": {
             "title": "Predicate",
@@ -6932,6 +7388,112 @@
         "title": "GraphMetric",
         "type": "object"
       },
+      "GraphMotif": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "additionalProperties": true,
+            "title": "Components",
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "minItems": 2,
+            "title": "Members",
+            "type": "array"
+          },
+          "minimum_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Minimum Confidence",
+            "type": "number"
+          },
+          "motif_key": {
+            "minLength": 1,
+            "title": "Motif Key",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "motif_key",
+          "members",
+          "supporting_fact_ids",
+          "minimum_confidence"
+        ],
+        "title": "GraphMotif",
+        "type": "object"
+      },
+      "GraphMotifList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "motifs": {
+            "items": {
+              "$ref": "#/components/schemas/GraphMotif"
+            },
+            "title": "Motifs",
+            "type": "array"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphAnalysisSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "as_of"
+        ],
+        "title": "GraphMotifList",
+        "type": "object"
+      },
       "GraphNeighborhood": {
         "additionalProperties": false,
         "properties": {
@@ -7008,6 +7570,17 @@
             "title": "Aggregate",
             "type": "boolean"
           },
+          "community_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Key"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -7058,6 +7631,36 @@
             "title": "Namespace",
             "type": "string"
           },
+          "structural_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STRUCTURALLY_CRITICAL",
+                  "ELEVATED",
+                  "TYPICAL",
+                  "WAITING_FOR_DATA"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structural Status"
+          },
+          "systemic_risk": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systemic Risk"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -7077,6 +7680,14 @@
       "GraphRiskItem": {
         "additionalProperties": false,
         "properties": {
+          "component_contributions": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Component Contributions",
+            "type": "object"
+          },
           "component_metrics": {
             "items": {
               "$ref": "#/components/schemas/GraphMetric"
@@ -7094,11 +7705,23 @@
             "title": "Impacted Applications",
             "type": "array"
           },
+          "method_version": {
+            "default": "graph-systemic-risk/v2",
+            "title": "Method Version",
+            "type": "string"
+          },
           "reasons": {
             "items": {
               "type": "string"
             },
             "title": "Reasons",
+            "type": "array"
+          },
+          "renormalized_families": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Renormalized Families",
             "type": "array"
           },
           "systemic_risk": {
@@ -7136,6 +7759,16 @@
             },
             "title": "Limitations",
             "type": "array"
+          },
+          "page_info": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "risks": {
             "items": {
@@ -9493,6 +10126,29 @@
             ],
             "title": "Citations"
           },
+          "community_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Community Key"
+          },
+          "dependency_depth": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dependency Depth"
+          },
           "dependency_tier": {
             "anyOf": [
               {
@@ -9562,6 +10218,23 @@
           "priority": {
             "$ref": "#/components/schemas/Score"
           },
+          "structural_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STRUCTURALLY_CRITICAL",
+                  "ELEVATED",
+                  "TYPICAL",
+                  "WAITING_FOR_DATA"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structural Status"
+          },
           "summary": {
             "anyOf": [
               {
@@ -9572,6 +10245,31 @@
               }
             ],
             "title": "Summary"
+          },
+          "systemic_risk": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Systemic Risk"
+          },
+          "upstream_impact": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Impact"
           },
           "viability": {
             "anyOf": [
@@ -9869,6 +10567,16 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "graph_intelligence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityGraphIntelligence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "profile": {
             "anyOf": [
@@ -10200,6 +10908,33 @@
         "title": "RescanRequest",
         "type": "object"
       },
+      "ResolvedEntity": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "matched_terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Terms",
+            "type": "array"
+          },
+          "score": {
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "entity",
+          "score"
+        ],
+        "title": "ResolvedEntity",
+        "type": "object"
+      },
       "ReviewQueue": {
         "additionalProperties": false,
         "properties": {
@@ -10512,10 +11247,37 @@
           "entity": {
             "$ref": "#/components/schemas/EntitySummary"
           },
+          "excerpt": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excerpt"
+          },
           "input_hash": {
             "pattern": "^sha256:[a-f0-9]{64}$",
             "title": "Input Hash",
             "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "matched_terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Terms",
+            "type": "array"
           },
           "score": {
             "maximum": 1.0,
@@ -10532,6 +11294,14 @@
             ],
             "title": "Sensitivity",
             "type": "string"
+          },
+          "source_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Source Fact Ids",
+            "type": "array"
           }
         },
         "required": [
@@ -10560,6 +11330,29 @@
             "minimum": 1.0,
             "title": "Limit",
             "type": "integer"
+          },
+          "min_score": {
+            "default": -1,
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Min Score",
+            "type": "number"
+          },
+          "namespace": {
+            "items": {
+              "enum": [
+                "BUSINESS",
+                "ENTERPRISE",
+                "TECHNOLOGY",
+                "OSS",
+                "DEPLOYMENT",
+                "INTELLIGENCE"
+              ],
+              "type": "string"
+            },
+            "maxItems": 6,
+            "title": "Namespace",
+            "type": "array"
           },
           "query": {
             "maxLength": 2000,
@@ -11118,6 +11911,16 @@
           },
           "freshness": {
             "$ref": "#/components/schemas/Freshness"
+          },
+          "graph_intelligence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityGraphIntelligence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "internal_usage": {
             "$ref": "#/components/schemas/InternalUsage"
@@ -14467,6 +15270,100 @@
         ]
       }
     },
+    "/embedding-spaces/{id}/promotion": {
+      "post": {
+        "operationId": "promoteEmbeddingSpace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingSpacePromotionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingSpacePromotionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Embedding Space",
+        "tags": [
+          "embeddings"
+        ]
+      }
+    },
+    "/embeddings/backfill": {
+      "post": {
+        "operationId": "requestEmbeddingBackfill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingBackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingBackfillResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Embedding Backfill",
+        "tags": [
+          "embeddings"
+        ]
+      }
+    },
     "/embeddings/status": {
       "get": {
         "operationId": "getEmbeddingStatus",
@@ -14531,6 +15428,49 @@
         ]
       }
     },
+    "/entities/{id}/critical-edges": {
+      "get": {
+        "operationId": "listEntityCriticalEdges",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriticalGraphEdgeList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Entity Critical Edges",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
     "/entities/{id}/graph-metrics": {
       "get": {
         "operationId": "getEntityGraphMetrics",
@@ -14586,6 +15526,45 @@
               "format": "uuid",
               "title": "Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "UNREVIEWED",
+                    "CONFIRMED_SIMILAR",
+                    "CONFIRMED_DISTINCT",
+                    "CONSOLIDATION_CANDIDATE",
+                    "DISMISSED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           },
           {
@@ -14687,6 +15666,22 @@
               ],
               "title": "Domain"
             }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "priority",
+              "enum": [
+                "priority",
+                "systemic_risk",
+                "upstream_impact",
+                "dependency_depth"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -14760,6 +15755,108 @@
         ]
       }
     },
+    "/graph-intelligence/analysis-requests": {
+      "post": {
+        "operationId": "requestGraphAnalysis",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphAnalysisRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphAnalysisRequestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Graph Analysis",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
+    "/graph-intelligence/anomalies": {
+      "get": {
+        "operationId": "listGraphIntelligenceAnomalies",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cohort_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cohort Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphAnomalyList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Graph Intelligence Anomalies",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
     "/graph-intelligence/communities": {
       "get": {
         "operationId": "listGraphIntelligenceCommunities",
@@ -14816,10 +15913,159 @@
         ]
       }
     },
+    "/graph-intelligence/motifs": {
+      "get": {
+        "operationId": "listGraphIntelligenceMotifs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "motif_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Motif Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphMotifList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Graph Intelligence Motifs",
+        "tags": [
+          "graph-intelligence"
+        ]
+      }
+    },
     "/graph-intelligence/risks": {
       "get": {
         "operationId": "listGraphIntelligenceRisks",
         "parameters": [
+          {
+            "in": "query",
+            "name": "entity_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "namespace",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "BUSINESS",
+                    "ENTERPRISE",
+                    "TECHNOLOGY",
+                    "OSS",
+                    "DEPLOYMENT",
+                    "INTELLIGENCE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Namespace"
+            }
+          },
+          {
+            "in": "query",
+            "name": "community_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Community Key"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_score",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Min Score",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
           {
             "in": "query",
             "name": "limit",

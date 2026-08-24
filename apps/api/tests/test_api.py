@@ -38,6 +38,12 @@ from app.models import (
     GraphCommunityList,
     GraphIntelligenceStatus,
     GraphRiskList,
+    GraphAnomalyList,
+    GraphMotifList,
+    CriticalGraphEdgeList,
+    GraphAnalysisRequestResult,
+    EmbeddingBackfillResult,
+    EmbeddingSpacePromotionResult,
     IdentityReviewRequest,
     IdentityReviewResult,
     PageInfo,
@@ -133,7 +139,7 @@ class StubReadModels:
         self.last_actor_key = None
         self.last_estate_namespaces = None
 
-    async def estate_summary(self, *, tenant_id, cursor, limit, namespaces=None):
+    async def estate_summary(self, *, tenant_id, cursor, limit, namespaces=None, sort="priority"):
         self.last_tenant_id = tenant_id
         self.last_estate_namespaces = namespaces
         return EstateSummary(
@@ -232,13 +238,30 @@ class StubReadModels:
             affected_entity_count=0,maximum_depth=0,as_of=NOW,
         )
 
-    async def graph_risks(self, *, tenant_id, limit):
+    async def graph_risks(
+        self, *, tenant_id, entity_type=None, namespace=None, community_key=None,
+        min_score=0, cursor=None, limit,
+    ):
         self.last_tenant_id = tenant_id
         return GraphRiskList(as_of=NOW)
 
     async def graph_communities(self, *, tenant_id, policy_key, limit):
         self.last_tenant_id = tenant_id
         return GraphCommunityList(algorithm_key="wcc",as_of=NOW)
+
+    async def graph_anomalies(self, *, tenant_id, cohort_key, limit):
+        self.last_tenant_id = tenant_id
+        return GraphAnomalyList(as_of=NOW)
+
+    async def graph_motifs(self, *, tenant_id, motif_key, limit):
+        self.last_tenant_id = tenant_id
+        return GraphMotifList(as_of=NOW)
+
+    async def critical_edges(self, entity_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return CriticalGraphEdgeList(
+            entity=EntitySummary(id=entity_id,kind="Application",name="Billing"),as_of=NOW,
+        )
 
     async def semantic_search(self, body, *, tenant_id):
         self.last_tenant_id = tenant_id
@@ -256,7 +279,9 @@ class StubReadModels:
             pending_jobs=0,running_jobs=0,failed_jobs=0,
         )
 
-    async def similar_applications(self, application_id, *, tenant_id, limit):
+    async def similar_applications(
+        self, application_id, *, tenant_id, review_state=None, cursor=None, limit,
+    ):
         self.last_tenant_id = tenant_id
         return ApplicationSimilarityList(
             subject=EntitySummary(id=application_id,kind="Application",name="Billing"),
@@ -268,6 +293,30 @@ class StubReadModels:
         self.last_actor_key = actor_key
         return ApplicationSimilarityReviewResult(
             candidate_id=candidate_id,review_state=body.decision,reviewed_at=NOW,
+        )
+
+    async def request_graph_analysis(self, body, *, tenant_id, actor_key):
+        self.last_tenant_id=tenant_id
+        self.last_actor_key=actor_key
+        return GraphAnalysisRequestResult(
+            id=UUID("00000000-0000-4000-8000-000000000a01"),
+            policy_key=body.policy_key,requested_change_watermark=42,status="PENDING",created_at=NOW,
+        ),True
+
+    async def request_embedding_backfill(self, body, *, tenant_id, actor_key):
+        self.last_tenant_id=tenant_id
+        self.last_actor_key=actor_key
+        return EmbeddingBackfillResult(
+            embedding_space_id=UUID("00000000-0000-4000-8000-000000000a02"),
+            queued_jobs=3,requested_at=NOW,
+        )
+
+    async def promote_embedding_space(self, space_id, body, *, tenant_id, actor_key):
+        self.last_tenant_id=tenant_id
+        self.last_actor_key=actor_key
+        return EmbeddingSpacePromotionResult(
+            embedding_space_id=space_id,space_kind="SEMANTIC_ENTITY",
+            action=body.action,activated_at=NOW,
         )
 
     async def evidence_detail(self, fact_id, *, tenant_id):
@@ -755,9 +804,12 @@ def test_graph_intelligence_read_endpoints_are_versioned_and_tenant_scoped() -> 
         asyncio.run(request(app,"GET",f"/api/v1/entities/{entity_id}/blast-radius")),
         asyncio.run(request(app,"GET","/api/v1/graph-intelligence/risks?limit=10")),
         asyncio.run(request(app,"GET","/api/v1/graph-intelligence/communities")),
+        asyncio.run(request(app,"GET","/api/v1/graph-intelligence/anomalies")),
+        asyncio.run(request(app,"GET","/api/v1/graph-intelligence/motifs")),
+        asyncio.run(request(app,"GET",f"/api/v1/entities/{entity_id}/critical-edges")),
     ]
 
-    assert [response.status_code for response in responses] == [200,200,200,200,200]
+    assert [response.status_code for response in responses] == [200]*8
     assert responses[0].json()["neo4j_projection_watermark"] == 42
     assert responses[1].json()["primary_status"] == "WAITING_FOR_DATA"
     assert responses[2].json()["affected_entity_count"] == 0
@@ -784,6 +836,29 @@ def test_embedding_search_similarity_and_review_endpoints_are_governed() -> None
     assert review.status_code == 200
     assert review.json()["review_state"] == "CONFIRMED_SIMILAR"
     assert store.last_actor_key == "local-user"
+
+
+def test_graph_and_embedding_operator_endpoints_are_capability_gated() -> None:
+    app,store=app_with_stubs()
+    analysis=asyncio.run(request(
+        app,"POST","/api/v1/graph-intelligence/analysis-requests",
+        json={"policy_key":"runtime-dependency","reason":"operator verification"},
+    ))
+    backfill=asyncio.run(request(
+        app,"POST","/api/v1/embeddings/backfill",json={"entity_types":["Application"]},
+    ))
+    promotion=asyncio.run(request(
+        app,"POST","/api/v1/embedding-spaces/00000000-0000-4000-8000-000000000a02/promotion",
+        json={"action":"PROMOTE"},
+    ))
+
+    assert analysis.status_code==201
+    assert analysis.json()["policy_key"]=="runtime-dependency"
+    assert backfill.status_code==200
+    assert backfill.json()["queued_jobs"]==3
+    assert promotion.status_code==200
+    assert promotion.json()["action"]=="PROMOTE"
+    assert store.last_actor_key=="local-user"
 
 
 def test_technology_hierarchy_is_exposed_before_dynamic_technology_route() -> None:

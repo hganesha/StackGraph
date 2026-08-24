@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
@@ -59,9 +59,18 @@ from app.models import (
     EntityGraphIntelligence,
     GraphBlastRadius,
     GraphCommunityList,
+    GraphAnomalyList,
+    GraphMotifList,
+    CriticalGraphEdgeList,
     GraphIntelligenceStatus,
     GraphNeighborhood,
     GraphRiskList,
+    GraphAnalysisRequestCreate,
+    GraphAnalysisRequestResult,
+    EmbeddingBackfillRequest,
+    EmbeddingBackfillResult,
+    EmbeddingSpacePromotionRequest,
+    EmbeddingSpacePromotionResult,
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
@@ -123,7 +132,7 @@ from app.models import (
 class ReadModelsProtocol(Protocol):
     async def estate_summary(
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
-        namespaces: list[str] | None = None,
+        namespaces: list[str] | None = None, sort: str = "priority",
     ) -> EstateSummary: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
     async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse: ...
@@ -169,8 +178,19 @@ class ReadModelsProtocol(Protocol):
         self, entity_id: UUID, *, tenant_id: UUID | None,
     ) -> GraphBlastRadius: ...
     async def graph_risks(
-        self, *, tenant_id: UUID | None, limit: int,
+        self, *, tenant_id: UUID | None, entity_type: str | None,
+        namespace: str | None, community_key: str | None, min_score: float,
+        cursor: str | None, limit: int,
     ) -> GraphRiskList: ...
+    async def graph_anomalies(
+        self, *, tenant_id: UUID | None, cohort_key: str | None, limit: int,
+    ) -> GraphAnomalyList: ...
+    async def graph_motifs(
+        self, *, tenant_id: UUID | None, motif_key: str | None, limit: int,
+    ) -> GraphMotifList: ...
+    async def critical_edges(
+        self, entity_id: UUID, *, tenant_id: UUID | None,
+    ) -> CriticalGraphEdgeList: ...
     async def graph_communities(
         self, *, tenant_id: UUID | None, policy_key: str, limit: int,
     ) -> GraphCommunityList: ...
@@ -179,12 +199,23 @@ class ReadModelsProtocol(Protocol):
     ) -> SemanticSearchResponse: ...
     async def embedding_status(self, *, tenant_id: UUID | None) -> EmbeddingStatus: ...
     async def similar_applications(
-        self, application_id: UUID, *, tenant_id: UUID | None, limit: int,
+        self, application_id: UUID, *, tenant_id: UUID | None,
+        review_state: str | None, cursor: str | None, limit: int,
     ) -> ApplicationSimilarityList: ...
     async def review_application_similarity(
         self, candidate_id: UUID, review: ApplicationSimilarityReviewRequest,
         *, tenant_id: UUID | None, actor_key: str,
     ) -> ApplicationSimilarityReviewResult: ...
+    async def request_graph_analysis(
+        self, request: GraphAnalysisRequestCreate, *, tenant_id: UUID | None, actor_key: str,
+    ) -> tuple[GraphAnalysisRequestResult,bool]: ...
+    async def request_embedding_backfill(
+        self, request: EmbeddingBackfillRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> EmbeddingBackfillResult: ...
+    async def promote_embedding_space(
+        self, space_id: UUID, request: EmbeddingSpacePromotionRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> EmbeddingSpacePromotionResult: ...
     async def evidence_detail(self, fact_id: UUID, *, tenant_id: UUID | None) -> EvidenceDetail: ...
     async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse: ...
     async def review_identity_assertion(
@@ -421,11 +452,13 @@ async def get_estate_summary(
     cursor: str | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     domain: list[Namespace] | None = Query(default=None),
+    sort: Literal["priority", "systemic_risk", "upstream_impact", "dependency_depth"] = "priority",
 ) -> EstateSummary:
     principal = await _principal(request)
     return await _store(request).estate_summary(
         tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
         namespaces=domain,
+        sort=sort,
     )
 
 
@@ -578,6 +611,23 @@ async def get_graph_intelligence_status(request: Request) -> GraphIntelligenceSt
     return await _store(request).graph_intelligence_status(tenant_id=principal.tenant_id)
 
 
+@router.post(
+    "/graph-intelligence/analysis-requests",response_model=GraphAnalysisRequestResult,
+    response_model_exclude_none=True,operation_id="requestGraphAnalysis",
+    tags=["graph-intelligence"],
+)
+async def request_graph_analysis(
+    body: GraphAnalysisRequestCreate,request: Request,response: Response,
+) -> GraphAnalysisRequestResult:
+    principal = await _principal(request)
+    _require(principal,"admin")
+    result,created = await _store(request).request_graph_analysis(
+        body,tenant_id=principal.tenant_id,actor_key=principal.actor_key,
+    )
+    response.status_code=201 if created else 200
+    return result
+
+
 @router.get(
     "/entities/{id}/graph-metrics", response_model=EntityGraphIntelligence,
     response_model_exclude_none=True, operation_id="getEntityGraphMetrics",
@@ -604,10 +654,59 @@ async def get_entity_blast_radius(id: UUID, request: Request) -> GraphBlastRadiu
     tags=["graph-intelligence"],
 )
 async def list_graph_intelligence_risks(
-    request: Request,limit: int = Query(default=20,ge=1,le=100),
+    request: Request,
+    entity_type: str | None = Query(default=None,min_length=1,max_length=100),
+    namespace: Namespace | None = None,
+    community_key: str | None = Query(default=None,min_length=1,max_length=200),
+    min_score: float = Query(default=0,ge=0,le=1),
+    cursor: str | None = None,
+    limit: int = Query(default=20,ge=1,le=100),
 ) -> GraphRiskList:
     principal = await _principal(request)
-    return await _store(request).graph_risks(tenant_id=principal.tenant_id,limit=limit)
+    return await _store(request).graph_risks(
+        tenant_id=principal.tenant_id,entity_type=entity_type,namespace=namespace,
+        community_key=community_key,min_score=min_score,cursor=cursor,limit=limit,
+    )
+
+
+@router.get(
+    "/graph-intelligence/anomalies", response_model=GraphAnomalyList,
+    response_model_exclude_none=True, operation_id="listGraphIntelligenceAnomalies",
+    tags=["graph-intelligence"],
+)
+async def list_graph_intelligence_anomalies(
+    request: Request, cohort_key: str | None = None,
+    limit: int = Query(default=50,ge=1,le=100),
+) -> GraphAnomalyList:
+    principal = await _principal(request)
+    return await _store(request).graph_anomalies(
+        tenant_id=principal.tenant_id,cohort_key=cohort_key,limit=limit,
+    )
+
+
+@router.get(
+    "/graph-intelligence/motifs", response_model=GraphMotifList,
+    response_model_exclude_none=True, operation_id="listGraphIntelligenceMotifs",
+    tags=["graph-intelligence"],
+)
+async def list_graph_intelligence_motifs(
+    request: Request, motif_key: str | None = None,
+    limit: int = Query(default=50,ge=1,le=100),
+) -> GraphMotifList:
+    principal = await _principal(request)
+    return await _store(request).graph_motifs(
+        tenant_id=principal.tenant_id,motif_key=motif_key,limit=limit,
+    )
+
+
+@router.get(
+    "/entities/{id}/critical-edges", response_model=CriticalGraphEdgeList,
+    response_model_exclude_none=True, operation_id="listEntityCriticalEdges",
+    tags=["graph-intelligence"],
+)
+async def list_entity_critical_edges(id: UUID, request: Request) -> CriticalGraphEdgeList:
+    principal = await _principal(request)
+    return await _store(request).critical_edges(id,tenant_id=principal.tenant_id)
 
 
 @router.get(
@@ -644,15 +743,51 @@ async def get_embedding_status(request: Request) -> EmbeddingStatus:
     return await _store(request).embedding_status(tenant_id=principal.tenant_id)
 
 
+@router.post(
+    "/embeddings/backfill",response_model=EmbeddingBackfillResult,
+    response_model_exclude_none=True,operation_id="requestEmbeddingBackfill",tags=["embeddings"],
+)
+async def request_embedding_backfill(
+    body: EmbeddingBackfillRequest,request: Request,
+) -> EmbeddingBackfillResult:
+    principal = await _principal(request)
+    _require(principal,"admin")
+    return await _store(request).request_embedding_backfill(
+        body,tenant_id=principal.tenant_id,actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/embedding-spaces/{id}/promotion",response_model=EmbeddingSpacePromotionResult,
+    response_model_exclude_none=True,operation_id="promoteEmbeddingSpace",tags=["embeddings"],
+)
+async def promote_embedding_space(
+    id: UUID,body: EmbeddingSpacePromotionRequest,request: Request,
+) -> EmbeddingSpacePromotionResult:
+    principal = await _principal(request)
+    _require(principal,"admin")
+    return await _store(request).promote_embedding_space(
+        id,body,tenant_id=principal.tenant_id,actor_key=principal.actor_key,
+    )
+
+
 @router.get(
     "/entities/{id}/similar",response_model=ApplicationSimilarityList,
     response_model_exclude_none=True,operation_id="listSimilarApplications",tags=["embeddings"],
 )
 async def list_similar_applications(
-    id: UUID,request: Request,limit: int=Query(default=10,ge=1,le=50),
+    id: UUID,request: Request,
+    review_state: Literal[
+        "UNREVIEWED","CONFIRMED_SIMILAR","CONFIRMED_DISTINCT",
+        "CONSOLIDATION_CANDIDATE","DISMISSED",
+    ] | None = None,
+    cursor: str | None = None,
+    limit: int=Query(default=10,ge=1,le=50),
 ) -> ApplicationSimilarityList:
     principal = await _principal(request)
-    return await _store(request).similar_applications(id,tenant_id=principal.tenant_id,limit=limit)
+    return await _store(request).similar_applications(
+        id,tenant_id=principal.tenant_id,review_state=review_state,cursor=cursor,limit=limit,
+    )
 
 
 @router.post(
