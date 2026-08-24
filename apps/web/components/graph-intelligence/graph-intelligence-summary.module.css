@@ -78,6 +78,15 @@
   border-inline-start: 2px solid var(--sg-color-signal-warning-500, var(--sg-color-domain-business-500));
 }
 
+.community {
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+
+.communityAlgorithm {
+  color: var(--sg-text-muted);
+}
+
 .actions,
 .facts {
   display: flex;

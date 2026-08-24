@@ -127,6 +127,23 @@ export function useGraphIntelligenceRisks(limit = 20) {
   });
 }
 
+/**
+ * Communities for a policy's active snapshot. Only fetched when an entity actually
+ * belongs to one, since the whole point of asking is to place that entity.
+ */
+export function useGraphIntelligenceCommunities(
+  { enabled = true, policyKey = "runtime-dependency", limit = 50 }: {
+    enabled?: boolean; policyKey?: string; limit?: number;
+  } = {},
+) {
+  return useQuery({
+    queryKey: ["graph-intelligence", "communities", policyKey, limit],
+    queryFn: () => stackGraphClient.listGraphIntelligenceCommunities(policyKey, limit),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useEmbeddingStatus() {
   return useQuery({
     queryKey: ["embeddings", "status"],

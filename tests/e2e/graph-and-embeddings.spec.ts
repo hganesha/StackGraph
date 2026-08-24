@@ -119,3 +119,18 @@ test("queue findings decided elsewhere link to where they were found", async ({ 
   const recommendation = page.locator("li").filter({ hasText: "Replace bespoke retry helper" });
   await expect(recommendation.getByRole("link", { name: /Open the repository/ })).toBeVisible();
 });
+
+test("an entity says which community it sits in, and what that means", async ({ page }) => {
+  await page.goto(billingApplication);
+
+  const panel = page.getByRole("region", { name: "Structurally critical" });
+  // Asserted around the glossary term rather than through it: Term keeps its definition
+  // in the same paragraph, so a match spanning the word itself also spans the tooltip.
+  await expect(panel.getByText(/of 14 entities that depend on each other/)).toBeVisible();
+  await expect(panel.getByText(/alongside Ledger API/)).toBeVisible();
+  await expect(panel.getByRole("button", { name: "community" })).toBeVisible();
+
+  // A community is a shape in the graph, not a team — the panel has to say so, because
+  // "community" reads as ownership to almost everyone.
+  await expect(panel.getByText(/not by ownership/)).toBeVisible();
+});

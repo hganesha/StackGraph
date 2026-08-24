@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatRelative, type EntityGraphIntelligence, type GraphMetric } from "@stackgraph/shared";
 import { Drawer, Skeleton, Term, type GlossaryKey } from "@stackgraph/design-system";
-import { useEntityBlastRadius, useSimilarApplications } from "@/lib/queries";
+import { useEntityBlastRadius, useGraphIntelligenceCommunities, useSimilarApplications } from "@/lib/queries";
 import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./graph-intelligence-summary.module.css";
@@ -109,6 +109,8 @@ export function GraphIntelligenceSummary({
   const [showBlastRadius, setShowBlastRadius] = useState(false);
   const [showSimilarity, setShowSimilarity] = useState(false);
   const blastRadius = useEntityBlastRadius(entityId, showBlastRadius);
+  const communityKey = intelligence?.community_keys?.[0];
+  const communities = useGraphIntelligenceCommunities({ enabled: Boolean(communityKey) });
   const similarity = useSimilarApplications(entityId, showSimilarity && similarityAvailable);
   const openEvidence = useEvidenceStore((state) => state.open);
   const metrics = useMemo(
@@ -120,6 +122,15 @@ export function GraphIntelligenceSummary({
   );
 
   const waiting = !intelligence || intelligence.primary_status === "WAITING_FOR_DATA";
+  const community = useMemo(
+    () => communities.data?.communities.find((entry) => entry.community_key === communityKey),
+    [communities.data, communityKey],
+  );
+  // Representative entities include the subject itself; peers are the rest.
+  const peers = useMemo(
+    () => (community?.representative_entities ?? []).filter((entity) => entity.id !== entityId).slice(0, 3),
+    [community, entityId],
+  );
   // Snapshot limitations qualify the same numbers the entity limitations do, so they
   // are shown together rather than hidden one drawer away.
   const limitations = useMemo(
@@ -169,6 +180,17 @@ export function GraphIntelligenceSummary({
           ) : null}
         </>
       )}
+
+      {communityKey && community ? (
+        <p className={styles.community}>
+          Sits in a <Term id="community">community</Term> of {community.member_count.toLocaleString()}{" "}
+          {community.member_count === 1 ? "entity" : "entities"} that depend on each other
+          {peers.length ? <> — alongside {peers.map((peer) => peer.name).join(", ")}</> : null}.{" "}
+          <span className={styles.communityAlgorithm}>
+            Grouped by {communities.data?.algorithm_key ?? "algorithm"} from the graph's shape, not by ownership.
+          </span>
+        </p>
+      ) : null}
 
       <Limitations limitations={limitations} fallback="This entity's structural coverage is limited." />
 

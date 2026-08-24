@@ -877,10 +877,16 @@ const fixtureClient: StackGraphClient = {
       contract_version: "1.0.0",
       snapshot: intelligence.snapshots[0] ?? null,
       algorithm_key: "wcc",
+      // Representatives include the subject and its peers; with the subject alone the
+      // "alongside" half of the community line never rendered.
       communities: [{
         community_key: intelligence.community_keys[0] ?? "runtime:0",
         member_count: 14,
-        representative_entities: [intelligence.entity],
+        representative_entities: [
+          intelligence.entity,
+          { id: "00000000-0000-4000-8000-000000000703", kind: "Application", name: "Ledger API", canonical_key: "application:ledger-api" },
+          repositoryDetail.repository,
+        ],
       }],
       as_of: intelligence.as_of,
       limitations: [],
