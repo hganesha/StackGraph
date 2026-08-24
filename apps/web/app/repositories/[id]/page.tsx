@@ -6,7 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { stackGraphClient } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { useEntityGraphMetrics } from "@/lib/queries";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
+import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { RecommendationFocus } from "./RecommendationFocus";
 import styles from "./repository.module.css";
 
@@ -52,6 +54,7 @@ export default function RepositoryPage({
     queryKey: ["repository", id],
     queryFn: () => stackGraphClient.getRepository(id),
   });
+  const graphIntelligence = useEntityGraphMetrics(id);
 
   if (isLoading || !data) {
     return (
@@ -90,6 +93,13 @@ export default function RepositoryPage({
         </div>
         <span className={styles.freshness}>{data.freshness.status}</span>
       </header>
+
+      <GraphIntelligenceSummary
+        entityId={id}
+        intelligence={graphIntelligence.data}
+        graphHref={`/repositories/${id}/graph`}
+        compact
+      />
 
       <section className={styles.purpose} aria-labelledby="repository-purpose-heading">
         <div className={styles.sectionHead}>

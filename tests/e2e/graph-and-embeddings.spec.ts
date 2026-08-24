@@ -156,3 +156,16 @@ test("a term nothing reads like says so, and leaves name filtering alone", async
   const related = page.getByRole("region", { name: "Related by meaning" });
   await expect(related.getByText(/Nothing in the evaluated space reads like/)).toBeVisible();
 });
+
+test("a repository carries the graph panel and its own lens", async ({ page }) => {
+  await page.goto("/repositories/00000000-0000-4000-8000-000000000203");
+
+  // Repositories rank in structural risk and are the likeliest single point of failure,
+  // and this was the one entity type with no panel at all.
+  const panel = page.getByRole("region", { name: "Structurally critical" });
+  await expect(panel).toBeVisible();
+
+  await panel.getByRole("link", { name: "Explore dependencies" }).click();
+  await expect(page).toHaveURL(/\/repositories\/[0-9a-f-]+\/graph$/);
+  await expect(page.getByText("Graph lens")).toBeVisible();
+});
