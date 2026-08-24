@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /workspace/services/mcp-server
+COPY services/mcp-server/requirements.txt services/mcp-server/requirements-dev.txt ./
+RUN pip install --no-cache-dir --requirement requirements-dev.txt
+COPY services/mcp-server/stackgraph_mcp ./stackgraph_mcp
+COPY services/mcp-server/tests ./tests
+COPY services/mcp-server/conftest.py services/mcp-server/pytest.ini ./
+COPY stackgraph-foundation/contracts /workspace/stackgraph-foundation/contracts
+
+CMD ["python", "-m", "pytest", "-q"]

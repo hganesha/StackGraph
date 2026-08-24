@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose build api seed ai-prompts
+      - run: docker compose build api seed ai-prompts mcp-server
       - name: Verify FastAPI and canonical OpenAPI are identical
         run: |
           mkdir -p "$RUNNER_TEMP/stackgraph-openapi"
@@ -91,6 +91,8 @@ jobs:
       - run: docker compose run --rm --no-deps --entrypoint python ai-prompts -m unittest discover -s /code/tests -v
       - run: docker build -t stackgraph-enterprise-discovery-test -f services/enterprise-discovery/Dockerfile.test .
       - run: docker run --rm stackgraph-enterprise-discovery-test
+      - run: docker build -t stackgraph-mcp-test -f services/mcp-server/Dockerfile.test .
+      - run: docker run --rm stackgraph-mcp-test
 
   postgres-integration:
     runs-on: ubuntu-latest

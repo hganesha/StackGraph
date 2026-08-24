@@ -158,6 +158,33 @@ services:
       retries: 6
       start_period: 10s
 
+  mcp-server:
+    build:
+      context: .
+      dockerfile: services/mcp-server/Dockerfile
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_MCP_API_BASE_URL: http://api:8000
+      STACKGRAPH_MCP_API_TOKEN: ${STACKGRAPH_MCP_API_TOKEN:-}
+      STACKGRAPH_MCP_TOOLSETS: ${STACKGRAPH_MCP_TOOLSETS:-}
+      STACKGRAPH_MCP_READ_ONLY: ${STACKGRAPH_MCP_READ_ONLY:-false}
+      STACKGRAPH_MCP_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    ports:
+      - "127.0.0.1:${STACKGRAPH_MCP_PORT:-8085}:8081"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import socket; socket.create_connection(('localhost', 8081), 2).close()
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
   seed:
     profiles: [tools]
     build:

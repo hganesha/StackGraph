@@ -36,6 +36,8 @@ All settings are read from `STACKGRAPH_MCP_*` environment variables.
 | `STACKGRAPH_MCP_MAX_RESPONSE_CHARS` | `40000` | Truncation budget for a single tool result. |
 | `STACKGRAPH_MCP_MAX_BODY_SCHEMA_CHARS` | `4000` | Request-body schemas above this size are replaced in `tools/list` by a pointer to `stackgraph_describe_operation`. `0` always inlines them. |
 | `STACKGRAPH_MCP_VERIFY_TLS` | `true` | Verify TLS certificates. |
+| `STACKGRAPH_MCP_DATABASE_URL` | — | PostgreSQL URL used to record service heartbeats for Admin → Services & health. Set only for the deployment-managed HTTP transport (the Docker Compose service sets it); leave unset for stdio clients. |
+| `STACKGRAPH_MCP_HEARTBEAT_SECONDS` | `15` | Interval between service heartbeats when a database URL is configured. |
 
 The API accepts a bearer token or a session cookie. When neither is set, calls fail with
 a 401 whose message says which variable to set — except against an API running in
@@ -60,6 +62,15 @@ Print the tool surface without serving:
 ```bash
 python -m stackgraph_mcp --list-tools
 ```
+
+### As a deployment service
+
+Docker Compose runs the HTTP transport as the `mcp-server` service (published on
+`127.0.0.1:8085` by default, `STACKGRAPH_MCP_PORT` to change it). It records
+heartbeats so Admin → Services & health shows the endpoint's liveness, and the
+page's Stop/Start control gates MCP traffic per workspace: while stopped, the
+API answers MCP-originated requests with `503 SERVICE_STOPPED` and durable
+state is untouched.
 
 ### Claude Code / Claude Desktop
 

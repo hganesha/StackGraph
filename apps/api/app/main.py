@@ -211,6 +211,30 @@ def create_app(
                     )
                     response.headers["X-Request-ID"] = request_id
                     return response
+                # The MCP server proxies agent traffic under its own User-Agent; the
+                # workspace Stop control in Admin -> Services & health gates it here
+                # because the MCP process itself holds no database connection.
+                if (
+                    request.headers.get("User-Agent", "").startswith("stackgraph-mcp/")
+                    and principal.tenant_id is not None
+                    and hasattr(application.state.database, "fetch_one")
+                ):
+                    control = await application.state.database.fetch_one(
+                        "SELECT desired_state FROM tenant_service_control WHERE service_key='mcp'",
+                        tenant_id=principal.tenant_id,
+                    )
+                    if control is not None and control["desired_state"] == "STOPPED":
+                        response = JSONResponse(
+                            error_payload(
+                                request,
+                                "SERVICE_STOPPED",
+                                "The MCP server is stopped for this workspace. "
+                                "Start it from Admin -> Services & health.",
+                            ),
+                            status_code=503,
+                        )
+                        response.headers["X-Request-ID"] = request_id
+                        return response
             except APIError as error:
                 response = JSONResponse(
                     error_payload(request, error.code, error.message, error.details),

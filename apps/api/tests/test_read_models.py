@@ -202,16 +202,24 @@ class ServiceStatusDatabaseStub:
     def __init__(self) -> None:
         self.workload_query = ""
         self.workload_params: tuple[UUID, ...] = ()
+        self.control_rows: list[dict] = []
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
         if "FROM service_heartbeat" in query:
-            return [{
-                "service_key": "intelligence",
-                "status": "RUNNING",
-                "last_heartbeat_at": datetime.now(UTC),
-            }]
+            return [
+                {
+                    "service_key": "intelligence",
+                    "status": "RUNNING",
+                    "last_heartbeat_at": datetime.now(UTC),
+                },
+                {
+                    "service_key": "mcp",
+                    "status": "RUNNING",
+                    "last_heartbeat_at": datetime.now(UTC),
+                },
+            ]
         if "FROM tenant_service_control" in query:
-            return []
+            return self.control_rows
         raise AssertionError(f"unexpected query: {query}")
 
     async def fetch_one(self, query, params=None, *, tenant_id=None):
@@ -1083,6 +1091,32 @@ def test_service_status_scopes_intelligence_workload_to_active_configuration() -
     assert graph_intelligence.pending == 0
     embeddings = next(service for service in result.services if service.key == "embeddings")
     assert embeddings.category == "INTELLIGENCE"
+
+
+def test_service_status_reports_controllable_mcp_endpoint() -> None:
+    database = ServiceStatusDatabaseStub()
+    result = asyncio.run(ReadModelStore(database).service_status(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    mcp = next(service for service in result.services if service.key == "mcp")
+    assert mcp.category == "CORE"
+    assert mcp.controllable is True
+    assert mcp.management_scope == "This workspace"
+    assert mcp.state == "IDLE"
+    assert "MCP endpoint is online" in mcp.detail
+
+
+def test_service_status_shows_mcp_stopped_when_workspace_stopped_it() -> None:
+    database = ServiceStatusDatabaseStub()
+    database.control_rows = [{"service_key": "mcp", "desired_state": "STOPPED"}]
+    result = asyncio.run(ReadModelStore(database).service_status(
+        tenant_id=UUID("00000000-0000-4000-8000-000000000001"),
+    ))
+
+    mcp = next(service for service in result.services if service.key == "mcp")
+    assert mcp.state == "STOPPED"
+    assert mcp.desired_state == "STOPPED"
 
 
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:

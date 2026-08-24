@@ -7,7 +7,7 @@ app-down:
 	docker compose --profile pipeline down
 
 app-logs:
-	docker compose --profile pipeline logs -f database neo4j api web github-webhook github-control-loop \
+	docker compose --profile pipeline logs -f database neo4j api web mcp-server github-webhook github-control-loop \
 		depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 
 PRODUCTION_COMPOSE = docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml --profile pipeline
