@@ -123,6 +123,55 @@ export const GLOSSARY = {
     note: "A limitation of the tool, not a finding about your estate.",
   },
 
+  // ── Graph intelligence ─────────────────────────────────────────────────────
+  blastRadius: {
+    term: "Blast radius",
+    body:
+      "Everything that would be affected if this entity failed or disappeared, found by following relationships outward from it. Each affected entity keeps the path and the facts that connect it back.",
+    note: "A reachability result, not a prediction. It says what depends on this, not what would actually break.",
+  },
+  systemicRisk: {
+    term: "Systemic risk",
+    body:
+      "How much of the estate rests on one entity, scored from its position in the graph — how many things reach it, how many dependency paths run through it, and whether removing it would split the graph.",
+    note: "Signals StackGraph cannot see for your estate are left out and the rest rescaled, so a score always says which signals it used.",
+  },
+  articulationPoint: {
+    term: "Single point of failure",
+    body:
+      "An entity whose removal would split the graph into pieces that can no longer reach each other. Also called an articulation point.",
+    note: "Structural, not operational. It describes the shape of your dependencies, not the reliability of the thing itself.",
+  },
+  community: {
+    term: "Community",
+    body:
+      "A group of entities that reach each other through dependencies but barely connect to anything outside the group. Found by algorithm from the graph's shape alone.",
+    note: "Not a team, an owner, or a business domain. Two applications land in one community because they share dependencies, not because anyone decided they belong together.",
+  },
+  centrality: {
+    term: "Centrality",
+    body:
+      "How important an entity's position is in the graph. PageRank counts how much depends on it, weighted by how much depends on those things in turn; betweenness counts how often the shortest path between two other entities runs through it.",
+  },
+  analysisSnapshot: {
+    term: "Analysis snapshot",
+    body:
+      "One complete run of the graph analysis, frozen. Every metric, path, and ranking on screen is read from a snapshot rather than recalculated, so numbers shown together were computed together.",
+    note: "The snapshot's age is how current the structural picture is — separate from the freshness of the underlying scans.",
+  },
+  embeddingSpace: {
+    term: "Embedding space",
+    body:
+      "A versioned set of numeric representations of your entities, used to find candidates by meaning rather than by exact match. A new space stays in shadow until its coverage and reviewed relevance are good enough to replace the active one.",
+    note: "Used to retrieve and rank candidates. Never used as proof that two things are related.",
+  },
+  semanticSimilarity: {
+    term: "Semantic similarity",
+    body:
+      "How close two entities are in an embedding space — a suggestion that they may serve the same purpose, drawn from their descriptions, dependencies, capabilities, and technologies.",
+    note: "A starting point for a human decision, never a conclusion. Always read what the two share and what differs before acting.",
+  },
+
   // ── Governance ─────────────────────────────────────────────────────────────
   governed: {
     term: "Governed",

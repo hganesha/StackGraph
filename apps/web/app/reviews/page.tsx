@@ -9,10 +9,12 @@ import {
   IconTrendingUp,
   type Icon,
 } from "@tabler/icons-react";
+import Link from "next/link";
 import { ConfidenceChip, Skeleton, confidenceLabel } from "@stackgraph/design-system";
 import type { ReviewQueueItem } from "@stackgraph/shared";
 import { useReviewQueue } from "@/lib/queries";
 import { UncertainBridge } from "@/components/reviews/UncertainBridge";
+import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import styles from "./reviews.module.css";
 
 /** Each finding type carries a mono glyph beside its always-present text label. */
@@ -28,6 +30,18 @@ const typeMeta: Record<ReviewQueueItem["item_type"], { label: string; icon: Icon
 function identityLabels(title: string): [string, string] {
   const labels = title.split(/\s*(?:↔|→)\s*/, 2);
   return [labels[0] || title, labels[1] || "possible match"];
+}
+
+/**
+ * Where a finding can be reviewed, for the types that are not yet decided in place.
+ * Every row used to end in the same dead sentence telling the reader to go and find
+ * it themselves; a link is the least this queue owes them.
+ */
+function reviewLocation(item: ReviewQueueItem): { href: string; label: string } | null {
+  if (item.repository_id) {
+    return { href: `/repositories/${item.repository_id}`, label: "Open the repository" };
+  }
+  return null;
 }
 
 export default function ReviewsPage() {
@@ -69,6 +83,7 @@ export default function ReviewsPage() {
           {data.items.map((item) => {
             const [sourceLabel, targetLabel] = identityLabels(item.title);
             const TypeIcon = typeMeta[item.item_type].icon;
+            const location = reviewLocation(item);
             return (
               <li key={`${item.item_type}:${item.item_id}`} className={styles.item}>
                 <div className={styles.itemHead}>
@@ -90,8 +105,20 @@ export default function ReviewsPage() {
                     confidence={item.confidence}
                     expectedVersion={item.version}
                   />
+                ) : item.item_type === "APPLICATION_SIMILARITY" ? (
+                  <SimilarityDecision
+                    candidateId={item.item_id}
+                    title={item.title}
+                    confidence={item.confidence}
+                  />
+                ) : location ? (
+                  <Link className={styles.reviewHint} href={location.href}>
+                    {location.label} <span aria-hidden="true">→</span>
+                  </Link>
                 ) : (
-                  <p className={styles.reviewHint}>Open where this was found to review it.</p>
+                  <p className={styles.reviewHint}>
+                    This finding is decided where it was found, on the repository it came from.
+                  </p>
                 )}
               </li>
             );

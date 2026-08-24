@@ -17,6 +17,7 @@ import { DomainIcon, RankedTable, StatTile, Skeleton } from "@stackgraph/design-
 import { namespaceLabel, type Namespace, type RankedItem } from "@stackgraph/shared";
 import { useEstateSummary, useInfiniteEstateSummary } from "@/lib/queries";
 import { useEstateQuery } from "@/lib/useEstateQuery";
+import { SemanticMatches } from "@/components/estate/SemanticMatches";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
@@ -295,6 +296,9 @@ export function EstateView() {
           incremental
         />
       ) : null}
+
+      {/* Exact matches stay above; retrieval is offered beside them, never instead. */}
+      <SemanticMatches query={query.q} />
 
       <section className={styles.tableWrap} aria-label="Ranked items">
         {isLoading || !overview.data ? (

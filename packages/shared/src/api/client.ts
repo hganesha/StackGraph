@@ -825,15 +825,32 @@ const fixtureClient: StackGraphClient = {
   async getEntityBlastRadius(id) {
     await delay();
     const intelligence = fixtureEntityGraphIntelligence(id);
+    // A path with its supporting facts, because the empty case exercised none of the
+    // rendering that matters here — the hops, the confidence floor, and the evidence
+    // that has to open on top of the drawer showing it.
     return {
       contract_version: "1.0.0",
       entity: intelligence.entity,
       snapshot: intelligence.snapshots[0] ?? null,
       affected_entity_count: 4,
       maximum_depth: 3,
-      impacts: [],
+      impacts: [
+        {
+          target: applicationDetail.application,
+          distance: 2,
+          minimum_confidence: 0.78,
+          entity_ids: [id, repositoryDetail.repository.id, applicationDetail.application.id],
+          supporting_fact_ids: [
+            "70000000-0000-4000-8000-000000000011",
+            "70000000-0000-4000-8000-000000000012",
+          ],
+        },
+      ],
       as_of: intelligence.as_of,
-      limitations: [{ code: "FIXTURE_PATHS_OMITTED", message: "Fixture mode does not include supporting path facts." }],
+      limitations: [{
+        code: "PARTIAL_COVERAGE",
+        message: "Deployment relationships were not covered by this snapshot, so runtime-only impact may be understated.",
+      }],
     };
   },
   async listGraphIntelligenceRisks(limit = 20) {
@@ -860,10 +877,16 @@ const fixtureClient: StackGraphClient = {
       contract_version: "1.0.0",
       snapshot: intelligence.snapshots[0] ?? null,
       algorithm_key: "wcc",
+      // Representatives include the subject and its peers; with the subject alone the
+      // "alongside" half of the community line never rendered.
       communities: [{
         community_key: intelligence.community_keys[0] ?? "runtime:0",
         member_count: 14,
-        representative_entities: [intelligence.entity],
+        representative_entities: [
+          intelligence.entity,
+          { id: "00000000-0000-4000-8000-000000000703", kind: "Application", name: "Ledger API", canonical_key: "application:ledger-api" },
+          repositoryDetail.repository,
+        ],
       }],
       as_of: intelligence.as_of,
       limitations: [],
@@ -872,16 +895,52 @@ const fixtureClient: StackGraphClient = {
   async semanticSearch(body) {
     await delay();
     const now = new Date().toISOString();
+    // Scored against a small pool rather than returning one constant hit, so both the
+    // "found something a name filter would miss" and the "found nothing" states are
+    // reachable. Each entry carries the words it would be retrieved by, standing in for
+    // the rendered document a real space embeds.
+    const pool: Array<{ entity: EntitySummary; terms: string[]; score: number }> = [
+      {
+        entity: { id: "00000000-0000-4000-8000-000000000703", kind: "Application", name: "Ledger API", canonical_key: "application:ledger-api", summary: "Posts and reconciles financial ledger entries" },
+        terms: ["ledger", "billing", "invoice", "payment", "finance", "reconcile"],
+        score: 0.86,
+      },
+      {
+        entity: applicationDetail.application,
+        terms: ["billing", "invoice", "payment", "charge", "subscription"],
+        score: 0.81,
+      },
+      {
+        entity: repositoryDetail.repository,
+        terms: ["billing", "service", "repository", "node"],
+        score: 0.74,
+      },
+    ];
+    const needles = body.query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const hits = pool
+      .filter((candidate) => needles.some((needle) =>
+        candidate.terms.some((term) => term.startsWith(needle) || needle.startsWith(term)),
+      ))
+      .slice(0, body.limit)
+      .map((candidate) => ({
+        entity: candidate.entity,
+        score: candidate.score,
+        input_hash: `sha256:${"b".repeat(64)}`,
+        sensitivity: "INTERNAL" as const,
+      }));
     return {
       contract_version: "1.0.0",
       space_id: fixtureEmbeddingStatus().active_spaces[0]!.id,
       space_key: "entity-semantic",
       model_or_algorithm: "hash-embedding-v1",
       template_version: "entity-document/v1",
-      query_hash: `fixture:${body.query.length}`,
-      hits: [{ entity: applicationDetail.application, score: 0.86, input_hash: "fixture", sensitivity: "INTERNAL" }],
+      query_hash: `sha256:${"c".repeat(64)}`,
+      hits,
       as_of: now,
-      limitations: [],
+      limitations: [{
+        code: "EXACT_SEARCH",
+        message: "Results use exact tenant-filtered cosine search; no approximate index was used.",
+      }],
     };
   },
   async getEmbeddingStatus() {
@@ -1041,8 +1100,8 @@ const fixtureClient: StackGraphClient = {
       as_of: now,
       counts: {
         IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 0, DUPLICATE_CAPABILITY: 0,
-        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 0,
-        APPLICATION_SIMILARITY: 0,
+        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 1,
+        APPLICATION_SIMILARITY: 1,
       },
       items: [{
         item_id: "00000000-0000-4000-8000-000000000501",
@@ -1050,6 +1109,26 @@ const fixtureClient: StackGraphClient = {
         title: "stripe ↔ stripe-node", confidence: 0.72, confidence_band: "MEDIUM",
         version: 1, created_at: now,
         review_path: "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
+      }, {
+        // The queue routes similarity candidates, so fixture mode has to carry one:
+        // it is the only type besides identity that is decided in the queue itself.
+        item_id: "00000000-0000-4000-8000-000000000502",
+        item_type: "APPLICATION_SIMILARITY", review_state: "UNREVIEWED",
+        title: "Billing API ↔ Ledger API", confidence: 0.83, confidence_band: "MEDIUM",
+        summary: "Explainable application similarity 83 percent",
+        version: 1, created_at: now,
+        review_path: "/similarity-candidates/00000000-0000-4000-8000-000000000502/review",
+      }, {
+        // A type that is still decided where it was found, so the queue's link out
+        // stays exercised too.
+        item_id: "00000000-0000-4000-8000-000000000503",
+        item_type: "MODERNIZATION_RECOMMENDATION", review_state: "UNREVIEWED",
+        title: "Replace bespoke retry helper with the platform client",
+        summary: "Consolidates three internal implementations onto one supported client",
+        confidence: 0.66, confidence_band: "MEDIUM",
+        repository_id: repositoryDetail.repository.id,
+        version: 1, created_at: now,
+        review_path: "/modernization-recommendations/00000000-0000-4000-8000-000000000503/review",
       }],
       page_info: { has_next_page: false },
     };

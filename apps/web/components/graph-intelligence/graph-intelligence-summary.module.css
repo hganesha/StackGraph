@@ -9,16 +9,14 @@
   border-radius: var(--sg-radius-card);
 }
 
-.head,
-.drawerHead {
+.head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--sg-space-4);
 }
 
-.head h2,
-.drawerHead h2 {
+.head h2 {
   margin-block-start: var(--sg-space-1);
   font-size: var(--sg-type-h3-size);
   font-weight: 600;
@@ -80,6 +78,15 @@
   border-inline-start: 2px solid var(--sg-color-signal-warning-500, var(--sg-color-domain-business-500));
 }
 
+.community {
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+
+.communityAlgorithm {
+  color: var(--sg-text-muted);
+}
+
 .actions,
 .facts {
   display: flex;
@@ -100,36 +107,6 @@
 .actions span {
   color: var(--sg-text-muted);
   font-size: var(--sg-type-small-size);
-}
-
-.backdrop {
-  position: fixed;
-  z-index: 60;
-  inset: 0;
-  display: flex;
-  justify-content: flex-end;
-  background: rgb(0 0 0 / 38%);
-}
-
-.drawer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sg-space-4);
-  inline-size: min(580px, 94vw);
-  block-size: 100%;
-  padding: var(--sg-space-6);
-  overflow-y: auto;
-  background: var(--sg-surface-card);
-  box-shadow: -16px 0 40px rgb(0 0 0 / 18%);
-}
-
-.drawerHead button {
-  inline-size: 36px;
-  block-size: 36px;
-  color: var(--sg-text-secondary);
-  border: var(--sg-border-hairline) solid var(--sg-surface-border);
-  border-radius: var(--sg-radius-control);
-  font-size: 24px;
 }
 
 .drawerBody,
