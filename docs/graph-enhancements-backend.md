@@ -69,6 +69,7 @@ Milestone letters match the review's phases. "Blocks FE-*" names the frontend ta
 `similar_applications` returns every candidate ordered by score with no filter and no cursor. `ApplicationSimilarityReviewRequest.decision` excludes `UNREVIEWED`, so a decision made in error cannot be undone through the API even though `application_similarity_feedback` is append-only and would record the reversal correctly.
 
 - Add `review_state` filter and cursor pagination to `GET /entities/{id}/similar`, using the existing `_encode_cursor`/`_decode_cursor` helpers.
+- Add `GET /similarity-candidates/{id}` returning one candidate with its `overlaps`, `differences`, `coverage`, and both applications. Found during frontend implementation: the review queue can now *decide* a candidate, but `ReviewQueueItem` carries only a title and a confidence, so the queue cannot show what the two applications share without this read. Until it lands, a reviewer decides from the title alone or opens the application.
 - Add a `REOPENED` decision that resets `review_state` to `UNREVIEWED` and appends a feedback row like any other decision. It is a new decision, not a delete — the history stays complete.
 - Keep `reason_code` required. The frontend currently sends a constant; that is FE-A1's fix, and this task must not paper over it by defaulting the field server-side.
 

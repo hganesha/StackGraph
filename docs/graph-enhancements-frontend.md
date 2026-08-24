@@ -39,23 +39,25 @@ The sequence per task:
 
 Three tasks need no backend at all and can start immediately: **FE-A1** (`POST /similarity-candidates/{id}/review` already exists), **FE-A2** (`listGraphIntelligenceCommunities` already exists in the client), and **FE-A6** (glossary, drawer, and accessibility repairs).
 
+**Correction, found in implementation.** FE-A1 was listed as fully unblocked and is not. `ReviewQueueItem` carries a title, a confidence, and a review path — not the two application IDs and not the candidate's overlaps and differences. The *decision* is unblocked and is built; showing the evidence beside it in the queue needs a read for a single candidate by id (`GET /similarity-candidates/{id}`), which no backend task currently covers. Add it to BE-A1.
+
 ---
 
 ## 3. Task list
 
 | ID | Task | Source | Milestone | Depends on |
 |---|---|---|---|---|
-| FE-A1 | Reviews decides similarity inline | U1 | A | — (reopen affordance needs BE-A1) |
-| FE-A2 | Communities become a surface | U4 | A | — |
-| FE-A3 | Anomalies and circular dependencies become surfaces | U4 | A | BE-A2 contract |
-| FE-A4 | Semantic search gets an entry point | U6 | A | — (explanation needs BE-A3 contract) |
-| FE-A5 | Detail-page consistency | U8 | A | BE-A4 contract |
-| FE-A6 | Vocabulary, drawer reuse, and accessibility repairs | U8 | A | — |
-| FE-B1 | Architecture risk explains itself | U3 | B | BE-B2, BE-B4 contracts |
-| FE-C1 | Estate ranked lenses, server-sorted | U2 | C | BE-C1 contract |
-| FE-C2 | The graph lens shows what the graph knows | U5 | C | BE-C2 contract |
-| FE-D1 | Ask shows what it resolved | — | D | BE-D1, BE-D2 contracts |
-| FE-E1 | Admin operates the intelligence it configures | U7 | E | BE-E1 contract |
+| FE-A1 | Reviews decides similarity inline | U1 | A | Shipped — decision only; inline overlaps need a candidate-by-id read |
+| FE-A2 | Communities become a surface | U4 | A | Shipped — entity half; the Estate filter needs BE-C1 |
+| FE-A3 | Anomalies and circular dependencies become surfaces | U4 | A | Blocked on BE-A2 contract |
+| FE-A4 | Semantic search gets an entry point | U6 | A | Shipped — matched terms and excerpt need BE-A3 |
+| FE-A5 | Detail-page consistency | U8 | A | Shipped — repository half; the technology request drop needs BE-A4 |
+| FE-A6 | Vocabulary, drawer reuse, and accessibility repairs | U8 | A | Shipped |
+| FE-B1 | Architecture risk explains itself | U3 | B | Blocked on BE-B2, BE-B4 contracts |
+| FE-C1 | Estate ranked lenses, server-sorted | U2 | C | Blocked on BE-C1 contract |
+| FE-C2 | The graph lens shows what the graph knows | U5 | C | Blocked on BE-C2 contract |
+| FE-D1 | Ask shows what it resolved | — | D | Blocked on BE-D1, BE-D2 contracts |
+| FE-E1 | Admin operates the intelligence it configures | U7 | E | Blocked on BE-E1 contract |
 
 ---
 
