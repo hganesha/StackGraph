@@ -13,7 +13,7 @@ from stackgraph_mcp.spec import Contract, load_contract, parse_contract
 def test_every_contract_operation_is_parsed(contract: Contract) -> None:
     assert contract.title == "StackGraph API"
     assert contract.base_path == "/api/v1"
-    assert len(contract.operations) == 101
+    assert len(contract.operations) == 102
     assert len({operation.operation_id for operation in contract.operations}) == len(contract.operations)
 
 

@@ -60,9 +60,20 @@ def _serve_http(settings: Settings, host: str, port: int) -> None:
             "--transport http needs uvicorn. Install it with 'pip install uvicorn[standard]'."
         ) from exc
 
+    from .heartbeat import start_heartbeat
+
     app = build_app(settings)
     server = create_server(app)
-    uvicorn.run(server.streamable_http_app(json_response=True, stateless_http=True, host=host), host=host, port=port)
+    stop_heartbeat = (
+        start_heartbeat(settings.database_url, settings.heartbeat_seconds)
+        if settings.database_url
+        else None
+    )
+    try:
+        uvicorn.run(server.streamable_http_app(json_response=True, stateless_http=True, host=host), host=host, port=port)
+    finally:
+        if stop_heartbeat is not None:
+            stop_heartbeat.set()
 
 
 def main(argv: list[str] | None = None) -> int:

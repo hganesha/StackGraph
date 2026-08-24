@@ -7,9 +7,19 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_OPENAPI_PATH = (
-    Path(__file__).resolve().parents[3] / "stackgraph-foundation" / "contracts" / "v1" / "openapi.json"
-)
+def _default_openapi_path() -> Path:
+    """The frozen contract in a repository checkout, or the image's copy elsewhere.
+
+    Inside the Docker image the package lives at /code, too shallow for the
+    repository-relative walk, and the contract ships at /contracts/v1 instead.
+    """
+    parents = Path(__file__).resolve().parents
+    if len(parents) > 3:
+        return parents[3] / "stackgraph-foundation" / "contracts" / "v1" / "openapi.json"
+    return Path("/contracts/v1/openapi.json")
+
+
+DEFAULT_OPENAPI_PATH = _default_openapi_path()
 
 
 class Settings(BaseSettings):
@@ -68,6 +78,19 @@ class Settings(BaseSettings):
     verify_tls: bool = Field(
         default=True,
         description="Verify TLS certificates. Disable only against a local development server.",
+    )
+    database_url: str | None = Field(
+        default=None,
+        description=(
+            "PostgreSQL URL used to record service heartbeats for Admin -> Services & health. "
+            "Set only for the deployment-managed HTTP transport; leave unset for stdio clients."
+        ),
+    )
+    heartbeat_seconds: float = Field(
+        default=15.0,
+        ge=5.0,
+        le=300.0,
+        description="Interval between service heartbeats when database_url is configured.",
     )
 
     @field_validator("api_base_url")

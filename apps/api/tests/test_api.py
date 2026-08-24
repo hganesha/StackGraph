@@ -1725,6 +1725,68 @@ def test_admin_can_stop_workspace_service() -> None:
     assert store.last_actor_key == "operator"
 
 
+class McpControlStubDatabase(StubDatabase):
+    def __init__(self, desired_state: str) -> None:
+        self.desired_state = desired_state
+        self.control_tenants: list[object] = []
+
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "tenant_service_control" in query:
+            self.control_tenants.append(tenant_id)
+            return {"desired_state": self.desired_state}
+        if "api_rate_limit_window" in query:
+            return {"request_count": 1}
+        return None
+
+
+def _mcp_gated_app(desired_state: str) -> tuple[FastAPI, McpControlStubDatabase]:
+    database = McpControlStubDatabase(desired_state)
+    app = create_app(
+        settings=Settings(
+            environment="test", auth_mode="signed_session", auth_session_secret=SECRET,
+        ),
+        database=database,
+        read_models=StubReadModels(),
+    )
+    return app, database
+
+
+def test_mcp_traffic_is_refused_while_workspace_stopped_the_service() -> None:
+    app, database = _mcp_gated_app("STOPPED")
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/services",
+        headers={
+            "Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}",
+            "User-Agent": "stackgraph-mcp/1.0.0",
+        },
+    ))
+    assert response.status_code == 503
+    assert response.json()["code"] == "SERVICE_STOPPED"
+    assert database.control_tenants == [TENANT]
+
+
+def test_mcp_traffic_flows_while_workspace_service_is_running() -> None:
+    app, _ = _mcp_gated_app("RUNNING")
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/services",
+        headers={
+            "Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}",
+            "User-Agent": "stackgraph-mcp/1.0.0",
+        },
+    ))
+    assert response.status_code == 200
+
+
+def test_browser_traffic_ignores_the_mcp_service_control() -> None:
+    app, database = _mcp_gated_app("STOPPED")
+    response = asyncio.run(request(
+        app, "GET", "/api/v1/admin/services",
+        headers={"Authorization": f"Bearer {_token(SECRET, ['admin'], TENANT)}"},
+    ))
+    assert response.status_code == 200
+    assert database.control_tenants == []
+
+
 def test_connect_github_repository_rejects_tokens_and_invalid_identity() -> None:
     app, _ = _signed_app()
     admin = _token(SECRET, ["admin"], TENANT)

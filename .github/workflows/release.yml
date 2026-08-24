@@ -48,6 +48,11 @@ jobs:
             file: services/intelligence/ai-services/Dockerfile
             target: ""
             build_args: ""
+          - name: mcp
+            context: .
+            file: services/mcp-server/Dockerfile
+            target: ""
+            build_args: ""
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

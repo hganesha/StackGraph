@@ -60,6 +60,16 @@ services:
       STACKGRAPH_WEB_AUTH_REQUIRED: "true"
     ports: !reset []
 
+  mcp-server:
+    image: ${STACKGRAPH_MCP_IMAGE:-ghcr.io/hganesha/stackgraph-mcp:latest}
+    pull_policy: always
+    build: !reset null
+    environment:
+      STACKGRAPH_MCP_API_BASE_URL: http://api:8000
+      STACKGRAPH_MCP_API_TOKEN: ${STACKGRAPH_MCP_API_TOKEN:-}
+      STACKGRAPH_MCP_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    ports: !reset []
+
   migrate:
     image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
     pull_policy: always

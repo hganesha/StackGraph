@@ -121,6 +121,7 @@ _RAW_SECRET_MARKERS: tuple[str, ...] = (
 
 _CONTROLLABLE_SERVICES = frozenset({
     "github-webhook", "github-control-loop", "projection", "intelligence", "graph-intelligence", "embeddings",
+    "mcp",
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
@@ -4040,6 +4041,7 @@ class AdminReadModelsMixin:
             last_activity_at: datetime | None = None,
             controllable: bool = False,
             management_scope: str = "Externally managed",
+            idle_detail: str = "Worker is online and the durable queue is clear.",
         ) -> ServiceStatus:
             heartbeat = heartbeats.get(key)
             heartbeat_at = heartbeat.get("last_heartbeat_at") if heartbeat else None
@@ -4072,7 +4074,7 @@ class AdminReadModelsMixin:
                 detail = "Worker is online; no tenant connection or work is configured."
             else:
                 state = "IDLE"
-                detail = "Worker is online and the durable queue is clear."
+                detail = idle_detail
             return ServiceStatus(
                 key=key, name=name, category=category, state=state, detail=detail,
                 desired_state=desired_state, controllable=controllable,
@@ -4097,6 +4099,11 @@ class AdminReadModelsMixin:
                 key="database", name="PostgreSQL", category="CORE", state="RUNNING",
                 detail="Authoritative operational state is reachable.", management_scope="Docker / deployment platform",
                 last_activity_at=now, last_heartbeat_at=now,
+            ),
+            service(
+                "mcp", "MCP server", "CORE",
+                controllable=True, management_scope="This workspace",
+                idle_detail="MCP endpoint is online; agent tool calls are proxied to the API.",
             ),
             service(
                 "github-webhook", "GitHub webhooks", "INGESTION", configured=github_configured,
