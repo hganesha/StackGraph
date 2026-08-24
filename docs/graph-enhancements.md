@@ -6,6 +6,8 @@
 
 **Reviewed:** `d22b301` (Neo4j graph intelligence and embeddings), `821fef2` (merge), `68b13fd` (graph finding routing and documentation)
 
+**Work plans:** [graph-enhancements-backend.md](./graph-enhancements-backend.md) · [graph-enhancements-frontend.md](./graph-enhancements-frontend.md) — this document is the *why*; the lane plans are the *how*, and each owns its own task detail.
+
 **Companion documents:** [graph-and-embeddings-features.md](./graph-and-embeddings-features.md) (the implemented plan), [runbooks/graph-and-embeddings-operations.md](./runbooks/graph-and-embeddings-operations.md) (operations)
 
 **Scope:** what the merged graph and embedding work can now become, in three lanes — (1) more intelligent API services, (2) UI implementation, (3) sequenced actions. Everything below is an increment on merged behavior; nothing here proposes reversing a delivered decision.
@@ -225,54 +227,58 @@ Admin → Services & health shows `graph-intelligence` and `embeddings` as start
 
 Sequenced so each phase is independently shippable and each unblocks the next. Effort is relative, not calendar. "Exit" is the observable condition, in the style the feature plan uses.
 
+This section is the **cross-lane milestone view** — the only place the two lanes are sequenced against each other. Per-task detail (files, acceptance, tests) lives in the lane plans: backend tasks are `BE-*` in [graph-enhancements-backend.md](./graph-enhancements-backend.md), frontend tasks are `FE-*` in [graph-enhancements-frontend.md](./graph-enhancements-frontend.md). The "Lane" column below says which plan owns each row; rows marked *Web + API* split across both and are handed off at the contract.
+
+The two lanes run in parallel rather than in series. `playwright.config.ts` runs end-to-end tests against the fixture client, so the frontend builds and tests a surface as soon as its **contract** is published — not when its implementation lands. The backend lane therefore ships each wire shape in two steps, contract first; the protocol is in its plan.
+
 ### Phase A — Reconcile and surface what already exists
 
 No new computation. Highest value per unit of risk.
 
-| # | Action | Lane | Depends on | Exit |
+| # | Action | Lane tasks | Depends on | Exit |
 |---|---|---|---|---|
-| A1 | Inline similarity decisions in Reviews, with required reason and optional rationale (U1, part of S8) | Web + API | — | A reviewer completes a consolidation decision without leaving Reviews; `application_similarity_feedback` carries a non-constant reason on every new row |
-| A2 | Read models for anomalies, motifs, and bridge edges (S4) | API | — | Each endpoint returns snapshot-backed rows with supporting fact IDs that open the evidence drawer |
-| A3 | Surface anomalies, motifs, communities (U4) | Web | A2 | Each finding class is reachable from Estate or an entity, or is stated as unavailable with a reason |
-| A4 | Hook and surface semantic search (U6, S7 request fields) | Web + API | — | Semantic candidates appear as a labeled group with matched terms and evidence; absent space degrades visibly, never breaks |
-| A5 | Consistency repairs (U8) | Web + API | — | Repository detail carries the panel; both detail pages load intelligence the same way |
+| A1 | Inline similarity decisions in Reviews, with required reason and optional rationale (U1, part of S8) | FE-A1 · BE-A1 | — | A reviewer completes a consolidation decision without leaving Reviews; `application_similarity_feedback` carries a non-constant reason on every new row |
+| A2 | Read models for anomalies, motifs, and bridge edges (S4) | BE-A2 | — | Each endpoint returns snapshot-backed rows with supporting fact IDs that open the evidence drawer |
+| A3 | Surface anomalies, motifs, communities (U4) | FE-A2 · FE-A3 | A2 | Each finding class is reachable from Estate or an entity, or is stated as unavailable with a reason |
+| A4 | Hook and surface semantic search (U6, S7 request fields) | FE-A4 · BE-A3 | — | Semantic candidates appear as a labeled group with matched terms and evidence; absent space degrades visibly, never breaks |
+| A5 | Consistency repairs (U8) | FE-A5 · FE-A6 · BE-A4 | — | Repository detail carries the panel; both detail pages load intelligence the same way |
 
 ### Phase B — One risk method, one ranking
 
-The flagship change. Do not start before Phase A: A2 and A3 establish the finding-surface pattern this phase reuses.
+The flagship change. Its backend half (`BE-B1`) has no dependency and can run alongside Phase A; its frontend half should not, because `FE-A2`/`FE-A3` establish the finding-surface pattern `FE-B1` reuses. This is the clearest case for the lanes moving at different speeds.
 
-| # | Action | Lane | Depends on | Exit |
+| # | Action | Lane tasks | Depends on | Exit |
 |---|---|---|---|---|
-| B1 | Move composite weights into `graph_analysis_policy.configuration`; publish `policy_version` and `policy_hash` on every risk response (S1) | API + migration | — | Changing a tenant's weighting requires no release; the response explains the number it returned |
-| B2 | Compose structural + business + exposure + lifecycle families with renormalization and per-family contributions (S1) | API | B1 | Scores are reproducible from a snapshot plus a policy hash; every absent family emits a limitation |
-| B3 | Materialize `graph_entity_risk` at run completion; serve ranked, filtered, cursor-paginated risks (S2) | Worker + API + migration | B2 | The endpoint no longer loads the full metric set per request; filters and cursor are covered by tests |
-| B4 | Route the `systemic_dependency_risk` report to the composite and retire the divergent SQL heuristic (S1) | API | B2 | `/ask` cannot show two different rankings of one question |
-| B5 | Explainable Architecture risk cards (U3) | Web | B2 | Each card states its family contributions and any renormalization |
+| B1 | Move composite weights into `graph_analysis_policy.configuration`; publish `policy_version` and `policy_hash` on every risk response (S1) | BE-B1 | — | Changing a tenant's weighting requires no release; the response explains the number it returned |
+| B2 | Compose structural + business + exposure + lifecycle families with renormalization and per-family contributions (S1) | BE-B2 | B1 | Scores are reproducible from a snapshot plus a policy hash; every absent family emits a limitation |
+| B3 | Materialize `graph_entity_risk` at run completion; serve ranked, filtered, cursor-paginated risks (S2) | BE-B3 | B2 | The endpoint no longer loads the full metric set per request; filters and cursor are covered by tests |
+| B4 | Route the `systemic_dependency_risk` report to the composite and retire the divergent SQL heuristic (S1) | BE-B4 | B2 | `/ask` cannot show two different rankings of one question |
+| B5 | Explainable Architecture risk cards (U3) | FE-B1 | B2 | Each card states its family contributions and any renormalization |
 
 ### Phase C — Ranked lenses and the graph that shows what it knows
 
-| # | Action | Lane | Depends on | Exit |
+| # | Action | Lane tasks | Depends on | Exit |
 |---|---|---|---|---|
-| C1 | Graph fields on `RankedItem`; `sort` on `/estate/summary` (S3) | API | B3 | Estate ranks by structural signal in one request; an unavailable sort is a typed error |
-| C2 | Estate ranked lenses (U2) | Web | C1 | An architect reaches the most structurally critical entity without knowing its name |
-| C3 | Intelligence on graph nodes and edges (S10) | API | B3 | Bounded neighborhoods carry status, risk, community, and bridge flags |
-| C4 | Structural encoding in the graph lens (U5) | Web | C3 | Articulation points and bridge edges are visually distinct and explained on selection |
+| C1 | Graph fields on `RankedItem`; `sort` on `/estate/summary` (S3) | BE-C1 | B3 | Estate ranks by structural signal in one request; an unavailable sort is a typed error |
+| C2 | Estate ranked lenses (U2) | FE-C1 | C1 | An architect reaches the most structurally critical entity without knowing its name |
+| C3 | Intelligence on graph nodes and edges (S10) | BE-C2 | B3 | Bounded neighborhoods carry status, risk, community, and bridge flags |
+| C4 | Structural encoding in the graph lens (U5) | FE-C2 | C3 | Articulation points and bridge edges are visually distinct and explained on selection |
 
 ### Phase D — Ask becomes retrieval-grounded
 
-| # | Action | Lane | Depends on | Exit |
+| # | Action | Lane tasks | Depends on | Exit |
 |---|---|---|---|---|
-| D1 | `resolve_entities` tool backed by tenant-scoped semantic search (S5) | API | A4 | A question naming an entity resolves it; the response names what it resolved and its score |
-| D2 | Graph-backed query kinds with stated SQL fallback (S6) | API | B2 | Structural questions answer from snapshots when covered, from SQL with a limitation when not |
-| D3 | Resolution and structural provenance in the Ask answer presentation | Web | D1, D2 | A wrong resolution is visible to the reader, not silent |
+| D1 | `resolve_entities` tool backed by tenant-scoped semantic search (S5) | BE-D1 | A4 | A question naming an entity resolves it; the response names what it resolved and its score |
+| D2 | Graph-backed query kinds with stated SQL fallback (S6) | BE-D2 | B2 | Structural questions answer from snapshots when covered, from SQL with a limitation when not |
+| D3 | Resolution and structural provenance in the Ask answer presentation | FE-D1 | D1, D2 | A wrong resolution is visible to the reader, not silent |
 
 ### Phase E — Operate it
 
-| # | Action | Lane | Depends on | Exit |
+| # | Action | Lane tasks | Depends on | Exit |
 |---|---|---|---|---|
-| E1 | Analysis-request, backfill, and promotion endpoints, audited and gate-enforcing (S9) | API | — | Promotion refuses a space failing coverage or evaluation; every promotion writes an audit row in the same transaction |
-| E2 | Admin space comparison, promotion, rollback, and weight configuration (U7) | Web | E1, B1 | An operator promotes an evaluated space and configures weights without a shell |
-| E3 | Generalized similarity across Technology and Capability (S8) | API + worker | A1 | Per-kind method versions with unchanged explainability contract |
+| E1 | Analysis-request, backfill, and promotion endpoints, audited and gate-enforcing (S9) | BE-E1 | — | Promotion refuses a space failing coverage or evaluation; every promotion writes an audit row in the same transaction |
+| E2 | Admin space comparison, promotion, rollback, and weight configuration (U7) | FE-E1 | E1, B1 | An operator promotes an evaluated space and configures weights without a shell |
+| E3 | Generalized similarity across Technology and Capability (S8) | BE-E2 | A1 | Per-kind method versions with unchanged explainability contract |
 
 ### Deferred, deliberately
 
