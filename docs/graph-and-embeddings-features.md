@@ -4,6 +4,8 @@
 
 **Source reviewed:** [Enterprise graph embeddings.md](./Enterprise%20graph%20embeddings.md)
 
+**Enhancement review:** [graph-enhancements.md](./graph-enhancements.md) — post-merge gap review and sequenced actions for API services and UI
+
 **Decision summary:** build a separate `graph-intelligence` worker and use Neo4j as the tenant-scoped, asynchronous graph projection and GDS execution engine. Keep PostgreSQL as the only authoritative store for entities, facts, evidence, reviews, jobs, graph-analysis snapshots, and pgvector embeddings. A Neo4j graph is disposable and fully rebuildable from PostgreSQL. Compute explainable graph metrics before introducing graph embeddings. Use embeddings to retrieve and rank candidates; never treat vector similarity as proof or as an authoritative graph relationship.
 
 ## Implementation outcome
