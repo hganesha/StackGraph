@@ -388,6 +388,9 @@ class GitHubAcquisitionTests(unittest.TestCase):
         self.assertEqual(manifest_kind("compose.production.yaml"), "DEPLOYMENT_CONFIG")
         self.assertEqual(manifest_kind("docker-compose.dev.yml"), "DEPLOYMENT_CONFIG")
         self.assertEqual(manifest_kind("Dockerfile.worker"), "DEPLOYMENT_CONFIG")
+        self.assertEqual(manifest_kind("openapi.json"), "API_CONTRACT")
+        self.assertEqual(manifest_kind("services/billing/billing.openapi.yaml"), "API_CONTRACT")
+        self.assertEqual(manifest_kind("docs/swagger-v2.yml"), "API_CONTRACT")
         self.assertEqual(manifest_kind("config/database.properties"), "BUILD_OR_DEPLOYMENT_CONFIG")
         self.assertEqual(manifest_kind_or_none("../index.ts"), "UNSAFE_TARGET")
 

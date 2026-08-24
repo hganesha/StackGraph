@@ -466,6 +466,130 @@ class RepositoryScannerTests(unittest.TestCase):
                 for fact in service_facts
             ))
 
+    def test_openapi_contract_emits_service_api_and_operation_profile(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "contracts").mkdir()
+            (root / "contracts" / "openapi.json").write_text(json.dumps({
+                "openapi": "3.1.0",
+                "info": {
+                    "title": "Invoice Service",
+                    "version": "2026-08",
+                    "description": "Creates and retrieves customer invoices.",
+                },
+                "servers": [{"url": "https://billing.example.test"}],
+                "tags": [{"name": "invoices"}],
+                "paths": {
+                    "/invoices": {
+                        "get": {
+                            "operationId": "listInvoices",
+                            "tags": ["invoices"],
+                            "responses": {"200": {"description": "ok"}},
+                        },
+                        "post": {
+                            "operationId": "createInvoice",
+                            "tags": ["invoices"],
+                            "responses": {"201": {"description": "created"}},
+                        },
+                    },
+                    "/health": {
+                        "get": {"responses": {"200": {"description": "ok"}}},
+                    },
+                },
+                "components": {
+                    "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
+                },
+            }))
+
+            result = scan_repository(request(root))
+
+        service = next(
+            fact["subject"] for fact in result["facts"]
+            if fact["predicate"] == "IMPLEMENTED_BY"
+            and fact.get("subject", {}).get("type") == "Service"
+        )
+        self.assertEqual(service["name"], "Invoice Service")
+        exposed = next(
+            fact for fact in result["facts"]
+            if fact["predicate"] == "EXPOSES"
+        )
+        self.assertEqual(exposed["subject"]["key"], service["key"])
+        self.assertEqual(exposed["object_entity"]["type"], "API")
+        self.assertEqual(exposed["object_entity"]["name"], "Invoice Service")
+        self.assertEqual(exposed["evidence"][0]["type"], "API_CONTRACT")
+        profile = next(
+            fact["object_value"] for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "openapi_service_profile"
+        )
+        self.assertEqual(profile["specification_version"], "3.1.0")
+        self.assertEqual(profile["service_version"], "2026-08")
+        self.assertEqual(profile["path_count"], 2)
+        self.assertEqual(profile["operation_count"], 3)
+        self.assertEqual(profile["operation_id_count"], 2)
+        self.assertEqual(profile["methods"], ["GET", "POST"])
+        self.assertEqual(profile["tags"], ["invoices"])
+        self.assertEqual(profile["server_count"], 1)
+        self.assertEqual(profile["security_scheme_count"], 1)
+        self.assertEqual(result["stats"]["services_discovered"], 1)
+        self.assertEqual(result["stats"]["api_contracts_discovered"], 1)
+        self.assertEqual(result["stats"]["api_operations_discovered"], 3)
+
+    def test_openapi_enriches_single_compose_service_without_inflating_count(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "compose.yaml").write_text(
+                "services:\n  api:\n    build: .\n"
+            )
+            (root / "openapi.yaml").write_text(
+                "openapi: 3.0.3\n"
+                "info:\n  title: Billing public API\n  version: 1.0.0\n"
+                "paths:\n  /charges:\n    post:\n      responses:\n"
+                "        '201':\n          description: created\n"
+            )
+
+            result = scan_repository(request(root))
+
+        services = {
+            entity["name"]
+            for fact in result["facts"]
+            for entity in (fact.get("subject"), fact.get("object_entity"))
+            if entity and entity.get("type") == "Service"
+        }
+        self.assertEqual(services, {"api"})
+        exposed = next(fact for fact in result["facts"] if fact["predicate"] == "EXPOSES")
+        self.assertEqual(exposed["subject"]["name"], "api")
+        self.assertEqual(exposed["object_entity"]["name"], "Billing public API")
+        self.assertEqual(result["stats"]["services_discovered"], 1)
+        self.assertEqual(result["stats"]["api_contracts_discovered"], 1)
+
+    def test_openapi_title_matches_service_in_multi_service_repository(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "compose.yaml").write_text(
+                "services:\n"
+                "  billing-api:\n    build: ./services/billing\n"
+                "  notifications-worker:\n    build: ./services/notifications\n"
+            )
+            (root / "services" / "billing").mkdir(parents=True)
+            (root / "services" / "billing" / "openapi.json").write_text(json.dumps({
+                "openapi": "3.0.3",
+                "info": {"title": "Billing public API", "version": "1.0.0"},
+                "paths": {},
+            }))
+
+            result = scan_repository(request(root))
+
+        services = {
+            entity["name"]
+            for fact in result["facts"]
+            for entity in (fact.get("subject"), fact.get("object_entity"))
+            if entity and entity.get("type") == "Service"
+        }
+        self.assertEqual(services, {"billing-api", "notifications-worker"})
+        exposed = next(fact for fact in result["facts"] if fact["predicate"] == "EXPOSES")
+        self.assertEqual(exposed["subject"]["name"], "billing-api")
+        self.assertEqual(result["stats"]["services_discovered"], 2)
+
     def test_dockerfile_is_a_provisional_service_fallback(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

@@ -26,6 +26,9 @@
         "code_units_emitted": {"type": "integer", "minimum": 0},
         "pass_a_inventory_items": {"type": "integer", "minimum": 0},
         "material_findings_emitted": {"type": "integer", "minimum": 0},
+        "services_discovered": {"type": "integer", "minimum": 0},
+        "api_contracts_discovered": {"type": "integer", "minimum": 0},
+        "api_operations_discovered": {"type": "integer", "minimum": 0},
         "phase_timings_ms": {
           "type": "object",
           "required": ["pass_a_inventory", "pass_b_refinement"],

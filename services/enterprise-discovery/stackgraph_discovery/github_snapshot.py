@@ -26,7 +26,7 @@ from .github_client import (
 )
 
 
-ADAPTER_VERSION = "github-repository-snapshot/1.3.0"
+ADAPTER_VERSION = "github-repository-snapshot/1.4.0"
 REPOSITORY_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 INSTALLATION_ID = re.compile(r"^[0-9]+$")
 GIT_OBJECT_ID = re.compile(r"^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$")
@@ -564,6 +564,8 @@ def manifest_kind(path: str) -> str | None:
         return "DEPLOYMENT_CONFIG"
     if COMPOSE_FILE.fullmatch(lower_name):
         return "DEPLOYMENT_CONFIG"
+    if _is_openapi_file(lower_name):
+        return "API_CONTRACT"
     if (
         (lower_name.startswith(".env.") or lower_name.startswith("env."))
         and lower_name.endswith((".example", ".sample", ".template"))
@@ -596,6 +598,19 @@ def manifest_kind(path: str) -> str | None:
     ):
         return "BUILD_OR_DEPLOYMENT_CONFIG"
     return None
+
+
+def _is_openapi_file(name: str) -> bool:
+    """Recognize conventional OpenAPI/Swagger contract filenames.
+
+    Requiring an OpenAPI or Swagger token avoids downloading every JSON/YAML file;
+    the repository scanner still validates the document signature before using it.
+    """
+    pure_name = PurePosixPath(name).name.lower()
+    if PurePosixPath(pure_name).suffix not in {".json", ".yaml", ".yml"}:
+        return False
+    stem = pure_name.rsplit(".", 1)[0]
+    return bool({"openapi", "swagger"} & set(re.split(r"[._-]+", stem)))
 
 
 def materialize_snapshot(
@@ -736,6 +751,7 @@ def manifest_kind_or_none(path: str) -> str | None:
             or name.lower() == "dockerfile"
             or name.lower().startswith("dockerfile.")
             or COMPOSE_FILE.fullmatch(name.lower()) is not None
+            or _is_openapi_file(name)
             or (
                 (name.lower().startswith(".env.") or name.lower().startswith("env."))
                 and name.lower().endswith((".example", ".sample", ".template"))

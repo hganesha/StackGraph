@@ -42,7 +42,7 @@ export default async function ApplicationsPage({
           linkServicesToParent={services}
           emptyTitle={services ? "No services have been inferred yet." : "No applications have been modeled yet."}
           emptyBody={services
-            ? "Services appear after repository scans find local Compose builds, Kubernetes workloads, or Dockerfile service boundaries."
+            ? "Services appear after repository scans find OpenAPI contracts, local Compose builds, Kubernetes workloads, or Dockerfile service boundaries."
             : "Repository scans can complete before application boundaries are inferred or curated. Review the connected repositories or run a new scan after enabling application discovery."}
         />
       </Suspense>

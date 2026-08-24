@@ -10,8 +10,8 @@ It supports public repositories without authentication and private/customer repo
 - Resolves the default branch to an exact commit and tree SHA.
 - Stops before tree or blob retrieval when `--previous-revision` matches.
 - Lists the Git tree and downloads known JavaScript/TypeScript and Python dependency,
-  source, and repository-hygiene files such as README, LICENSE, CODEOWNERS, CI,
-  lockfiles, and test configuration.
+  source, API contract, and repository-hygiene files such as OpenAPI/Swagger documents,
+  README, LICENSE, CODEOWNERS, CI, lockfiles, and test configuration.
 - Enforces per-file, total-byte, and file-count limits.
 - Marks snapshots `PARTIAL` when GitHub truncates the tree or a configured limit skips a target file.
 - Writes an immutable, revision-addressed directory containing retrieved files, `snapshot.json`, and a contract-v1 `raw-observation.json` envelope.
@@ -75,6 +75,10 @@ are emitted only for complete source scans and always include limitations.
 Repository profiles also record deterministic README, license, ownership, CI,
 dependency-lockfile, and test-presence signals. Downstream absence rules evaluate
 those signals only when the source snapshot is `COMPLETE`.
+OpenAPI 3.x and Swagger 2.0 contracts emit logical Service and API entities linked by
+`EXPOSES`, plus evidence-backed specification version, service version, path,
+operation, method, tag, server, and security-scheme counts. A contract enriches an
+unambiguous Compose or Kubernetes service rather than creating a duplicate.
 When the request contains the snapshot `blob_uri`, checksum, and size descriptor,
 every file evidence reference points to its exact archive member.
 

@@ -8,6 +8,9 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="STACKGRAPH_",
@@ -20,7 +23,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://stackgraph_app:stackgraph_app@localhost:5432/stackgraph"
     db_pool_min_size: int = Field(default=1, ge=1)
     db_pool_max_size: int = Field(default=5, ge=1)
-    default_tenant_id: UUID | None = None
+    default_tenant_id: UUID | None = DEFAULT_TENANT_ID
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"
     auth_mode: Literal["development", "signed_session", "oidc"] = "development"
     auth_session_secret: str | None = None
@@ -74,6 +77,11 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_auth(self) -> "Settings":
         normalized_environment = self.environment.strip().lower()
+        if normalized_environment in {"production", "prod"} and (
+            "default_tenant_id" not in self.model_fields_set
+            or self.default_tenant_id is None
+        ):
+            raise ValueError("default_tenant_id must be explicitly configured in production")
         if normalized_environment in {"production", "prod"} and self.auth_mode == "development":
             raise ValueError("development auth mode is not allowed in production")
         keys = self.session_keys

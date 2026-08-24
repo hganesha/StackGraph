@@ -1248,6 +1248,11 @@ class ReadModelStore(AdminReadModelsMixin):
               count(*) FILTER (
                 WHERE e.namespace='ENTERPRISE' AND e.entity_type='Service'
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+                  AND EXISTS (
+                    SELECT 1 FROM current_relationship active_service
+                    WHERE active_service.tenant_id=e.tenant_id
+                      AND (active_service.source_entity_id=e.id OR active_service.target_entity_id=e.id)
+                  )
               ) AS services,
               count(*) FILTER (
                 WHERE e.namespace='TECHNOLOGY' AND e.entity_type<>'Capability'
@@ -1363,7 +1368,15 @@ class ReadModelStore(AdminReadModelsMixin):
              AND community.entity_id=e.id AND community.algorithm_key='wcc'
             WHERE (
                 (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service')
-                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope))
+                  AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
+                  AND (
+                    e.entity_type<>'Service'
+                    OR EXISTS (
+                      SELECT 1 FROM current_relationship active_service
+                      WHERE active_service.tenant_id=e.tenant_id
+                        AND (active_service.source_entity_id=e.id OR active_service.target_entity_id=e.id)
+                    )
+                  ))
                 OR (e.namespace='BUSINESS' AND e.entity_type='BusinessCapability'
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
                   AND EXISTS (

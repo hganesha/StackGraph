@@ -26,7 +26,8 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.9.1"
+SCANNER_VERSION = "1.10.0"
+HTTP_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
     r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]+\])?\s*([^;\s]+)?"
@@ -306,6 +307,14 @@ class CodeUnit:
     vendored_identity_source: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class OpenApiDefinition:
+    path: str
+    line: int
+    title: str
+    metadata: Mapping[str, Any]
+
+
 @dataclass(slots=True)
 class Dependency:
     ecosystem: str
@@ -430,6 +439,25 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         )
     )
     facts.extend(_code_unit_facts(scan_input, code_units))
+    service_keys = {
+        entity["key"]
+        for fact in facts
+        for entity in (fact.get("subject"), fact.get("object_entity"))
+        if isinstance(entity, Mapping) and entity.get("type") == "Service"
+    }
+    api_keys = {
+        entity["key"]
+        for fact in facts
+        for entity in (fact.get("subject"), fact.get("object_entity"))
+        if isinstance(entity, Mapping) and entity.get("type") == "API"
+    }
+    api_operations = sum(
+        int(value.get("operation_count") or 0)
+        for fact in facts
+        if fact.get("predicate") == "HAS_PROPERTY"
+        and isinstance((value := fact.get("object_value")), Mapping)
+        and value.get("record_kind") == "openapi_service_profile"
+    )
     material_findings = sum(
         fact.get("predicate") == "HAS_PROPERTY"
         and isinstance(fact.get("object_value"), Mapping)
@@ -454,6 +482,9 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
             "code_units_emitted": len(code_units),
             "pass_a_inventory_items": len(dependencies) + len(inventory_facts),
             "material_findings_emitted": material_findings,
+            "services_discovered": len(service_keys),
+            "api_contracts_discovered": len(api_keys),
+            "api_operations_discovered": api_operations,
             "phase_timings_ms": {
                 "pass_a_inventory": pass_a_ms,
                 "pass_b_refinement": max(0, duration_ms - pass_a_ms),
@@ -2337,13 +2368,16 @@ def _service_boundary_facts(
     contents: Mapping[str, bytes],
     diagnostics: list[Diagnostic],
 ) -> list[dict[str, Any]]:
-    """Emit logical services only from explicit code or infrastructure definitions.
+    """Emit logical services from API contracts and explicit deployment definitions.
 
     Named Compose builds and Kubernetes workloads are stronger boundaries than a bare
-    Dockerfile. A Dockerfile is therefore used only as a repository-local fallback when
-    no named service definition exists. Image-only Compose dependencies remain deployment
-    resources so databases and brokers are not promoted into enterprise services.
+    Dockerfile. OpenAPI/Swagger contracts are declared service boundaries and are linked
+    to an existing deployment when the match is unambiguous. A Dockerfile is used only as
+    a repository-local fallback when neither a named deployment nor an API contract exists.
+    Image-only Compose dependencies remain deployment resources so databases and brokers
+    are not promoted into enterprise services.
     """
+    openapi_definitions = _openapi_definitions(scan_input, contents, diagnostics)
     definitions: list[tuple[str, int, str, str, dict[str, str], float]] = []
     for path, content in sorted(contents.items()):
         name = PurePosixPath(path).name.lower()
@@ -2392,7 +2426,7 @@ def _service_boundary_facts(
                     0.9,
                 ))
 
-    if not definitions:
+    if not definitions and not openapi_definitions:
         for path, content in sorted(contents.items()):
             name = PurePosixPath(path).name.lower()
             if name != "dockerfile" and not name.startswith("dockerfile."):
@@ -2440,6 +2474,48 @@ def _service_boundary_facts(
             properties,
             confidence=confidence,
         ))
+
+    deployment_names = sorted({definition[2] for definition in definitions})
+    emitted_service_keys = {
+        fact["subject"]["key"]
+        for fact in facts
+        if fact.get("predicate") == "IMPLEMENTED_BY"
+        and fact.get("subject", {}).get("type") == "Service"
+    }
+    for definition in openapi_definitions:
+        service_name = _openapi_service_name(
+            scan_input, definition, deployment_names,
+        )
+        service = _service_ref(scan_input, service_name)
+        api = _api_ref(scan_input, definition.path, definition.title)
+        properties = {
+            "source_kind": "OPENAPI_CONTRACT",
+            "boundary_strategy": "OPENAPI_CONTRACT",
+            "provisional": False,
+            "service_name": service_name,
+            **definition.metadata,
+        }
+        if service["key"] not in emitted_service_keys:
+            facts.append(_entity_relationship_fact(
+                scan_input, definition.path, definition.line, service,
+                "IMPLEMENTED_BY", _repository_ref(scan_input), properties,
+                evidence_type="API_CONTRACT",
+            ))
+            facts.append(_entity_relationship_fact(
+                scan_input, definition.path, definition.line, application,
+                "CONTAINS", service, properties,
+                assertion_class="INFERRED",
+                evidence_type="API_CONTRACT",
+            ))
+            emitted_service_keys.add(service["key"])
+        facts.append(_entity_relationship_fact(
+            scan_input, definition.path, definition.line, service,
+            "EXPOSES", api, properties,
+            evidence_type="API_CONTRACT",
+        ))
+        facts.append(_openapi_profile_fact(
+            scan_input, definition, service, api, properties,
+        ))
     return facts
 
 
@@ -2468,6 +2544,232 @@ def _dockerfile_service_name(scan_input: ScanInput, path: str) -> str:
     if str(parent) != ".":
         return parent.name
     return scan_input.repository_name
+
+
+def _openapi_definitions(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    diagnostics: list[Diagnostic],
+) -> list[OpenApiDefinition]:
+    definitions: list[OpenApiDefinition] = []
+    for path, content in sorted(contents.items()):
+        if manifest_kind(path) != "API_CONTRACT":
+            continue
+        try:
+            text = content.decode("utf-8")
+            document = (
+                json.loads(text)
+                if PurePosixPath(path).suffix.lower() == ".json"
+                else yaml.safe_load(text)
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as error:
+            diagnostics.append(Diagnostic(
+                "ERROR", "INVALID_API_CONTRACT", str(error), path,
+            ))
+            continue
+        if not isinstance(document, Mapping):
+            diagnostics.append(Diagnostic(
+                "WARNING", "INVALID_API_CONTRACT_SIGNATURE",
+                "OpenAPI/Swagger contract must be an object", path,
+            ))
+            continue
+        openapi_version = document.get("openapi")
+        swagger_version = document.get("swagger")
+        if not (
+            isinstance(openapi_version, str) and openapi_version.startswith("3.")
+        ) and swagger_version != "2.0":
+            diagnostics.append(Diagnostic(
+                "WARNING", "INVALID_API_CONTRACT_SIGNATURE",
+                "Contract does not declare a supported OpenAPI 3.x or Swagger 2.0 version",
+                path,
+            ))
+            continue
+
+        info = document.get("info") if isinstance(document.get("info"), Mapping) else {}
+        raw_title = info.get("title")
+        title = raw_title.strip() if isinstance(raw_title, str) and raw_title.strip() else ""
+        if not title:
+            parent = PurePosixPath(path).parent
+            title = parent.name if str(parent) != "." else scan_input.repository_name
+            diagnostics.append(Diagnostic(
+                "WARNING", "OPENAPI_TITLE_MISSING",
+                f"Contract info.title is missing; using {title!r} as the service name",
+                path,
+            ))
+        paths = document.get("paths") if isinstance(document.get("paths"), Mapping) else {}
+        methods: set[str] = set()
+        tags: set[str] = set()
+        operation_count = 0
+        operation_id_count = 0
+        for path_item in paths.values():
+            if not isinstance(path_item, Mapping):
+                continue
+            for method, operation in path_item.items():
+                normalized_method = str(method).lower()
+                if normalized_method not in HTTP_METHODS or not isinstance(operation, Mapping):
+                    continue
+                methods.add(normalized_method.upper())
+                operation_count += 1
+                if isinstance(operation.get("operationId"), str) and operation["operationId"].strip():
+                    operation_id_count += 1
+                operation_tags = operation.get("tags")
+                if isinstance(operation_tags, list):
+                    tags.update(
+                        value.strip() for value in operation_tags
+                        if isinstance(value, str) and value.strip()
+                    )
+        declared_tags = document.get("tags")
+        if isinstance(declared_tags, list):
+            tags.update(
+                str(value["name"]).strip() for value in declared_tags
+                if isinstance(value, Mapping) and isinstance(value.get("name"), str)
+                and str(value["name"]).strip()
+            )
+        components = document.get("components") if isinstance(document.get("components"), Mapping) else {}
+        security_schemes = (
+            components.get("securitySchemes")
+            if isinstance(components.get("securitySchemes"), Mapping)
+            else document.get("securityDefinitions")
+        )
+        servers = document.get("servers")
+        server_count = len(servers) if isinstance(servers, list) else int(bool(document.get("host")))
+        description = info.get("description")
+        metadata: dict[str, Any] = {
+            "contract_format": "OPENAPI" if isinstance(openapi_version, str) else "SWAGGER",
+            "specification_version": str(openapi_version or swagger_version),
+            "contract_path": path,
+            "path_count": len(paths),
+            "operation_count": operation_count,
+            "operation_id_count": operation_id_count,
+            "methods": sorted(methods),
+            "tags": sorted(tags)[:100],
+            "server_count": server_count,
+            "security_scheme_count": len(security_schemes) if isinstance(security_schemes, Mapping) else 0,
+        }
+        service_version = info.get("version")
+        if isinstance(service_version, str) and service_version.strip():
+            metadata["service_version"] = service_version.strip()[:200]
+        if isinstance(description, str) and description.strip():
+            metadata["description"] = re.sub(r"\s+", " ", description).strip()[:1000]
+        title_pattern = re.compile(r"^[ \t]*(?:[\"']?title[\"']?)[ \t]*:", re.M)
+        title_match = title_pattern.search(text)
+        line = text.count("\n", 0, title_match.start()) + 1 if title_match else 1
+        definitions.append(OpenApiDefinition(path, line, title[:300], metadata))
+    return definitions
+
+
+def _openapi_service_name(
+    scan_input: ScanInput,
+    definition: OpenApiDefinition,
+    deployment_names: list[str],
+) -> str:
+    title_key = _service_name_key(definition.title)
+    title_tokens = _service_identity_tokens(definition.title)
+    exact = [
+        name for name in deployment_names
+        if _service_name_key(name) == title_key
+        or (title_tokens and _service_identity_tokens(name) == title_tokens)
+    ]
+    if len(exact) == 1:
+        return exact[0]
+    parent = PurePosixPath(definition.path).parent
+    parent_keys = {
+        _service_name_key(part) for part in parent.parts
+        if part not in {".", "docs", "api", "spec", "specs"}
+    }
+    directory_matches = [
+        name for name in deployment_names
+        if any(
+            _service_name_key(name) == parent_key
+            or (
+                len(parent_key) >= 3
+                and (
+                    _service_name_key(name).startswith(parent_key)
+                    or parent_key.startswith(_service_name_key(name))
+                )
+            )
+            for parent_key in parent_keys
+        )
+    ]
+    if len(directory_matches) == 1:
+        return directory_matches[0]
+    if len(deployment_names) == 1:
+        return deployment_names[0]
+    return definition.title or scan_input.repository_name
+
+
+def _service_name_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _service_identity_tokens(value: str) -> frozenset[str]:
+    generic = {"api", "http", "internal", "openapi", "public", "rest", "service", "swagger"}
+    return frozenset(
+        token for token in re.findall(r"[a-z0-9]+", value.casefold())
+        if token not in generic
+    )
+
+
+def _api_ref(scan_input: ScanInput, path: str, title: str) -> dict[str, str]:
+    return {
+        "namespace": "ENTERPRISE",
+        "type": "API",
+        "key": f"api:{scan_input.repository_key}:{quote(path, safe='.-_~/')}",
+        "name": title,
+    }
+
+
+def _openapi_profile_fact(
+    scan_input: ScanInput,
+    definition: OpenApiDefinition,
+    service: Mapping[str, str],
+    api: Mapping[str, str],
+    properties: Mapping[str, Any],
+) -> dict[str, Any]:
+    value = {
+        "record_kind": "openapi_service_profile",
+        "service_name": service["name"],
+        "api_key": api["key"],
+        "api_name": api["name"],
+        **definition.metadata,
+    }
+    evidence = Evidence(
+        path=definition.path,
+        evidence_type="API_CONTRACT",
+        content_hash=_content_hash_from_evidence_context(
+            definition.path, scan_input.checkout_root,
+        ),
+        locator={
+            "path": definition.path,
+            "line_start": definition.line,
+            "line_end": definition.line,
+            "json_pointer": "/info",
+        },
+        excerpt_hash=sha256_key(definition.path, definition.line, value),
+        metadata=properties,
+    )
+    return {
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "service": service["key"],
+            "profile": value,
+            "path": definition.path,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": dict(service),
+        "predicate": "HAS_PROPERTY",
+        "object_value": value,
+        "assertion_class": "DECLARED",
+        "confidence": 1,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": dict(properties),
+        "evidence": [_evidence_dict(evidence, scan_input)],
+    }
 
 
 def _application_ref(scan_input: ScanInput) -> dict[str, str]:
@@ -3200,10 +3502,11 @@ def _entity_relationship_fact(
     *,
     assertion_class: str = "DECLARED",
     confidence: float = 1,
+    evidence_type: str = "DEPLOYMENT_CONFIG",
 ) -> dict[str, Any]:
     evidence = Evidence(
         path=path,
-        evidence_type="DEPLOYMENT_CONFIG",
+        evidence_type=evidence_type,
         content_hash=_content_hash_from_evidence_context(path, scan_input.checkout_root),
         locator={"path": path, "line_start": line, "line_end": line},
         excerpt_hash=sha256_key(path, line, predicate, object_entity["key"]),
@@ -3239,6 +3542,7 @@ def _application_boundary_evidence_path(contents: Mapping[str, bytes]) -> str | 
     preferred_names = (
         "package.json", "pyproject.toml", "requirements.txt", "Dockerfile",
         "compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
+        "openapi.json", "openapi.yaml", "openapi.yml",
     )
     for name in preferred_names:
         matches = sorted(path for path in contents if PurePosixPath(path).name == name)
