@@ -2,7 +2,10 @@ name: stackgraph
 
 services:
   database:
-    image: apache/age:release_PG16_1.6.0
+    image: stackgraph-postgres:pg16-pgvector
+    build:
+      context: .
+      dockerfile: infrastructure/database/Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${STACKGRAPH_DB_NAME:-stackgraph}
@@ -16,7 +19,6 @@ services:
       - stackgraph_postgres_data:/var/lib/postgresql/data
       - ./infrastructure/database/init/005-create-app-role.sh:/docker-entrypoint-initdb.d/005-create-app-role.sh:ro
       - ./stackgraph-foundation/schema.sql:/docker-entrypoint-initdb.d/010-schema.sql:ro
-      - ./infrastructure/database/init/020-create-graph.sql:/docker-entrypoint-initdb.d/020-create-graph.sql:ro
       - ./infrastructure/database/init/030-grant-app-role.sh:/docker-entrypoint-initdb.d/030-grant-app-role.sh:ro
       - ./infrastructure/database/tests:/stackgraph/tests:ro
     healthcheck:
@@ -27,6 +29,28 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  neo4j:
+    image: neo4j:2026.07.1
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      NEO4J_PLUGINS: '["graph-data-science"]'
+    ports:
+      - "127.0.0.1:${STACKGRAPH_NEO4J_HTTP_PORT:-7474}:7474"
+      - "127.0.0.1:${STACKGRAPH_NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - stackgraph_neo4j_data:/data
+      - stackgraph_neo4j_plugins:/plugins
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - cypher-shell -a neo4j://localhost:7687 -u neo4j -p "$$STACKGRAPH_NEO4J_PASSWORD" "RETURN 1" >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
 
   api:
     build:
@@ -41,6 +65,7 @@ services:
       STACKGRAPH_DB_POOL_MAX_SIZE: ${STACKGRAPH_DB_POOL_MAX_SIZE:-5}
       STACKGRAPH_GRAPH_READ_MODE: ${STACKGRAPH_GRAPH_READ_MODE:-auto}
       STACKGRAPH_GRAPH_AGE_TIMEOUT_SECONDS: ${STACKGRAPH_GRAPH_AGE_TIMEOUT_SECONDS:-3}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
       STACKGRAPH_CORS_ALLOWED_ORIGINS: ${STACKGRAPH_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://127.0.0.1:3100,http://localhost:5173}
       STACKGRAPH_AUTH_MODE: ${STACKGRAPH_AUTH_MODE:-development}
       STACKGRAPH_AUTH_SESSION_SECRET: ${STACKGRAPH_AUTH_SESSION_SECRET:-}
@@ -174,6 +199,77 @@ services:
       database:
         condition: service_healthy
 
+  neo4j-register:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_NEO4J_URI: neo4j://neo4j:7687
+      STACKGRAPH_NEO4J_DATABASE: neo4j
+      STACKGRAPH_NEO4J_USERNAME: neo4j
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+    entrypoint: ["python", "-m", "stackgraph_data.neo4j_project"]
+    command:
+      - register-local
+      - --tenant-id
+      - ${STACKGRAPH_DEFAULT_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+      - --create-local-tenant
+    depends_on:
+      database:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  neo4j-projection:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+    entrypoint: ["python", "-m", "stackgraph_data.neo4j_project"]
+    command: ["work"]
+    depends_on:
+      database:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  graph-intelligence:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: services/intelligence/graph-intelligence/Dockerfile
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      STACKGRAPH_GDS_CONCURRENCY: ${STACKGRAPH_GDS_CONCURRENCY:-2}
+      STACKGRAPH_GDS_MAX_PROJECTION_BYTES: ${STACKGRAPH_GDS_MAX_PROJECTION_BYTES:-5368709120}
+    command: ["work"]
+    depends_on:
+      database:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  embeddings:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: services/intelligence/graph-intelligence/Dockerfile
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+    entrypoint: ["python", "-m", "stackgraph_graph_intelligence.embedding_worker"]
+    command: ["work"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   depsdev:
     profiles: [tools]
     build:
@@ -214,6 +310,52 @@ services:
       STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
     entrypoint: ["python", "-m", "stackgraph_data.osv_worker"]
     command: ["serve", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  graph-intelligence-continuous:
+    profiles: [pipeline]
+    build:
+      context: .
+      dockerfile: services/intelligence/graph-intelligence/Dockerfile
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      STACKGRAPH_GDS_CONCURRENCY: ${STACKGRAPH_GDS_CONCURRENCY:-2}
+      STACKGRAPH_GDS_MAX_PROJECTION_BYTES: ${STACKGRAPH_GDS_MAX_PROJECTION_BYTES:-5368709120}
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_GRAPH_INTELLIGENCE_POLL_SECONDS:-5}"]
+    depends_on:
+      database:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  embeddings-continuous:
+    profiles: [pipeline]
+    build:
+      context: .
+      dockerfile: services/intelligence/graph-intelligence/Dockerfile
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+    entrypoint: ["python", "-m", "stackgraph_graph_intelligence.embedding_worker"]
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_EMBEDDING_POLL_SECONDS:-2}"]
     depends_on:
       database:
         condition: service_healthy
@@ -380,7 +522,7 @@ services:
       start_period: 10s
 
   projection-continuous:
-    profiles: [pipeline]
+    profiles: [legacy-age]
     build:
       context: ./services/data-platform
     restart: unless-stopped
@@ -392,6 +534,30 @@ services:
     command: ["python", "-m", "stackgraph_data.project", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
     depends_on:
       database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  neo4j-projection-continuous:
+    profiles: [pipeline]
+    build:
+      context: ./services/data-platform
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:-stackgraph-local-development-credential-key}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-stackgraph_neo4j}
+      STACKGRAPH_PROJECTION_BATCH_SIZE: ${STACKGRAPH_PROJECTION_BATCH_SIZE:-100}
+    entrypoint: ["python", "-m", "stackgraph_data.neo4j_project"]
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+      neo4j:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
@@ -485,5 +651,7 @@ services:
 
 volumes:
   stackgraph_postgres_data:
+  stackgraph_neo4j_data:
+  stackgraph_neo4j_plugins:
   stackgraph_evidence_data:
   stackgraph_repository_snapshots:

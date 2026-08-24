@@ -1,19 +1,21 @@
 # Continuous discovery pipeline runbook
 
 This runbook operates the durable Lane A/B/D path from GitHub target scheduling through repository evidence,
-fact publication, AGE projection, and repository intelligence. It complements the
+fact publication, tenant Neo4j projection, and repository intelligence. It complements the
 [GitHub installation lifecycle](github-installation-lifecycle.md) and
 [repository dependency analysis](repository-dependency-analysis.md) runbooks.
 
 ## Processing topology
 
-The `pipeline` Compose profile runs four restartable services:
+The `pipeline` Compose profile runs six restartable services:
 
 1. `github-webhook` verifies and records provider deliveries, then creates or advances durable targets/runs.
 2. `github-control-loop` schedules due installation and repository targets and leases one run at a time.
-3. `projection-continuous` drains fact close/upsert events into AGE.
+3. `neo4j-projection-continuous` drains per-tenant fact close/upsert deliveries into the tenant's registered Neo4j graph.
 4. `intelligence-continuous` drains complete repository snapshots into capability and modernization analysis,
    resolving the encrypted provider/model independently for each job's tenant.
+5. `graph-intelligence-continuous` claims coalesced tenant analysis requests after Neo4j reaches their authoritative watermark, runs deterministic GDS policies, and atomically activates complete PostgreSQL snapshots.
+6. `embeddings-continuous` drains the separate entity/content queue, evaluates shadow spaces, and persists tenant-scoped pgvector embeddings and explainable application-similarity candidates.
 
 The database is the queue of record. Provider work is never inferred from an in-memory timer alone. A worker
 restart either leaves a pending run claimable or lets a running lease expire and become claimable again. A lease
@@ -95,6 +97,12 @@ FROM projection_outbox WHERE processed_at IS NULL;
 
 SELECT status,count(*),min(created_at) oldest
 FROM intelligence_job GROUP BY status ORDER BY status;
+
+SELECT status,count(*),min(created_at) oldest
+FROM graph_analysis_request GROUP BY status ORDER BY status;
+
+SELECT status,count(*),min(created_at) oldest
+FROM embedding_job GROUP BY status ORDER BY status;
 ```
 
 ## Recovery drill
@@ -103,7 +111,7 @@ FROM intelligence_job GROUP BY status ORDER BY status;
 2. Confirm the run remains `RUNNING` with `lease_expires_at` populated.
 3. Start the worker after lease expiry and confirm the same run is reclaimed with a higher attempt.
 4. Confirm changed content produces one published source snapshot; replay must not duplicate facts.
-5. Stop and restart projection/intelligence consumers and confirm their durable queues drain.
+5. Stop and restart projection, graph-analysis, embedding, and repository-intelligence consumers and confirm their independent durable queues drain.
 6. Inspect freshness and unresolved dead letters before declaring recovery complete.
 
 ## Production boundary

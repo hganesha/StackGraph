@@ -15,6 +15,17 @@ THRESHOLDS: dict[str, tuple[int, str]] = {
     "stale_or_error_sources": (0, "data-quality-owner"),
     "failed_ai_invocations_24h": (0, "intelligence-on-call"),
     "throttled_or_exhausted_quotas": (0, "discovery-on-call"),
+    "graph_projection_lag_events": (1000, "graph-intelligence-on-call"),
+    "graph_projection_queue_age_seconds": (300, "graph-intelligence-on-call"),
+    "graph_analysis_queue_age_seconds": (600, "graph-intelligence-on-call"),
+    "failed_graph_analysis_requests": (0, "graph-intelligence-on-call"),
+    "graph_snapshot_age_seconds": (1800, "graph-intelligence-on-call"),
+    "failed_graph_rebuilds": (0, "graph-intelligence-on-call"),
+    "embedding_queue_age_seconds": (600, "intelligence-on-call"),
+    "expired_embedding_leases": (0, "intelligence-on-call"),
+    "dead_letter_embedding_jobs": (0, "intelligence-on-call"),
+    "embedding_coverage_gap_basis_points": (0, "intelligence-on-call"),
+    "embedding_provider_failures_24h": (0, "intelligence-on-call"),
 }
 
 QUERY = """
@@ -38,9 +49,73 @@ SELECT
   (SELECT count(*) FROM connector_quota
    WHERE status IN ('THROTTLED','EXHAUSTED')
      AND (backoff_until IS NULL OR backoff_until>now())) throttled_or_exhausted_quotas,
+  coalesce((
+    SELECT max(greatest(0,deployment.desired_outbox_id-deployment.projected_outbox_id))
+    FROM tenant_graph_deployment deployment
+    WHERE deployment.deployment_state='ACTIVE'
+  ),0) graph_projection_lag_events,
+  coalesce((SELECT extract(epoch FROM now()-min(created_at))::bigint
+            FROM graph_projection_delivery WHERE status IN ('PENDING','PROCESSING')),0)
+    graph_projection_queue_age_seconds,
+  coalesce((SELECT extract(epoch FROM now()-min(created_at))::bigint
+            FROM graph_analysis_request WHERE status IN ('PENDING','WAITING_FOR_PROJECTION')),0)
+    graph_analysis_queue_age_seconds,
+  (SELECT count(*) FROM graph_analysis_request failed
+   WHERE failed.status='FAILED' AND NOT EXISTS (
+     SELECT 1 FROM graph_analysis_request recovered
+     WHERE recovered.tenant_id=failed.tenant_id
+       AND recovered.policy_id=failed.policy_id
+       AND recovered.status='SUCCEEDED'
+       AND recovered.completed_at>failed.completed_at
+   )) failed_graph_analysis_requests,
+  coalesce((SELECT extract(epoch FROM now()-max(completed_at))::bigint
+            FROM graph_analysis_run WHERE status IN ('SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS')),0)
+    graph_snapshot_age_seconds,
+  (SELECT count(*) FROM tenant_graph_deployment WHERE rebuild_state='FAILED') failed_graph_rebuilds,
+  (SELECT count(*) FROM tenant_graph_deployment WHERE rebuild_state='RUNNING') active_graph_rebuilds,
+  coalesce((SELECT extract(epoch FROM now()-min(created_at))::bigint
+            FROM embedding_job WHERE status IN ('PENDING','RETRY_WAIT')),0)
+    embedding_queue_age_seconds,
+  (SELECT count(*) FROM embedding_job
+   WHERE status='RUNNING' AND lease_expires_at<now()) expired_embedding_leases,
+  (SELECT count(*) FROM embedding_job WHERE status='DEAD_LETTER') dead_letter_embedding_jobs,
+  coalesce((
+    SELECT CASE WHEN policy.enabled AND active.embedding_space_id IS NULL THEN 9500
+                ELSE greatest(0,9500-round(coalesce(space.coverage_ratio,0)*10000)::integer) END
+    FROM tenant_embedding_policy policy
+    LEFT JOIN active_embedding_space active ON active.tenant_id=policy.tenant_id
+      AND active.space_kind='SEMANTIC_ENTITY'
+    LEFT JOIN embedding_space space ON space.id=active.embedding_space_id
+    ORDER BY policy.tenant_id LIMIT 1
+  ),0) embedding_coverage_gap_basis_points,
+  (SELECT count(*) FROM entity_embedding
+   WHERE created_at>=now()-interval '24 hours'
+     AND coalesce((provider_usage->>'cache_hit')::boolean,false)=false)
+    embedding_provider_requests_24h,
+  (SELECT count(*) FROM entity_embedding
+   WHERE created_at>=now()-interval '24 hours'
+     AND coalesce((provider_usage->>'cache_hit')::boolean,false)=true)
+    embedding_cache_hits_24h,
+  (SELECT coalesce(sum(token_count),0) FROM entity_embedding
+   WHERE created_at>=now()-interval '24 hours') embedding_provider_tokens_24h,
+  (SELECT coalesce(avg(provider_latency_ms),0)::bigint FROM entity_embedding
+   WHERE created_at>=now()-interval '24 hours'
+     AND coalesce((provider_usage->>'cache_hit')::boolean,false)=false)
+    embedding_provider_latency_ms_24h,
+  (SELECT count(*) FROM embedding_job
+   WHERE updated_at>=now()-interval '24 hours'
+     AND last_error_class='EMBEDDING_RATE_LIMIT') embedding_rate_limits_24h,
+  (SELECT count(*) FROM embedding_job
+   WHERE updated_at>=now()-interval '24 hours'
+     AND last_error_class IN ('EMBEDDING_PROVIDER_HTTP','EMBEDDING_PROVIDER_UNAVAILABLE'))
+    embedding_provider_failures_24h,
   (SELECT count(*) FROM ingest_run WHERE status IN ('PENDING','RUNNING')) active_ingest_runs,
   (SELECT count(*) FROM projection_outbox WHERE processed_at IS NULL) pending_projection_events,
   (SELECT count(*) FROM intelligence_job WHERE status IN ('PENDING','RUNNING')) active_intelligence_jobs,
+  (SELECT count(*) FROM graph_analysis_request
+   WHERE status IN ('PENDING','WAITING_FOR_PROJECTION','RUNNING')) active_graph_analysis_requests,
+  (SELECT count(*) FROM embedding_job
+   WHERE status IN ('PENDING','RETRY_WAIT','RUNNING')) active_embedding_jobs,
   (SELECT coalesce(sum(actual_cost_usd),0) FROM ai_model_invocation
    WHERE started_at>=now()-interval '24 hours') ai_cost_usd_24h,
   (SELECT coalesce(avg(duration_ms),0)::bigint FROM ai_model_invocation

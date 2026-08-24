@@ -16,6 +16,8 @@ from app.main import create_app
 from app.models import (
     AIProviderConfiguration,
     AIProviderConnectionTest,
+    ApplicationSimilarityList,
+    ApplicationSimilarityReviewResult,
     AskRequest,
     AskResponse,
     CapabilityDefinitionModel,
@@ -26,10 +28,16 @@ from app.models import (
     Coverage,
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
+    EmbeddingStatus,
+    EntityGraphIntelligence,
     EntitySummary,
     EstateCounts,
     EstateSummary,
     Freshness,
+    GraphBlastRadius,
+    GraphCommunityList,
+    GraphIntelligenceStatus,
+    GraphRiskList,
     IdentityReviewRequest,
     IdentityReviewResult,
     PageInfo,
@@ -66,6 +74,7 @@ from app.models import (
     ScanStatus,
     ServiceStatus,
     ServiceStatusList,
+    SemanticSearchResponse,
     RescanJob,
     RescanJobList,
 )
@@ -82,7 +91,7 @@ class StubDatabase:
         return None
 
     async def check_readiness(self) -> DatabaseReadiness:
-        return DatabaseReadiness(connected=True, age_installed=True, schema_installed=True)
+        return DatabaseReadiness(connected=True, vector_installed=True, schema_installed=True)
 
 
 class MetricsStubDatabase(StubDatabase):
@@ -99,9 +108,20 @@ class MetricsStubDatabase(StubDatabase):
             "stale_or_error_sources": 0,
             "failed_ai_invocations_24h": 0,
             "throttled_or_exhausted_quotas": 0,
+            "graph_projection_lag_events": 0,
+            "graph_projection_queue_age_seconds": 0,
+            "graph_analysis_queue_age_seconds": 0,
+            "failed_graph_analysis_requests": 0,
+            "graph_snapshot_age_seconds": 0,
+            "embedding_queue_age_seconds": 0,
+            "expired_embedding_leases": 0,
+            "dead_letter_embedding_jobs": 0,
+            "embedding_coverage_gap_basis_points": 0,
             "active_ingest_runs": 0,
             "pending_projection_events": 0,
             "active_intelligence_jobs": 0,
+            "active_graph_analysis_requests": 0,
+            "active_embedding_jobs": 0,
             "ai_cost_usd_24h": 0,
             "ai_latency_ms_24h": 0,
         }
@@ -189,6 +209,66 @@ class StubReadModels:
         namespaces, min_confidence, highlight_to,
     ):
         raise NotImplementedError
+
+    async def graph_intelligence_status(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return GraphIntelligenceStatus(
+            as_of=NOW,deployment_state="ACTIVE",desired_change_watermark=42,
+            neo4j_projection_watermark=42,projection_lag=0,pending_requests=0,
+            running_requests=0,failed_requests=0,
+        )
+
+    async def entity_graph_metrics(self, entity_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return EntityGraphIntelligence(
+            entity=EntitySummary(id=entity_id,kind="Application",name="Billing"),
+            primary_status="WAITING_FOR_DATA",as_of=NOW,
+        )
+
+    async def graph_blast_radius(self, entity_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return GraphBlastRadius(
+            entity=EntitySummary(id=entity_id,kind="Application",name="Billing"),
+            affected_entity_count=0,maximum_depth=0,as_of=NOW,
+        )
+
+    async def graph_risks(self, *, tenant_id, limit):
+        self.last_tenant_id = tenant_id
+        return GraphRiskList(as_of=NOW)
+
+    async def graph_communities(self, *, tenant_id, policy_key, limit):
+        self.last_tenant_id = tenant_id
+        return GraphCommunityList(algorithm_key="wcc",as_of=NOW)
+
+    async def semantic_search(self, body, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return SemanticSearchResponse(
+            space_id=UUID("90000000-0000-4000-8000-000000000001"),
+            space_key="semantic-entity-fixture",model_or_algorithm="fixture-v1",
+            template_version="semantic-entity/v1",query_hash="sha256:"+"a"*64,
+            as_of=NOW,
+        )
+
+    async def embedding_status(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return EmbeddingStatus(
+            as_of=NOW,enabled=True,provider="LOCAL",model="fixture-v1",
+            pending_jobs=0,running_jobs=0,failed_jobs=0,
+        )
+
+    async def similar_applications(self, application_id, *, tenant_id, limit):
+        self.last_tenant_id = tenant_id
+        return ApplicationSimilarityList(
+            subject=EntitySummary(id=application_id,kind="Application",name="Billing"),
+            as_of=NOW,
+        )
+
+    async def review_application_similarity(self, candidate_id, body, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return ApplicationSimilarityReviewResult(
+            candidate_id=candidate_id,review_state=body.decision,reviewed_at=NOW,
+        )
 
     async def evidence_detail(self, fact_id, *, tenant_id):
         raise NotImplementedError
@@ -327,6 +407,7 @@ class StubReadModels:
             counts={
                 "IDENTITY_ASSERTION": 1, "CAPABILITY_INFERENCE": 0, "DUPLICATE_CAPABILITY": 0,
                 "MODERNIZATION_CANDIDATE": 0, "MODERNIZATION_RECOMMENDATION": 0,
+                "APPLICATION_SIMILARITY": 0,
             },
             items=[ReviewQueueItem(
                 item_id=UUID("00000000-0000-4000-8000-000000000501"),
@@ -663,6 +744,46 @@ def test_estate_summary_forwards_domain_scope() -> None:
 
     assert response.status_code == 200
     assert store.last_estate_namespaces == ["TECHNOLOGY", "OSS"]
+
+
+def test_graph_intelligence_read_endpoints_are_versioned_and_tenant_scoped() -> None:
+    app, store = app_with_stubs()
+    entity_id = "00000000-0000-4000-8000-000000000201"
+    responses = [
+        asyncio.run(request(app,"GET","/api/v1/graph-intelligence/status")),
+        asyncio.run(request(app,"GET",f"/api/v1/entities/{entity_id}/graph-metrics")),
+        asyncio.run(request(app,"GET",f"/api/v1/entities/{entity_id}/blast-radius")),
+        asyncio.run(request(app,"GET","/api/v1/graph-intelligence/risks?limit=10")),
+        asyncio.run(request(app,"GET","/api/v1/graph-intelligence/communities")),
+    ]
+
+    assert [response.status_code for response in responses] == [200,200,200,200,200]
+    assert responses[0].json()["neo4j_projection_watermark"] == 42
+    assert responses[1].json()["primary_status"] == "WAITING_FOR_DATA"
+    assert responses[2].json()["affected_entity_count"] == 0
+    assert store.last_tenant_id == UUID("00000000-0000-0000-0000-000000000001")
+
+
+def test_embedding_search_similarity_and_review_endpoints_are_governed() -> None:
+    app, store = app_with_stubs()
+    entity_id = "00000000-0000-4000-8000-000000000201"
+    candidate_id = "00000000-0000-4000-8000-000000000202"
+    search = asyncio.run(request(app,"POST","/api/v1/search/semantic",json={"query":"billing payments"}))
+    status = asyncio.run(request(app,"GET","/api/v1/embeddings/status"))
+    similar = asyncio.run(request(app,"GET",f"/api/v1/entities/{entity_id}/similar"))
+    review = asyncio.run(request(app,"POST",f"/api/v1/similarity-candidates/{candidate_id}/review",json={
+        "decision":"CONFIRMED_SIMILAR","reason_code":"SAME_PLATFORM","rationale":"Reviewed overlap.",
+    }))
+
+    assert search.status_code == 200
+    assert search.json()["space_key"] == "semantic-entity-fixture"
+    assert status.status_code == 200
+    assert status.json()["provider"] == "LOCAL"
+    assert similar.status_code == 200
+    assert similar.json()["subject"]["id"] == entity_id
+    assert review.status_code == 200
+    assert review.json()["review_state"] == "CONFIRMED_SIMILAR"
+    assert store.last_actor_key == "local-user"
 
 
 def test_technology_hierarchy_is_exposed_before_dynamic_technology_route() -> None:

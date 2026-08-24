@@ -7,6 +7,8 @@ import { stackGraphClient, sanitizeOrigin } from "@stackgraph/shared";
 import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
+import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
+import { useEntityGraphMetrics } from "@/lib/queries";
 import styles from "./technology.module.css";
 
 const compactNumber = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
@@ -24,6 +26,7 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
     queryKey: ["technology", id],
     queryFn: () => stackGraphClient.getTechnology(id),
   });
+  const graphIntelligence = useEntityGraphMetrics(id);
 
   if (isLoading || !data) {
     return (
@@ -67,6 +70,13 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
           <span aria-hidden="true">◇</span> Explore neighborhood
         </a>
       </header>
+
+      <GraphIntelligenceSummary
+        entityId={id}
+        intelligence={graphIntelligence.data}
+        graphHref={`/technologies/${id}/graph`}
+        compact
+      />
 
       {data.catalog_profile ? (
         <section className={styles.catalog} aria-label="OSS catalog intelligence">

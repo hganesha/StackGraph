@@ -43,7 +43,7 @@ Git repositories are a primary sensor, not the final product.
 
 ## Docker quick start
 
-Start the database, apply migrations, load the reference cohort, project the graph, and run the
+Start PostgreSQL and a local tenant Neo4j/GDS deployment, apply migrations, load the reference cohort, project the graph, and run the
 API, standalone Next.js UI, and continuous ingestion/enrichment pipeline as Docker images:
 
 ```sh
@@ -55,7 +55,7 @@ The script waits for every long-running service to become healthy before returni
 the named database volume across restarts; use `make app-down` to stop the app without deleting data.
 
 Open **Admin → Services** to see the API, UI, database, GitHub webhook/control loop, deps.dev,
-OSV, graph projection, and intelligence workers together with their heartbeat and queue state.
+OSV, tenant Neo4j projection, graph analysis, semantic embeddings, and intelligence workers together with their heartbeat and queue state. Application Overview and technology detail show contextual graph intelligence; application similarity opens on demand, and Scan Health exposes projection and embedding readiness.
 Open **Admin → Connections** to bind an already-authorized GitHub App installation by its public
 installation ID. Configure `GITHUB_APP_ID` and either `GITHUB_APP_PRIVATE_KEY` or
 `GITHUB_APP_PRIVATE_KEY_FILE` in the Docker environment; private keys and short-lived installation

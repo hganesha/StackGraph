@@ -14,6 +14,9 @@ from app.auth import Principal
 from app.errors import APIError
 from app.models import (
     ApplicationDetail,
+    ApplicationSimilarityList,
+    ApplicationSimilarityReviewRequest,
+    ApplicationSimilarityReviewResult,
     AIProviderConfiguration,
     AIProviderConfigurationUpdateRequest,
     AIProviderConnectionTest,
@@ -50,9 +53,15 @@ from app.models import (
     DeterministicInsightGovernanceState,
     DeterministicInsightRuleUpdateRequest,
     EnterpriseInsightReportList,
+    EmbeddingStatus,
     EstateSummary,
     EvidenceDetail,
+    EntityGraphIntelligence,
+    GraphBlastRadius,
+    GraphCommunityList,
+    GraphIntelligenceStatus,
     GraphNeighborhood,
+    GraphRiskList,
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
@@ -106,6 +115,8 @@ from app.models import (
     ServiceControlRequest,
     ServiceStatus,
     ServiceStatusList,
+    SemanticSearchRequest,
+    SemanticSearchResponse,
 )
 
 
@@ -148,6 +159,32 @@ class ReadModelsProtocol(Protocol):
         predicates: list[str] | None, namespaces: list[str] | None,
         min_confidence: float, highlight_to: UUID | None,
     ) -> GraphNeighborhood: ...
+    async def graph_intelligence_status(
+        self, *, tenant_id: UUID | None,
+    ) -> GraphIntelligenceStatus: ...
+    async def entity_graph_metrics(
+        self, entity_id: UUID, *, tenant_id: UUID | None,
+    ) -> EntityGraphIntelligence: ...
+    async def graph_blast_radius(
+        self, entity_id: UUID, *, tenant_id: UUID | None,
+    ) -> GraphBlastRadius: ...
+    async def graph_risks(
+        self, *, tenant_id: UUID | None, limit: int,
+    ) -> GraphRiskList: ...
+    async def graph_communities(
+        self, *, tenant_id: UUID | None, policy_key: str, limit: int,
+    ) -> GraphCommunityList: ...
+    async def semantic_search(
+        self, request: SemanticSearchRequest, *, tenant_id: UUID | None,
+    ) -> SemanticSearchResponse: ...
+    async def embedding_status(self, *, tenant_id: UUID | None) -> EmbeddingStatus: ...
+    async def similar_applications(
+        self, application_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> ApplicationSimilarityList: ...
+    async def review_application_similarity(
+        self, candidate_id: UUID, review: ApplicationSimilarityReviewRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> ApplicationSimilarityReviewResult: ...
     async def evidence_detail(self, fact_id: UUID, *, tenant_id: UUID | None) -> EvidenceDetail: ...
     async def ask(self, request: AskRequest, *, tenant_id: UUID | None) -> AskResponse: ...
     async def review_identity_assertion(
@@ -528,6 +565,107 @@ async def get_graph_neighborhood(
         namespaces=namespace,
         min_confidence=min_confidence,
         highlight_to=highlight_to,
+    )
+
+
+@router.get(
+    "/graph-intelligence/status", response_model=GraphIntelligenceStatus,
+    response_model_exclude_none=True, operation_id="getGraphIntelligenceStatus",
+    tags=["graph-intelligence"],
+)
+async def get_graph_intelligence_status(request: Request) -> GraphIntelligenceStatus:
+    principal = await _principal(request)
+    return await _store(request).graph_intelligence_status(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/entities/{id}/graph-metrics", response_model=EntityGraphIntelligence,
+    response_model_exclude_none=True, operation_id="getEntityGraphMetrics",
+    tags=["graph-intelligence"],
+)
+async def get_entity_graph_metrics(id: UUID, request: Request) -> EntityGraphIntelligence:
+    principal = await _principal(request)
+    return await _store(request).entity_graph_metrics(id,tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/entities/{id}/blast-radius", response_model=GraphBlastRadius,
+    response_model_exclude_none=True, operation_id="getEntityBlastRadius",
+    tags=["graph-intelligence"],
+)
+async def get_entity_blast_radius(id: UUID, request: Request) -> GraphBlastRadius:
+    principal = await _principal(request)
+    return await _store(request).graph_blast_radius(id,tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/graph-intelligence/risks", response_model=GraphRiskList,
+    response_model_exclude_none=True, operation_id="listGraphIntelligenceRisks",
+    tags=["graph-intelligence"],
+)
+async def list_graph_intelligence_risks(
+    request: Request,limit: int = Query(default=20,ge=1,le=100),
+) -> GraphRiskList:
+    principal = await _principal(request)
+    return await _store(request).graph_risks(tenant_id=principal.tenant_id,limit=limit)
+
+
+@router.get(
+    "/graph-intelligence/communities", response_model=GraphCommunityList,
+    response_model_exclude_none=True, operation_id="listGraphIntelligenceCommunities",
+    tags=["graph-intelligence"],
+)
+async def list_graph_intelligence_communities(
+    request: Request,
+    policy_key: str = Query(default="runtime-dependency",pattern=r"^[a-z][a-z0-9-]{2,63}$"),
+    limit: int = Query(default=50,ge=1,le=100),
+) -> GraphCommunityList:
+    principal = await _principal(request)
+    return await _store(request).graph_communities(
+        tenant_id=principal.tenant_id,policy_key=policy_key,limit=limit,
+    )
+
+
+@router.post(
+    "/search/semantic",response_model=SemanticSearchResponse,
+    response_model_exclude_none=True,operation_id="semanticSearch",tags=["embeddings"],
+)
+async def semantic_search(body: SemanticSearchRequest,request: Request) -> SemanticSearchResponse:
+    principal = await _principal(request)
+    return await _store(request).semantic_search(body,tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/embeddings/status",response_model=EmbeddingStatus,
+    response_model_exclude_none=True,operation_id="getEmbeddingStatus",tags=["embeddings"],
+)
+async def get_embedding_status(request: Request) -> EmbeddingStatus:
+    principal = await _principal(request)
+    return await _store(request).embedding_status(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/entities/{id}/similar",response_model=ApplicationSimilarityList,
+    response_model_exclude_none=True,operation_id="listSimilarApplications",tags=["embeddings"],
+)
+async def list_similar_applications(
+    id: UUID,request: Request,limit: int=Query(default=10,ge=1,le=50),
+) -> ApplicationSimilarityList:
+    principal = await _principal(request)
+    return await _store(request).similar_applications(id,tenant_id=principal.tenant_id,limit=limit)
+
+
+@router.post(
+    "/similarity-candidates/{id}/review",response_model=ApplicationSimilarityReviewResult,
+    response_model_exclude_none=True,operation_id="reviewApplicationSimilarity",tags=["embeddings"],
+)
+async def review_application_similarity(
+    id: UUID,body: ApplicationSimilarityReviewRequest,request: Request,
+) -> ApplicationSimilarityReviewResult:
+    principal = await _principal(request)
+    _require(principal,"review")
+    return await _store(request).review_application_similarity(
+        id,body,tenant_id=principal.tenant_id,actor_key=principal.actor_key,
     )
 
 

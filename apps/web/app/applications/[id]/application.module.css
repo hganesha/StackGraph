@@ -141,6 +141,10 @@
   padding-block: var(--sg-space-4);
 }
 
+.graphIntelligenceSection {
+  grid-column: 1 / -1;
+}
+
 .overviewSection {
   display: flex;
   flex-direction: column;

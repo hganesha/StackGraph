@@ -99,7 +99,7 @@ show_failure_context() {
   echo "StackGraph startup failed. Current container state:" >&2
   "${compose[@]}" ps >&2 || true
   echo >&2
-  echo "Inspect logs with: docker compose --profile pipeline logs database api web github-control-loop" >&2
+  echo "Inspect logs with: docker compose --profile pipeline logs database neo4j api web github-control-loop neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous" >&2
   exit "$exit_code"
 }
 trap show_failure_context ERR
@@ -109,8 +109,8 @@ echo "Validating the Docker Compose configuration..."
 
 if [[ "$build_images" == true ]]; then
   echo "Building application and continuous pipeline images..."
-  "${compose[@]}" build migrate seed projection ai-prompts api web github-webhook github-control-loop \
-    depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+  "${compose[@]}" build migrate seed neo4j-register neo4j-projection ai-prompts api web github-webhook github-control-loop \
+    depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous embeddings-continuous intelligence-continuous
 fi
 
 up_options=(-d --wait --wait-timeout "$startup_timeout")
@@ -118,8 +118,8 @@ if [[ "$build_images" == false ]]; then
   up_options+=(--no-build)
 fi
 
-echo "Starting PostgreSQL/AGE..."
-"${compose[@]}" up "${up_options[@]}" database
+echo "Starting PostgreSQL and the local tenant Neo4j deployment..."
+"${compose[@]}" up "${up_options[@]}" database neo4j
 
 echo "Applying database migrations..."
 "${compose[@]}" run --rm migrate
@@ -132,12 +132,16 @@ if [[ "$seed_database" == true ]]; then
   "${compose[@]}" run --rm seed
 fi
 
-echo "Projecting pending graph changes..."
-"${compose[@]}" run --rm projection
+echo "Registering the local tenant graph deployment..."
+"${compose[@]}" run --rm neo4j-register
+
+echo "Projecting pending graph changes into Neo4j..."
+"${compose[@]}" run --rm neo4j-projection
 
 echo "Starting the API, containerized UI, and continuous pipeline..."
 "${compose[@]}" up "${up_options[@]}" api web github-webhook github-control-loop \
-  depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+  depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous \
+  embeddings-continuous intelligence-continuous
 
 web_binding="$("${compose[@]}" port web 3000)"
 api_binding="$("${compose[@]}" port api 8000)"
@@ -150,12 +154,14 @@ echo "StackGraph is ready."
 echo "  UI:  http://localhost:${web_port}"
 echo "  API: http://localhost:${api_port}"
 echo
-"${compose[@]}" ps database api web github-webhook github-control-loop \
-  depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+"${compose[@]}" ps database neo4j api web github-webhook github-control-loop \
+  depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous \
+  embeddings-continuous intelligence-continuous
 
 if [[ "$follow_logs" == true ]]; then
   echo
   echo "Following logs; Ctrl-C stops log streaming but leaves the app running."
-  "${compose[@]}" logs --follow database api web github-webhook github-control-loop \
-    depsdev-continuous osv-continuous projection-continuous intelligence-continuous
+  "${compose[@]}" logs --follow database neo4j api web github-webhook github-control-loop \
+    depsdev-continuous osv-continuous neo4j-projection-continuous graph-intelligence-continuous \
+    embeddings-continuous intelligence-continuous
 fi

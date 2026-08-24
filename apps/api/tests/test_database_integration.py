@@ -398,9 +398,9 @@ def test_http_api_queries_seeded_database() -> None:
                     await client.get(f"/facts/{fact_id}/evidence"),
                     await client.post("/ask", json={"question": "How many items are in the estate?"}),
                 )
-                return responses, app.state.read_models.graph_read_metrics.age_reads
+                return responses, app.state.read_models.graph_read_metrics
 
-    responses, age_reads = asyncio.run(query_api())
+    responses, graph_read_metrics = asyncio.run(query_api())
     summary, technology, graph, evidence, ask = responses
 
     assert summary.status_code == 200
@@ -422,12 +422,18 @@ def test_http_api_queries_seeded_database() -> None:
     )
     assert evidence.status_code == 200
     assert ask.status_code == 200
-    assert age_reads >= 1
+    assert graph_read_metrics.neo4j_reads + graph_read_metrics.sql_reads == 1
+    assert graph_read_metrics.age_reads == 0
 
 
 def test_age_and_sql_neighborhoods_have_canonical_parity() -> None:
     database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
     with psycopg.connect(database_url) as connection:
+        age_available = connection.execute(
+            "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='age') AND to_regclass('stackgraph.\"Relationship\"') IS NOT NULL"
+        ).fetchone()[0]
+        if not age_available:
+            pytest.skip("legacy AGE parity is optional; Neo4j projection parity is tested separately")
         row = connection.execute(
             """
             SELECT r.source_entity_id,r.target_entity_id,r.relationship_type
@@ -746,7 +752,7 @@ def test_review_queue_aggregates_pending_items_over_live_schema() -> None:
         assert unfiltered.contract_version == "1.0.0"
         assert set(unfiltered.counts) == {
             "IDENTITY_ASSERTION", "CAPABILITY_INFERENCE", "DUPLICATE_CAPABILITY",
-            "MODERNIZATION_CANDIDATE", "MODERNIZATION_RECOMMENDATION",
+            "MODERNIZATION_CANDIDATE", "MODERNIZATION_RECOMMENDATION", "APPLICATION_SIMILARITY",
         }
         assert unfiltered.counts["IDENTITY_ASSERTION"] >= 1
         item = next(i for i in unfiltered.items if str(i.item_id) == assertion_id)
@@ -977,7 +983,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert services.status_code == 200
         assert {service["key"] for service in services.json()["services"]} == {
             "web", "api", "database", "github-webhook", "github-control-loop",
-            "depsdev", "osv", "projection", "intelligence",
+            "depsdev", "osv", "projection", "intelligence", "graph-intelligence", "embeddings",
         }
         assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
         assert ai_saved.status_code == 200 and ai_saved.json()["key_fingerprint"] == "5678"

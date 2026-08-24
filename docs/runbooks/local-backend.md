@@ -1,6 +1,6 @@
 # Local backend environment
 
-The local backend uses FastAPI for the API and the official Apache AGE image for PostgreSQL 16 plus AGE 1.6.0. PostgreSQL is authoritative; the `stackgraph` AGE graph is initialized as an asynchronous projection target.
+The local backend uses FastAPI, authoritative PostgreSQL, and a local Neo4j Community deployment with the Graph Data Science plugin. Neo4j is a tenant-scoped, disposable projection; the API retains its bounded SQL graph reader as the correctness and outage fallback.
 
 ## Start
 
@@ -11,7 +11,7 @@ complete application—including the standalone UI Docker image—run:
 ./scripts/start_docker.sh
 ```
 
-This builds the database tools, API, and UI images; waits for PostgreSQL/AGE; applies migrations;
+This builds the database tools, API, and UI images; waits for PostgreSQL and Neo4j; applies migrations;
 loads the reference cohort; projects graph changes; and health-gates the API and UI. For backend-only
 work, run:
 
@@ -20,7 +20,8 @@ make backend-up
 ```
 
 The UI is available at `http://localhost:3000`, the API at `http://localhost:8080`, interactive API
-documentation at `http://localhost:8080/docs`, and PostgreSQL at `localhost:5432` by default. Host
+documentation at `http://localhost:8080/docs`, PostgreSQL at `localhost:5432`, Neo4j Browser at
+`http://localhost:7474`, and Bolt at `localhost:7687` by default. Host
 ports are configurable through `STACKGRAPH_WEB_PORT`, `STACKGRAPH_API_PORT`, and
 `STACKGRAPH_DB_PORT`; container ports remain fixed.
 
@@ -32,6 +33,13 @@ The V0 API read models are available both at their contract paths and under the 
 - `GET /modernization`
 - `POST /ask`
 - `GET /graph/neighborhood`
+- `GET /graph-intelligence/status`
+- `GET /entities/{id}/graph-metrics`
+- `GET /entities/{id}/blast-radius`
+- `POST /search/semantic`
+- `GET /embeddings/status`
+- `GET /entities/{id}/similar`
+- `POST /similarity-candidates/{id}/review`
 - `GET /facts/{id}/evidence`
 - `POST /identity-assertions/{id}/review`
 - `GET /capabilities/taxonomy`
@@ -48,7 +56,9 @@ In `development` auth mode, the API derives the principal from `STACKGRAPH_DEFAU
 
 Graph neighborhoods accept repeatable `predicate` and `namespace` filters, `min_confidence`, and an optional `highlight_to` entity ID in addition to the frozen v1 center, depth, and limit parameters. Traversal and response nodes remain bounded to depth 2 and 50 nodes.
 
-`STACKGRAPH_GRAPH_READ_MODE=auto` uses the tenant-filtered AGE projection when its fact outbox is current. Pending projection work, missing projection data, a parity mismatch, permission failure, or AGE unavailability automatically falls back to authoritative SQL and emits a structured fallback log. Set the mode to `sql` to disable AGE reads while diagnosing a projection issue; `age` forces an AGE attempt but still preserves the SQL safety fallback.
+Neo4j projects tenant graphs for asynchronous deterministic analysis while the bounded SQL reader remains the outage and correctness fallback. Completed graph-intelligence snapshots, blast-radius paths, semantic search, and explainable application-similarity candidates are available through contextual application/technology views and Scan Health. PostgreSQL remains authoritative; see [graph and embedding intelligence operations](graph-and-embeddings-operations.md).
+
+`STACKGRAPH_GRAPH_READ_MODE=auto` is the default: a caught-up, parity-valid tenant Neo4j deployment serves bounded neighborhoods and the API falls back to SQL on lag, outage, timeout, or discovery-cap overflow. `neo4j` keeps the same fail-closed fallback behavior, `sql` bypasses Neo4j, and `age` exists only for explicit legacy comparison. The backward-compatible `STACKGRAPH_GRAPH_AGE_TIMEOUT_SECONDS` variable currently sets the generic projected-reader timeout.
 
 ### Enable AI-backed Ask
 
@@ -94,7 +104,7 @@ Complete repository dependency-usage snapshots automatically enqueue capability 
 
 ## Seed the curated framework catalog
 
-The checked-in foundation catalog is loaded as global curated knowledge. The loader is versioned and idempotent, writes evidence-backed facts into PostgreSQL, and queues AGE projection through `projection_outbox`.
+The checked-in foundation catalog is loaded as global curated knowledge. The loader is versioned and idempotent, writes evidence-backed facts into PostgreSQL, and fans projection deliveries out to every active tenant Neo4j deployment.
 
 The migrator recognizes the one documented pre-canonical checksum for migration 005 only after verifying
 its installed schema. Migration 014 then replaces the legacy global package-analysis uniqueness rule with
@@ -109,7 +119,7 @@ make database-seed-verify
 
 `database-seed` applies pending tracked migrations before loading. Migrations can also be run independently with `make database-migrate`. Re-running the same seed version is a no-op and reports `"replayed": true`. A later seed version creates a new complete snapshot and closes the earlier current facts through the normal snapshot publication path.
 
-## Populate the AGE projection
+## Populate the Neo4j projection
 
 Project pending fact events after seeding:
 
@@ -118,7 +128,7 @@ make database-project
 make database-project-verify
 ```
 
-The worker uses leased `projection_outbox` batches, idempotently upserts generic `Entity` vertices and `Relationship` edges, and acknowledges each batch in the same PostgreSQL transaction as its AGE writes. Re-running with an empty outbox reports zero processed events.
+`make database-project` starts the local Neo4j deployment, registers it for the development tenant, and drains its per-tenant deliveries. The worker batches parameterized Cypher, writes stable PostgreSQL entity/fact IDs in one Neo4j transaction, and only then advances the PostgreSQL watermark. A crash between those commits safely replays the idempotent batch. Global catalog events receive one delivery per active tenant rather than sharing a single acknowledgement.
 
 ## Operate
 

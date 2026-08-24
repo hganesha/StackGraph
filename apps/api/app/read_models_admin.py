@@ -106,6 +106,7 @@ _REVIEW_PATHS: dict[str, str] = {
     "DUPLICATE_CAPABILITY": "/duplicate-capability-candidates/{id}/review",
     "MODERNIZATION_CANDIDATE": "/modernization-candidates/{id}/review",
     "MODERNIZATION_RECOMMENDATION": "/modernization-recommendations/{id}/review",
+    "APPLICATION_SIMILARITY": "/similarity-candidates/{id}/review",
 }
 
 _RAW_SECRET_MARKERS: tuple[str, ...] = (
@@ -113,7 +114,7 @@ _RAW_SECRET_MARKERS: tuple[str, ...] = (
 )
 
 _CONTROLLABLE_SERVICES = frozenset({
-    "github-webhook", "github-control-loop", "projection", "intelligence",
+    "github-webhook", "github-control-loop", "projection", "intelligence", "graph-intelligence", "embeddings",
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
@@ -502,6 +503,15 @@ class AdminReadModelsMixin:
                      mr.confidence, mr.version, mr.created_at, mr.title, mr.objective
               FROM modernization_recommendation mr
               WHERE mr.review_state = 'UNREVIEWED'
+              UNION ALL
+              SELECT similarity.id, 'APPLICATION_SIMILARITY', similarity.review_state, NULL::uuid,
+                     similarity.score, 1, similarity.created_at,
+                     concat(left_app.name, ' ↔ ', right_app.name),
+                     concat('Explainable application similarity ',round(similarity.score::numeric*100),' percent')
+              FROM application_similarity_candidate similarity
+              JOIN entity left_app ON left_app.id=similarity.left_application_id
+              JOIN entity right_app ON right_app.id=similarity.right_application_id
+              WHERE similarity.review_state='UNREVIEWED'
             )
             SELECT * FROM queue
             WHERE (%(types)s::text[] IS NULL OR item_type = ANY(%(types)s))
@@ -543,6 +553,8 @@ class AdminReadModelsMixin:
               FROM modernization_candidate WHERE review_state = 'UNREVIEWED'
             UNION ALL SELECT 'MODERNIZATION_RECOMMENDATION', count(*)
               FROM modernization_recommendation WHERE review_state = 'UNREVIEWED'
+            UNION ALL SELECT 'APPLICATION_SIMILARITY', count(*)
+              FROM application_similarity_candidate WHERE review_state = 'UNREVIEWED'
             """,
             tenant_id=tenant_id,
         )
@@ -3762,10 +3774,14 @@ class AdminReadModelsMixin:
               (SELECT count(*) FROM webhook_delivery WHERE tenant_id=%s AND status='PROCESSING') webhook_running,
               (SELECT count(*) FROM webhook_delivery WHERE tenant_id=%s AND status='FAILED') webhook_failed,
               (SELECT max(coalesce(processed_at,received_at)) FROM webhook_delivery WHERE tenant_id=%s) webhook_last,
-              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND processed_at IS NULL) projection_pending,
-              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND leased_by IS NOT NULL AND processed_at IS NULL) projection_running,
-              (SELECT count(*) FROM projection_outbox WHERE tenant_id=%s AND last_error IS NOT NULL AND processed_at IS NULL) projection_failed,
-              (SELECT max(coalesce(processed_at,created_at)) FROM projection_outbox WHERE tenant_id=%s) projection_last,
+              (SELECT count(*) FROM graph_projection_delivery
+               WHERE tenant_id=%s AND status='PENDING') projection_pending,
+              (SELECT count(*) FROM graph_projection_delivery
+               WHERE tenant_id=%s AND status='PROCESSING') projection_running,
+              (SELECT count(*) FROM graph_projection_delivery
+               WHERE tenant_id=%s AND status='DEAD_LETTER') projection_failed,
+              (SELECT max(coalesce(processed_at,created_at)) FROM graph_projection_delivery
+               WHERE tenant_id=%s) projection_last,
               (SELECT count(*) FROM intelligence_job job, intelligence_scope scope
                WHERE job.tenant_id=%s AND job.configuration_fingerprint=scope.fingerprint
                  AND job.status='PENDING') intelligence_pending,
@@ -3788,6 +3804,29 @@ class AdminReadModelsMixin:
                FROM intelligence_job job, intelligence_scope scope
                WHERE job.tenant_id=%s
                  AND job.configuration_fingerprint=scope.fingerprint) intelligence_last,
+              (SELECT count(*) FROM graph_analysis_request
+               WHERE tenant_id=%s AND status IN ('PENDING','WAITING_FOR_PROJECTION')) graph_intelligence_pending,
+              (SELECT count(*) FROM graph_analysis_request
+               WHERE tenant_id=%s AND status='RUNNING') graph_intelligence_running,
+              (SELECT count(*) FROM graph_analysis_request failed
+               WHERE failed.tenant_id=%s AND failed.status='FAILED'
+                 AND NOT EXISTS (
+                   SELECT 1 FROM graph_analysis_request recovered
+                   WHERE recovered.tenant_id=failed.tenant_id
+                     AND recovered.policy_id=failed.policy_id
+                     AND recovered.status='SUCCEEDED'
+                     AND recovered.completed_at>failed.completed_at
+                 )) graph_intelligence_failed,
+              (SELECT max(coalesce(completed_at,started_at,created_at))
+               FROM graph_analysis_request WHERE tenant_id=%s) graph_intelligence_last,
+              (SELECT count(*) FROM embedding_job
+               WHERE tenant_id=%s AND status IN ('PENDING','RETRY_WAIT')) embeddings_pending,
+              (SELECT count(*) FROM embedding_job
+               WHERE tenant_id=%s AND status='RUNNING') embeddings_running,
+              (SELECT count(*) FROM embedding_job
+               WHERE tenant_id=%s AND status='DEAD_LETTER') embeddings_failed,
+              (SELECT max(coalesce(completed_at,started_at,created_at))
+               FROM embedding_job WHERE tenant_id=%s) embeddings_last,
               (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
                JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='PENDING') depsdev_pending,
@@ -3815,7 +3854,7 @@ class AdminReadModelsMixin:
                JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='osv.dev') osv_last
             """,
-            tuple([tenant_id] * 25),
+            tuple([tenant_id] * 33),
             tenant_id=tenant_id,
         ) or {}
         now = datetime.now(UTC)
@@ -3882,8 +3921,8 @@ class AdminReadModelsMixin:
                 last_activity_at=now, last_heartbeat_at=now,
             ),
             ServiceStatus(
-                key="database", name="PostgreSQL / AGE", category="CORE", state="RUNNING",
-                detail="Operational state and graph storage are reachable.", management_scope="Docker / deployment platform",
+                key="database", name="PostgreSQL", category="CORE", state="RUNNING",
+                detail="Authoritative operational state is reachable.", management_scope="Docker / deployment platform",
                 last_activity_at=now, last_heartbeat_at=now,
             ),
             service(
@@ -3924,6 +3963,22 @@ class AdminReadModelsMixin:
                 failed=int(workload.get("projection_failed") or 0),
                 last_activity_at=workload.get("projection_last"),
                 controllable=True, management_scope="This workspace",
+            ),
+            service(
+                "graph-intelligence", "Graph intelligence", "GRAPH",
+                pending=int(workload.get("graph_intelligence_pending") or 0),
+                running=int(workload.get("graph_intelligence_running") or 0),
+                failed=int(workload.get("graph_intelligence_failed") or 0),
+                last_activity_at=workload.get("graph_intelligence_last"),
+                controllable=True,management_scope="This workspace",
+            ),
+            service(
+                "embeddings", "Semantic embeddings", "INTELLIGENCE",
+                pending=int(workload.get("embeddings_pending") or 0),
+                running=int(workload.get("embeddings_running") or 0),
+                failed=int(workload.get("embeddings_failed") or 0),
+                last_activity_at=workload.get("embeddings_last"),
+                controllable=True,management_scope="This workspace",
             ),
             service(
                 "intelligence", "Modernization intelligence", "INTELLIGENCE",

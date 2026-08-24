@@ -18,23 +18,26 @@ cleanup() {
 trap cleanup EXIT
 
 docker compose up --wait -d database >/dev/null
-docker compose build -q api seed projection >/dev/null
+docker compose build -q api seed >/dev/null
 docker compose exec -T database createdb -U "${admin_user}" "${database_name}"
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
   -f /docker-entrypoint-initdb.d/010-schema.sql >/dev/null
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
-  -f /docker-entrypoint-initdb.d/020-create-graph.sql >/dev/null
+  -f /stackgraph/tests/neo4j-projection-smoke.sql >/dev/null
+docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
+  -f /stackgraph/tests/graph-analysis-control-plane-smoke.sql >/dev/null
+docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
+  -f /stackgraph/tests/embedding-control-plane-smoke.sql >/dev/null
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
   -v app_user="${app_user}" >/dev/null <<'SQL'
 SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), :'app_user') \gexec
-SELECT format('GRANT USAGE ON SCHEMA public, ag_catalog, stackgraph TO %I', :'app_user') \gexec
-SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, stackgraph TO %I', :'app_user') \gexec
-SELECT format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public, stackgraph TO %I', :'app_user') \gexec
-SELECT format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public, ag_catalog TO %I', :'app_user') \gexec
+SELECT format('GRANT USAGE ON SCHEMA %I TO %I',nspname,:'app_user') FROM pg_namespace WHERE nspname IN ('public','ag_catalog','stackgraph') \gexec
+SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA %I TO %I',nspname,:'app_user') FROM pg_namespace WHERE nspname IN ('public','stackgraph') \gexec
+SELECT format('GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I TO %I',nspname,:'app_user') FROM pg_namespace WHERE nspname IN ('public','stackgraph') \gexec
+SELECT format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %I TO %I',nspname,:'app_user') FROM pg_namespace WHERE nspname IN ('public','ag_catalog') \gexec
 SQL
 
 docker compose run --rm --no-deps -e STACKGRAPH_DATABASE_URL="${admin_url}" seed >/dev/null
-docker compose run --rm --no-deps -e STACKGRAPH_DATABASE_URL="${admin_url}" projection >/dev/null
 docker compose run --rm --no-deps \
   -e STACKGRAPH_TEST_DATABASE_URL="${app_url}" \
   -e STACKGRAPH_TEST_ADMIN_DATABASE_URL="${admin_url}" \

@@ -18,7 +18,7 @@ The Git repository is a primary sensor; it is not the product.
 ## Design invariants
 
 - PostgreSQL is the authoritative store.
-- Apache AGE is a graph traversal projection over canonical entities/relationships.
+- Neo4j is a tenant-scoped, disposable graph projection over canonical PostgreSQL entities and relationships.
 - Every material conclusion is traceable to evidence.
 - Scanners emit facts; analytics emit assessments; reasoning emits explanations; recommendation engines propose actions.
 - Security is one viability dimension, not the product boundary.
@@ -45,7 +45,8 @@ The Git repository is a primary sensor; it is not the product.
 - `seed/assessments.json` — initial curated lifecycle/trajectory hypotheses.
 - `seed/source-rows.json` — normalized raw reference rows retained for provenance.
 - `seed/seed-manifest.json` — seed version and provenance.
-- `AGE-PROJECTION.md` — AGE projection and write strategy.
+- `AGE-PROJECTION.md` — legacy AGE projection notes retained for migration context.
+- `../docs/graph-and-embeddings-features.md` — selected Neo4j/GDS architecture and delivery plan.
 - `ONTOLOGY.md` — canonical entity and relationship semantics.
 
 ## Initial hydration

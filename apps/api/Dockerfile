@@ -20,6 +20,7 @@ COPY apps/api/app ./app
 COPY apps/api/tests ./tests
 COPY scripts/export_openapi.py ./scripts/export_openapi.py
 COPY services/intelligence/ai-services/stackgraph_ai ./stackgraph_ai
+COPY services/intelligence/graph-intelligence/stackgraph_graph_intelligence ./stackgraph_graph_intelligence
 COPY services/intelligence/ai-services/prompts ./prompts
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -33,6 +34,7 @@ RUN addgroup --system stackgraph \
 
 COPY --chown=stackgraph:stackgraph apps/api/app ./app
 COPY --chown=stackgraph:stackgraph services/intelligence/ai-services/stackgraph_ai ./stackgraph_ai
+COPY --chown=stackgraph:stackgraph services/intelligence/graph-intelligence/stackgraph_graph_intelligence ./stackgraph_graph_intelligence
 COPY --chown=stackgraph:stackgraph services/intelligence/ai-services/prompts ./prompts
 
 USER stackgraph

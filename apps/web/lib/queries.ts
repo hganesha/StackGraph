@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import { stackGraphClient, type EstateSummary, type Namespace } from "@stackgraph/shared";
 
 export function useEstateSummary() {
@@ -91,6 +91,71 @@ export function useGraphNeighborhood(centerId: string, depth = 1) {
   return useQuery({
     queryKey: ["graph", centerId, depth],
     queryFn: () => stackGraphClient.getGraphNeighborhood(centerId, depth),
+  });
+}
+
+export function useGraphIntelligenceStatus() {
+  return useQuery({
+    queryKey: ["graph-intelligence", "status"],
+    queryFn: () => stackGraphClient.getGraphIntelligenceStatus(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useEntityGraphMetrics(entityId: string) {
+  return useQuery({
+    queryKey: ["graph-intelligence", "entity", entityId],
+    queryFn: () => stackGraphClient.getEntityGraphMetrics(entityId),
+    enabled: Boolean(entityId),
+  });
+}
+
+export function useEntityBlastRadius(entityId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["graph-intelligence", "blast-radius", entityId],
+    queryFn: () => stackGraphClient.getEntityBlastRadius(entityId),
+    enabled: Boolean(entityId) && enabled,
+  });
+}
+
+export function useGraphIntelligenceRisks(limit = 20) {
+  return useQuery({
+    queryKey: ["graph-intelligence", "risks", limit],
+    queryFn: () => stackGraphClient.listGraphIntelligenceRisks(limit),
+    staleTime: 60_000,
+  });
+}
+
+export function useEmbeddingStatus() {
+  return useQuery({
+    queryKey: ["embeddings", "status"],
+    queryFn: () => stackGraphClient.getEmbeddingStatus(),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useSimilarApplications(entityId: string, enabled = true, limit = 10) {
+  return useQuery({
+    queryKey: ["embeddings", "similar-applications", entityId, limit],
+    queryFn: () => stackGraphClient.listSimilarApplications(entityId, limit),
+    enabled: Boolean(entityId) && enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useReviewApplicationSimilarity(entityId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ candidateId, decision }: {
+      candidateId: string;
+      decision: "CONFIRMED_SIMILAR" | "CONFIRMED_DISTINCT" | "CONSOLIDATION_CANDIDATE" | "DISMISSED";
+    }) => stackGraphClient.reviewApplicationSimilarity(candidateId, {
+      decision,reason_code: "APPLICATION_DETAIL_REVIEW",
+    }),
+    onSuccess: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["embeddings", "similar-applications", entityId] }),
+      queryClient.invalidateQueries({ queryKey: ["reviews", "queue"] }),
+    ]),
   });
 }
 

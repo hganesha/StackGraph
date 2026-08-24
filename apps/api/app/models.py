@@ -248,6 +248,44 @@ class RecommendationSummary(ContractModel):
     citations: list[Citation] = Field(min_length=1)
 
 
+class GraphAnalysisSnapshot(ContractModel):
+    analysis_run_id: UUID
+    policy_key: str = Field(min_length=1)
+    policy_version: int = Field(ge=1)
+    policy_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    status: Literal["SUCCEEDED", "SUCCEEDED_WITH_LIMITATIONS"]
+    as_of: datetime
+    requested_change_watermark: int = Field(ge=0)
+    neo4j_projection_watermark: int = Field(ge=0)
+    node_count: int = Field(ge=0)
+    edge_count: int = Field(ge=0)
+    coverage: dict[str, Any] = Field(default_factory=dict)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphMetric(ContractModel):
+    analysis_run_id: UUID
+    policy_key: str = Field(min_length=1)
+    metric_key: str = Field(min_length=1)
+    numeric_value: float | None = None
+    percentile: float | None = Field(default=None, ge=0, le=1)
+    rank: int | None = Field(default=None, ge=1)
+    components: dict[str, Any] = Field(default_factory=dict)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class EntityGraphIntelligence(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    entity: EntitySummary
+    primary_status: Literal["STRUCTURALLY_CRITICAL", "ELEVATED", "TYPICAL", "WAITING_FOR_DATA"]
+    reasons: list[str] = Field(default_factory=list)
+    snapshots: list[GraphAnalysisSnapshot] = Field(default_factory=list)
+    metrics: list[GraphMetric] = Field(default_factory=list)
+    community_keys: list[str] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class ApplicationDetail(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     application: EntitySummary
@@ -261,6 +299,167 @@ class ApplicationDetail(ContractModel):
     assessments: list[AssessmentSummary]
     recommendations: list[RecommendationSummary]
     freshness: Freshness
+    graph_intelligence: EntityGraphIntelligence | None = None
+
+
+class GraphIntelligenceStatus(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    deployment_state: Literal["PROVISIONING", "ACTIVE", "SUSPENDED", "ERROR", "UNCONFIGURED"]
+    desired_change_watermark: int = Field(ge=0)
+    neo4j_projection_watermark: int = Field(ge=0)
+    projection_lag: int = Field(ge=0)
+    pending_requests: int = Field(ge=0)
+    running_requests: int = Field(ge=0)
+    failed_requests: int = Field(ge=0)
+    oldest_pending_at: datetime | None = None
+    snapshots: list[GraphAnalysisSnapshot] = Field(default_factory=list)
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphImpactPath(ContractModel):
+    target: EntitySummary
+    distance: int = Field(ge=1)
+    minimum_confidence: float = Field(ge=0, le=1)
+    entity_ids: list[UUID] = Field(min_length=2)
+    supporting_fact_ids: list[UUID] = Field(min_length=1)
+
+
+class GraphBlastRadius(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    entity: EntitySummary
+    snapshot: GraphAnalysisSnapshot | None = None
+    affected_entity_count: int = Field(ge=0)
+    maximum_depth: int = Field(ge=0)
+    impacts: list[GraphImpactPath] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphRiskItem(ContractModel):
+    entity: EntitySummary
+    systemic_risk: float = Field(ge=0, le=1)
+    component_metrics: list[GraphMetric] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class GraphRiskList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    snapshot: GraphAnalysisSnapshot | None = None
+    risks: list[GraphRiskItem] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class GraphCommunity(ContractModel):
+    community_key: str = Field(min_length=1)
+    member_count: int = Field(ge=1)
+    representative_entities: list[EntitySummary] = Field(default_factory=list)
+
+
+class GraphCommunityList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    snapshot: GraphAnalysisSnapshot | None = None
+    algorithm_key: str = Field(min_length=1)
+    communities: list[GraphCommunity] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class SemanticSearchRequest(ContractModel):
+    query: str = Field(min_length=2,max_length=2000)
+    entity_types: list[str] = Field(default_factory=list,max_length=20)
+    limit: int = Field(default=20,ge=1,le=100)
+
+
+class SemanticSearchHit(ContractModel):
+    entity: EntitySummary
+    score: float = Field(ge=-1,le=1)
+    input_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    sensitivity: Literal["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"]
+
+
+class SemanticSearchResponse(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    space_id: UUID
+    space_key: str
+    model_or_algorithm: str
+    template_version: str
+    query_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    hits: list[SemanticSearchHit] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str,Any]] = Field(default_factory=list)
+
+
+class EmbeddingSpaceSnapshot(ContractModel):
+    id: UUID
+    space_key: str
+    space_kind: Literal["SEMANTIC_ENTITY","STRUCTURAL_GRAPH","CODE"]
+    lifecycle_state: Literal["SHADOW","ACTIVE","RETIRED","FAILED"]
+    provider: str
+    model_or_algorithm: str
+    dimensions: int = Field(ge=8,le=4096)
+    template_version: str
+    coverage_ratio: float = Field(ge=0,le=1)
+    evaluation: dict[str,Any] = Field(default_factory=dict)
+    updated_at: datetime
+
+
+class EmbeddingStatus(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    enabled: bool
+    provider: str
+    model: str
+    pending_jobs: int = Field(ge=0)
+    running_jobs: int = Field(ge=0)
+    failed_jobs: int = Field(ge=0)
+    active_spaces: list[EmbeddingSpaceSnapshot] = Field(default_factory=list)
+    shadow_spaces: list[EmbeddingSpaceSnapshot] = Field(default_factory=list)
+    limitations: list[dict[str,Any]] = Field(default_factory=list)
+
+
+SimilarityReviewState = Literal[
+    "UNREVIEWED","CONFIRMED_SIMILAR","CONFIRMED_DISTINCT",
+    "CONSOLIDATION_CANDIDATE","DISMISSED",
+]
+
+
+class ApplicationSimilarityCandidate(ContractModel):
+    id: UUID
+    application: EntitySummary
+    score: float = Field(ge=0,le=1)
+    method_version: str
+    components: dict[str,Any]
+    overlaps: dict[str,Any]
+    differences: dict[str,Any]
+    coverage: dict[str,Any]
+    limitations: list[dict[str,Any]] = Field(default_factory=list)
+    review_state: SimilarityReviewState
+    created_at: datetime
+
+
+class ApplicationSimilarityList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    subject: EntitySummary
+    candidates: list[ApplicationSimilarityCandidate] = Field(default_factory=list)
+    as_of: datetime
+    limitations: list[dict[str,Any]] = Field(default_factory=list)
+
+
+class ApplicationSimilarityReviewRequest(ContractModel):
+    decision: Literal[
+        "CONFIRMED_SIMILAR","CONFIRMED_DISTINCT","CONSOLIDATION_CANDIDATE","DISMISSED",
+    ]
+    reason_code: str = Field(min_length=1,max_length=100)
+    rationale: str = Field(default="",max_length=4000)
+
+
+class ApplicationSimilarityReviewResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    candidate_id: UUID
+    review_state: SimilarityReviewState
+    reviewed_at: datetime
 
 
 class RepositoryProfile(ContractModel):
@@ -1708,6 +1907,7 @@ ReviewQueueItemType = Literal[
     "DUPLICATE_CAPABILITY",
     "MODERNIZATION_CANDIDATE",
     "MODERNIZATION_RECOMMENDATION",
+    "APPLICATION_SIMILARITY",
 ]
 
 

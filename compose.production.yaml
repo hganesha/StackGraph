@@ -1,7 +1,12 @@
 name: stackgraph-production
 
 services:
+  neo4j:
+    profiles: [local-only]
+
   database:
+    image: ${STACKGRAPH_POSTGRES_IMAGE:-pgvector/pgvector:pg16}
+    build: !reset null
     environment:
       POSTGRES_DB: ${STACKGRAPH_DB_NAME:-stackgraph}
       POSTGRES_USER: ${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}
@@ -40,6 +45,7 @@ services:
       STACKGRAPH_RATE_LIMIT_REQUESTS_PER_MINUTE: ${STACKGRAPH_RATE_LIMIT_REQUESTS_PER_MINUTE:-300}
       STACKGRAPH_RATE_LIMIT_ASK_PER_MINUTE: ${STACKGRAPH_RATE_LIMIT_ASK_PER_MINUTE:-20}
       STACKGRAPH_REQUEST_BODY_MAX_BYTES: ${STACKGRAPH_REQUEST_BODY_MAX_BYTES:-1048576}
+      STACKGRAPH_NEO4J_PASSWORD: ${STACKGRAPH_NEO4J_PASSWORD:-}
     ports: !reset []
     volumes: !reset []
 
@@ -68,9 +74,39 @@ services:
     image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
     pull_policy: always
 
-  projection-continuous:
+  neo4j-projection-continuous:
     image: ${STACKGRAPH_DATA_IMAGE:-ghcr.io/hganesha/stackgraph-data:latest}
     pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:?set STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY}
+      STACKGRAPH_NEO4J_PASSWORD: ""
+    depends_on: !override
+      database:
+        condition: service_healthy
+
+  graph-intelligence-continuous:
+    image: ${STACKGRAPH_GRAPH_INTELLIGENCE_IMAGE:-ghcr.io/hganesha/stackgraph-graph-intelligence:latest}
+    pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:?set STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY}
+      STACKGRAPH_NEO4J_PASSWORD: ""
+      STACKGRAPH_GDS_CONCURRENCY: ${STACKGRAPH_GDS_CONCURRENCY:-2}
+      STACKGRAPH_GDS_MAX_PROJECTION_BYTES: ${STACKGRAPH_GDS_MAX_PROJECTION_BYTES:-5368709120}
+    depends_on: !override
+      database:
+        condition: service_healthy
+
+  embeddings-continuous:
+    image: ${STACKGRAPH_GRAPH_INTELLIGENCE_IMAGE:-ghcr.io/hganesha/stackgraph-graph-intelligence:latest}
+    pull_policy: always
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:?set STACKGRAPH_DB_ADMIN_PASSWORD}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY: ${STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY:?set STACKGRAPH_CREDENTIAL_ENCRYPTION_KEY}
+    depends_on: !override
+      database:
+        condition: service_healthy
 
   github-webhook:
     image: ${STACKGRAPH_DISCOVERY_IMAGE:-ghcr.io/hganesha/stackgraph-discovery:latest}
@@ -104,6 +140,7 @@ services:
     pull_policy: always
 
   caddy:
+    profiles: [pipeline]
     image: caddy:2.10-alpine
     restart: unless-stopped
     environment:

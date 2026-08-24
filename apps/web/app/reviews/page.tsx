@@ -22,6 +22,7 @@ const typeMeta: Record<ReviewQueueItem["item_type"], { label: string; icon: Icon
   DUPLICATE_CAPABILITY: { label: "Duplicate", icon: IconCopy },
   MODERNIZATION_CANDIDATE: { label: "Candidate", icon: IconTrendingUp },
   MODERNIZATION_RECOMMENDATION: { label: "Recommendation", icon: IconTrendingUp },
+  APPLICATION_SIMILARITY: { label: "Application match", icon: IconCopy },
 };
 
 function identityLabels(title: string): [string, string] {

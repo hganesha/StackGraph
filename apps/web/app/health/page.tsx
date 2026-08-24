@@ -7,7 +7,9 @@ import { StatTile, Skeleton } from "@stackgraph/design-system";
 import { formatRelative } from "@stackgraph/shared";
 import {
   useEnterpriseInsightReports,
+  useEmbeddingStatus,
   useEstateSummary,
+  useGraphIntelligenceStatus,
   useScanStatus,
   useServiceStatus,
 } from "@/lib/queries";
@@ -19,6 +21,8 @@ export default function HealthPage() {
   const insightReports = useEnterpriseInsightReports();
   const scanStatus = useScanStatus();
   const serviceStatus = useServiceStatus();
+  const graphStatus = useGraphIntelligenceStatus();
+  const embeddingStatus = useEmbeddingStatus();
 
   const freshness = useMemo(() => {
     const acc = { FRESH: 0, STALE: 0, UNKNOWN: 0 } as Record<string, number>;
@@ -139,6 +143,61 @@ export default function HealthPage() {
           <span>reports answerable</span>
         </div>
         <Link href="/ask">View insights <span aria-hidden="true">→</span></Link>
+      </section>
+
+      <section className={styles.card} aria-labelledby="graph-health-heading">
+        <div className={styles.cardHead}>
+          <div>
+            <h2 id="graph-health-heading" className={styles.h2}>Graph intelligence</h2>
+            <p className={styles.cardNote}>Neo4j projection freshness and active deterministic-analysis snapshots.</p>
+          </div>
+          <Link className={styles.adminLink} href="/admin?tab=operations">Manage service <span aria-hidden="true">→</span></Link>
+        </div>
+        {graphStatus.isLoading ? <Skeleton height={72} /> : graphStatus.isError || !graphStatus.data ? (
+          <p className={styles.operationError} role="alert">Graph-intelligence health is temporarily unavailable.</p>
+        ) : (
+          <>
+            <div className={styles.operationSummary}>
+              <div><span>Deployment</span><strong>{graphStatus.data.deployment_state.toLowerCase()}</strong></div>
+              <div><span>Projection lag</span><strong>{graphStatus.data.projection_lag.toLocaleString()}</strong></div>
+              <div><span>Queued / running</span><strong>{graphStatus.data.pending_requests} / {graphStatus.data.running_requests}</strong></div>
+              <div><span>Needs attention</span><strong>{graphStatus.data.failed_requests}</strong></div>
+            </div>
+            <p className={styles.cardNote}>
+              Authoritative watermark {graphStatus.data.desired_change_watermark.toLocaleString()} · projected {graphStatus.data.neo4j_projection_watermark.toLocaleString()} · {graphStatus.data.snapshots.length} active policy snapshots.
+            </p>
+          </>
+        )}
+      </section>
+
+      <section className={styles.card} aria-labelledby="embedding-health-heading">
+        <div className={styles.cardHead}>
+          <div>
+            <h2 id="embedding-health-heading" className={styles.h2}>Semantic intelligence</h2>
+            <p className={styles.cardNote}>Evaluated embedding spaces, tenant coverage, and durable worker backlog.</p>
+          </div>
+          <Link className={styles.adminLink} href="/admin?tab=operations">Manage service <span aria-hidden="true">→</span></Link>
+        </div>
+        {embeddingStatus.isLoading ? <Skeleton height={72} /> : embeddingStatus.isError || !embeddingStatus.data ? (
+          <p className={styles.operationError} role="alert">Semantic-intelligence health is temporarily unavailable.</p>
+        ) : (
+          <>
+            <div className={styles.operationSummary}>
+              <div><span>Provider</span><strong>{embeddingStatus.data.provider}</strong></div>
+              <div><span>Active coverage</span><strong>{embeddingStatus.data.active_spaces.length ? `${Math.round(Math.max(...embeddingStatus.data.active_spaces.map((space) => space.coverage_ratio)) * 100)}%` : "not active"}</strong></div>
+              <div><span>Queued / running</span><strong>{embeddingStatus.data.pending_jobs} / {embeddingStatus.data.running_jobs}</strong></div>
+              <div><span>Needs attention</span><strong>{embeddingStatus.data.failed_jobs}</strong></div>
+            </div>
+            <p className={styles.cardNote}>
+              {embeddingStatus.data.active_spaces.length
+                ? `${embeddingStatus.data.active_spaces.length} evaluated space${embeddingStatus.data.active_spaces.length === 1 ? "" : "s"} active; ${embeddingStatus.data.shadow_spaces.length} candidate space${embeddingStatus.data.shadow_spaces.length === 1 ? "" : "s"} awaiting evaluation.`
+                : "No semantic space is active yet. Search and similarity remain unavailable until coverage and evaluation gates pass."}
+            </p>
+            {embeddingStatus.data.limitations.map((limitation, index) => (
+              <p key={`${String(limitation.code ?? "limitation")}:${index}`} className={styles.operationError}>{String(limitation.message ?? limitation.code ?? "Semantic coverage is limited.")}</p>
+            ))}
+          </>
+        )}
       </section>
 
       <div className={styles.cols}>

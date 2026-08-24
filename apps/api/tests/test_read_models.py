@@ -927,7 +927,14 @@ def test_service_status_scopes_intelligence_workload_to_active_configuration() -
     assert database.workload_query.count(
         "configuration_fingerprint=scope.fingerprint"
     ) == 4
-    assert len(database.workload_params) == 25
+    assert len(database.workload_params) == 33
+    graph_intelligence = next(
+        service for service in result.services if service.key == "graph-intelligence"
+    )
+    assert graph_intelligence.category == "GRAPH"
+    assert graph_intelligence.pending == 0
+    embeddings = next(service for service in result.services if service.key == "embeddings")
+    assert embeddings.category == "INTELLIGENCE"
 
 
 def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None:

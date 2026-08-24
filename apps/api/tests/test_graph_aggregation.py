@@ -1,6 +1,7 @@
 import asyncio
 from uuid import UUID
 
+from app.neo4j_graph import Neo4jProjectionState
 from app.read_models import ReadModelStore
 
 
@@ -63,30 +64,23 @@ class GraphDatabaseStub:
         raise AssertionError(f"unexpected query: {query}")
 
 
-class LaggedGraphDatabaseStub(GraphDatabaseStub):
-    async def fetch_one(self, query, params=None, *, tenant_id=None):
-        if "pending_events" in query:
-            return {"pending_events": 2, "oldest_pending_seconds": 4.5}
-        return await super().fetch_one(query, params, tenant_id=tenant_id)
+class LaggedNeo4jReader:
+    async def projection_state(self, tenant_id):
+        return Neo4jProjectionState(True, True, 42, 40)
 
 
-class UnavailableGraphDatabaseStub(GraphDatabaseStub):
-    async def fetch_one(self, query, params=None, *, tenant_id=None):
-        if "pending_events" in query:
-            raise RuntimeError("AGE connection unavailable")
-        return await super().fetch_one(query, params, tenant_id=tenant_id)
+class UnavailableNeo4jReader:
+    async def projection_state(self, tenant_id):
+        raise RuntimeError("Neo4j connection unavailable")
 
 
-class SlowAgeGraphDatabaseStub(GraphDatabaseStub):
-    async def fetch_one(self, query, params=None, *, tenant_id=None):
-        if "pending_events" in query:
-            return {"pending_events": 0, "oldest_pending_seconds": None}
-        return await super().fetch_one(query, params, tenant_id=tenant_id)
+class SlowNeo4jReader:
+    async def projection_state(self, tenant_id):
+        return Neo4jProjectionState(True, True, 42, 42)
 
-    async def fetch_all(self, query, params=None, *, tenant_id=None):
-        if "age_entity_properties AS MATERIALIZED" in query:
-            await asyncio.sleep(0.05)
-        return await super().fetch_all(query, params, tenant_id=tenant_id)
+    async def neighborhood(self, *args, **kwargs):
+        await asyncio.sleep(0.05)
+        return None
 
 
 async def aggregate_graph():
@@ -121,40 +115,43 @@ def test_aggregate_node_and_edge_ids_are_deterministic() -> None:
 
 
 def test_auto_mode_falls_back_to_sql_when_projection_is_behind() -> None:
-    store = ReadModelStore(LaggedGraphDatabaseStub(), graph_read_mode="auto")
+    store = ReadModelStore(GraphDatabaseStub(), graph_read_mode="auto")
+    store.neo4j_graph = LaggedNeo4jReader()
     graph = asyncio.run(store.graph_neighborhood(
-        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+        CENTER_ID, tenant_id=CENTER_ID, depth=1, real_node_limit=50,
     ))
 
     assert graph.truncated
-    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.neo4j_reads == 0
     assert store.graph_read_metrics.lag_fallbacks == 1
     assert store.graph_read_metrics.sql_reads == 1
 
 
-def test_auto_mode_falls_back_to_sql_when_age_is_unavailable() -> None:
-    store = ReadModelStore(UnavailableGraphDatabaseStub(), graph_read_mode="auto")
+def test_auto_mode_falls_back_to_sql_when_neo4j_is_unavailable() -> None:
+    store = ReadModelStore(GraphDatabaseStub(), graph_read_mode="auto")
+    store.neo4j_graph = UnavailableNeo4jReader()
     graph = asyncio.run(store.graph_neighborhood(
-        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+        CENTER_ID, tenant_id=CENTER_ID, depth=1, real_node_limit=50,
     ))
 
     assert graph.truncated
-    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.neo4j_reads == 0
     assert store.graph_read_metrics.unavailable_fallbacks == 1
     assert store.graph_read_metrics.sql_reads == 1
 
 
-def test_auto_mode_falls_back_to_sql_when_age_exceeds_time_budget() -> None:
+def test_auto_mode_falls_back_to_sql_when_neo4j_exceeds_time_budget() -> None:
     store = ReadModelStore(
-        SlowAgeGraphDatabaseStub(),
+        GraphDatabaseStub(),
         graph_read_mode="auto",
         graph_age_timeout_seconds=0.001,
     )
+    store.neo4j_graph = SlowNeo4jReader()
     graph = asyncio.run(store.graph_neighborhood(
-        CENTER_ID, tenant_id=None, depth=1, real_node_limit=50,
+        CENTER_ID, tenant_id=CENTER_ID, depth=1, real_node_limit=50,
     ))
 
     assert graph.truncated
-    assert store.graph_read_metrics.age_reads == 0
+    assert store.graph_read_metrics.neo4j_reads == 0
     assert store.graph_read_metrics.timeout_fallbacks == 1
     assert store.graph_read_metrics.sql_reads == 1

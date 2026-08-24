@@ -14,6 +14,12 @@ from typing import Any, Mapping
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
+from stackgraph_graph_intelligence.embeddings import (
+    LocalHashEmbeddingAdapter,
+    OpenAICompatibleEmbeddingAdapter,
+    content_hash as embedding_content_hash,
+    vector_literal,
+)
 from stackgraph_ai.governance import (
     CapabilityFootprint as GovernedCapabilityFootprint,
     PortfolioCandidate,
@@ -36,9 +42,14 @@ from app.enterprise_posture_insights import (
     posture_report_readiness,
 )
 from app.errors import APIError
+from app.neo4j_graph import Neo4jGraphReader, Neo4jTopology
 from app.read_models_admin import AdminReadModelsMixin
 from app.models import (
     ApplicationDetail,
+    ApplicationSimilarityCandidate,
+    ApplicationSimilarityList,
+    ApplicationSimilarityReviewRequest,
+    ApplicationSimilarityReviewResult,
     ApplicationComponentDependencyHierarchy,
     ApplicationDependencyNode,
     ApplicationRepositoryDependencyHierarchy,
@@ -101,6 +112,8 @@ from app.models import (
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     DuplicateCapabilityCandidateSummary,
+    EmbeddingSpaceSnapshot,
+    EmbeddingStatus,
     DeterministicInsightList,
     EnterpriseInsightReport,
     EnterpriseInsightReportList,
@@ -111,11 +124,21 @@ from app.models import (
     Extractor,
     Freshness,
     GraphEdge,
+    GraphAnalysisSnapshot,
+    GraphBlastRadius,
+    GraphCommunity,
+    GraphCommunityList,
+    GraphImpactPath,
+    GraphIntelligenceStatus,
+    GraphMetric,
     GraphNeighborhood,
     GraphNode,
+    GraphRiskItem,
+    GraphRiskList,
     IdentityReviewRequest,
     IdentityReviewResult,
     InternalUsage,
+    EntityGraphIntelligence,
     ModernizationList,
     ModernizationScenarioItem,
     ModernizationScenarioRequest,
@@ -165,6 +188,9 @@ from app.models import (
     RescanJobList,
     ProviderQuota,
     ScanStatus,
+    SemanticSearchHit,
+    SemanticSearchRequest,
+    SemanticSearchResponse,
 )
 
 
@@ -1099,6 +1125,7 @@ def _aggregate_node_id(center_id: UUID, depth: int, namespace: str, entity_type:
 
 @dataclass(slots=True)
 class GraphReadMetrics:
+    neo4j_reads: int = 0
     age_reads: int = 0
     sql_reads: int = 0
     lag_fallbacks: int = 0
@@ -1125,6 +1152,11 @@ class ReadModelStore(AdminReadModelsMixin):
         self.database = database
         self.graph_read_mode = graph_read_mode
         self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
+        self.neo4j_graph = Neo4jGraphReader(
+            database,
+            encryption_key=credential_encryption_key,
+            discovery_limit=graph_discovery_limit,
+        )
         self.graph_age_timeout_seconds = graph_age_timeout_seconds
         self.graph_read_metrics = GraphReadMetrics()
         self.credential_encryption_key = credential_encryption_key
@@ -1381,6 +1413,611 @@ class ReadModelStore(AdminReadModelsMixin):
             assessments=assessments,
             recommendations=recommendations,
             freshness=_freshness(application.get("observed_at")),
+            graph_intelligence=await self.entity_graph_metrics(
+                application_id,tenant_id=tenant_id,entity_row=application,
+            ),
+        )
+
+    @staticmethod
+    def _graph_snapshot(row: Mapping[str, Any]) -> GraphAnalysisSnapshot:
+        return GraphAnalysisSnapshot(
+            analysis_run_id=row["analysis_run_id"],policy_key=row["policy_key"],
+            policy_version=row["policy_version"],policy_hash=row["policy_hash"],
+            status=row["status"],as_of=row["completed_at"],
+            requested_change_watermark=row["requested_change_watermark"],
+            neo4j_projection_watermark=row["neo4j_projection_watermark"],
+            node_count=row["node_count"] or 0,edge_count=row["edge_count"] or 0,
+            coverage=row.get("coverage") or {},limitations=row.get("limitations") or [],
+        )
+
+    async def _active_graph_snapshots(
+        self,tenant_id: UUID | None,*,policy_key: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if tenant_id is None:
+            return []
+        return await self.database.fetch_all(
+            """
+            SELECT run.id AS analysis_run_id,run.policy_key,policy.version AS policy_version,
+                   policy.content_hash AS policy_hash,run.status,run.completed_at,
+                   run.requested_change_watermark,run.neo4j_projection_watermark,
+                   run.node_count,run.edge_count,run.coverage,run.limitations
+            FROM active_graph_analysis_run active
+            JOIN graph_analysis_run run ON run.id=active.run_id
+            JOIN graph_analysis_policy policy ON policy.id=run.policy_id
+            WHERE active.tenant_id=%s AND (%s::text IS NULL OR run.policy_key=%s)
+              AND run.status IN ('SUCCEEDED','SUCCEEDED_WITH_LIMITATIONS')
+            ORDER BY run.policy_key
+            """,
+            (tenant_id,policy_key,policy_key),tenant_id=tenant_id,
+        )
+
+    async def graph_intelligence_status(
+        self,*,tenant_id: UUID | None,
+    ) -> GraphIntelligenceStatus:
+        now = datetime.now(UTC)
+        if tenant_id is None:
+            return GraphIntelligenceStatus(
+                as_of=now,deployment_state="UNCONFIGURED",desired_change_watermark=0,
+                neo4j_projection_watermark=0,projection_lag=0,pending_requests=0,
+                running_requests=0,failed_requests=0,
+                limitations=[{"code":"TENANT_REQUIRED","message":"Graph intelligence requires a tenant context."}],
+            )
+        state = await self.database.fetch_one(
+            """
+            SELECT deployment.deployment_state,deployment.desired_outbox_id,
+                   deployment.projected_outbox_id,deployment.rebuild_state,
+                   deployment.candidate_projected_outbox_id,deployment.rebuild_started_at,
+                   (SELECT count(*) FROM graph_analysis_request request
+                    WHERE request.tenant_id=deployment.tenant_id
+                      AND request.status IN ('PENDING','WAITING_FOR_PROJECTION')) AS pending_requests,
+                   (SELECT count(*) FROM graph_analysis_request request
+                    WHERE request.tenant_id=deployment.tenant_id
+                      AND request.status='RUNNING') AS running_requests,
+                   (SELECT count(*) FROM graph_analysis_request failed
+                    WHERE failed.tenant_id=deployment.tenant_id AND failed.status='FAILED'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM graph_analysis_request recovered
+                        WHERE recovered.tenant_id=failed.tenant_id
+                          AND recovered.policy_id=failed.policy_id
+                          AND recovered.status='SUCCEEDED'
+                          AND recovered.completed_at>failed.completed_at
+                      )) AS failed_requests,
+                   (SELECT min(request.created_at) FROM graph_analysis_request request
+                    WHERE request.tenant_id=deployment.tenant_id
+                      AND request.status IN ('PENDING','WAITING_FOR_PROJECTION')) AS oldest_pending_at
+            FROM tenant_graph_deployment deployment
+            WHERE deployment.tenant_id=%s
+            """,
+            (tenant_id,),tenant_id=tenant_id,
+        )
+        snapshots = [
+            self._graph_snapshot(row) for row in await self._active_graph_snapshots(tenant_id)
+        ]
+        if state is None:
+            return GraphIntelligenceStatus(
+                as_of=now,deployment_state="UNCONFIGURED",desired_change_watermark=0,
+                neo4j_projection_watermark=0,projection_lag=0,pending_requests=0,
+                running_requests=0,failed_requests=0,snapshots=snapshots,
+                limitations=[{"code":"GRAPH_DEPLOYMENT_UNCONFIGURED","message":"No tenant graph deployment is configured."}],
+            )
+        desired = int(state["desired_outbox_id"] or 0)
+        projected = int(state["projected_outbox_id"] or 0)
+        limitations: list[dict[str, Any]] = []
+        if desired > projected:
+            limitations.append({
+                "code":"PROJECTION_LAG","message":"Neo4j has not reached the authoritative change watermark.",
+                "lag":desired-projected,
+            })
+        if state["rebuild_state"] == "RUNNING":
+            limitations.append({
+                "code":"GRAPH_REBUILD_IN_PROGRESS",
+                "message":"A parity-gated Neo4j candidate is being rebuilt; SQL remains available.",
+                "candidate_projection_watermark":int(state["candidate_projected_outbox_id"] or 0),
+                "started_at":state["rebuild_started_at"].isoformat() if state["rebuild_started_at"] else None,
+            })
+        elif state["rebuild_state"] == "FAILED":
+            limitations.append({
+                "code":"GRAPH_REBUILD_FAILED",
+                "message":"The last Neo4j candidate rebuild failed; the active graph pointer was unchanged.",
+            })
+        active_policy_keys = {snapshot.policy_key for snapshot in snapshots}
+        if len(active_policy_keys) < 4:
+            limitations.append({
+                "code":"INCOMPLETE_POLICY_COVERAGE",
+                "message":"Not every default graph policy has an active snapshot.",
+                "active_policy_count":len(active_policy_keys),"expected_policy_count":4,
+            })
+        return GraphIntelligenceStatus(
+            as_of=now,deployment_state=state["deployment_state"],
+            desired_change_watermark=desired,neo4j_projection_watermark=projected,
+            projection_lag=max(0,desired-projected),
+            pending_requests=int(state["pending_requests"] or 0),
+            running_requests=int(state["running_requests"] or 0),
+            failed_requests=int(state["failed_requests"] or 0),
+            oldest_pending_at=state.get("oldest_pending_at"),snapshots=snapshots,
+            limitations=limitations,
+        )
+
+    async def entity_graph_metrics(
+        self,entity_id: UUID,*,tenant_id: UUID | None,
+        entity_row: Mapping[str, Any] | None = None,
+    ) -> EntityGraphIntelligence:
+        entity_data = entity_row or await self._get_entity(entity_id,tenant_id)
+        snapshot_rows = await self._active_graph_snapshots(tenant_id)
+        snapshots = [self._graph_snapshot(row) for row in snapshot_rows]
+        if tenant_id is None or not snapshots:
+            return EntityGraphIntelligence(
+                entity=_entity(entity_data),primary_status="WAITING_FOR_DATA",as_of=datetime.now(UTC),
+                reasons=["No completed graph-analysis snapshot is active."],
+                limitations=[{"code":"NO_ACTIVE_GRAPH_SNAPSHOT","message":"Graph metrics are not ready for this tenant."}],
+            )
+        rows = await self.database.fetch_all(
+            """
+            SELECT metric.run_id AS analysis_run_id,run.policy_key,metric.metric_key,
+                   metric.numeric_value,metric.percentile,metric.rank,
+                   metric.components,metric.limitations
+            FROM active_graph_analysis_run active
+            JOIN graph_analysis_run run ON run.id=active.run_id
+            JOIN graph_entity_metric metric
+              ON metric.run_id=run.id AND metric.tenant_id=active.tenant_id
+            WHERE active.tenant_id=%s AND metric.entity_id=%s
+            ORDER BY run.policy_key,metric.metric_key
+            """,
+            (tenant_id,entity_id),tenant_id=tenant_id,
+        )
+        metrics = [
+            GraphMetric(
+                analysis_run_id=row["analysis_run_id"],policy_key=row["policy_key"],
+                metric_key=row["metric_key"],numeric_value=row.get("numeric_value"),
+                percentile=row.get("percentile"),rank=row.get("rank"),
+                components=row.get("components") or {},limitations=row.get("limitations") or [],
+            ) for row in rows
+        ]
+        community_rows = await self.database.fetch_all(
+            """
+            SELECT DISTINCT membership.algorithm_key||':'||membership.community_key AS community_key
+            FROM active_graph_analysis_run active
+            JOIN graph_community_membership membership
+              ON membership.run_id=active.run_id AND membership.tenant_id=active.tenant_id
+            WHERE active.tenant_id=%s AND membership.entity_id=%s
+            ORDER BY community_key
+            """,
+            (tenant_id,entity_id),tenant_id=tenant_id,
+        )
+        metric_by_key: dict[str, GraphMetric] = {}
+        for metric in metrics:
+            current = metric_by_key.get(metric.metric_key)
+            if current is None or (metric.percentile or 0) > (current.percentile or 0):
+                metric_by_key[metric.metric_key] = metric
+        reasons: list[str] = []
+        spof = metric_by_key.get("spof.articulation")
+        reach = metric_by_key.get("reachability.upstream_impact")
+        betweenness = metric_by_key.get("betweenness")
+        if spof and (spof.numeric_value or 0)>0:
+            reasons.append("Removing this entity can disconnect parts of its policy graph.")
+        if reach and reach.percentile is not None and reach.percentile>=0.9:
+            reasons.append("Its upstream enterprise impact is in the estate's top decile.")
+        if betweenness and betweenness.percentile is not None and betweenness.percentile>=0.9:
+            reasons.append("A top-decile share of shortest dependency paths crosses this entity.")
+        highest = max(
+            (metric.percentile or 0 for metric in (reach,betweenness) if metric is not None),
+            default=0,
+        )
+        if spof and (spof.numeric_value or 0)>0 or highest>=0.9:
+            primary_status = "STRUCTURALLY_CRITICAL"
+        elif highest>=0.75:
+            primary_status = "ELEVATED"
+        elif metrics:
+            primary_status = "TYPICAL"
+        else:
+            primary_status = "WAITING_FOR_DATA"
+            reasons.append("The active policies do not include this entity or have no matching data.")
+        limitations = [
+            limitation for snapshot in snapshots for limitation in snapshot.limitations
+        ]
+        limitations.extend(
+            limitation for metric in metrics for limitation in metric.limitations
+        )
+        return EntityGraphIntelligence(
+            entity=_entity(entity_data),primary_status=primary_status,
+            reasons=reasons[:2],snapshots=snapshots,metrics=metrics,
+            community_keys=[row["community_key"] for row in community_rows],
+            as_of=max(snapshot.as_of for snapshot in snapshots),
+            limitations=list({json.dumps(item,sort_keys=True):item for item in limitations}.values()),
+        )
+
+    async def graph_blast_radius(
+        self,entity_id: UUID,*,tenant_id: UUID | None,
+    ) -> GraphBlastRadius:
+        entity_data = await self._get_entity(entity_id,tenant_id)
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return GraphBlastRadius(
+                entity=_entity(entity_data),affected_entity_count=0,maximum_depth=0,
+                as_of=datetime.now(UTC),
+                limitations=[{"code":"NO_ACTIVE_RUNTIME_SNAPSHOT","message":"Runtime dependency blast radius is not ready."}],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            SELECT metric_key,numeric_value,limitations
+            FROM graph_entity_metric
+            WHERE run_id=%s AND tenant_id=%s AND entity_id=%s
+              AND metric_key IN ('reachability.upstream_impact','reachability.upstream_depth')
+            """,
+            (snapshot.analysis_run_id,tenant_id,entity_id),tenant_id=tenant_id,
+        )
+        values = {row["metric_key"]:row for row in rows}
+        limitations = list(snapshot.limitations)
+        limitations.extend(
+            limitation for row in rows for limitation in (row.get("limitations") or [])
+        )
+        path_rows = await self.database.fetch_all(
+            """
+            SELECT target.id,target.entity_type,target.name,target.canonical_key,
+                   target.properties->>'summary' AS summary,path.distance,
+                   path.minimum_confidence,path.path_entity_ids,path.path_fact_ids
+            FROM graph_impact_path path
+            JOIN entity target ON target.id=path.target_entity_id
+            WHERE path.run_id=%s AND path.tenant_id=%s AND path.source_entity_id=%s
+            ORDER BY path.distance,target.name,target.id
+            LIMIT 100
+            """,
+            (snapshot.analysis_run_id,tenant_id,entity_id),tenant_id=tenant_id,
+        )
+        impacts = [GraphImpactPath(
+            target=_entity(row),distance=row["distance"],
+            minimum_confidence=row["minimum_confidence"],
+            entity_ids=row["path_entity_ids"],supporting_fact_ids=row["path_fact_ids"],
+        ) for row in path_rows]
+        affected_count = int(
+            (values.get("reachability.upstream_impact") or {}).get("numeric_value") or 0
+        )
+        if affected_count>len(impacts):
+            limitations.append({
+                "code":"IMPACT_PATH_SCOPE",
+                "message":"Evidence paths list impacted applications and business capabilities; the count includes every affected graph entity.",
+                "affected_entity_count":affected_count,"listed_impact_count":len(impacts),
+            })
+        return GraphBlastRadius(
+            entity=_entity(entity_data),snapshot=snapshot,
+            affected_entity_count=affected_count,
+            maximum_depth=int((values.get("reachability.upstream_depth") or {}).get("numeric_value") or 0),
+            impacts=impacts,as_of=snapshot.as_of,
+            limitations=list({json.dumps(item,sort_keys=True):item for item in limitations}.values()),
+        )
+
+    async def graph_risks(
+        self,*,tenant_id: UUID | None,limit: int,
+    ) -> GraphRiskList:
+        snapshot_rows = await self._active_graph_snapshots(
+            tenant_id,policy_key="runtime-dependency",
+        )
+        if not snapshot_rows or tenant_id is None:
+            return GraphRiskList(
+                as_of=datetime.now(UTC),
+                limitations=[{"code":"NO_ACTIVE_RUNTIME_SNAPSHOT","message":"Systemic graph risk is not ready."}],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            SELECT entity.id,entity.entity_type,entity.name,entity.canonical_key,
+                   entity.properties->>'summary' AS summary,metric.metric_key,
+                   metric.numeric_value,metric.percentile,metric.rank,
+                   metric.components,metric.limitations
+            FROM graph_entity_metric metric
+            JOIN entity ON entity.id=metric.entity_id
+            WHERE metric.run_id=%s AND metric.tenant_id=%s
+              AND metric.metric_key IN ('reachability.upstream_impact','betweenness','spof.articulation','pagerank')
+            ORDER BY entity.id,metric.metric_key
+            """,
+            (snapshot.analysis_run_id,tenant_id),tenant_id=tenant_id,
+        )
+        grouped: dict[UUID, dict[str, Any]] = {}
+        for row in rows:
+            bucket = grouped.setdefault(row["id"],{"entity":row,"metrics":[]})
+            bucket["metrics"].append(GraphMetric(
+                analysis_run_id=snapshot.analysis_run_id,policy_key=snapshot.policy_key,
+                metric_key=row["metric_key"],numeric_value=row.get("numeric_value"),
+                percentile=row.get("percentile"),rank=row.get("rank"),
+                components=row.get("components") or {},limitations=row.get("limitations") or [],
+            ))
+        weights = {
+            "reachability.upstream_impact":0.4,"betweenness":0.3,
+            "spof.articulation":0.2,"pagerank":0.1,
+        }
+        risk_items: list[GraphRiskItem] = []
+        for bucket in grouped.values():
+            metrics = bucket["metrics"]
+            available = [metric for metric in metrics if metric.percentile is not None]
+            weight_total = sum(weights[metric.metric_key] for metric in available)
+            score = (
+                sum(weights[metric.metric_key]*(metric.percentile or 0) for metric in available)
+                / weight_total if weight_total else 0
+            )
+            reasons = [
+                f"{metric.metric_key} is at the {round((metric.percentile or 0)*100)}th estate percentile."
+                for metric in sorted(available,key=lambda item:item.percentile or 0,reverse=True)[:2]
+            ]
+            risk_items.append(GraphRiskItem(
+                entity=_entity(bucket["entity"]),systemic_risk=score,
+                component_metrics=metrics,reasons=reasons,
+            ))
+        risk_items.sort(key=lambda item:(-item.systemic_risk,item.entity.name.lower(),str(item.entity.id)))
+        return GraphRiskList(
+            snapshot=snapshot,risks=risk_items[:limit],as_of=snapshot.as_of,
+            limitations=list(snapshot.limitations)+[
+                {"code":"RENORMALIZED_COMPOSITE","message":"Business criticality and incident/vulnerability overlays are unavailable; structural weights were renormalized.","method_version":"graph-systemic-risk/v1"}
+            ],
+        )
+
+    async def graph_communities(
+        self,*,tenant_id: UUID | None,policy_key: str,limit: int,
+    ) -> GraphCommunityList:
+        snapshot_rows = await self._active_graph_snapshots(tenant_id,policy_key=policy_key)
+        if not snapshot_rows or tenant_id is None:
+            return GraphCommunityList(
+                algorithm_key="wcc",as_of=datetime.now(UTC),
+                limitations=[{"code":"NO_ACTIVE_POLICY_SNAPSHOT","message":"Community data is not ready for this policy."}],
+            )
+        snapshot = self._graph_snapshot(snapshot_rows[0])
+        rows = await self.database.fetch_all(
+            """
+            WITH ranked AS (
+              SELECT membership.community_key,entity.id,entity.entity_type,entity.name,
+                     entity.canonical_key,entity.properties->>'summary' AS summary,
+                     count(*) OVER(PARTITION BY membership.community_key) AS member_count,
+                     row_number() OVER(PARTITION BY membership.community_key ORDER BY entity.name,entity.id) AS member_rank
+              FROM graph_community_membership membership
+              JOIN entity ON entity.id=membership.entity_id
+              WHERE membership.run_id=%s AND membership.tenant_id=%s
+                AND membership.algorithm_key='wcc'
+            ), selected AS (
+              SELECT * FROM ranked
+              WHERE member_rank<=5
+                AND community_key IN (
+                  SELECT community_key FROM ranked GROUP BY community_key
+                  ORDER BY max(member_count) DESC,community_key LIMIT %s
+                )
+            )
+            SELECT * FROM selected ORDER BY member_count DESC,community_key,member_rank
+            """,
+            (snapshot.analysis_run_id,tenant_id,limit),tenant_id=tenant_id,
+        )
+        grouped: dict[str, GraphCommunity] = {}
+        for row in rows:
+            community = grouped.get(row["community_key"])
+            if community is None:
+                community = GraphCommunity(
+                    community_key=row["community_key"],member_count=row["member_count"],
+                )
+                grouped[row["community_key"]] = community
+            community.representative_entities.append(_entity(row))
+        return GraphCommunityList(
+            snapshot=snapshot,algorithm_key="wcc",communities=list(grouped.values()),
+            as_of=snapshot.as_of,limitations=list(snapshot.limitations),
+        )
+
+    async def semantic_search(
+        self,request: SemanticSearchRequest,*,tenant_id: UUID | None,
+    ) -> SemanticSearchResponse:
+        if tenant_id is None:
+            raise APIError(400,"TENANT_REQUIRED","Semantic search requires a tenant context.")
+        space = await self.database.fetch_one(
+            """
+            SELECT space.id,space.space_key,space.provider,space.model_or_algorithm,
+                   space.dimensions,space.normalization,space.template_version,
+                   policy.external_processing_allowed,policy.sensitive_content_allowed,
+                   policy.provider_base_url,
+                   CASE WHEN secret.id IS NULL THEN NULL
+                        ELSE pgp_sym_decrypt(secret.ciphertext,%s)::text END AS api_key
+            FROM active_embedding_space active
+            JOIN embedding_space space ON space.id=active.embedding_space_id
+              AND space.tenant_id=active.tenant_id
+            JOIN tenant_embedding_policy policy ON policy.tenant_id=active.tenant_id
+            LEFT JOIN tenant_secret secret ON secret.id=policy.credential_secret_id
+              AND secret.tenant_id=policy.tenant_id
+            WHERE active.tenant_id=%s AND active.space_kind='SEMANTIC_ENTITY'
+              AND policy.enabled AND space.lifecycle_state='ACTIVE'
+              AND space.coverage_ratio>=0.95
+              AND coalesce((space.evaluation->>'passed')::boolean,false)
+            """,
+            (self.credential_encryption_key,tenant_id),tenant_id=tenant_id,
+        )
+        if space is None:
+            raise APIError(503,"SEMANTIC_SPACE_UNAVAILABLE","No evaluated semantic embedding space is active.")
+        provider = str(space["provider"])
+        if provider == "LOCAL":
+            adapter = LocalHashEmbeddingAdapter()
+        else:
+            if not space["external_processing_allowed"]:
+                raise APIError(503,"SEMANTIC_PROVIDER_DISABLED","Tenant policy forbids external query embedding.")
+            if not space.get("provider_base_url") or not space.get("api_key"):
+                raise APIError(503,"SEMANTIC_PROVIDER_UNCONFIGURED","Semantic provider credentials are incomplete.")
+            adapter = OpenAICompatibleEmbeddingAdapter(
+                base_url=space["provider_base_url"],api_key=space["api_key"],
+            )
+        try:
+            embedded = await asyncio.to_thread(
+                adapter.embed,request.query,dimensions=int(space["dimensions"]),
+                model=space["model_or_algorithm"],
+            )
+        except Exception as error:
+            raise APIError(
+                503,"SEMANTIC_PROVIDER_UNAVAILABLE","The configured semantic embedding provider is unavailable.",
+                {"error_type":type(error).__name__},
+            ) from error
+        entity_types = sorted(set(request.entity_types))
+        rows = await self.database.fetch_all(
+            """
+            SELECT entity.id,entity.entity_type,entity.name,entity.canonical_key,
+                   entity.properties->>'summary' AS summary,document.input_hash,document.sensitivity,
+                   1-(embedding.embedding<=>%s::vector) AS score
+            FROM entity_embedding embedding
+            JOIN embedding_document document ON document.embedding_space_id=embedding.embedding_space_id
+              AND document.entity_id=embedding.entity_id
+            JOIN entity ON entity.id=embedding.entity_id
+            WHERE embedding.tenant_id=%s AND embedding.embedding_space_id=%s
+              AND (cardinality(%s::text[])=0 OR entity.entity_type=ANY(%s::text[]))
+            ORDER BY embedding.embedding<=>%s::vector,entity.id LIMIT %s
+            """,
+            (
+                vector_literal(embedded.values),tenant_id,space["id"],entity_types,entity_types,
+                vector_literal(embedded.values),request.limit,
+            ),tenant_id=tenant_id,
+        )
+        return SemanticSearchResponse(
+            space_id=space["id"],space_key=space["space_key"],
+            model_or_algorithm=space["model_or_algorithm"],template_version=space["template_version"],
+            query_hash=embedding_content_hash(request.query),
+            hits=[SemanticSearchHit(
+                entity=_entity(row),score=max(-1,min(1,_number(row["score"]))),
+                input_hash=row["input_hash"],sensitivity=row["sensitivity"],
+            ) for row in rows],
+            as_of=datetime.now(UTC),
+            limitations=[{
+                "code":"EXACT_SEARCH","message":"Results use exact tenant-filtered cosine search; no approximate index was used."
+            }],
+        )
+
+    async def embedding_status(self,*,tenant_id: UUID | None) -> EmbeddingStatus:
+        if tenant_id is None:
+            return EmbeddingStatus(
+                as_of=datetime.now(UTC),enabled=False,provider="UNCONFIGURED",model="",
+                pending_jobs=0,running_jobs=0,failed_jobs=0,
+                limitations=[{"code":"TENANT_REQUIRED","message":"Embedding status requires a tenant context."}],
+            )
+        policy = await self.database.fetch_one(
+            "SELECT enabled,provider,model FROM tenant_embedding_policy WHERE tenant_id=%s",
+            (tenant_id,),tenant_id=tenant_id,
+        )
+        workload = await self.database.fetch_one(
+            """
+            SELECT count(*) FILTER(WHERE status IN ('PENDING','RETRY_WAIT')) pending_jobs,
+                   count(*) FILTER(WHERE status='RUNNING') running_jobs,
+                   count(*) FILTER(WHERE status='DEAD_LETTER') failed_jobs
+            FROM embedding_job WHERE tenant_id=%s
+            """,
+            (tenant_id,),tenant_id=tenant_id,
+        ) or {}
+        rows = await self.database.fetch_all(
+            """
+            SELECT space.*,active.embedding_space_id IS NOT NULL AS is_active
+            FROM embedding_space space
+            LEFT JOIN active_embedding_space active ON active.embedding_space_id=space.id
+            WHERE space.tenant_id=%s AND space.lifecycle_state IN ('ACTIVE','SHADOW')
+            ORDER BY space.space_kind,space.created_at DESC
+            """,
+            (tenant_id,),tenant_id=tenant_id,
+        )
+        snapshots = [(EmbeddingSpaceSnapshot(
+            id=row["id"],space_key=row["space_key"],space_kind=row["space_kind"],
+            lifecycle_state=row["lifecycle_state"],provider=row["provider"],
+            model_or_algorithm=row["model_or_algorithm"],dimensions=row["dimensions"],
+            template_version=row["template_version"],coverage_ratio=row["coverage_ratio"],
+            evaluation=row["evaluation"],updated_at=row["updated_at"],
+        ),bool(row["is_active"])) for row in rows]
+        limitations: list[dict[str,Any]] = []
+        if policy is None:
+            limitations.append({"code":"EMBEDDING_POLICY_UNCONFIGURED","message":"No tenant embedding policy is configured."})
+        if not any(active for _,active in snapshots):
+            limitations.append({"code":"NO_ACTIVE_EMBEDDING_SPACE","message":"Search remains unavailable until a shadow space passes its gates."})
+        for snapshot,active in snapshots:
+            if active and (
+                snapshot.coverage_ratio<0.95 or snapshot.evaluation.get("passed") is not True
+            ):
+                limitations.append({
+                    "code":"ACTIVE_EMBEDDING_SPACE_INVALIDATED",
+                    "message":"The linked semantic space no longer passes its coverage or reviewed-relevance gate; search is fail-closed until reevaluation.",
+                    "space_id":str(snapshot.id),
+                })
+        return EmbeddingStatus(
+            as_of=datetime.now(UTC),enabled=bool(policy and policy["enabled"]),
+            provider=str(policy["provider"] if policy else "UNCONFIGURED"),
+            model=str(policy["model"] if policy else ""),
+            pending_jobs=int(workload.get("pending_jobs") or 0),
+            running_jobs=int(workload.get("running_jobs") or 0),
+            failed_jobs=int(workload.get("failed_jobs") or 0),
+            active_spaces=[snapshot for snapshot,active in snapshots if active],
+            shadow_spaces=[snapshot for snapshot,active in snapshots if not active],
+            limitations=limitations,
+        )
+
+    async def similar_applications(
+        self,application_id: UUID,*,tenant_id: UUID | None,limit: int,
+    ) -> ApplicationSimilarityList:
+        subject_row = await self._get_entity(
+            application_id,tenant_id,namespace="ENTERPRISE",entity_type="Application",
+        )
+        rows = await self.database.fetch_all(
+            """
+            SELECT candidate.id,candidate.score,candidate.method_version,candidate.components,
+                   candidate.overlap_features,candidate.differences,candidate.coverage,
+                   candidate.limitations,candidate.review_state,candidate.created_at,
+                   peer.id AS peer_id,peer.entity_type AS peer_entity_type,peer.name AS peer_name,
+                   peer.canonical_key AS peer_canonical_key,peer.properties->>'summary' AS peer_summary
+            FROM application_similarity_candidate candidate
+            JOIN entity peer ON peer.id=CASE WHEN candidate.left_application_id=%s
+              THEN candidate.right_application_id ELSE candidate.left_application_id END
+            WHERE candidate.tenant_id=%s
+              AND %s IN (candidate.left_application_id,candidate.right_application_id)
+            ORDER BY candidate.score DESC,candidate.id LIMIT %s
+            """,
+            (application_id,tenant_id,application_id,limit),tenant_id=tenant_id,
+        )
+        return ApplicationSimilarityList(
+            subject=_entity(subject_row),
+            candidates=[ApplicationSimilarityCandidate(
+                id=row["id"],application=EntitySummary(
+                    id=row["peer_id"],kind=row["peer_entity_type"],name=row["peer_name"],
+                    canonical_key=row.get("peer_canonical_key"),summary=row.get("peer_summary"),
+                ),score=row["score"],method_version=row["method_version"],
+                components=row["components"],overlaps=row["overlap_features"],
+                differences=row["differences"],coverage=row["coverage"],
+                limitations=row["limitations"],review_state=row["review_state"],
+                created_at=row["created_at"],
+            ) for row in rows],
+            as_of=datetime.now(UTC),
+            limitations=[] if rows else [{
+                "code":"SIMILARITY_NOT_EVALUATED","message":"No explainable application-similarity candidates are available yet."
+            }],
+        )
+
+    async def review_application_similarity(
+        self,candidate_id: UUID,review: ApplicationSimilarityReviewRequest,
+        *,tenant_id: UUID | None,actor_key: str,
+    ) -> ApplicationSimilarityReviewResult:
+        if tenant_id is None:
+            raise APIError(400,"TENANT_REQUIRED","Similarity review requires a tenant context.")
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                """SELECT id,score,method_version FROM application_similarity_candidate
+                WHERE id=%s AND tenant_id=%s FOR UPDATE""",
+                (candidate_id,tenant_id),
+            )
+            candidate = await cursor.fetchone()
+            if candidate is None:
+                raise APIError(404,"SIMILARITY_CANDIDATE_NOT_FOUND","The similarity candidate was not found.")
+            await connection.execute(
+                """
+                INSERT INTO application_similarity_feedback(
+                  tenant_id,candidate_id,decision,reason_code,rationale,
+                  candidate_method_version,candidate_score,actor_key
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    tenant_id,candidate_id,review.decision,review.reason_code,review.rationale,
+                    candidate["method_version"],candidate["score"],actor_key,
+                ),
+            )
+            await connection.execute(
+                "UPDATE application_similarity_candidate SET review_state=%s,updated_at=now() WHERE id=%s",
+                (review.decision,candidate_id),
+            )
+        return ApplicationSimilarityReviewResult(
+            candidate_id=candidate_id,review_state=review.decision,reviewed_at=datetime.now(UTC),
         )
 
     async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse:
@@ -2909,66 +3546,72 @@ class ReadModelStore(AdminReadModelsMixin):
         min_confidence: float = 0,
         highlight_to: UUID | None = None,
     ) -> GraphNeighborhood:
-        if self.graph_read_mode != "sql":
+        if self.graph_read_mode in {"auto", "neo4j"}:
             try:
-                if self.graph_read_mode == "auto":
-                    projection = await self.age_graph.projection_state(tenant_id)
-                    if not projection.current:
+                projection = await self.neo4j_graph.projection_state(tenant_id)
+                if not projection.current:
+                    if projection.configured:
                         self.graph_read_metrics.lag_fallbacks += 1
                         logger.info(
-                            "graph read using SQL because AGE projection is behind",
-                            extra={
-                                "pending_events": projection.pending_events,
-                                "oldest_pending_seconds": projection.oldest_pending_seconds,
-                            },
+                            "graph read using SQL because Neo4j projection is unavailable or behind",
+                            extra={"pending_events": projection.pending_events},
                         )
-                    else:
-                        async with asyncio.timeout(self.graph_age_timeout_seconds):
-                            graph = await self._try_age_graph_neighborhood(
-                                center_id,
-                                tenant_id=tenant_id,
-                                depth=depth,
-                                real_node_limit=real_node_limit,
-                                predicates=predicates,
-                                namespaces=namespaces,
-                                min_confidence=min_confidence,
-                                highlight_to=highlight_to,
-                            )
-                        if graph is not None:
-                            self.graph_read_metrics.age_reads += 1
-                            return graph
                 else:
-                    graph = await self._try_age_graph_neighborhood(
-                        center_id,
-                        tenant_id=tenant_id,
-                        depth=depth,
-                        real_node_limit=real_node_limit,
-                        predicates=predicates,
-                        namespaces=namespaces,
-                        min_confidence=min_confidence,
-                        highlight_to=highlight_to,
-                    )
+                    async with asyncio.timeout(self.graph_age_timeout_seconds):
+                        graph = await self._try_neo4j_graph_neighborhood(
+                            center_id,
+                            tenant_id=tenant_id,
+                            depth=depth,
+                            real_node_limit=real_node_limit,
+                            predicates=predicates,
+                            namespaces=namespaces,
+                            min_confidence=min_confidence,
+                            highlight_to=highlight_to,
+                        )
                     if graph is not None:
-                        self.graph_read_metrics.age_reads += 1
+                        self.graph_read_metrics.neo4j_reads += 1
                         return graph
             except APIError:
                 raise
             except TimeoutError:
                 self.graph_read_metrics.timeout_fallbacks += 1
                 logger.warning(
-                    "graph read falling back to SQL because AGE exceeded its time budget",
+                    "graph read falling back to SQL because Neo4j exceeded its time budget",
                     extra={"timeout_seconds": self.graph_age_timeout_seconds},
                 )
             except AgeParityError as error:
                 self.graph_read_metrics.parity_fallbacks += 1
                 logger.warning(
-                    "graph read falling back to SQL because AGE differs from current SQL state",
+                    "graph read falling back to SQL because Neo4j differs from current SQL state",
                     extra={"reason": str(error)},
                 )
             except Exception as error:
                 self.graph_read_metrics.unavailable_fallbacks += 1
                 logger.warning(
-                    "graph read falling back to SQL because AGE is unavailable",
+                    "graph read falling back to SQL because Neo4j is unavailable",
+                    extra={"error_type": type(error).__name__},
+                )
+        elif self.graph_read_mode == "age":
+            try:
+                graph = await self._try_age_graph_neighborhood(
+                    center_id,
+                    tenant_id=tenant_id,
+                    depth=depth,
+                    real_node_limit=real_node_limit,
+                    predicates=predicates,
+                    namespaces=namespaces,
+                    min_confidence=min_confidence,
+                    highlight_to=highlight_to,
+                )
+                if graph is not None:
+                    self.graph_read_metrics.age_reads += 1
+                    return graph
+            except APIError:
+                raise
+            except Exception as error:
+                self.graph_read_metrics.unavailable_fallbacks += 1
+                logger.warning(
+                    "legacy AGE graph read failed; using SQL",
                     extra={"error_type": type(error).__name__},
                 )
         self.graph_read_metrics.sql_reads += 1
@@ -2980,6 +3623,45 @@ class ReadModelStore(AdminReadModelsMixin):
             predicates=predicates,
             namespaces=namespaces,
             min_confidence=min_confidence,
+            highlight_to=highlight_to,
+        )
+
+    async def _try_neo4j_graph_neighborhood(
+        self,
+        center_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        depth: int,
+        real_node_limit: int,
+        predicates: list[str] | None,
+        namespaces: list[str] | None,
+        min_confidence: float,
+        highlight_to: UUID | None,
+    ) -> GraphNeighborhood | None:
+        await self._get_entity(center_id, tenant_id)
+        if highlight_to is not None:
+            await self._get_entity(highlight_to, tenant_id)
+        topology = await self.neo4j_graph.neighborhood(
+            center_id,
+            tenant_id=tenant_id,
+            depth=depth,
+            predicates=predicates,
+            namespaces=namespaces,
+            min_confidence=min_confidence,
+        )
+        if topology is None:
+            self.graph_read_metrics.parity_fallbacks += 1
+            return None
+        if topology.discovery_capped:
+            self.graph_read_metrics.discovery_limit_fallbacks += 1
+            return None
+        return await self._build_projected_graph_neighborhood(
+            center_id,
+            topology,
+            source="Neo4j",
+            tenant_id=tenant_id,
+            depth=depth,
+            real_node_limit=real_node_limit,
             highlight_to=highlight_to,
         )
 
@@ -3012,9 +3694,10 @@ class ReadModelStore(AdminReadModelsMixin):
         if topology.discovery_capped:
             self.graph_read_metrics.discovery_limit_fallbacks += 1
             return None
-        return await self._build_age_graph_neighborhood(
+        return await self._build_projected_graph_neighborhood(
             center_id,
             topology,
+            source="AGE",
             tenant_id=tenant_id,
             depth=depth,
             real_node_limit=real_node_limit,
@@ -3163,11 +3846,12 @@ class ReadModelStore(AdminReadModelsMixin):
             truncation_reason="REAL_NODE_LIMIT" if truncated else None,
         )
 
-    async def _build_age_graph_neighborhood(
+    async def _build_projected_graph_neighborhood(
         self,
         center_id: UUID,
-        topology: AgeTopology,
+        topology: AgeTopology | Neo4jTopology,
         *,
+        source: str,
         tenant_id: UUID | None,
         depth: int,
         real_node_limit: int,
@@ -3184,7 +3868,7 @@ class ReadModelStore(AdminReadModelsMixin):
         rows_by_id = {row["id"]: row for row in node_rows}
         missing_nodes = set(topology.node_depths) - set(rows_by_id)
         if missing_nodes:
-            raise AgeParityError(f"{len(missing_nodes)} AGE nodes are absent from SQL")
+            raise AgeParityError(f"{len(missing_nodes)} {source} nodes are absent from SQL")
 
         edge_rows = await self.database.fetch_all(
             """
@@ -3210,7 +3894,7 @@ class ReadModelStore(AdminReadModelsMixin):
         sql_fact_ids = {row["fact_assertion_id"] for row in edge_rows}
         if sql_fact_ids != set(topology.fact_ids):
             raise AgeParityError(
-                f"AGE returned {len(topology.fact_ids)} facts but SQL hydrated {len(sql_fact_ids)}"
+                f"{source} returned {len(topology.fact_ids)} facts but SQL hydrated {len(sql_fact_ids)}"
             )
 
         ranked_rows = sorted(

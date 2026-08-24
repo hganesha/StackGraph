@@ -1,0 +1,104 @@
+import unittest
+
+from stackgraph_graph_intelligence.algorithms import (
+    articulation_points_and_bridges,
+    circular_dependency_motifs,
+    cohort_percentile_anomalies,
+    materialize_impact_paths,
+    rank_metrics,
+    reachability_metrics,
+)
+from stackgraph_graph_intelligence.worker import validate_projection_budget
+
+
+class GraphAlgorithmTests(unittest.TestCase):
+    def test_rank_metrics_is_deterministic_and_uses_competition_rank(self) -> None:
+        ranked = rank_metrics(
+            "pagerank",[("c",1.0,{}),("b",2.0,{}),("a",2.0,{})]
+        )
+        self.assertEqual([row.entity_id for row in ranked],["a","b","c"])
+        self.assertEqual([row.rank for row in ranked],[1,1,3])
+        self.assertEqual([row.percentile for row in ranked],[0.75,0.75,0.0])
+
+    def test_rank_metrics_assigns_a_neutral_percentile_when_all_values_tie(self) -> None:
+        ranked = rank_metrics("degree",[("a",0,{}),("b",0,{}),("c",0,{})])
+        self.assertEqual([row.percentile for row in ranked],[0.5,0.5,0.5])
+
+    def test_reachability_is_exact_for_small_directed_graph(self) -> None:
+        result = reachability_metrics(
+            ["a","b","c","d"],[('a','b'),('b','c'),('a','d')]
+        )
+        self.assertEqual(result.reachable,{"a":3,"b":1,"c":0,"d":0})
+        self.assertEqual(result.depth["a"],2)
+        self.assertFalse(result.limited_entities)
+
+    def test_reachability_discloses_bounded_large_graph(self) -> None:
+        result = reachability_metrics(
+            ["a","b","c","d"],[('a','b'),('b','c'),('c','d')],
+            exact_node_limit=2,bounded_max_depth=1,
+        )
+        self.assertEqual(result.reachable["a"],1)
+        self.assertIn("a",result.limited_entities)
+
+    def test_tarjan_handles_parallel_edges_without_false_bridge(self) -> None:
+        result = articulation_points_and_bridges(
+            ["a","b","c"],
+            [("a","b","f1"),("a","b","f2"),("b","c","f3")],
+        )
+        self.assertEqual(result.articulation_entities,frozenset({"b"}))
+        self.assertEqual(result.bridge_fact_ids,frozenset({"f3"}))
+
+    def test_impact_paths_are_shortest_deterministic_and_evidence_backed(self) -> None:
+        paths = materialize_impact_paths(
+            {"package":"Package","service":"Service","app":"Application"},
+            [
+                ("package","service","f1",0.9),
+                ("service","app","f2",0.8),
+                ("package","app","f3",0.7),
+            ],
+        )
+        package_path = next(path for path in paths if path.source_entity_id=="package")
+        self.assertEqual(package_path.entity_ids,("package","app"))
+        self.assertEqual(package_path.fact_ids,("f3",))
+        self.assertEqual(package_path.minimum_confidence,0.7)
+
+    def test_circular_dependency_motif_retains_supporting_facts(self) -> None:
+        motifs = circular_dependency_motifs(
+            ["a","b","c","outside"],
+            [
+                ("a","b","fact-ab",0.9),("b","c","fact-bc",0.8),
+                ("c","a","fact-ca",0.7),("c","outside","fact-out",1.0),
+            ],
+        )
+        self.assertEqual(len(motifs),1)
+        self.assertEqual(motifs[0].entity_ids,("a","b","c"))
+        self.assertEqual(motifs[0].fact_ids,("fact-ab","fact-bc","fact-ca"))
+        self.assertEqual(motifs[0].minimum_confidence,0.7)
+
+    def test_anomalies_use_an_explicit_sufficient_cohort(self) -> None:
+        anomalies = cohort_percentile_anomalies(
+            "reachability.upstream_impact",
+            [("app-a",1),("app-b",2),("app-c",3),("app-d",4),("app-e",100)],
+            cohort_key="entity-type:Application",
+        )
+        self.assertEqual(
+            [(item.entity_id,item.score,item.cohort_key) for item in anomalies],
+            [("app-e",1.0,"entity-type:Application")],
+        )
+        self.assertEqual(cohort_percentile_anomalies(
+            "reachability.upstream_impact",[("a",1),("b",100)],
+            cohort_key="entity-type:Service",
+        ),())
+
+    def test_projection_budget_checks_estimated_memory_before_projection(self) -> None:
+        validate_projection_budget(
+            100,500,{"bytesMax":1_000_000},{"max_nodes":100,"max_edges":500,"max_memory_bytes":1_000_000},
+        )
+        with self.assertRaisesRegex(RuntimeError,"memory budget exceeded"):
+            validate_projection_budget(
+                100,500,{"bytesMax":1_000_001},{"max_memory_bytes":1_000_000},
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -11,10 +11,11 @@ import {
   type EnterpriseInsightCategory,
   type EnterpriseInsightReport,
   type EnterpriseInsightReportList,
+  type GraphRiskList,
 } from "@stackgraph/shared";
 import { CitationChip } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
-import { useEnterpriseInsightReports } from "@/lib/queries";
+import { useEnterpriseInsightReports, useGraphIntelligenceRisks } from "@/lib/queries";
 import styles from "./ask.module.css";
 
 interface ContextLink {
@@ -118,6 +119,7 @@ export default function AskPage() {
   const nextId = useRef(1);
   const listEndRef = useRef<HTMLDivElement>(null);
   const insightReports = useEnterpriseInsightReports();
+  const graphRisks = useGraphIntelligenceRisks(6);
 
   useEffect(() => {
     if (searchParams.get("view") === "ask") setMode("ask");
@@ -232,6 +234,9 @@ export default function AskPage() {
           loading={insightReports.isLoading}
           error={insightReports.isError}
           onOpen={openReport}
+          graphRisks={graphRisks.data}
+          graphRisksLoading={graphRisks.isLoading}
+          graphRisksError={graphRisks.isError}
         />
       ) : (
         <>
@@ -314,11 +319,17 @@ function InsightOverview({
   loading,
   error,
   onOpen,
+  graphRisks,
+  graphRisksLoading,
+  graphRisksError,
 }: {
   data?: EnterpriseInsightReportList;
   loading: boolean;
   error: boolean;
   onOpen: (report: EnterpriseInsightReport) => void;
+  graphRisks?: GraphRiskList;
+  graphRisksLoading: boolean;
+  graphRisksError: boolean;
 }) {
   if (loading) {
     return (
@@ -345,6 +356,45 @@ function InsightOverview({
         </p>
         <span className="sg-mono">Evaluated {formatRelative(data.evaluated_at)}</span>
       </div>
+
+      <section className={styles.reportSection} aria-labelledby="architecture-risk-heading">
+        <div className={styles.reportSectionHead}>
+          <h2 id="architecture-risk-heading">Architecture risk</h2>
+          <span>{graphRisks?.risks.length ?? 0} ranked entities</span>
+        </div>
+        {graphRisksLoading ? (
+          <div className={styles.riskLoading}><span /><span /><span /></div>
+        ) : graphRisksError ? (
+          <p className={styles.reportError}>Architecture-risk snapshots are temporarily unavailable.</p>
+        ) : graphRisks?.risks.length ? (
+          <div className={styles.riskGrid}>
+            {graphRisks.risks.slice(0, 6).map((risk) => {
+              const basePath = risk.entity.kind === "Application"
+                ? "/applications"
+                : risk.entity.kind === "Technology" || risk.entity.kind === "Package"
+                  ? "/technologies"
+                  : "/estate";
+              return (
+                <Link key={risk.entity.id} href={basePath === "/estate" ? basePath : `${basePath}/${risk.entity.id}`} className={styles.riskCard}>
+                  <span className="sg-mono">{Math.round(risk.systemic_risk * 100)}</span>
+                  <div>
+                    <strong>{risk.entity.name}</strong>
+                    <p>{risk.reasons[0] ?? "Ranked from complete structural metrics in the active runtime snapshot."}</p>
+                  </div>
+                  <small>{risk.entity.kind}</small>
+                </Link>
+              );
+            })}
+          </div>
+        ) : (
+          <p className={styles.reportError}>No runtime-dependency risk ranking is available yet. Projection and analysis may still be catching up.</p>
+        )}
+        {graphRisks?.limitations.map((limitation, index) => (
+          <p className={styles.riskLimitation} key={`${String(limitation.code ?? "limitation")}:${index}`}>
+            {String(limitation.message ?? limitation.code ?? "This ranking has a coverage limitation.")}
+          </p>
+        ))}
+      </section>
 
       {CATEGORY_ORDER.map((category) => {
         const reports = data.reports.filter((report) => report.category === category);
