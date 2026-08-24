@@ -7087,6 +7087,13 @@
           "entity": {
             "$ref": "#/components/schemas/EntitySummary"
           },
+          "impacted_applications": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Impacted Applications",
+            "type": "array"
+          },
           "reasons": {
             "items": {
               "type": "string"

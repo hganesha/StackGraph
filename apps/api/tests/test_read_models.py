@@ -26,6 +26,34 @@ from app.read_models import (
 NOW = datetime(2026, 8, 19, 14, 10, tzinfo=UTC)
 
 
+def test_graph_risk_applications_group_governed_application_context() -> None:
+    tenant_id = UUID("00000000-0000-0000-0000-000000000001")
+    repository_id = UUID("00000000-0000-4000-8000-000000000401")
+    application_id = UUID("00000000-0000-4000-8000-000000000201")
+
+    class GraphRiskApplicationDatabase:
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            assert "WITH requested AS" in query
+            assert "ordinal<=5" in query
+            assert params[0] == [repository_id]
+            assert all(value == tenant_id for value in params[1:])
+            return [{
+                "entity_id": repository_id,
+                "id": application_id,
+                "entity_type": "Application",
+                "name": "Billing API",
+                "canonical_key": "application:billing-api",
+                "summary": "Collects and reconciles payments.",
+            }]
+
+    result = asyncio.run(ReadModelStore(
+        GraphRiskApplicationDatabase()
+    )._graph_risk_applications([repository_id],tenant_id))
+
+    assert result[repository_id][0].id == application_id
+    assert result[repository_id][0].name == "Billing API"
+
+
 def test_structural_clone_candidates_feed_enterprise_library_standards() -> None:
     fact_id = UUID("00000000-0000-4000-8000-0000000007d1")
 

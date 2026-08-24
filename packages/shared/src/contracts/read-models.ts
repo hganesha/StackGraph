@@ -358,6 +358,7 @@ export interface GraphBlastRadius {
 
 export interface GraphRiskItem {
   entity: EntitySummary;
+  impacted_applications: EntitySummary[];
   systemic_risk: number;
   component_metrics: GraphMetric[];
   reasons: string[];

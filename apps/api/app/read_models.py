@@ -1689,6 +1689,115 @@ class ReadModelStore(AdminReadModelsMixin):
             limitations=list({json.dumps(item,sort_keys=True):item for item in limitations}.values()),
         )
 
+    async def _graph_risk_applications(
+        self,entity_ids: list[UUID],tenant_id: UUID,
+    ) -> dict[UUID,list[EntitySummary]]:
+        if not entity_ids:
+            return {}
+        rows = await self.database.fetch_all(
+            """
+            WITH requested AS (
+              SELECT unnest(%s::uuid[]) entity_id
+            ), candidates AS (
+              SELECT requested.entity_id,application.id,application.entity_type,
+                     application.name,application.canonical_key,
+                     application.properties->>'summary' summary,0 depth
+              FROM requested
+              JOIN entity application ON application.id=requested.entity_id
+              WHERE application.tenant_id=%s
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+              UNION ALL
+              SELECT requested.entity_id,application.id,application.entity_type,
+                     application.name,application.canonical_key,
+                     application.properties->>'summary' summary,1 depth
+              FROM requested
+              JOIN current_relationship relationship
+                ON relationship.tenant_id=%s
+               AND (
+                 relationship.source_entity_id=requested.entity_id
+                 OR relationship.target_entity_id=requested.entity_id
+               )
+              JOIN entity application
+                ON application.id=CASE
+                  WHEN relationship.source_entity_id=requested.entity_id
+                    THEN relationship.target_entity_id
+                  ELSE relationship.source_entity_id
+                END
+              WHERE application.tenant_id=%s
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+                AND relationship.relationship_type IN (
+                  'CONTAINS','IMPLEMENTED_BY','IMPLEMENTS','DEPENDS_ON',
+                  'USES','RUNS_ON','BUILT_ON','CONNECTS_TO'
+                )
+              UNION ALL
+              SELECT requested.entity_id,application.id,application.entity_type,
+                     application.name,application.canonical_key,
+                     application.properties->>'summary' summary,2 depth
+              FROM requested
+              JOIN current_relationship usage
+                ON usage.tenant_id=%s
+               AND (
+                 usage.source_entity_id=requested.entity_id
+                 OR usage.target_entity_id=requested.entity_id
+               )
+              JOIN entity repository
+                ON repository.id=CASE
+                  WHEN usage.source_entity_id=requested.entity_id
+                    THEN usage.target_entity_id
+                  ELSE usage.source_entity_id
+                END
+               AND repository.tenant_id=%s
+               AND repository.namespace='ENTERPRISE'
+               AND repository.entity_type='Repository'
+              JOIN current_relationship ownership
+                ON ownership.tenant_id=%s
+               AND (
+                 ownership.source_entity_id=repository.id
+                 OR ownership.target_entity_id=repository.id
+               )
+              JOIN entity application
+                ON application.id=CASE
+                  WHEN ownership.source_entity_id=repository.id
+                    THEN ownership.target_entity_id
+                  ELSE ownership.source_entity_id
+                END
+              WHERE application.tenant_id=%s
+                AND application.namespace='ENTERPRISE'
+                AND application.entity_type='Application'
+                AND usage.relationship_type IN (
+                  'CONTAINS','IMPLEMENTED_BY','IMPLEMENTS','DEPENDS_ON',
+                  'USES','RUNS_ON','BUILT_ON','HAS_VERSION','CONNECTS_TO'
+                )
+                AND ownership.relationship_type IN (
+                  'CONTAINS','IMPLEMENTED_BY','IMPLEMENTS'
+                )
+            ), unique_candidates AS (
+              SELECT DISTINCT ON (entity_id,id)
+                     entity_id,id,entity_type,name,canonical_key,summary,depth
+              FROM candidates
+              ORDER BY entity_id,id,depth
+            ), ranked AS (
+              SELECT *,row_number() OVER (
+                PARTITION BY entity_id ORDER BY depth,name,id
+              ) ordinal
+              FROM unique_candidates
+            )
+            SELECT entity_id,id,entity_type,name,canonical_key,summary
+            FROM ranked WHERE ordinal<=5
+            ORDER BY entity_id,ordinal
+            """,
+            (
+                entity_ids,tenant_id,tenant_id,tenant_id,
+                tenant_id,tenant_id,tenant_id,tenant_id,
+            ),tenant_id=tenant_id,
+        )
+        applications: dict[UUID,list[EntitySummary]] = {}
+        for row in rows:
+            applications.setdefault(row["entity_id"],[]).append(_entity(row))
+        return applications
+
     async def graph_risks(
         self,*,tenant_id: UUID | None,limit: int,
     ) -> GraphRiskList:
@@ -1746,8 +1855,18 @@ class ReadModelStore(AdminReadModelsMixin):
                 component_metrics=metrics,reasons=reasons,
             ))
         risk_items.sort(key=lambda item:(-item.systemic_risk,item.entity.name.lower(),str(item.entity.id)))
+        risk_items = risk_items[:limit]
+        applications = await self._graph_risk_applications(
+            [item.entity.id for item in risk_items],tenant_id,
+        )
+        risk_items = [
+            item.model_copy(update={
+                "impacted_applications":applications.get(item.entity.id,[]),
+            })
+            for item in risk_items
+        ]
         return GraphRiskList(
-            snapshot=snapshot,risks=risk_items[:limit],as_of=snapshot.as_of,
+            snapshot=snapshot,risks=risk_items,as_of=snapshot.as_of,
             limitations=list(snapshot.limitations)+[
                 {"code":"RENORMALIZED_COMPOSITE","message":"Business criticality and incident/vulnerability overlays are unavailable; structural weights were renormalized.","method_version":"graph-systemic-risk/v1"}
             ],

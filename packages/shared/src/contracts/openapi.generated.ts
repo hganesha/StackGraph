@@ -1214,6 +1214,7 @@ export interface GraphNode {
 export interface GraphRiskItem {
   component_metrics?: Array<GraphMetric>;
   entity: EntitySummary;
+  impacted_applications?: Array<EntitySummary>;
   reasons?: Array<string>;
   systemic_risk: number;
 }

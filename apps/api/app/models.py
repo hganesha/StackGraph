@@ -338,6 +338,7 @@ class GraphBlastRadius(ContractModel):
 
 class GraphRiskItem(ContractModel):
     entity: EntitySummary
+    impacted_applications: list[EntitySummary] = Field(default_factory=list)
     systemic_risk: float = Field(ge=0, le=1)
     component_metrics: list[GraphMetric] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)

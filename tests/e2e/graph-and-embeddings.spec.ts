@@ -33,3 +33,15 @@ test("scan health reports graph and semantic readiness", async ({ page }) => {
   await expect(page.getByText("Active coverage")).toBeVisible();
   await expect(page.getByText("100%")).toBeVisible();
 });
+
+test("architecture risk findings open the impacted application", async ({ page }) => {
+  await page.goto("/ask");
+
+  const risk = page.getByRole("link", { name: /billing-svc/i });
+  await expect(risk).toHaveAttribute("href", billingApplication);
+  await expect(risk.getByText("Repository · impacts Billing API")).toBeVisible();
+
+  await risk.click();
+  await expect(page).toHaveURL(billingApplication);
+  await expect(page.getByRole("heading", { name: "Billing API" })).toBeVisible();
+});

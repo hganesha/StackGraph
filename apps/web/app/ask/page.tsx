@@ -108,6 +108,17 @@ function serializeBusinessMap(context: BusinessMapContext): string {
   return `Business map \"${context.title}\" using the ${context.template} template. ${stages.join(" | ")}`;
 }
 
+function graphRiskHref(risk: GraphRiskList["risks"][number]): string {
+  const impactedApplication = risk.impacted_applications?.[0];
+  if (impactedApplication) return `/applications/${impactedApplication.id}`;
+  if (risk.entity.kind === "Repository") return `/repositories/${risk.entity.id}`;
+  if (risk.entity.kind === "Technology" || risk.entity.kind === "Package") {
+    return `/technologies/${risk.entity.id}`;
+  }
+  if (risk.entity.kind === "Application") return `/applications/${risk.entity.id}`;
+  return "/estate";
+}
+
 export default function AskPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -369,19 +380,20 @@ function InsightOverview({
         ) : graphRisks?.risks.length ? (
           <div className={styles.riskGrid}>
             {graphRisks.risks.slice(0, 6).map((risk) => {
-              const basePath = risk.entity.kind === "Application"
-                ? "/applications"
-                : risk.entity.kind === "Technology" || risk.entity.kind === "Package"
-                  ? "/technologies"
-                  : "/estate";
+              const impactedApplications = risk.impacted_applications ?? [];
+              const primaryApplication = impactedApplications[0];
               return (
-                <Link key={risk.entity.id} href={basePath === "/estate" ? basePath : `${basePath}/${risk.entity.id}`} className={styles.riskCard}>
+                <Link key={risk.entity.id} href={graphRiskHref(risk)} className={styles.riskCard}>
                   <span className="sg-mono">{Math.round(risk.systemic_risk * 100)}</span>
                   <div>
                     <strong>{risk.entity.name}</strong>
                     <p>{risk.reasons[0] ?? "Ranked from complete structural metrics in the active runtime snapshot."}</p>
                   </div>
-                  <small>{risk.entity.kind}</small>
+                  <small>
+                    {primaryApplication
+                      ? `${risk.entity.kind} · impacts ${primaryApplication.name}${impactedApplications.length > 1 ? ` +${impactedApplications.length - 1}` : ""}`
+                      : risk.entity.kind}
+                  </small>
                 </Link>
               );
             })}

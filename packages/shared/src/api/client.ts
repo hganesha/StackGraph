@@ -843,7 +843,8 @@ const fixtureClient: StackGraphClient = {
       contract_version: "1.0.0",
       snapshot: intelligence.snapshots[0] ?? null,
       risks: [{
-        entity: intelligence.entity,
+        entity: repositoryDetail.repository,
+        impacted_applications: [applicationDetail.application],
         systemic_risk: 0.86,
         component_metrics: intelligence.metrics,
         reasons: intelligence.reasons,
