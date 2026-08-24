@@ -59,6 +59,22 @@
   overflow-wrap: anywhere;
 }
 
+.repositoryMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2);
+  margin-block-start: var(--sg-space-3);
+}
+
+.repositoryMeta span {
+  padding: var(--sg-space-1) var(--sg-space-2);
+  color: var(--sg-text-muted);
+  background: var(--sg-surface-sunken);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-pill);
+  font-size: var(--sg-type-small-size);
+}
+
 .freshness {
   padding: var(--sg-space-1) var(--sg-space-3);
   color: var(--sg-text-secondary);
@@ -74,6 +90,28 @@
   border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
   border-inline-start: 4px solid var(--sg-color-domain-enterprise-500);
   border-radius: var(--sg-radius-card);
+}
+
+.context {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sg-space-5);
+  margin-block-end: calc(var(--sg-space-3) * -1);
+  padding-block-start: var(--sg-space-3);
+}
+
+.context h2 {
+  margin: var(--sg-space-1) 0 0;
+  font-size: var(--sg-type-h2-size);
+}
+
+.context p {
+  max-inline-size: 470px;
+  margin: 0;
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+  text-align: end;
 }
 
 .sectionHead {
@@ -206,6 +244,49 @@
 .limitations ul {
   margin-block-end: 0;
   padding-inline-start: var(--sg-space-5);
+}
+
+.findingsAction {
+  display: flex;
+  justify-content: center;
+  margin-block-start: calc(var(--sg-space-4) * -1);
+}
+
+.findingsAction button {
+  min-block-size: 36px;
+  padding-inline: var(--sg-space-4);
+  color: var(--sg-text-secondary);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  font-weight: 600;
+}
+
+.findingsAction button:hover {
+  color: var(--sg-color-domain-enterprise-600);
+  border-color: var(--sg-color-domain-enterprise-500);
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: var(--sg-space-4);
+  }
+
+  .head,
+  .sectionHead,
+  .context {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .context p {
+    text-align: start;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .focusPage {

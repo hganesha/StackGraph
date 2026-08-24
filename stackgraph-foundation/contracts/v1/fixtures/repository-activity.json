@@ -1,0 +1,59 @@
+{
+  "contract_version": "1.0.0",
+  "repository": {
+    "id": "00000000-0000-4000-8000-000000000203",
+    "kind": "Repository",
+    "name": "billing-svc",
+    "canonical_key": "github:repo:123"
+  },
+  "source": {
+    "provider": "GITHUB",
+    "full_name": "acme/billing-svc",
+    "default_branch": "main",
+    "visibility": "PRIVATE",
+    "archived": false
+  },
+  "window": "30d",
+  "window_started_at": "2026-07-20T14:00:00Z",
+  "window_ended_at": "2026-08-19T14:00:00Z",
+  "summary": {
+    "commits": 47,
+    "pull_requests_merged": 8,
+    "contributors": 5,
+    "last_change_at": "2026-08-18T19:42:00Z"
+  },
+  "coverage": {
+    "commits": "AVAILABLE",
+    "pull_requests": "AVAILABLE",
+    "contributors": "AVAILABLE"
+  },
+  "top_contributors": [
+    {
+      "actor": {"actor_key": "github:user:42", "login": "dana-okafor", "is_bot": false},
+      "commits": 18,
+      "pull_requests_merged": 3,
+      "total_events": 21
+    }
+  ],
+  "events": [
+    {
+      "id": "00000000-0000-4000-8000-000000000a01",
+      "event_type": "COMMIT",
+      "title": "Add retry guards to invoice collection",
+      "occurred_at": "2026-08-18T19:42:00Z",
+      "actor": {"actor_key": "github:user:42", "login": "dana-okafor", "is_bot": false},
+      "revision": "a9b6c3155e0c4fb0a88dd3d9f23b04ed9a222991",
+      "branch": "main",
+      "source_url": "https://github.com/acme/billing-svc/commit/a9b6c3155e0c4fb0a88dd3d9f23b04ed9a222991"
+    }
+  ],
+  "page_info": {"has_next_page": false, "next_cursor": null},
+  "freshness": {
+    "observed_at": "2026-08-19T14:00:00Z",
+    "status": "FRESH",
+    "source_key": "github-activity"
+  },
+  "limitations": [
+    "Contributor totals include linked GitHub identities; unlinked commit authors are excluded."
+  ]
+}

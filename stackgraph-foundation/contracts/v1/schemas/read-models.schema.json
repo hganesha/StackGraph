@@ -364,6 +364,96 @@
       },
       "additionalProperties": false
     },
+    "repositoryActivityActor": {
+      "type": "object",
+      "required": ["actor_key", "login", "is_bot"],
+      "properties": {
+        "actor_key": {"type": "string", "minLength": 1},
+        "login": {"type": "string", "minLength": 1},
+        "avatar_url": {"type": ["string", "null"], "format": "uri"},
+        "is_bot": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivityEvent": {
+      "type": "object",
+      "required": ["id", "event_type", "title", "occurred_at"],
+      "properties": {
+        "id": {"$ref": "common.schema.json#/$defs/uuid"},
+        "event_type": {"enum": ["COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED"]},
+        "title": {"type": "string", "minLength": 1},
+        "occurred_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "actor": {"oneOf": [{"$ref": "#/$defs/repositoryActivityActor"}, {"type": "null"}]},
+        "revision": {"type": ["string", "null"]},
+        "branch": {"type": ["string", "null"]},
+        "pull_request_number": {"type": ["integer", "null"], "minimum": 1},
+        "source_url": {"type": ["string", "null"], "format": "uri"}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivityContributor": {
+      "type": "object",
+      "required": ["actor", "commits", "pull_requests_merged", "total_events"],
+      "properties": {
+        "actor": {"$ref": "#/$defs/repositoryActivityActor"},
+        "commits": {"type": "integer", "minimum": 0},
+        "pull_requests_merged": {"type": "integer", "minimum": 0},
+        "total_events": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivitySummary": {
+      "type": "object",
+      "properties": {
+        "commits": {"type": ["integer", "null"], "minimum": 0},
+        "pull_requests_merged": {"type": ["integer", "null"], "minimum": 0},
+        "contributors": {"type": ["integer", "null"], "minimum": 0},
+        "last_change_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivityCoverage": {
+      "type": "object",
+      "required": ["commits", "pull_requests", "contributors"],
+      "properties": {
+        "commits": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
+        "pull_requests": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
+        "contributors": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivitySource": {
+      "type": "object",
+      "required": ["provider", "visibility"],
+      "properties": {
+        "provider": {"const": "GITHUB"},
+        "full_name": {"type": ["string", "null"]},
+        "default_branch": {"type": ["string", "null"]},
+        "visibility": {"enum": ["PUBLIC", "PRIVATE", "INTERNAL", "UNKNOWN"]},
+        "archived": {"type": ["boolean", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "repositoryActivity": {
+      "type": "object",
+      "required": ["contract_version", "repository", "source", "window", "window_started_at", "window_ended_at", "summary", "coverage", "top_contributors", "events", "page_info", "freshness", "limitations"],
+      "properties": {
+        "contract_version": {"const": "1.0.0"},
+        "repository": {"$ref": "#/$defs/entitySummary"},
+        "source": {"$ref": "#/$defs/repositoryActivitySource"},
+        "window": {"enum": ["7d", "30d", "90d"]},
+        "window_started_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "window_ended_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "summary": {"$ref": "#/$defs/repositoryActivitySummary"},
+        "coverage": {"$ref": "#/$defs/repositoryActivityCoverage"},
+        "top_contributors": {"type": "array", "items": {"$ref": "#/$defs/repositoryActivityContributor"}},
+        "events": {"type": "array", "items": {"$ref": "#/$defs/repositoryActivityEvent"}},
+        "page_info": {"$ref": "common.schema.json#/$defs/pageInfo"},
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
+        "limitations": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
     "technologyDetail": {
       "type": "object",
       "required": ["contract_version", "technology", "internal_usage", "packages", "projects", "assessments", "recommendations", "freshness"],

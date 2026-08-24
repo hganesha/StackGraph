@@ -67,7 +67,12 @@ function InsightCard({ insight }: { insight: DeterministicInsight }) {
         </dl>
       </div>
 
-      <div className={styles.funnel} aria-label="Observed impact stages">
+      <div
+        className={styles.funnel}
+        role="region"
+        aria-label="Observed impact stages"
+        tabIndex={0}
+      >
         {STAGES.map(({ key, label }) => {
           const value = insight.stages[key];
           const known = value != null;

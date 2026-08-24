@@ -18,6 +18,11 @@ from psycopg.types.json import Jsonb
 from .evidence_store import evidence_store_from_environment
 from .github_client import GitHubApiError, GitHubClient, GitHubTransportError
 from .github_app_auth import resolve_runtime_credential
+from .github_activity import (
+    ActivityCollection,
+    GitHubRepositoryActivityCollector,
+    persist_repository_activity,
+)
 from .github_installation import InstallationRepositoryDiscovery
 from .github_installation_store import (
     reconcile_installation,
@@ -48,6 +53,7 @@ class ClaimedRun:
     attempt: int
     lease_owner: str
     lease_seconds: int
+    permissions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +166,8 @@ def claim_run(
               AND tenant.id=run.tenant_id AND connector.id=target.connector_account_id
             RETURNING run.id run_id,target.id target_id,run.tenant_id,
                       tenant.tenant_key,target.target_kind,target.target_key,
-                      target.refresh_policy,connector.credential_reference,run.attempt
+                      target.refresh_policy,connector.credential_reference,
+                      connector.permissions,run.attempt
             """,
             (tenant_id, tenant_id, MAX_ATTEMPTS, worker_id, lease_seconds),
         ).fetchone()
@@ -172,6 +179,7 @@ def claim_run(
         target_key=row["target_key"], refresh_policy=dict(row["refresh_policy"]),
         credential_reference=row["credential_reference"], attempt=row["attempt"],
         lease_owner=worker_id, lease_seconds=lease_seconds,
+        permissions=tuple(str(value) for value in (row.get("permissions") or [])),
     )
 
 
@@ -403,7 +411,8 @@ def _acquire_scan_publish(
         ),
     )
     _renew_lease(database_url, claimed)
-    result = GitHubRepositoryAcquirer(_client(token)).acquire(
+    client = _client(token)
+    result = GitHubRepositoryAcquirer(client).acquire(
         full_name,
         previous_revision=acquisition_previous_revision,
         installation_id=installation_id,
@@ -434,6 +443,15 @@ def _acquire_scan_publish(
         repository_id = result.repository_id
     elif result.canonical_key != claimed.target_key or result.repository_id != repository_id:
         raise ValueError("GitHub acquisition identity does not match the leased target")
+    activity = (
+        GitHubRepositoryActivityCollector(client).collect(
+            result.full_name,
+            default_branch=result.default_branch,
+            include_pull_requests="pull_requests:read" in claimed.permissions,
+        )
+        if policy.get("activity_enabled") is True
+        else None
+    )
     _renew_lease(database_url, claimed)
     if result.status == "UNCHANGED":
         if not _scanner_snapshot_exists(
@@ -445,13 +463,16 @@ def _acquire_scan_publish(
                 source_revision=result.source_revision,
                 snapshot_root=snapshot_root,
             )
-            return _scan_publish_request(
+            work = _scan_publish_request(
                 database_url,
                 claimed,
                 request=request,
                 raw_observation=raw_observation,
                 source_revision=result.source_revision,
             )
+            _persist_activity(database_url, claimed, activity)
+            return work
+        _persist_activity(database_url, claimed, activity)
         _complete_run(
             database_url, claimed, result.source_revision,
             {"operation": "acquire", "changed": False},
@@ -490,13 +511,35 @@ def _acquire_scan_publish(
     raw_observation = result.snapshot.raw_observation(
         claimed.tenant_key, result.stored_evidence,
     )
-    return _scan_publish_request(
+    work = _scan_publish_request(
         database_url,
         claimed,
         request=request,
         raw_observation=raw_observation,
         source_revision=result.source_revision,
     )
+    _persist_activity(database_url, claimed, activity)
+    return work
+
+
+def _persist_activity(
+    database_url: str,
+    claimed: ClaimedRun,
+    activity: ActivityCollection | None,
+) -> bool:
+    if activity is None:
+        return False
+    try:
+        return persist_repository_activity(
+            database_url,
+            tenant_id=claimed.tenant_id,
+            repository_key=claimed.target_key,
+            collection=activity,
+        )
+    except psycopg.errors.UndefinedTable:
+        # A staggered deployment may start the worker before migration 045 is visible.
+        # Repository scanning remains authoritative and the next cadence retries activity.
+        return False
 
 
 def _scan_publish_request(

@@ -134,6 +134,25 @@ class ApiResult:
         return _optional_int(self.headers.get("x-ratelimit-reset"))
 
 
+@dataclass(frozen=True, slots=True)
+class ApiArrayResult:
+    status: int
+    headers: Mapping[str, str]
+    data: list[JsonObject]
+
+    @property
+    def rate_limit_remaining(self) -> int | None:
+        return _optional_int(self.headers.get("x-ratelimit-remaining"))
+
+    @property
+    def rate_limit_limit(self) -> int | None:
+        return _optional_int(self.headers.get("x-ratelimit-limit"))
+
+    @property
+    def rate_limit_reset(self) -> int | None:
+        return _optional_int(self.headers.get("x-ratelimit-reset"))
+
+
 class GitHubClient:
     def __init__(
         self,
@@ -215,6 +234,46 @@ class GitHubClient:
                 retriable=False,
             )
         return ApiResult(status=response.status, headers=normalized_headers, data=decoded)
+
+    def get_array(
+        self,
+        path: str,
+        *,
+        query: Mapping[str, str] | None = None,
+    ) -> ApiArrayResult:
+        if not path.startswith("/") or path.startswith("//"):
+            raise ValueError("GitHub API path must be root-relative")
+        url = f"{self._base_url}{path}"
+        if query:
+            url = f"{url}?{urlencode(query)}"
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": self._user_agent,
+            "X-GitHub-Api-Version": self._api_version,
+        }
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        response = self._transport.request(url, headers, self._timeout_seconds)
+        normalized_headers = {key.lower(): value for key, value in response.headers.items()}
+        if response.status < 200 or response.status >= 300:
+            raise _api_error(response.status, normalized_headers, response.body)
+        try:
+            decoded = json.loads(response.body)
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise GitHubApiError(
+                "GitHub returned an invalid JSON response",
+                status_code=response.status,
+                retriable=False,
+            ) from error
+        if not isinstance(decoded, list) or not all(isinstance(item, dict) for item in decoded):
+            raise GitHubApiError(
+                "GitHub returned an unexpected JSON array",
+                status_code=response.status,
+                retriable=False,
+            )
+        return ApiArrayResult(
+            status=response.status, headers=normalized_headers, data=decoded,
+        )
 
 
 def _validate_base_url(base_url: str, allow_insecure_localhost: bool) -> None:

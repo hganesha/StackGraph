@@ -568,6 +568,75 @@ class RepositoryDetail(ContractModel):
     graph_intelligence: EntityGraphIntelligence | None = None
 
 
+RepositoryActivityWindow = Literal["7d", "30d", "90d"]
+RepositoryActivityCoverageStatus = Literal[
+    "AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR",
+]
+
+
+class RepositoryActivityActor(ContractModel):
+    actor_key: str = Field(min_length=1)
+    login: str = Field(min_length=1)
+    avatar_url: str | None = None
+    is_bot: bool = False
+
+
+class RepositoryActivityEvent(ContractModel):
+    id: UUID
+    event_type: Literal["COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED"]
+    title: str = Field(min_length=1)
+    occurred_at: datetime
+    actor: RepositoryActivityActor | None = None
+    revision: str | None = None
+    branch: str | None = None
+    pull_request_number: int | None = Field(default=None, ge=1)
+    source_url: str | None = None
+
+
+class RepositoryActivityContributor(ContractModel):
+    actor: RepositoryActivityActor
+    commits: int = Field(ge=0)
+    pull_requests_merged: int = Field(ge=0)
+    total_events: int = Field(ge=0)
+
+
+class RepositoryActivitySummary(ContractModel):
+    commits: int | None = Field(default=None, ge=0)
+    pull_requests_merged: int | None = Field(default=None, ge=0)
+    contributors: int | None = Field(default=None, ge=0)
+    last_change_at: datetime | None = None
+
+
+class RepositoryActivityCoverage(ContractModel):
+    commits: RepositoryActivityCoverageStatus
+    pull_requests: RepositoryActivityCoverageStatus
+    contributors: RepositoryActivityCoverageStatus
+
+
+class RepositoryActivitySource(ContractModel):
+    provider: Literal["GITHUB"] = "GITHUB"
+    full_name: str | None = None
+    default_branch: str | None = None
+    visibility: Literal["PUBLIC", "PRIVATE", "INTERNAL", "UNKNOWN"] = "UNKNOWN"
+    archived: bool | None = None
+
+
+class RepositoryActivity(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    source: RepositoryActivitySource
+    window: RepositoryActivityWindow
+    window_started_at: datetime
+    window_ended_at: datetime
+    summary: RepositoryActivitySummary
+    coverage: RepositoryActivityCoverage
+    top_contributors: list[RepositoryActivityContributor]
+    events: list[RepositoryActivityEvent]
+    page_info: PageInfo
+    freshness: Freshness
+    limitations: list[str] = Field(default_factory=list)
+
+
 class InternalUsage(ContractModel):
     repository_count: int = Field(ge=0)
     application_count: int = Field(ge=0)

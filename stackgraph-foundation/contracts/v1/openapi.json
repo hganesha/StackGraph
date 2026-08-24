@@ -10424,6 +10424,407 @@
         "title": "RecommendationSummary",
         "type": "object"
       },
+      "RepositoryActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/RepositoryActivityCoverage"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/RepositoryActivityEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "source": {
+            "$ref": "#/components/schemas/RepositoryActivitySource"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RepositoryActivitySummary"
+          },
+          "top_contributors": {
+            "items": {
+              "$ref": "#/components/schemas/RepositoryActivityContributor"
+            },
+            "title": "Top Contributors",
+            "type": "array"
+          },
+          "window": {
+            "enum": [
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "title": "Window",
+            "type": "string"
+          },
+          "window_ended_at": {
+            "format": "date-time",
+            "title": "Window Ended At",
+            "type": "string"
+          },
+          "window_started_at": {
+            "format": "date-time",
+            "title": "Window Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "source",
+          "window",
+          "window_started_at",
+          "window_ended_at",
+          "summary",
+          "coverage",
+          "top_contributors",
+          "events",
+          "page_info",
+          "freshness"
+        ],
+        "title": "RepositoryActivity",
+        "type": "object"
+      },
+      "RepositoryActivityActor": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_key": {
+            "minLength": 1,
+            "title": "Actor Key",
+            "type": "string"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "is_bot": {
+            "default": false,
+            "title": "Is Bot",
+            "type": "boolean"
+          },
+          "login": {
+            "minLength": 1,
+            "title": "Login",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_key",
+          "login"
+        ],
+        "title": "RepositoryActivityActor",
+        "type": "object"
+      },
+      "RepositoryActivityContributor": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/RepositoryActivityActor"
+          },
+          "commits": {
+            "minimum": 0.0,
+            "title": "Commits",
+            "type": "integer"
+          },
+          "pull_requests_merged": {
+            "minimum": 0.0,
+            "title": "Pull Requests Merged",
+            "type": "integer"
+          },
+          "total_events": {
+            "minimum": 0.0,
+            "title": "Total Events",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "actor",
+          "commits",
+          "pull_requests_merged",
+          "total_events"
+        ],
+        "title": "RepositoryActivityContributor",
+        "type": "object"
+      },
+      "RepositoryActivityCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "commits": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED",
+              "PERMISSION_REQUIRED",
+              "ERROR"
+            ],
+            "title": "Commits",
+            "type": "string"
+          },
+          "contributors": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED",
+              "PERMISSION_REQUIRED",
+              "ERROR"
+            ],
+            "title": "Contributors",
+            "type": "string"
+          },
+          "pull_requests": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED",
+              "PERMISSION_REQUIRED",
+              "ERROR"
+            ],
+            "title": "Pull Requests",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commits",
+          "pull_requests",
+          "contributors"
+        ],
+        "title": "RepositoryActivityCoverage",
+        "type": "object"
+      },
+      "RepositoryActivityEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RepositoryActivityActor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch"
+          },
+          "event_type": {
+            "enum": [
+              "COMMIT",
+              "PULL_REQUEST_OPENED",
+              "PULL_REQUEST_MERGED"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "pull_request_number": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Request Number"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_type",
+          "title",
+          "occurred_at"
+        ],
+        "title": "RepositoryActivityEvent",
+        "type": "object"
+      },
+      "RepositoryActivitySource": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived"
+          },
+          "default_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Branch"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "provider": {
+            "const": "GITHUB",
+            "default": "GITHUB",
+            "title": "Provider",
+            "type": "string"
+          },
+          "visibility": {
+            "default": "UNKNOWN",
+            "enum": [
+              "PUBLIC",
+              "PRIVATE",
+              "INTERNAL",
+              "UNKNOWN"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "title": "RepositoryActivitySource",
+        "type": "object"
+      },
+      "RepositoryActivitySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "commits": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commits"
+          },
+          "contributors": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contributors"
+          },
+          "last_change_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Change At"
+          },
+          "pull_requests_merged": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pull Requests Merged"
+          }
+        },
+        "title": "RepositoryActivitySummary",
+        "type": "object"
+      },
       "RepositoryCapabilityIntelligence": {
         "additionalProperties": false,
         "properties": {
@@ -16798,6 +17199,92 @@
           }
         },
         "summary": "Get Repository",
+        "tags": [
+          "repositories"
+        ]
+      }
+    },
+    "/repositories/{id}/activity": {
+      "get": {
+        "operationId": "getRepositoryActivity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "enum": [
+                "7d",
+                "30d",
+                "90d"
+              ],
+              "title": "Window",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepositoryActivity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Repository Activity",
         "tags": [
           "repositories"
         ]

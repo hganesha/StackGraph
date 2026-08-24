@@ -54,6 +54,7 @@ class InstallationRepository:
             "disabled": self.disabled,
             "removed_from_installation": False,
             "installation_revoked": False,
+            "activity_enabled": True,
             "cadence_seconds": 3600,
         }
 

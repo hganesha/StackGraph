@@ -1724,6 +1724,69 @@ export interface RecommendationSummary {
   title: string;
 }
 
+export interface RepositoryActivity {
+  contract_version?: "1.0.0";
+  coverage: RepositoryActivityCoverage;
+  events: Array<RepositoryActivityEvent>;
+  freshness: Freshness;
+  limitations?: Array<string>;
+  page_info: PageInfo;
+  repository: EntitySummary;
+  source: RepositoryActivitySource;
+  summary: RepositoryActivitySummary;
+  top_contributors: Array<RepositoryActivityContributor>;
+  window: "7d" | "30d" | "90d";
+  window_ended_at: string;
+  window_started_at: string;
+}
+
+export interface RepositoryActivityActor {
+  actor_key: string;
+  avatar_url?: string | null;
+  is_bot?: boolean;
+  login: string;
+}
+
+export interface RepositoryActivityContributor {
+  actor: RepositoryActivityActor;
+  commits: number;
+  pull_requests_merged: number;
+  total_events: number;
+}
+
+export interface RepositoryActivityCoverage {
+  commits: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED" | "PERMISSION_REQUIRED" | "ERROR";
+  contributors: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED" | "PERMISSION_REQUIRED" | "ERROR";
+  pull_requests: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED" | "PERMISSION_REQUIRED" | "ERROR";
+}
+
+export interface RepositoryActivityEvent {
+  actor?: RepositoryActivityActor | null;
+  branch?: string | null;
+  event_type: "COMMIT" | "PULL_REQUEST_OPENED" | "PULL_REQUEST_MERGED";
+  id: string;
+  occurred_at: string;
+  pull_request_number?: number | null;
+  revision?: string | null;
+  source_url?: string | null;
+  title: string;
+}
+
+export interface RepositoryActivitySource {
+  archived?: boolean | null;
+  default_branch?: string | null;
+  full_name?: string | null;
+  provider?: "GITHUB";
+  visibility?: "PUBLIC" | "PRIVATE" | "INTERNAL" | "UNKNOWN";
+}
+
+export interface RepositoryActivitySummary {
+  commits?: number | null;
+  contributors?: number | null;
+  last_change_at?: string | null;
+  pull_requests_merged?: number | null;
+}
+
 export interface RepositoryCapabilityIntelligence {
   contract_version?: "1.0.0";
   duplicate_candidates: Array<DuplicateCapabilityCandidateSummary>;

@@ -1,15 +1,16 @@
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { stackGraphClient } from "@stackgraph/shared";
+import { stackGraphClient, type RepositoryActivityWindow } from "@stackgraph/shared";
 import { CitationChip, ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import { useEntityGraphMetrics } from "@/lib/queries";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { RecommendationFocus } from "./RecommendationFocus";
+import { RepositoryActivityPanel } from "./RepositoryActivityPanel";
 import styles from "./repository.module.css";
 
 function EntityLinks({
@@ -49,10 +50,16 @@ export default function RepositoryPage({
 }) {
   const { id } = use(params);
   const { recommendation } = use(searchParams);
+  const [activityWindow, setActivityWindow] = useState<RepositoryActivityWindow>("30d");
+  const [findingsExpanded, setFindingsExpanded] = useState(false);
   const openEvidence = useEvidenceStore((state) => state.open);
   const { data, isLoading } = useQuery({
     queryKey: ["repository", id],
     queryFn: () => stackGraphClient.getRepository(id),
+  });
+  const activity = useQuery({
+    queryKey: ["repository-activity", id, activityWindow],
+    queryFn: () => stackGraphClient.getRepositoryActivity(id, { window: activityWindow, limit: 6 }),
   });
   const graphIntelligence = useEntityGraphMetrics(id);
 
@@ -90,16 +97,17 @@ export default function RepositoryPage({
           {data.repository.canonical_key ? (
             <code className={`${styles.canonical} sg-mono`}>{data.repository.canonical_key}</code>
           ) : null}
+          {activity.data ? (
+            <div className={styles.repositoryMeta} aria-label="Repository metadata">
+              {activity.data.source.full_name ? <span>{activity.data.source.full_name}</span> : null}
+              <span>Default branch: {activity.data.source.default_branch ?? "unknown"}</span>
+              <span>{activity.data.source.visibility.toLowerCase()}</span>
+              {activity.data.source.archived ? <span>Archived</span> : null}
+            </div>
+          ) : null}
         </div>
         <span className={styles.freshness}>{data.freshness.status}</span>
       </header>
-
-      <GraphIntelligenceSummary
-        entityId={id}
-        intelligence={graphIntelligence.data}
-        graphHref={`/repositories/${id}/graph`}
-        compact
-      />
 
       <section className={styles.purpose} aria-labelledby="repository-purpose-heading">
         <div className={styles.sectionHead}>
@@ -128,6 +136,29 @@ export default function RepositoryPage({
           </div>
         ) : null}
       </section>
+
+      <RepositoryActivityPanel
+        data={activity.data}
+        isLoading={activity.isLoading}
+        isError={activity.isError}
+        window={activityWindow}
+        onWindowChange={setActivityWindow}
+      />
+
+      <section className={styles.context} aria-labelledby="repository-context-heading">
+        <div>
+          <span className={styles.eyebrow}>Repository context</span>
+          <h2 id="repository-context-heading">How it fits into the estate</h2>
+        </div>
+        <p>Graph-derived relationships and admitted repository inventory.</p>
+      </section>
+
+      <GraphIntelligenceSummary
+        entityId={id}
+        intelligence={graphIntelligence.data}
+        graphHref={`/repositories/${id}/graph`}
+        compact
+      />
 
       <div className={styles.grid}>
         <section className={styles.card} aria-labelledby="repository-shape-heading">
@@ -171,8 +202,13 @@ export default function RepositoryPage({
         scopeEntityId={id}
         title="Repository findings"
         description="Current deterministic findings whose evidence or affected scope includes this repository."
-        limit={12}
+        limit={findingsExpanded ? 12 : 3}
       />
+      <div className={styles.findingsAction}>
+        <button type="button" onClick={() => setFindingsExpanded((value) => !value)}>
+          {findingsExpanded ? "Show fewer findings" : "Show all findings"}
+        </button>
+      </div>
 
       {profile && profile.limitations.length > 0 ? (
         <aside className={styles.limitations} aria-label="Profile limitations">

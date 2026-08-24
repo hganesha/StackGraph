@@ -262,6 +262,61 @@ class RepositoryDetailDatabaseStub:
         }]
 
 
+class RepositoryActivityDatabaseStub:
+    async def fetch_one(self, query, params=None, *, tenant_id=None):
+        if "FROM entity" in query:
+            return {
+                "id": UUID("00000000-0000-4000-8000-000000000401"),
+                "namespace": "ENTERPRISE", "entity_type": "Repository",
+                "canonical_key": "github:repo:billing", "name": "billing-api",
+                "properties": {}, "observed_at": NOW,
+            }
+        if "FROM ingest_target" in query:
+            return {
+                "refresh_policy": {
+                    "full_name": "acme/billing-api", "default_branch": "main",
+                    "visibility": "private", "archived": False,
+                },
+                "source_key": "github-app",
+            }
+        if "FROM repository_activity_collection" in query:
+            return {
+                "commits_status": "PARTIAL",
+                "pull_requests_status": "PERMISSION_REQUIRED",
+                "collected_at": NOW,
+                "limitations": [
+                    "Commit activity exceeded the bounded 1000-event collection limit.",
+                    "Merged pull-request activity requires the GitHub pull_requests:read permission.",
+                ],
+            }
+        if "count(*) FILTER" in query:
+            return {
+                "commit_count": 1000, "pull_request_merged_count": 0,
+                "contributor_count": 1, "last_change_at": NOW,
+            }
+        raise AssertionError(f"unexpected fetch_one query: {query}")
+
+    async def fetch_all(self, query, params=None, *, tenant_id=None):
+        actor = {
+            "actor_key": "github:user:42", "actor_login": "dana-okafor",
+            "actor_avatar_url": "https://avatars.githubusercontent.com/u/42",
+            "actor_is_bot": False,
+        }
+        if "GROUP BY actor_key" in query:
+            return [{
+                **actor, "commits": 12, "pull_requests_merged": 0, "total_events": 12,
+            }]
+        if "FROM repository_activity_event" in query:
+            return [{
+                "id": UUID("00000000-0000-4000-8000-000000000411"),
+                "event_type": "COMMIT", "title": "Tighten invoice retry handling",
+                "occurred_at": NOW, **actor, "revision": "abcdef123456",
+                "branch": "main", "pull_request_number": None,
+                "source_url": "https://github.com/acme/billing-api/commit/abcdef123456",
+            }]
+        raise AssertionError(f"unexpected fetch_all query: {query}")
+
+
 def test_confidence_labels_use_frozen_contract_boundaries() -> None:
     assert _confidence_label(0.8499) == "MEDIUM"
     assert _confidence_label(0.85) == "HIGH"
@@ -375,6 +430,26 @@ def test_repository_detail_surfaces_cited_revision_pinned_profile() -> None:
     assert detail.profile.confidence_label == "HIGH"
     assert detail.profile.citations[0].fact_id == UUID("00000000-0000-4000-8000-000000000402")
     assert [application.name for application in detail.applications] == ["Billing"]
+
+
+def test_repository_activity_preserves_bounded_counts_and_permission_coverage() -> None:
+    result = asyncio.run(ReadModelStore(RepositoryActivityDatabaseStub()).repository_activity(
+        UUID("00000000-0000-4000-8000-000000000401"),
+        tenant_id=UUID("00000000-0000-4000-8000-000000000499"),
+        window="30d", cursor=None, limit=6,
+    ))
+
+    assert result.source.full_name == "acme/billing-api"
+    assert result.source.default_branch == "main"
+    assert result.summary.commits == 1000
+    assert result.summary.pull_requests_merged is None
+    assert result.summary.contributors == 1
+    assert result.coverage.commits == "PARTIAL"
+    assert result.coverage.pull_requests == "PERMISSION_REQUIRED"
+    assert result.coverage.contributors == "PARTIAL"
+    assert result.top_contributors[0].actor.login == "dana-okafor"
+    assert result.events[0].revision == "abcdef123456"
+    assert result.page_info.has_next_page is False
 
 
 def test_application_technologies_group_by_catalog_domain_and_capability() -> None:

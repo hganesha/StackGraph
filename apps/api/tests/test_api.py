@@ -61,6 +61,13 @@ from app.models import (
     TenantCodePolicyState,
     TenantCodePolicySummary,
     Phase3IntelligenceMetrics,
+    RepositoryActivity,
+    RepositoryActivityActor,
+    RepositoryActivityContributor,
+    RepositoryActivityCoverage,
+    RepositoryActivityEvent,
+    RepositoryActivitySource,
+    RepositoryActivitySummary,
     RepositoryModernizationIntelligence,
     RepositoryDetail,
     BusinessMapDetail,
@@ -193,6 +200,44 @@ class StubReadModels:
     async def technology_estate_hierarchy(self, *, tenant_id):
         self.last_tenant_id = tenant_id
         return TechnologyEstateHierarchy(as_of=NOW, nodes=[])
+
+    async def repository_activity(
+        self, repository_id, *, tenant_id, window, cursor, limit,
+    ):
+        self.last_tenant_id = tenant_id
+        actor = RepositoryActivityActor(
+            actor_key="github:user:42", login="dana", is_bot=False,
+        )
+        return RepositoryActivity(
+            repository=EntitySummary(
+                id=repository_id, kind="Repository", name="billing-api",
+                canonical_key="github:repo:billing-api",
+            ),
+            source=RepositoryActivitySource(
+                full_name="acme/billing-api", default_branch="main", visibility="PRIVATE",
+                archived=False,
+            ),
+            window=window,
+            window_started_at=datetime(2026, 7, 20, tzinfo=UTC),
+            window_ended_at=NOW,
+            summary=RepositoryActivitySummary(
+                commits=12, pull_requests_merged=3, contributors=1,
+                last_change_at=NOW,
+            ),
+            coverage=RepositoryActivityCoverage(
+                commits="AVAILABLE", pull_requests="AVAILABLE", contributors="AVAILABLE",
+            ),
+            top_contributors=[RepositoryActivityContributor(
+                actor=actor, commits=12, pull_requests_merged=3, total_events=15,
+            )],
+            events=[RepositoryActivityEvent(
+                id=UUID("00000000-0000-4000-8000-000000000799"),
+                event_type="COMMIT", title="Tighten invoice validation",
+                occurred_at=NOW, actor=actor, revision="abc123", branch="main",
+            )][:limit],
+            page_info=PageInfo(has_next_page=False),
+            freshness=Freshness(observed_at=NOW, status="FRESH", source_key="github-activity"),
+        )
 
     async def modernization(self, *, tenant_id, cursor, limit):
         raise NotImplementedError
@@ -935,6 +980,27 @@ def test_repository_detail_is_exposed_on_versioned_path() -> None:
     assert response.status_code == 200
     assert response.json()["repository"]["summary"] == "Creates invoices."
     assert "profile" not in response.json()
+    assert store.last_tenant_id == tenant_id
+
+
+def test_repository_activity_is_bounded_versioned_and_tenant_scoped() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+    response = asyncio.run(request(
+        app,
+        "GET",
+        "/api/v1/repositories/00000000-0000-4000-8000-000000000701/activity?window=30d&limit=5",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["contract_version"] == "1.0.0"
+    assert response.json()["summary"] == {
+        "commits": 12,
+        "pull_requests_merged": 3,
+        "contributors": 1,
+        "last_change_at": "2026-08-19T14:10:00Z",
+    }
+    assert response.json()["events"][0]["actor"]["login"] == "dana"
     assert store.last_tenant_id == tenant_id
 
 
