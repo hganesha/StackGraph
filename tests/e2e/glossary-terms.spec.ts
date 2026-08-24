@@ -85,3 +85,42 @@ test("every term on the About glossary is defined", async ({ page }) => {
   );
   expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
 });
+
+test("a definition stays inside the panel that would clip it", async ({ page }) => {
+  await page.goto("/architecture");
+  await expect(page.locator('[role="gridcell"]').first()).toBeVisible({ timeout: 15_000 });
+  await page.locator('[data-cell-key="cell.experience.ui"]').getByRole("heading").click();
+
+  const panel = page.locator('aside[aria-label$="detail"]');
+  await expect(panel).toBeVisible();
+
+  // The panel scrolls, so it clips its absolutely-positioned descendants. A definition
+  // anchored near its right edge used to be cut off mid-sentence, and the closed
+  // definitions widened the panel's scrollable area enough to give it a horizontal
+  // scrollbar with nothing in it.
+  await expect(panel).toHaveJSProperty("scrollWidth", await panel.evaluate((el) => el.clientWidth));
+
+  const term = panel.getByRole("button", { name: "health" });
+  await term.click();
+  const describedBy = await term.getAttribute("aria-describedby");
+  const tooltip = page.locator(`#${describedBy}`);
+  await expect(tooltip).toBeVisible();
+
+  const fit = await tooltip.evaluate((pop) => {
+    const clip = pop.closest("aside") as HTMLElement;
+    const popRect = pop.getBoundingClientRect();
+    const clipRect = clip.getBoundingClientRect();
+    const clipStart = clipRect.left + clip.clientLeft;
+    return {
+      overflowsRight: Math.round(popRect.right - (clipStart + clip.clientWidth)),
+      overflowsLeft: Math.round(clipStart - popRect.left),
+      stillScrollsSideways: clip.scrollWidth > clip.clientWidth,
+    };
+  });
+  expect(fit.overflowsRight).toBeLessThanOrEqual(0);
+  expect(fit.overflowsLeft).toBeLessThanOrEqual(0);
+  expect(fit.stillScrollsSideways).toBe(false);
+
+  // Readable, not merely contained: the last words of the definition have to survive.
+  await expect(tooltip).toContainText("conformance");
+});
