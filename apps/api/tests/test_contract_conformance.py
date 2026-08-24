@@ -56,3 +56,6 @@ def test_capability_and_modernization_fixtures_conform_to_frozen_schemas() -> No
         "phase3IntelligenceMetrics",
         load_json(fixtures / "phase3-intelligence-metrics.json"),
     )
+    validator.validate_read_model(
+        "repositoryActivity", load_json(fixtures / "repository-activity.json"),
+    )

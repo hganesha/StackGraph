@@ -84,6 +84,7 @@ from app.models import (
     ModernizationValidationOutcomeResult,
     Namespace,
     RepositoryCapabilityIntelligence,
+    RepositoryActivity,
     RepositoryDetail,
     RepositoryModernizationIntelligence,
     Phase3IntelligenceMetrics,
@@ -149,6 +150,10 @@ class ReadModelsProtocol(Protocol):
         self, request: CanvasComparisonRequest, *, tenant_id: UUID | None,
     ) -> CanvasComparison: ...
     async def repository_detail(self, repository_id: UUID, *, tenant_id: UUID | None) -> RepositoryDetail: ...
+    async def repository_activity(
+        self, repository_id: UUID, *, tenant_id: UUID | None, window: str,
+        cursor: str | None, limit: int,
+    ) -> RepositoryActivity: ...
     async def technology_detail(self, technology_id: UUID, *, tenant_id: UUID | None) -> TechnologyDetail: ...
     async def technology_estate_hierarchy(self, *, tenant_id: UUID | None) -> TechnologyEstateHierarchy: ...
     async def modernization(self, *, tenant_id: UUID | None, cursor: str | None, limit: int) -> ModernizationList: ...
@@ -487,6 +492,24 @@ async def get_technology_estate_hierarchy(request: Request) -> TechnologyEstateH
 async def get_repository(id: UUID, request: Request) -> RepositoryDetail:
     principal = await _principal(request)
     return await _store(request).repository_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/repositories/{id}/activity", response_model=RepositoryActivity,
+    response_model_exclude_none=True, operation_id="getRepositoryActivity",
+    tags=["repositories"],
+)
+async def get_repository_activity(
+    id: UUID,
+    request: Request,
+    window: Literal["7d", "30d", "90d"] = "30d",
+    cursor: str | None = None,
+    limit: int = Query(default=10, ge=1, le=100),
+) -> RepositoryActivity:
+    principal = await _principal(request)
+    return await _store(request).repository_activity(
+        id, tenant_id=principal.tenant_id, window=window, cursor=cursor, limit=limit,
+    )
 
 
 @router.get(

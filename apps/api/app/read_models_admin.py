@@ -878,6 +878,7 @@ class AdminReadModelsMixin:
                         "owner": owner,
                         "name": name,
                         "full_name": full_name,
+                        "activity_enabled": True,
                         "cadence_seconds": cadence_seconds,
                         "schedule_enabled": schedule_enabled,
                     }),

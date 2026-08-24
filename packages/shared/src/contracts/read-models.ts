@@ -522,6 +522,71 @@ export interface RepositoryDetail {
   graph_intelligence?: EntityGraphIntelligence;
 }
 
+export type RepositoryActivityWindow = "7d" | "30d" | "90d";
+export type RepositoryActivityCoverageStatus =
+  | "AVAILABLE"
+  | "PARTIAL"
+  | "NOT_COLLECTED"
+  | "PERMISSION_REQUIRED"
+  | "ERROR";
+
+export interface RepositoryActivityActor {
+  actor_key: string;
+  login: string;
+  avatar_url?: string | null;
+  is_bot: boolean;
+}
+
+export interface RepositoryActivityEvent {
+  id: UUID;
+  event_type: "COMMIT" | "PULL_REQUEST_OPENED" | "PULL_REQUEST_MERGED";
+  title: string;
+  occurred_at: Timestamp;
+  actor?: RepositoryActivityActor | null;
+  revision?: string | null;
+  branch?: string | null;
+  pull_request_number?: number | null;
+  source_url?: string | null;
+}
+
+export interface RepositoryActivityContributor {
+  actor: RepositoryActivityActor;
+  commits: number;
+  pull_requests_merged: number;
+  total_events: number;
+}
+
+export interface RepositoryActivity {
+  contract_version: "1.0.0";
+  repository: EntitySummary;
+  source: {
+    provider: "GITHUB";
+    full_name?: string | null;
+    default_branch?: string | null;
+    visibility: "PUBLIC" | "PRIVATE" | "INTERNAL" | "UNKNOWN";
+    archived?: boolean | null;
+  };
+  window: RepositoryActivityWindow;
+  window_started_at: Timestamp;
+  window_ended_at: Timestamp;
+  summary: {
+    commits?: number | null;
+    pull_requests_merged?: number | null;
+    contributors?: number | null;
+    last_change_at?: Timestamp | null;
+  };
+  coverage: {
+    commits: RepositoryActivityCoverageStatus;
+    pull_requests: RepositoryActivityCoverageStatus;
+    contributors: RepositoryActivityCoverageStatus;
+  };
+  top_contributors: RepositoryActivityContributor[];
+  events: RepositoryActivityEvent[];
+  page_info: PageInfo;
+  freshness: Freshness;
+  limitations: string[];
+}
+
 export interface PackageSource {
   registry_key: string;
   origin: string;

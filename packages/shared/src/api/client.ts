@@ -10,6 +10,8 @@ import { config, isFixtureMode } from "../config";
 import type {
   ApplicationDetail,
   RepositoryDetail,
+  RepositoryActivity,
+  RepositoryActivityWindow,
   AskRequest,
   AskResponse,
   EnterpriseInsightReportList,
@@ -120,6 +122,7 @@ import type {
 import estateSummary from "../fixtures/estate-summary.demo.json";
 import applicationDetail from "../fixtures/application-detail.json";
 import repositoryDetail from "../fixtures/repository-detail.json";
+import repositoryActivity from "../fixtures/repository-activity.json";
 import technologyDetail from "../fixtures/technology-detail.json";
 import modernizationList from "../fixtures/modernization-list.json";
 import askResponse from "../fixtures/ask-response.json";
@@ -162,6 +165,10 @@ export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
   getRepository(id: string): Promise<RepositoryDetail>;
+  getRepositoryActivity(
+    id: string,
+    params?: { window?: RepositoryActivityWindow; cursor?: string; limit?: number },
+  ): Promise<RepositoryActivity>;
   getTechnology(id: string): Promise<TechnologyDetail>;
   getTechnologyEstateHierarchy(): Promise<TechnologyEstateHierarchy>;
   listModernization(): Promise<ModernizationList>;
@@ -727,6 +734,43 @@ const fixtureClient: StackGraphClient = {
   async getRepository() {
     await delay();
     return repositoryDetail as RepositoryDetail;
+  },
+  async getRepositoryActivity(_id, params) {
+    await delay();
+    const result = clone(repositoryActivity as RepositoryActivity);
+    if (params?.window && params.window !== result.window) {
+      const days = Number.parseInt(params.window, 10);
+      result.window = params.window;
+      result.window_started_at = new Date(
+        new Date(result.window_ended_at).getTime() - days * 86_400_000,
+      ).toISOString();
+      if (params.window === "7d") {
+        result.summary = {
+          commits: 11,
+          pull_requests_merged: 2,
+          contributors: 3,
+          last_change_at: result.summary.last_change_at,
+        };
+        result.events = result.events.slice(0, 3);
+        result.top_contributors = result.top_contributors.slice(0, 3);
+      } else if (params.window === "90d") {
+        result.summary = {
+          commits: 129,
+          pull_requests_merged: 24,
+          contributors: 9,
+          last_change_at: result.summary.last_change_at,
+        };
+      }
+    }
+    if (params?.limit != null) {
+      const eventCount = result.events.length;
+      result.events = result.events.slice(0, params.limit);
+      result.page_info = {
+        has_next_page: eventCount > params.limit,
+        next_cursor: eventCount > params.limit ? "fixture-next" : null,
+      };
+    }
+    return result;
   },
   async getTechnology() {
     await delay();
@@ -1843,6 +1887,13 @@ const liveClient: StackGraphClient = {
   },
   getApplication: (id) => req(`/applications/${id}`),
   getRepository: (id) => req(`/repositories/${id}`),
+  getRepositoryActivity: (id, params) => {
+    const query = new URLSearchParams();
+    if (params?.window) query.set("window", params.window);
+    if (params?.cursor) query.set("cursor", params.cursor);
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    return req(`/repositories/${id}/activity${query.size ? `?${query.toString()}` : ""}`);
+  },
   getTechnology: (id) => req(`/technologies/${id}`),
   getTechnologyEstateHierarchy: () => req("/technologies/hierarchy"),
   listModernization: () => req("/modernization"),

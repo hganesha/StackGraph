@@ -165,6 +165,13 @@ from app.models import (
     PageInfo,
     RankedItem,
     RecommendationSummary,
+    RepositoryActivity,
+    RepositoryActivityActor,
+    RepositoryActivityContributor,
+    RepositoryActivityCoverage,
+    RepositoryActivityEvent,
+    RepositoryActivitySource,
+    RepositoryActivitySummary,
     RepositoryCapabilityIntelligence,
     RepositoryDetail,
     RepositoryProfile,
@@ -3451,6 +3458,212 @@ class ReadModelStore(AdminReadModelsMixin):
             graph_intelligence=await self.entity_graph_metrics(
                 repository_id,tenant_id=tenant_id,entity_row=repository,
             ),
+        )
+
+    async def repository_activity(
+        self,
+        repository_id: UUID,
+        *,
+        tenant_id: UUID | None,
+        window: str,
+        cursor: str | None,
+        limit: int,
+    ) -> RepositoryActivity:
+        repository = await self._get_entity(
+            repository_id, tenant_id, namespace="ENTERPRISE", entity_type="Repository",
+        )
+        window_days = {"7d": 7, "30d": 30, "90d": 90}.get(window)
+        if window_days is None:
+            raise APIError(400, "INVALID_ACTIVITY_WINDOW", "The activity window is invalid.")
+        window_ended_at = datetime.now(UTC)
+        window_started_at = window_ended_at - timedelta(days=window_days)
+
+        cursor_data = _decode_cursor(cursor, "repository-activity")
+        try:
+            cursor_time = (
+                datetime.fromisoformat(str(cursor_data["occurred_at"]).replace("Z", "+00:00"))
+                if cursor_data else None
+            )
+            cursor_id = UUID(str(cursor_data["id"])) if cursor_data else None
+            cursor_window = str(cursor_data["window"]) if cursor_data else window
+        except (KeyError, TypeError, ValueError) as error:
+            raise APIError(400, "INVALID_CURSOR", "The pagination cursor is invalid.") from error
+        if cursor_window != window:
+            raise APIError(
+                400, "CURSOR_WINDOW_MISMATCH",
+                "The pagination cursor belongs to a different activity window.",
+            )
+
+        source_row = await self.database.fetch_one(
+            """
+            SELECT target.refresh_policy,source.source_key
+            FROM ingest_target target
+            JOIN source_system source ON source.id=target.source_system_id
+            WHERE target.tenant_id=%s AND target.target_kind='REPOSITORY'
+              AND target.target_key=%s
+            ORDER BY target.updated_at DESC,target.id DESC LIMIT 1
+            """,
+            (tenant_id, repository["canonical_key"]),
+            tenant_id=tenant_id,
+        )
+        collection = await self.database.fetch_one(
+            """
+            SELECT commits_status,pull_requests_status,collected_at,limitations
+            FROM repository_activity_collection
+            WHERE repository_entity_id=%s
+            ORDER BY collected_at DESC,id DESC LIMIT 1
+            """,
+            (repository_id,),
+            tenant_id=tenant_id,
+        )
+        aggregate = await self.database.fetch_one(
+            """
+            SELECT
+              count(*) FILTER (WHERE event_type='COMMIT') commit_count,
+              count(*) FILTER (WHERE event_type='PULL_REQUEST_MERGED') pull_request_merged_count,
+              count(DISTINCT actor_key) FILTER (WHERE actor_key IS NOT NULL) contributor_count,
+              max(occurred_at) last_change_at
+            FROM repository_activity_event
+            WHERE repository_entity_id=%s AND occurred_at>=%s AND occurred_at<=%s
+            """,
+            (repository_id, window_started_at, window_ended_at),
+            tenant_id=tenant_id,
+        )
+        contributor_rows = await self.database.fetch_all(
+            """
+            SELECT actor_key,actor_login,actor_avatar_url,actor_is_bot,
+                   count(*) FILTER (WHERE event_type='COMMIT') commits,
+                   count(*) FILTER (WHERE event_type='PULL_REQUEST_MERGED') pull_requests_merged,
+                   count(*) total_events
+            FROM repository_activity_event
+            WHERE repository_entity_id=%s AND occurred_at>=%s AND occurred_at<=%s
+              AND actor_key IS NOT NULL AND actor_login IS NOT NULL
+            GROUP BY actor_key,actor_login,actor_avatar_url,actor_is_bot
+            ORDER BY total_events DESC,actor_login,actor_key LIMIT 8
+            """,
+            (repository_id, window_started_at, window_ended_at),
+            tenant_id=tenant_id,
+        )
+        event_rows = await self.database.fetch_all(
+            """
+            SELECT id,event_type,title,occurred_at,actor_key,actor_login,
+                   actor_avatar_url,actor_is_bot,revision,branch,
+                   pull_request_number,source_url
+            FROM repository_activity_event
+            WHERE repository_entity_id=%s AND occurred_at>=%s AND occurred_at<=%s
+              AND (
+                %s::timestamptz IS NULL OR occurred_at<%s::timestamptz
+                OR (occurred_at=%s::timestamptz AND id<%s::uuid)
+              )
+            ORDER BY occurred_at DESC,id DESC LIMIT %s
+            """,
+            (
+                repository_id, window_started_at, window_ended_at,
+                cursor_time, cursor_time, cursor_time, cursor_id, limit + 1,
+            ),
+            tenant_id=tenant_id,
+        )
+
+        has_next_page = len(event_rows) > limit
+        selected_rows = event_rows[:limit]
+        next_cursor = None
+        if has_next_page and selected_rows:
+            last = selected_rows[-1]
+            next_cursor = _encode_cursor(
+                "repository-activity", window=window,
+                occurred_at=last["occurred_at"].isoformat(), id=str(last["id"]),
+            )
+
+        commits_status = str(collection["commits_status"]) if collection else "NOT_COLLECTED"
+        pull_requests_status = (
+            str(collection["pull_requests_status"]) if collection else "NOT_COLLECTED"
+        )
+        contributor_status = commits_status
+        if commits_status == "AVAILABLE" and pull_requests_status != "AVAILABLE":
+            contributor_status = "PARTIAL"
+        elif commits_status != "AVAILABLE" and pull_requests_status == "AVAILABLE":
+            contributor_status = "PARTIAL"
+
+        aggregate = aggregate or {}
+        profile = dict(source_row["refresh_policy"]) if source_row else {}
+        visibility = str(profile.get("visibility") or "UNKNOWN").upper()
+        if visibility not in {"PUBLIC", "PRIVATE", "INTERNAL"}:
+            visibility = "UNKNOWN"
+        limitations = list(collection.get("limitations") or []) if collection else [
+            "Repository development activity has not been collected yet.",
+        ]
+        if contributor_status == "PARTIAL":
+            limitations.append(
+                "Contributor totals include only activity sources currently available to StackGraph."
+            )
+
+        def actor(row: Mapping[str, Any]) -> RepositoryActivityActor | None:
+            if not row.get("actor_key") or not row.get("actor_login"):
+                return None
+            return RepositoryActivityActor(
+                actor_key=str(row["actor_key"]), login=str(row["actor_login"]),
+                avatar_url=row.get("actor_avatar_url"),
+                is_bot=bool(row.get("actor_is_bot")),
+            )
+
+        top_contributors: list[RepositoryActivityContributor] = []
+        for row in contributor_rows:
+            contributor_actor = actor(row)
+            if contributor_actor is None:
+                continue
+            top_contributors.append(RepositoryActivityContributor(
+                actor=contributor_actor, commits=int(row["commits"]),
+                pull_requests_merged=int(row["pull_requests_merged"]),
+                total_events=int(row["total_events"]),
+            ))
+
+        collected_at = collection.get("collected_at") if collection else None
+        source_key = source_row.get("source_key") if source_row else "github-activity"
+        return RepositoryActivity(
+            repository=_entity(repository),
+            source=RepositoryActivitySource(
+                full_name=profile.get("full_name"),
+                default_branch=profile.get("default_branch"),
+                visibility=visibility,
+                archived=profile.get("archived") if isinstance(profile.get("archived"), bool) else None,
+            ),
+            window=window,
+            window_started_at=window_started_at,
+            window_ended_at=window_ended_at,
+            summary=RepositoryActivitySummary(
+                commits=(
+                    int(aggregate.get("commit_count") or 0)
+                    if commits_status in {"AVAILABLE", "PARTIAL"} else None
+                ),
+                pull_requests_merged=(
+                    int(aggregate.get("pull_request_merged_count") or 0)
+                    if pull_requests_status in {"AVAILABLE", "PARTIAL"} else None
+                ),
+                contributors=(
+                    int(aggregate.get("contributor_count") or 0)
+                    if contributor_status in {"AVAILABLE", "PARTIAL"} else None
+                ),
+                last_change_at=aggregate.get("last_change_at"),
+            ),
+            coverage=RepositoryActivityCoverage(
+                commits=commits_status,
+                pull_requests=pull_requests_status,
+                contributors=contributor_status,
+            ),
+            top_contributors=top_contributors,
+            events=[
+                RepositoryActivityEvent(
+                    id=row["id"], event_type=row["event_type"], title=row["title"],
+                    occurred_at=row["occurred_at"], actor=actor(row),
+                    revision=row.get("revision"), branch=row.get("branch"),
+                    pull_request_number=row.get("pull_request_number"),
+                    source_url=row.get("source_url"),
+                )
+                for row in selected_rows
+            ],
+            page_info=PageInfo(has_next_page=has_next_page, next_cursor=next_cursor),
+            freshness=_freshness(collected_at, source_key),
+            limitations=list(dict.fromkeys(str(value) for value in limitations)),
         )
 
     async def technology_estate_hierarchy(
