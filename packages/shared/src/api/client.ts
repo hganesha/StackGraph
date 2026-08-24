@@ -895,16 +895,52 @@ const fixtureClient: StackGraphClient = {
   async semanticSearch(body) {
     await delay();
     const now = new Date().toISOString();
+    // Scored against a small pool rather than returning one constant hit, so both the
+    // "found something a name filter would miss" and the "found nothing" states are
+    // reachable. Each entry carries the words it would be retrieved by, standing in for
+    // the rendered document a real space embeds.
+    const pool: Array<{ entity: EntitySummary; terms: string[]; score: number }> = [
+      {
+        entity: { id: "00000000-0000-4000-8000-000000000703", kind: "Application", name: "Ledger API", canonical_key: "application:ledger-api", summary: "Posts and reconciles financial ledger entries" },
+        terms: ["ledger", "billing", "invoice", "payment", "finance", "reconcile"],
+        score: 0.86,
+      },
+      {
+        entity: applicationDetail.application,
+        terms: ["billing", "invoice", "payment", "charge", "subscription"],
+        score: 0.81,
+      },
+      {
+        entity: repositoryDetail.repository,
+        terms: ["billing", "service", "repository", "node"],
+        score: 0.74,
+      },
+    ];
+    const needles = body.query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    const hits = pool
+      .filter((candidate) => needles.some((needle) =>
+        candidate.terms.some((term) => term.startsWith(needle) || needle.startsWith(term)),
+      ))
+      .slice(0, body.limit)
+      .map((candidate) => ({
+        entity: candidate.entity,
+        score: candidate.score,
+        input_hash: `sha256:${"b".repeat(64)}`,
+        sensitivity: "INTERNAL" as const,
+      }));
     return {
       contract_version: "1.0.0",
       space_id: fixtureEmbeddingStatus().active_spaces[0]!.id,
       space_key: "entity-semantic",
       model_or_algorithm: "hash-embedding-v1",
       template_version: "entity-document/v1",
-      query_hash: `fixture:${body.query.length}`,
-      hits: [{ entity: applicationDetail.application, score: 0.86, input_hash: "fixture", sensitivity: "INTERNAL" }],
+      query_hash: `sha256:${"c".repeat(64)}`,
+      hits,
       as_of: now,
-      limitations: [],
+      limitations: [{
+        code: "EXACT_SEARCH",
+        message: "Results use exact tenant-filtered cosine search; no approximate index was used.",
+      }],
     };
   },
   async getEmbeddingStatus() {

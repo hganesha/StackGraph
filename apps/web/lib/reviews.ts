@@ -23,6 +23,16 @@ export function isConflict(error: unknown): boolean {
 }
 
 /**
+ * Semantic retrieval is fail-closed by contract: with no evaluated embedding space
+ * active, the API returns 503 rather than answering from a degraded one. That is a
+ * state to explain, not an error to report — the surface degrades, the search does not
+ * break.
+ */
+export function isUnavailable(error: unknown): boolean {
+  return error instanceof ApiRequestError && error.status === 503;
+}
+
+/**
  * Why a similarity decision was made, offered as codes rather than free text so the
  * decisions stay analyzable. `application_similarity_feedback` records the code, the
  * rationale, the actor, and the candidate's method version and score at decision time.

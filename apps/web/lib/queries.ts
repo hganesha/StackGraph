@@ -144,6 +144,24 @@ export function useGraphIntelligenceCommunities(
   });
 }
 
+/**
+ * Related-by-meaning candidates for a search term. Retrieval is a suggestion, so the
+ * caller shows these beside exact matches and never in place of them.
+ */
+export function useSemanticSearch(query: string, { enabled = true, limit = 6 } = {}) {
+  const trimmed = query.trim();
+  return useQuery({
+    queryKey: ["embeddings", "semantic-search", trimmed, limit],
+    queryFn: () => stackGraphClient.semanticSearch({ query: trimmed, entity_types: [], limit }),
+    // The contract requires at least two characters; below that there is nothing to ask.
+    enabled: enabled && trimmed.length >= 2,
+    staleTime: 60_000,
+    // A fail-closed 503 means no evaluated space is active. Retrying will not conjure
+    // one, and the surface already explains the state.
+    retry: false,
+  });
+}
+
 export function useEmbeddingStatus() {
   return useQuery({
     queryKey: ["embeddings", "status"],

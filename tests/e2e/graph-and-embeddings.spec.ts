@@ -134,3 +134,25 @@ test("an entity says which community it sits in, and what that means", async ({ 
   // "community" reads as ownership to almost everyone.
   await expect(panel.getByText(/not by ownership/)).toBeVisible();
 });
+
+test("filtering by name also offers what reads like the term", async ({ page }) => {
+  await page.goto("/estate");
+  await expect(page.getByRole("heading", { name: "Estate" })).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Filter by name" }).fill("invoice");
+
+  const related = page.getByRole("region", { name: "Related by meaning" });
+  // "Ledger API" contains none of the letters of "invoice" — a name filter alone would
+  // never surface it, which is the whole reason this group exists.
+  await expect(related.getByRole("link", { name: /Ledger API/ })).toBeVisible();
+  await expect(related.getByText(/never proof of a relationship/)).toBeVisible();
+  await expect(related.getByText(/no approximate index was used/)).toBeVisible();
+});
+
+test("a term nothing reads like says so, and leaves name filtering alone", async ({ page }) => {
+  await page.goto("/estate");
+  await page.getByRole("searchbox", { name: "Filter by name" }).fill("zzzz");
+
+  const related = page.getByRole("region", { name: "Related by meaning" });
+  await expect(related.getByText(/Nothing in the evaluated space reads like/)).toBeVisible();
+});
