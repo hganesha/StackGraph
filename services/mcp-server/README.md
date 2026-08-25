@@ -165,3 +165,23 @@ cd services/mcp-server && python -m pytest
 
 The suite runs against the real contract with a mocked HTTP transport; it needs no
 running API. It is not yet wired into `compose.yaml` or the CI lanes.
+
+## Manual smoke test
+
+`scripts/harness.py` drives the real server as a subprocess over stdio with a genuine
+MCP client — the initialize handshake, JSON-RPC framing, and process startup that the
+mocked unit tests don't touch. Point it at a running API with the same
+`STACKGRAPH_MCP_*` variables the server itself reads:
+
+```bash
+STACKGRAPH_MCP_API_BASE_URL=http://localhost:8000 \
+STACKGRAPH_MCP_API_TOKEN=... \
+  .venv/bin/python services/mcp-server/scripts/harness.py                # list every tool
+
+STACKGRAPH_MCP_API_BASE_URL=http://localhost:8000 \
+STACKGRAPH_MCP_API_TOKEN=... \
+  .venv/bin/python services/mcp-server/scripts/harness.py \
+    --call stackgraph_get_estate_summary
+```
+
+Exits `0` on success, `1` if the tool call came back as an error.
