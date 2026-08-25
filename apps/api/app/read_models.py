@@ -118,6 +118,7 @@ from app.models import (
     DeterministicInsightList,
     EnterpriseInsightReport,
     EnterpriseInsightReportList,
+    EntityDescriptionUpdateRequest,
     EntitySummary,
     EstateCounts,
     EstateSummary,
@@ -402,10 +403,14 @@ def _entity(row: dict[str, Any]) -> EntitySummary:
     summary = row.get("summary")
     if summary is None and isinstance(row.get("properties"), dict):
         properties = row["properties"]
-        catalog_metadata = properties.get("catalog_metadata")
-        summary = properties.get("purpose") or properties.get("definition")
-        if summary is None and isinstance(catalog_metadata, dict):
-            summary = catalog_metadata.get("description")
+        # A human-set description always wins over what discovery inferred, so a
+        # curated correction cannot be silently overwritten by the next rescan.
+        summary = properties.get("curated_description") or None
+        if summary is None:
+            catalog_metadata = properties.get("catalog_metadata")
+            summary = properties.get("purpose") or properties.get("definition")
+            if summary is None and isinstance(catalog_metadata, dict):
+                summary = catalog_metadata.get("description")
     return EntitySummary(
         id=row["id"],
         kind=row["entity_type"],
@@ -7959,6 +7964,44 @@ class ReadModelStore(AdminReadModelsMixin):
         if row is None:
             raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
         return row
+
+    async def _update_entity_description(
+        self,
+        entity_id: UUID,
+        tenant_id: UUID | None,
+        *,
+        namespace: str,
+        entity_type: str,
+        description: str,
+    ) -> EntitySummary:
+        row = await self.database.fetch_one(
+            """
+            UPDATE entity SET properties=properties||jsonb_build_object('curated_description',%s::text)
+            WHERE id=%s AND namespace=%s AND entity_type=%s
+            RETURNING *,coalesce(last_seen_at,updated_at,created_at) observed_at
+            """,
+            (description, entity_id, namespace, entity_type),
+            tenant_id=tenant_id,
+        )
+        if row is None:
+            raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
+        return _entity(row)
+
+    async def update_application(
+        self, application_id: UUID, body: EntityDescriptionUpdateRequest, *, tenant_id: UUID | None,
+    ) -> EntitySummary:
+        return await self._update_entity_description(
+            application_id, tenant_id, namespace="ENTERPRISE", entity_type="Application",
+            description=body.description,
+        )
+
+    async def update_repository(
+        self, repository_id: UUID, body: EntityDescriptionUpdateRequest, *, tenant_id: UUID | None,
+    ) -> EntitySummary:
+        return await self._update_entity_description(
+            repository_id, tenant_id, namespace="ENTERPRISE", entity_type="Repository",
+            description=body.description,
+        )
 
     async def _application_related_entities(
         self,

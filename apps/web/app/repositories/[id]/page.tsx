@@ -9,6 +9,7 @@ import { useEvidenceStore } from "@/lib/evidenceStore";
 import { useEntityGraphMetrics } from "@/lib/queries";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
+import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
 import { RecommendationFocus } from "./RecommendationFocus";
 import { RepositoryActivityPanel } from "./RepositoryActivityPanel";
 import styles from "./repository.module.css";
@@ -97,6 +98,12 @@ export default function RepositoryPage({
           {data.repository.canonical_key ? (
             <code className={`${styles.canonical} sg-mono`}>{data.repository.canonical_key}</code>
           ) : null}
+          <DescriptionEditor
+            kind="repository"
+            entityId={id}
+            description={data.repository.summary}
+            queryKey={["repository", id]}
+          />
           {activity.data ? (
             <div className={styles.repositoryMeta} aria-label="Repository metadata">
               {activity.data.source.full_name ? <span>{activity.data.source.full_name}</span> : null}

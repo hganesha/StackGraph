@@ -29,6 +29,7 @@ The V0 API read models are available both at their contract paths and under the 
 
 - `GET /estate/summary`
 - `GET /applications/{id}`
+- `PUT /applications/{id}`
 - `GET /technologies/{id}`
 - `GET /modernization`
 - `POST /ask`
@@ -43,6 +44,7 @@ The V0 API read models are available both at their contract paths and under the 
 - `GET /facts/{id}/evidence`
 - `POST /identity-assertions/{id}/review`
 - `GET /capabilities/taxonomy`
+- `PUT /repositories/{id}`
 - `GET /repositories/{id}/capabilities`
 - `POST /capability-inferences/{id}/review`
 - `POST /duplicate-capability-candidates/{id}/review`

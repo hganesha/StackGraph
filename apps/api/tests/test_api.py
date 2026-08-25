@@ -194,6 +194,13 @@ class StubReadModels:
     async def application_detail(self, application_id, *, tenant_id):
         raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
 
+    async def update_application(self, application_id, body, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return EntitySummary(
+            id=application_id, kind="Application", name="billing-api",
+            summary=body.description or None,
+        )
+
     async def technology_detail(self, technology_id, *, tenant_id):
         raise APIError(404, "ENTITY_NOT_FOUND", "The requested entity was not found.")
 
@@ -405,6 +412,13 @@ class StubReadModels:
             ),
             applications=[], technologies=[], deployments=[],
             freshness=Freshness(observed_at=NOW, status="FRESH"),
+        )
+
+    async def update_repository(self, repository_id, body, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return EntitySummary(
+            id=repository_id, kind="Repository", name="billing-api",
+            canonical_key="github:repo:billing-api", summary=body.description or None,
         )
 
     async def review_capability_inference(
@@ -981,6 +995,48 @@ def test_repository_detail_is_exposed_on_versioned_path() -> None:
     assert response.json()["repository"]["summary"] == "Creates invoices."
     assert "profile" not in response.json()
     assert store.last_tenant_id == tenant_id
+
+
+def test_application_and_repository_description_updates_forward_tenant() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(environment="test", default_tenant_id=tenant_id))
+
+    application = asyncio.run(request(
+        app, "PUT", "/api/v1/applications/00000000-0000-4000-8000-000000000601",
+        json={"description": "Handles customer billing."},
+    ))
+    assert application.status_code == 200
+    assert application.json()["summary"] == "Handles customer billing."
+    assert store.last_tenant_id == tenant_id
+
+    repository = asyncio.run(request(
+        app, "PUT", "/api/v1/repositories/00000000-0000-4000-8000-000000000701",
+        json={"description": ""},
+    ))
+    assert repository.status_code == 200
+    assert "summary" not in repository.json()
+    assert store.last_tenant_id == tenant_id
+
+
+def test_repository_description_update_requires_execute_capability() -> None:
+    secret = "a-test-session-secret-with-at-least-32-characters"
+    tenant_id = UUID("00000000-0000-4000-8000-000000000123")
+    app, store = app_with_stubs(Settings(
+        environment="test", auth_mode="signed_session", auth_session_secret=secret,
+    ))
+    view_only = create_session_token(
+        secret, actor_key="viewer", tenant_id=tenant_id,
+        expires_at=int(time.time()) + 60, capabilities=["view"],
+    )
+
+    forbidden = asyncio.run(request(
+        app, "PUT", "/api/v1/repositories/00000000-0000-4000-8000-000000000701",
+        headers={"Authorization": f"Bearer {view_only}"},
+        json={"description": "Handles invoices."},
+    ))
+    assert forbidden.status_code == 403
+    assert forbidden.json()["details"]["required_capability"] == "execute"
+    assert store.last_tenant_id is None  # the store was never reached
 
 
 def test_repository_activity_is_bounded_versioned_and_tenant_scoped() -> None:

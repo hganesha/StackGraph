@@ -9,6 +9,7 @@ import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
 import { TechnologyWorkspace } from "./TechnologyWorkspace";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
+import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
 import styles from "./application.module.css";
 
 type ApplicationTab = "overview" | "technology" | "assessments" | "recommendations";
@@ -86,7 +87,12 @@ export default function ApplicationPage({
       <header className={styles.head}>
         <div className={styles.headMain}>
           <h1 className={`${styles.title} sg-mono`}>{data.application.name}</h1>
-          {data.application.summary ? <p className={styles.summary}>{data.application.summary}</p> : null}
+          <DescriptionEditor
+            kind="application"
+            entityId={id}
+            description={data.application.summary}
+            queryKey={["application", id]}
+          />
         </div>
         <ApplicationViewSwitch applicationId={id} active="hierarchy" />
       </header>
