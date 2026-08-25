@@ -62,8 +62,25 @@
   gap: 2px;
 }
 .name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
   color: var(--sg-text-primary);
   font-weight: 500;
+}
+.nestedRow {
+  background: var(--sg-surface-sunken);
+}
+.nestedRow .cName {
+  padding-inline-start: calc(var(--sg-space-4) + var(--sg-space-5));
+}
+.nestedRow .name {
+  font-weight: 400;
+  color: var(--sg-text-secondary);
+}
+.nestGlyph {
+  flex: none;
+  color: var(--sg-text-muted);
 }
 .summary {
   font-size: var(--sg-type-small-size);
