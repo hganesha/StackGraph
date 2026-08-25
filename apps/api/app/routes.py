@@ -54,6 +54,8 @@ from app.models import (
     DeterministicInsightRuleUpdateRequest,
     EnterpriseInsightReportList,
     EmbeddingStatus,
+    EntityDescriptionUpdateRequest,
+    EntitySummary,
     EstateSummary,
     EvidenceDetail,
     EntityGraphIntelligence,
@@ -476,6 +478,16 @@ async def get_application(id: UUID, request: Request) -> ApplicationDetail:
     return await _store(request).application_detail(id, tenant_id=principal.tenant_id)
 
 
+@router.put(
+    "/applications/{id}", response_model=EntitySummary,
+    response_model_exclude_none=True, operation_id="updateApplication", tags=["applications"],
+)
+async def update_application(id: UUID, body: EntityDescriptionUpdateRequest, request: Request) -> EntitySummary:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).update_application(id, body, tenant_id=principal.tenant_id)
+
+
 @router.get(
     "/technologies/hierarchy", response_model=TechnologyEstateHierarchy,
     response_model_exclude_none=True, operation_id="getTechnologyEstateHierarchy", tags=["technologies"],
@@ -492,6 +504,16 @@ async def get_technology_estate_hierarchy(request: Request) -> TechnologyEstateH
 async def get_repository(id: UUID, request: Request) -> RepositoryDetail:
     principal = await _principal(request)
     return await _store(request).repository_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/repositories/{id}", response_model=EntitySummary,
+    response_model_exclude_none=True, operation_id="updateRepository", tags=["repositories"],
+)
+async def update_repository(id: UUID, body: EntityDescriptionUpdateRequest, request: Request) -> EntitySummary:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).update_repository(id, body, tenant_id=principal.tenant_id)
 
 
 @router.get(

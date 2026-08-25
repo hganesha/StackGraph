@@ -26,6 +26,7 @@ import type {
   CapabilityInferenceReviewResult,
   DuplicateCapabilityReviewResult,
   RepositoryModernizationIntelligence,
+  ModernizationCandidate,
   ModernizationCandidateReviewResult,
   ModernizationRecommendationReviewRequest,
   ModernizationRecommendationReviewResult,
@@ -115,6 +116,7 @@ import type {
   CanvasProjection,
   CanvasTemplateList,
   CanvasTemplateModel,
+  EntityDescriptionUpdateRequest,
 } from "../contracts/openapi.generated";
 
 // UI-demo estate (several ranked items across domains) so filter/sort/lens UI is exercisable.
@@ -164,7 +166,9 @@ export interface EstateSummaryParams {
 export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
   getApplication(id: string): Promise<ApplicationDetail>;
+  updateApplication(id: string, body: EntityDescriptionUpdateRequest): Promise<EntitySummary>;
   getRepository(id: string): Promise<RepositoryDetail>;
+  updateRepository(id: string, body: EntityDescriptionUpdateRequest): Promise<EntitySummary>;
   getRepositoryActivity(
     id: string,
     params?: { window?: RepositoryActivityWindow; cursor?: string; limit?: number },
@@ -302,6 +306,66 @@ const assuranceCoverageResponse = (): AskResponse => ({
     { dimension: "Repository availability", scope: "Repositories", covered: 18, in_scope: 18, coverage_percent: 100, status: "COVERED", detail: "Repositories whose ingest target is enabled and unarchived, with no failed run since the last success." },
   ],
 });
+
+// The golden contract fixture for repository-modernization-intelligence carries an empty
+// candidates array (it exists to validate the schema, not to demo a page). Its recommendation
+// id matches modernization-scenario.json's "Consolidate billing HTTP clients" item, so the
+// dashboard's recommended-plan link and the Reviews queue's MODERNIZATION_RECOMMENDATION row
+// both resolve to this candidate, exercising the recommendation focus page end to end.
+const demoModernizationCandidate: ModernizationCandidate = {
+  id: "00000000-0000-4000-8000-000000000910",
+  source_revision: "revision-1",
+  kind: "INTERNAL_DUPLICATION",
+  subjects: [{ id: "00000000-0000-4000-8000-000000000701", kind: "Repository", name: "billing-api", canonical_key: "github:repo:billing-api" }],
+  confidence: 0.9,
+  summary: "Three internal HTTP client wrappers implement the same retry and auth logic.",
+  supporting_fact_ids: ["70000000-0000-4000-8000-000000000021", "70000000-0000-4000-8000-000000000022"],
+  counter_evidence_fact_ids: [],
+  source_locations: [
+    { path: "src/billing/http/retryClient.ts", repository_id: "00000000-0000-4000-8000-000000000701", symbol: "RetryClient" },
+    { path: "src/billing/http/authWrapper.ts", repository_id: "00000000-0000-4000-8000-000000000701", symbol: "AuthWrapper" },
+  ],
+  validation_gaps: ["2 affected call sites have no statically linked test file."],
+  analyzer: { key: "modernization.consolidation", version: "1.0.0" },
+  review_state: "CONFIRMED",
+  version: 1,
+  stale: false,
+  options: [],
+  recommendation: {
+    id: "00000000-0000-4000-8000-000000000911",
+    action: "CONSOLIDATE",
+    objective: "Reduce duplicated HTTP client implementations",
+    title: "Consolidate billing HTTP clients",
+    rationale: "Three internal wrappers duplicate the platform HTTP client's retry and auth behavior.",
+    confidence: 0.9,
+    estimated_effort: "MEDIUM",
+    affected_call_sites: 14,
+    affected_files: 6,
+    validation_gaps: ["2 affected call sites have no statically linked test file."],
+    migration_plan: [
+      "Inventory call sites of RetryClient and AuthWrapper across billing-service.",
+      "Swap call sites to the platform HTTP client one module at a time, starting with read-only endpoints.",
+      "Remove the vendored wrappers once no call sites remain.",
+    ],
+    rollback_plan: [
+      "Revert the call-site swap commit for the affected module.",
+      "Re-add the vendored wrapper import until the platform client issue is resolved.",
+    ],
+    supporting_fact_ids: ["70000000-0000-4000-8000-000000000021", "70000000-0000-4000-8000-000000000022"],
+    counter_evidence_fact_ids: [],
+    counter_signals: [],
+    policy_version: "modernization.portfolio/1.0.0",
+    review_state: "UNREVIEWED",
+    version: 1,
+    stale: false,
+    created_at: "2026-08-21T14:00:00.000Z",
+  },
+};
+
+// Fixture-mode: a human-set description overrides the golden fixture's summary, same
+// as `curated_description` overriding discovery in the real properties column.
+let applicationDescriptionOverride: string | null = null;
+let repositoryDescriptionOverride: string | null = null;
 
 // Fixture-mode admin state so the Admin surface's CRUD is exercisable without a backend.
 // Seeded to mirror the previous mock sections so the demo looks unchanged on first load.
@@ -726,14 +790,36 @@ const fixtureClient: StackGraphClient = {
   },
   async getApplication() {
     await delay();
+    const detail = clone(applicationDetail as ApplicationDetail);
+    if (applicationDescriptionOverride !== null) detail.application.summary = applicationDescriptionOverride || undefined;
     return {
-      ...(applicationDetail as ApplicationDetail),
+      ...detail,
       graph_intelligence: fixtureEntityGraphIntelligence(applicationDetail.application.id),
+    };
+  },
+  async updateApplication(id, body) {
+    await delay();
+    applicationDescriptionOverride = body.description;
+    return {
+      ...(applicationDetail as ApplicationDetail).application,
+      id,
+      summary: body.description || undefined,
     };
   },
   async getRepository() {
     await delay();
-    return repositoryDetail as RepositoryDetail;
+    const detail = clone(repositoryDetail as RepositoryDetail);
+    if (repositoryDescriptionOverride !== null) detail.repository.summary = repositoryDescriptionOverride || undefined;
+    return detail;
+  },
+  async updateRepository(id, body) {
+    await delay();
+    repositoryDescriptionOverride = body.description;
+    return {
+      ...(repositoryDetail as RepositoryDetail).repository,
+      id,
+      summary: body.description || undefined,
+    };
   },
   async getRepositoryActivity(_id, params) {
     await delay();
@@ -1029,7 +1115,8 @@ const fixtureClient: StackGraphClient = {
   },
   async getRepositoryModernizationIntelligence() {
     await delay();
-    return repositoryModernization as RepositoryModernizationIntelligence;
+    const golden = repositoryModernization as RepositoryModernizationIntelligence;
+    return { ...golden, candidates: [...golden.candidates, demoModernizationCandidate] };
   },
   async reviewModernizationCandidate(id, body) {
     await delay();
@@ -1143,8 +1230,8 @@ const fixtureClient: StackGraphClient = {
       contract_version: "1.0.0",
       as_of: now,
       counts: {
-        IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 0, DUPLICATE_CAPABILITY: 0,
-        MODERNIZATION_CANDIDATE: 0, MODERNIZATION_RECOMMENDATION: 1,
+        IDENTITY_ASSERTION: 1, CAPABILITY_INFERENCE: 1, DUPLICATE_CAPABILITY: 1,
+        MODERNIZATION_CANDIDATE: 1, MODERNIZATION_RECOMMENDATION: 1,
         APPLICATION_SIMILARITY: 1,
       },
       items: [{
@@ -1154,8 +1241,6 @@ const fixtureClient: StackGraphClient = {
         version: 1, created_at: now,
         review_path: "/identity-assertions/00000000-0000-4000-8000-000000000501/review",
       }, {
-        // The queue routes similarity candidates, so fixture mode has to carry one:
-        // it is the only type besides identity that is decided in the queue itself.
         item_id: "00000000-0000-4000-8000-000000000502",
         item_type: "APPLICATION_SIMILARITY", review_state: "UNREVIEWED",
         title: "Billing API ↔ Ledger API", confidence: 0.83, confidence_band: "MEDIUM",
@@ -1163,8 +1248,6 @@ const fixtureClient: StackGraphClient = {
         version: 1, created_at: now,
         review_path: "/similarity-candidates/00000000-0000-4000-8000-000000000502/review",
       }, {
-        // A type that is still decided where it was found, so the queue's link out
-        // stays exercised too.
         item_id: "00000000-0000-4000-8000-000000000503",
         item_type: "MODERNIZATION_RECOMMENDATION", review_state: "UNREVIEWED",
         title: "Replace bespoke retry helper with the platform client",
@@ -1173,6 +1256,33 @@ const fixtureClient: StackGraphClient = {
         repository_id: repositoryDetail.repository.id,
         version: 1, created_at: now,
         review_path: "/modernization-recommendations/00000000-0000-4000-8000-000000000503/review",
+      }, {
+        item_id: "00000000-0000-4000-8000-000000000504",
+        item_type: "CAPABILITY_INFERENCE", review_state: "UNREVIEWED",
+        title: "Payment retry logic implements Rate limiting",
+        summary: "Inferred from call-site and dependency evidence in this repository",
+        confidence: 0.78, confidence_band: "MEDIUM",
+        repository_id: repositoryDetail.repository.id,
+        version: 1, created_at: now,
+        review_path: "/capability-inferences/00000000-0000-4000-8000-000000000504/review",
+      }, {
+        item_id: "00000000-0000-4000-8000-000000000505",
+        item_type: "DUPLICATE_CAPABILITY", review_state: "UNREVIEWED",
+        title: "Rate limiting implemented in 3 repositories",
+        summary: "Matching structural fingerprint across three repositories",
+        confidence: 0.69, confidence_band: "MEDIUM",
+        repository_id: repositoryDetail.repository.id,
+        version: 1, created_at: now,
+        review_path: "/duplicate-capability-candidates/00000000-0000-4000-8000-000000000505/review",
+      }, {
+        item_id: "00000000-0000-4000-8000-000000000506",
+        item_type: "MODERNIZATION_CANDIDATE", review_state: "UNREVIEWED",
+        title: "Vendored retry helper duplicates the platform client",
+        summary: "Vendored duplication candidate flagged by the modernization analyzer",
+        confidence: 0.61, confidence_band: "MEDIUM",
+        repository_id: repositoryDetail.repository.id,
+        version: 1, created_at: now,
+        review_path: "/modernization-candidates/00000000-0000-4000-8000-000000000506/review",
       }],
       page_info: { has_next_page: false },
     };
@@ -1886,7 +1996,11 @@ const liveClient: StackGraphClient = {
     return req(`/estate/summary${suffix}`);
   },
   getApplication: (id) => req(`/applications/${id}`),
+  updateApplication: (id, body) =>
+    req(`/applications/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getRepository: (id) => req(`/repositories/${id}`),
+  updateRepository: (id, body) =>
+    req(`/repositories/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getRepositoryActivity: (id, params) => {
     const query = new URLSearchParams();
     if (params?.window) query.set("window", params.window);

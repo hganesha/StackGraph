@@ -1039,6 +1039,10 @@ export interface EnterpriseInsightReportList {
   total_reports: number;
 }
 
+export interface EntityDescriptionUpdateRequest {
+  description: string;
+}
+
 export interface EntityGraphIntelligence {
   as_of: string;
   community_keys?: Array<string>;

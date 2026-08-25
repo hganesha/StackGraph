@@ -15,6 +15,8 @@ import type { ReviewQueueItem } from "@stackgraph/shared";
 import { useReviewQueue } from "@/lib/queries";
 import { UncertainBridge } from "@/components/reviews/UncertainBridge";
 import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
+import { OptimisticReviewDecision } from "@/components/reviews/OptimisticReviewDecision";
+import { ModernizationRecommendationDecision } from "@/components/reviews/ModernizationRecommendationDecision";
 import styles from "./reviews.module.css";
 
 /** Each finding type carries a mono glyph beside its always-present text label. */
@@ -110,6 +112,23 @@ export default function ReviewsPage() {
                     candidateId={item.item_id}
                     title={item.title}
                     confidence={item.confidence}
+                  />
+                ) : item.item_type === "MODERNIZATION_RECOMMENDATION" ? (
+                  <ModernizationRecommendationDecision
+                    recommendationId={item.item_id}
+                    reviewState="UNREVIEWED"
+                    confidence={item.confidence}
+                    expectedVersion={item.version}
+                  />
+                ) : item.item_type === "CAPABILITY_INFERENCE" ||
+                  item.item_type === "DUPLICATE_CAPABILITY" ||
+                  item.item_type === "MODERNIZATION_CANDIDATE" ? (
+                  <OptimisticReviewDecision
+                    kind={item.item_type}
+                    itemId={item.item_id}
+                    title={item.title}
+                    confidence={item.confidence}
+                    expectedVersion={item.version}
                   />
                 ) : location ? (
                   <Link className={styles.reviewHint} href={location.href}>

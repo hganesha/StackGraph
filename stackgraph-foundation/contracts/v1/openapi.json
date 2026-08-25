@@ -6037,6 +6037,22 @@
         "title": "EnterpriseInsightReportList",
         "type": "object"
       },
+      "EntityDescriptionUpdateRequest": {
+        "additionalProperties": false,
+        "description": "A human-curated description, distinct from `summary` values discovery infers\n(package metadata, catalog definitions) \u2014 those stay read-only; this is the only\nfield an owner can edit directly. Empty string clears the override.",
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "EntityDescriptionUpdateRequest",
+        "type": "object"
+      },
       "EntityGraphIntelligence": {
         "additionalProperties": false,
         "properties": {
@@ -14687,6 +14703,57 @@
         "tags": [
           "applications"
         ]
+      },
+      "put": {
+        "operationId": "updateApplication",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntityDescriptionUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Application",
+        "tags": [
+          "applications"
+        ]
       }
     },
     "/ask": {
@@ -17199,6 +17266,57 @@
           }
         },
         "summary": "Get Repository",
+        "tags": [
+          "repositories"
+        ]
+      },
+      "put": {
+        "operationId": "updateRepository",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntityDescriptionUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Repository",
         "tags": [
           "repositories"
         ]

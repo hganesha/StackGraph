@@ -103,6 +103,14 @@ class EntitySummary(ContractModel):
     summary: str | None = None
 
 
+class EntityDescriptionUpdateRequest(ContractModel):
+    """A human-curated description, distinct from `summary` values discovery infers
+    (package metadata, catalog definitions) — those stay read-only; this is the only
+    field an owner can edit directly. Empty string clears the override."""
+
+    description: str = Field(max_length=2000)
+
+
 class TaxonomySummary(ContractModel):
     key: str = Field(min_length=1)
     name: str = Field(min_length=1)

@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
-import { stackGraphClient, ApiRequestError } from "@stackgraph/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { stackGraphClient, ApiRequestError, type OptimisticReviewRequest } from "@stackgraph/shared";
 
 export type ReviewDecision = "CONFIRM" | "REJECT";
 
@@ -95,3 +95,51 @@ export const SIMILARITY_DECISIONS: ReadonlyArray<{
     ],
   },
 ];
+
+/**
+ * The three review-queue finding types that share the identity-bridge shape exactly:
+ * a two-way CONFIRM/REJECT decision with a required rationale and optimistic concurrency.
+ * Kept as one mutation factory so a fourth type never needs a fourth copy of this wiring.
+ */
+export type OptimisticReviewKind = "CAPABILITY_INFERENCE" | "DUPLICATE_CAPABILITY" | "MODERNIZATION_CANDIDATE";
+
+const optimisticReviewFns: Record<
+  OptimisticReviewKind,
+  (id: string, body: OptimisticReviewRequest) => Promise<{ review_state: "CONFIRMED" | "REJECTED"; version: number }>
+> = {
+  CAPABILITY_INFERENCE: (id, body) => stackGraphClient.reviewCapabilityInference(id, body),
+  DUPLICATE_CAPABILITY: (id, body) => stackGraphClient.reviewDuplicateCapabilityCandidate(id, body),
+  MODERNIZATION_CANDIDATE: (id, body) => stackGraphClient.reviewModernizationCandidate(id, body),
+};
+
+export function useOptimisticReviewMutation(kind: OptimisticReviewKind, itemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { decision: ReviewDecision; rationale: string; expectedVersion: number }) =>
+      optimisticReviewFns[kind](itemId, {
+        decision: input.decision,
+        rationale: input.rationale,
+        expected_version: input.expectedVersion,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reviews", "queue"] }),
+  });
+}
+
+export type ModernizationRecommendationDecision = "ACCEPT" | "REJECT" | "DISMISS";
+
+/**
+ * Decide a modernization recommendation (contract: three-way ACCEPT/REJECT/DISMISS,
+ * distinct from the two-way CONFIRM/REJECT pattern used by the other finding types).
+ */
+export function useReviewModernizationRecommendation(recommendationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { decision: ModernizationRecommendationDecision; rationale: string; expectedVersion: number }) =>
+      stackGraphClient.reviewModernizationRecommendation(recommendationId, {
+        decision: input.decision,
+        rationale: input.rationale,
+        expected_version: input.expectedVersion,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reviews", "queue"] }),
+  });
+}

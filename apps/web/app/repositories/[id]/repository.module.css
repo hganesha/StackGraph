@@ -362,6 +362,27 @@
   background: var(--sg-surface-sunken);
 }
 
+.headActions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--sg-space-2);
+}
+
+.exportButton {
+  padding: var(--sg-space-2) var(--sg-space-3);
+  color: var(--sg-color-domain-intelligence-700);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  font-weight: 500;
+  font-size: var(--sg-type-small-size);
+  cursor: pointer;
+}
+
+.exportButton:hover {
+  background: var(--sg-surface-sunken);
+}
+
 .entityContext {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

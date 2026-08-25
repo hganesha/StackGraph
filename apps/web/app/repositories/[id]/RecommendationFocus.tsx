@@ -14,6 +14,9 @@ import {
   presentRecommendationTitle,
   presentValidationGap,
 } from "@/lib/modernizationPresentation";
+import { downloadMarkdown, recommendationFilename, recommendationToMarkdown } from "@/lib/exportRecommendation";
+import { ModernizationRecommendationDecision } from "@/components/reviews/ModernizationRecommendationDecision";
+import { ValidationOutcome } from "@/components/reviews/ValidationOutcome";
 import styles from "./repository.module.css";
 
 const INITIAL_MODULE_COUNT = 12;
@@ -97,6 +100,7 @@ export function RecommendationFocus({
   repository: RepositoryDetail;
 }) {
   const [showAllModules, setShowAllModules] = useState(false);
+  const [decidedState, setDecidedState] = useState<"ACCEPTED" | "REJECTED" | "DISMISSED" | null>(null);
   const intelligence = useQuery({
     queryKey: ["repository", repository.repository.id, "modernization-intelligence"],
     queryFn: () => stackGraphClient.getRepositoryModernizationIntelligence(repository.repository.id, 100),
@@ -180,7 +184,19 @@ export function RecommendationFocus({
           <h1>{presentRecommendationTitle(recommendation.title)}</h1>
           <p>{presentRecommendationRationale(recommendation.rationale)}</p>
         </div>
-        <Link className={styles.backLink} href="/modernization">Back to modernization</Link>
+        <div className={styles.headActions}>
+          <button
+            type="button"
+            className={styles.exportButton}
+            onClick={() => downloadMarkdown(
+              recommendationFilename(recommendation.id),
+              recommendationToMarkdown(candidate, repository),
+            )}
+          >
+            Export as Markdown
+          </button>
+          <Link className={styles.backLink} href="/modernization">Back to modernization</Link>
+        </div>
       </header>
 
       <section className={styles.entityContext} aria-label="Application and repository context">
@@ -266,6 +282,24 @@ export function RecommendationFocus({
         </section>
 
         <aside className={styles.focusSidebar} aria-label="Recommendation details">
+          <section className={styles.sideSection}>
+            <h2>Decision</h2>
+            <ModernizationRecommendationDecision
+              recommendationId={recommendation.id}
+              reviewState={decidedState ?? recommendation.review_state}
+              confidence={recommendation.confidence}
+              expectedVersion={recommendation.version}
+              onResolved={(state) => setDecidedState(state)}
+            />
+          </section>
+
+          {(decidedState ?? recommendation.review_state) === "ACCEPTED" ? (
+            <section className={styles.sideSection}>
+              <h2>Outcome</h2>
+              <ValidationOutcome recommendationId={recommendation.id} />
+            </section>
+          ) : null}
+
           <section className={styles.sideSection}>
             <div className={styles.sideHeading}>
               <h2>Estimated impact</h2>

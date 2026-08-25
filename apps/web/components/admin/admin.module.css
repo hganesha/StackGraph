@@ -628,6 +628,49 @@
   background: var(--sg-surface-sunken);
   color: var(--sg-text-secondary);
 }
+.memberRight {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  flex-shrink: 0;
+}
+.memberRoleSelect {
+  inline-size: auto;
+  max-inline-size: 140px;
+  padding: 4px var(--sg-space-2);
+  font-size: var(--sg-type-small-size);
+}
+.memberStatus {
+  font-size: var(--sg-type-small-size);
+  font-weight: 500;
+  padding: 1px var(--sg-space-2);
+  border-radius: var(--sg-radius-pill);
+  flex-shrink: 0;
+}
+.memberStatusACTIVE {
+  background: var(--sg-color-domain-oss-100);
+  color: var(--sg-color-domain-oss-800);
+}
+.memberStatusINVITED {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-secondary);
+}
+.memberStatusSUSPENDED {
+  background: var(--sg-color-signal-danger-50);
+  color: var(--sg-color-signal-danger-700);
+}
+.inviteRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2);
+  align-items: flex-end;
+}
+.inviteRow .field {
+  flex: 1 1 160px;
+}
+.inviteRow .primary {
+  align-self: flex-end;
+}
 
 /* modernization governance */
 .governanceCard,
