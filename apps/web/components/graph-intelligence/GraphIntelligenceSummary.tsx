@@ -131,15 +131,10 @@ export function GraphIntelligenceSummary({
     () => (community?.representative_entities ?? []).filter((entity) => entity.id !== entityId).slice(0, 3),
     [community, entityId],
   );
-  // Snapshot limitations qualify the same numbers the entity limitations do, so they
-  // are shown together rather than hidden one drawer away.
-  const limitations = useMemo(
-    () => [
-      ...(intelligence?.limitations ?? []),
-      ...(intelligence?.snapshots ?? []).flatMap((snapshot) => snapshot.limitations),
-    ],
-    [intelligence?.limitations, intelligence?.snapshots],
-  );
+  // intelligence.limitations already merges snapshot- and metric-level limitations
+  // with dedup on the backend (see read_models.py), so it doesn't need snapshot
+  // limitations re-appended here — doing so just reprints each note once per snapshot.
+  const limitations = intelligence?.limitations ?? [];
 
   return (
     <section className={styles.panel} aria-labelledby={`graph-intelligence-${entityId}`}>
