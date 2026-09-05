@@ -587,11 +587,20 @@ class RepositoryActivityActor(ContractModel):
     login: str = Field(min_length=1)
     avatar_url: str | None = None
     is_bot: bool = False
+    classification: Literal[
+        "HUMAN", "BOT", "DEPENDENCY_BOT", "CI_AUTOMATION",
+        "AI_AGENT", "AI_ASSISTED_HUMAN", "UNKNOWN",
+    ] = "UNKNOWN"
+    classification_confidence: float = Field(default=0, ge=0, le=1)
+    classification_basis: str | None = None
 
 
 class RepositoryActivityEvent(ContractModel):
     id: UUID
-    event_type: Literal["COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED"]
+    event_type: Literal[
+        "COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED", "RELEASE", "DEPLOYMENT",
+        "DEPENDENCY_CHANGE", "ARCHITECTURE_CHANGE", "INCIDENT", "INTERVENTION", "ROLLBACK",
+    ]
     title: str = Field(min_length=1)
     occurred_at: datetime
     actor: RepositoryActivityActor | None = None
@@ -613,12 +622,16 @@ class RepositoryActivitySummary(ContractModel):
     pull_requests_merged: int | None = Field(default=None, ge=0)
     contributors: int | None = Field(default=None, ge=0)
     last_change_at: datetime | None = None
+    releases: int | None = Field(default=None, ge=0)
+    deployments: int | None = Field(default=None, ge=0)
 
 
 class RepositoryActivityCoverage(ContractModel):
     commits: RepositoryActivityCoverageStatus
     pull_requests: RepositoryActivityCoverageStatus
     contributors: RepositoryActivityCoverageStatus
+    releases: RepositoryActivityCoverageStatus = "NOT_COLLECTED"
+    deployments: RepositoryActivityCoverageStatus = "NOT_COLLECTED"
 
 
 class RepositoryActivitySource(ContractModel):
@@ -1052,6 +1065,9 @@ class ModernizationRecommendationModel(ContractModel):
     version: int = Field(ge=1)
     stale: bool
     created_at: datetime
+    proposed_change_set_id: UUID | None = None
+    simulation_eligibility: Literal["ELIGIBLE", "NOT_SIMULATABLE", "UNKNOWN"] = "UNKNOWN"
+    not_simulatable_reason: dict[str, Any] | None = None
 
 
 class ModernizationCandidateModel(ContractModel):
@@ -2480,3 +2496,315 @@ class ErrorResponse(ContractModel):
     message: str
     request_id: str
     details: dict[str, Any] | None = None
+
+
+# --- Phase 2 change compiler and simulator ---------------------------------
+
+ResolutionState = Literal["RESOLVED", "INFERRED", "UNRESOLVED"]
+GateState = Literal["BLOCKED", "ESCALATE", "CONSTRAIN", "CLEAR"]
+ActionPredicate = Literal["UPGRADE", "REPLACE", "REMOVE", "DEPRECATE", "MIGRATE", "MOVE"]
+MutationLifecycle = Literal[
+    "DRAFT", "VALIDATED", "REJECTED", "SUPERSEDED", "SUBMITTED", "EXECUTED", "CANCELLED",
+]
+SimulationStatus = Literal[
+    "QUEUED", "RUNNING", "SUCCEEDED", "LIMITED", "NOT_SIMULATABLE", "FAILED", "CANCELLED",
+]
+ImpactClassification = Literal["DIRECT", "TRANSITIVE", "CONTEXT", "STOP", "INFORMATIONAL"]
+
+
+class GateReason(ContractModel):
+    code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{2,63}$")
+    message: str = Field(min_length=1)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+
+
+class ChangeGate(ContractModel):
+    state: GateState
+    reasons: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_gate_reasons(self) -> "ChangeGate":
+        if self.state == "CLEAR" and self.reasons:
+            raise ValueError("CLEAR gates cannot carry blocking reasons")
+        if self.state != "CLEAR" and not self.reasons:
+            raise ValueError("non-clear gates must name at least one reason")
+        return self
+
+
+class ResolutionCandidate(ContractModel):
+    entity: EntitySummary
+    confidence: float = Field(ge=0, le=1)
+    method: str = Field(min_length=1)
+
+
+class EntityResolution(ContractModel):
+    state: ResolutionState
+    entity: EntitySummary | None = None
+    candidates: list[ResolutionCandidate] = Field(default_factory=list)
+    confidence: float = Field(ge=0, le=1)
+    method: str = Field(min_length=1)
+    method_version: str = Field(min_length=1)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+
+
+class ActionTypeSummary(ContractModel):
+    predicate: ActionPredicate
+    label: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    subject_types: list[str] = Field(min_length=1)
+    enabled: bool
+    lifecycle: Literal["ACTIVE", "DISABLED", "RETIRED"]
+    ontology_version: str = Field(min_length=1)
+
+
+class ActionTypeList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    action_types: list[ActionTypeSummary]
+    policy_version: str = Field(min_length=1)
+
+
+class ActionSubject(ContractModel):
+    entity: EntitySummary
+    resolution: Literal["RESOLVED"] = "RESOLVED"
+    observed_versions: list[str] = Field(default_factory=list)
+    dependent_count: int = Field(default=0, ge=0)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+
+
+class ActionSubjectList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    predicate: ActionPredicate
+    subjects: list[ActionSubject]
+    page_info: PageInfo
+
+
+class ValidTarget(ContractModel):
+    entity_id: UUID
+    version: str = Field(min_length=1)
+    canonical_key: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    observed_at: datetime
+    freshness: FreshnessStatus
+    support: Literal["SUPPORTED", "UNKNOWN", "UNSUPPORTED"] = "UNKNOWN"
+
+
+class ValidTargetList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    subject: EntitySummary
+    targets: list[ValidTarget]
+    policy_version: str = Field(min_length=1)
+    page_info: PageInfo
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class VersionDistribution(ContractModel):
+    version: str = Field(min_length=1)
+    count: int = Field(ge=1)
+
+
+class ChangeScope(ContractModel):
+    id: str = Field(min_length=1)
+    kind: Literal["ESTATE", "REPOSITORY", "COMPONENT"]
+    label: str = Field(min_length=1)
+    entity_id: UUID | None = None
+    component_path: str | None = None
+    affected_count: int = Field(ge=1)
+    version_distribution: list[VersionDistribution]
+    evidence_fact_ids: list[UUID] = Field(min_length=1)
+
+
+class ChangeScopeList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    subject: EntitySummary
+    scopes: list[ChangeScope]
+    policy_version: str = Field(min_length=1)
+
+
+class MutationCompileRequest(ContractModel):
+    intent: str | None = Field(default=None, min_length=3, max_length=500)
+    predicate: ActionPredicate | None = None
+    subject_id: UUID | None = None
+    subject_query: str | None = Field(default=None, min_length=1, max_length=255)
+    target_version: str | None = Field(default=None, min_length=1, max_length=255)
+    scope_id: str | None = Field(default=None, min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def validate_input_mode(self) -> "MutationCompileRequest":
+        if not self.intent and not self.predicate:
+            raise ValueError("intent or predicate is required")
+        if self.intent and any((self.predicate, self.subject_id, self.subject_query, self.target_version, self.scope_id)):
+            raise ValueError("intent cannot be combined with structured mutation fields")
+        if self.predicate and not (self.subject_id or self.subject_query):
+            raise ValueError("structured mutations require subject_id or subject_query")
+        return self
+
+
+class MutationValidationError(ContractModel):
+    code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{2,63}$")
+    field: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+
+
+class MutationIR(ContractModel):
+    id: UUID | None = None
+    schema_version: Literal["mutation/1.0.0"] = "mutation/1.0.0"
+    predicate: ActionPredicate
+    subject: EntityResolution
+    before: dict[str, Any]
+    after: dict[str, Any]
+    scope: ChangeScope | None = None
+    constraints: dict[str, Any] = Field(default_factory=dict)
+    provenance: dict[str, Any]
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    lifecycle: MutationLifecycle
+    validation_errors: list[MutationValidationError] = Field(default_factory=list)
+
+
+class ChangeSetModel(ContractModel):
+    id: UUID | None = None
+    schema_version: Literal["changeset/1.0.0"] = "changeset/1.0.0"
+    atomic: bool = True
+    mutations: list[MutationIR] = Field(min_length=1, max_length=20)
+    lifecycle: MutationLifecycle
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    created_at: datetime | None = None
+
+
+class MutationCompileResult(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    command_state: Literal["EMPTY", "RESOLVING", "TOKENISED", "COMPILED"]
+    change_set: ChangeSetModel | None = None
+    draft: MutationIR
+    gate: ChangeGate
+    replayed: bool = False
+
+
+class MutationValidateRequest(ContractModel):
+    change_set_id: UUID
+
+
+class RecommendationCompileRequest(ContractModel):
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class RepositoryFingerprintSnapshot(ContractModel):
+    fact_id: UUID
+    source_revision: str = Field(min_length=1)
+    observed_at: datetime
+    system_from: datetime
+    system_to: datetime | None = None
+    confidence: float = Field(ge=0, le=1)
+    fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    profile: dict[str, Any]
+
+
+class RepositoryFingerprintList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    snapshots: list[RepositoryFingerprintSnapshot]
+    page_info: PageInfo
+
+
+class ObservedMutationCreateRequest(ContractModel):
+    correlation_key: str = Field(min_length=1, max_length=255)
+    source_kind: Literal[
+        "PULL_REQUEST", "COMMIT", "DEPLOYMENT", "TICKET", "INCIDENT", "POSTMORTEM", "MANUAL",
+    ]
+    predicate: ActionPredicate
+    subject_entity_id: UUID
+    before: dict[str, Any]
+    after: dict[str, Any]
+    scope: dict[str, Any]
+    observed_impact: dict[str, Any]
+    unexpected_impact: dict[str, Any] = Field(default_factory=dict)
+    success: bool | None = None
+    intervention_required: bool = False
+    rolled_back: bool = False
+    evidence_fact_ids: list[UUID] = Field(min_length=1)
+    graph_watermark_before: str | None = None
+    predicted_simulation_run_id: UUID | None = None
+    resolution: str | None = Field(default=None, max_length=2000)
+    confidence: float = Field(ge=0, le=1)
+    observed_at: datetime
+
+
+class ObservedMutationModel(ContractModel):
+    id: UUID
+    correlation_key: str
+    source_kind: str
+    predicate: ActionPredicate
+    subject: EntitySummary
+    before: dict[str, Any]
+    after: dict[str, Any]
+    scope: dict[str, Any]
+    observed_impact: dict[str, Any]
+    unexpected_impact: dict[str, Any]
+    success: bool | None = None
+    intervention_required: bool
+    rolled_back: bool
+    evidence_fact_ids: list[UUID]
+    graph_watermark_before: str | None = None
+    predicted_simulation_run_id: UUID | None = None
+    resolution: str | None = None
+    confidence: float = Field(ge=0, le=1)
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    observed_at: datetime
+    created_at: datetime
+
+
+class ObservedMutationList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    subject: EntitySummary
+    outcomes: list[ObservedMutationModel]
+    page_info: PageInfo
+
+
+class SimulationCreateRequest(ContractModel):
+    change_set_id: UUID
+    idempotency_key: str = Field(min_length=1, max_length=255)
+
+
+class SimulationFinding(ContractModel):
+    id: UUID
+    rule_key: str = Field(min_length=1)
+    rule_version: str = Field(min_length=1)
+    classification: ImpactClassification
+    severity: Literal["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    title: str = Field(min_length=1)
+    detail: str = Field(min_length=1)
+    affected_entity: EntitySummary | None = None
+    confidence: float = Field(ge=0, le=1)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    path: list[EntitySummary] = Field(default_factory=list)
+
+
+class SimulationInterpretation(ContractModel):
+    status: Literal["AVAILABLE", "UNAVAILABLE", "QUARANTINED"]
+    risk: str | None = None
+    explanation: str | None = None
+    rollout: list[str] = Field(default_factory=list)
+    verification: list[str] = Field(default_factory=list)
+    cited_finding_ids: list[UUID] = Field(default_factory=list)
+    limitation: str | None = None
+
+
+class SimulationRunModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    change_set_id: UUID
+    status: SimulationStatus
+    gate: ChangeGate
+    estate_watermark: str
+    policy_version: str
+    provider_version: str
+    scanner_versions: list[str]
+    findings: list[SimulationFinding]
+    interpretation: SimulationInterpretation
+    limitations: list[GateReason]
+    result_hash: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    replayed: bool = False

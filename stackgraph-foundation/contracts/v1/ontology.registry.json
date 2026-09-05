@@ -12,6 +12,8 @@
     "OWNS": {"object_kind": "ENTITY"},
     "OPERATES": {"object_kind": "ENTITY"},
     "CONTAINS": {"object_kind": "ENTITY"},
+    "BUILDS": {"object_kind": "ENTITY"},
+    "BASED_ON": {"object_kind": "ENTITY"},
     "REQUIRES": {"object_kind": "ENTITY"},
     "ENABLED_BY": {"object_kind": "ENTITY"},
     "PROVIDED_BY": {"object_kind": "ENTITY"},

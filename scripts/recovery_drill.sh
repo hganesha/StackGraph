@@ -30,19 +30,66 @@ docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "$
   -f /docker-entrypoint-initdb.d/020-create-graph.sql >/dev/null
 docker compose run --rm --no-deps \
   -e STACKGRAPH_DATABASE_URL="postgresql://${admin_user}:${admin_password}@database:5432/${source_db}" \
+  migrate >/dev/null
+docker compose run --rm --no-deps \
+  -e STACKGRAPH_DATABASE_URL="postgresql://${admin_user}:${admin_password}@database:5432/${source_db}" \
   seed >/dev/null
-docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${source_db}" \
-  -c "INSERT INTO tenant(id,tenant_key,name) VALUES ('00000000-0000-0000-0000-000000000099','recovery-drill','Recovery drill sentinel')" >/dev/null
+docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${source_db}" >/dev/null <<'SQL'
+INSERT INTO tenant(id,tenant_key,name)
+VALUES ('00000000-0000-0000-0000-000000000099','recovery-drill','Recovery drill sentinel');
+SELECT set_config('app.tenant_id','00000000-0000-0000-0000-000000000099',false);
+INSERT INTO entity(
+  id,tenant_id,namespace,entity_type,canonical_key,name,properties
+) VALUES (
+  '00000000-0000-0000-0000-000000000098',
+  '00000000-0000-0000-0000-000000000099',
+  'TECHNOLOGY','Package','pkg:npm/recovery-drill','Recovery drill package','{}'
+);
+INSERT INTO change_set(
+  id,tenant_id,lifecycle,input_fingerprint,idempotency_key,provenance,created_by
+) VALUES (
+  '00000000-0000-0000-0000-000000000097',
+  '00000000-0000-0000-0000-000000000099','VALIDATED',
+  'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+  'recovery-drill','{"entry_point":"RECOVERY_DRILL"}','recovery-drill'
+);
+INSERT INTO simulation_run(
+  id,tenant_id,change_set_id,idempotency_key,status,estate_watermark,
+  policy_version,provider_version,input_fingerprint,created_by,started_at
+) VALUES (
+  '00000000-0000-0000-0000-000000000096',
+  '00000000-0000-0000-0000-000000000099',
+  '00000000-0000-0000-0000-000000000097','recovery-drill','RUNNING',
+  'facts:recovery-drill','upgrade-package/1','package-registry/1.0.0',
+  'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+  'recovery-drill',now()
+);
+INSERT INTO simulation_finding(
+  id,tenant_id,simulation_run_id,rule_key,rule_version,classification,severity,
+  title,detail,affected_entity_id,confidence,deterministic_key
+) VALUES (
+  '00000000-0000-0000-0000-000000000095',
+  '00000000-0000-0000-0000-000000000099',
+  '00000000-0000-0000-0000-000000000096','recovery.sentinel','1.0.0',
+  'INFORMATIONAL','INFO','Recovery sentinel','Recovery result integrity sentinel.',
+  '00000000-0000-0000-0000-000000000098',1,'recovery.sentinel'
+);
+UPDATE simulation_run SET
+  status='SUCCEEDED',
+  result_hash='sha256:3333333333333333333333333333333333333333333333333333333333333333',
+  completed_at=now()
+WHERE id='00000000-0000-0000-0000-000000000096';
+SQL
 
 source_counts="$(docker compose exec -T database psql -At -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${source_db}" \
-  -c "SELECT json_build_object('tenant',count(*),'entity',(SELECT count(*) FROM entity),'fact',(SELECT count(*) FROM fact_assertion),'migration',(SELECT count(*) FROM schema_migration)) FROM tenant")"
+  -c "SELECT json_build_object('tenant',count(*),'entity',(SELECT count(*) FROM entity),'fact',(SELECT count(*) FROM fact_assertion),'migration',(SELECT count(*) FROM schema_migration),'change_set',(SELECT count(*) FROM change_set),'simulation',(SELECT count(*) FROM simulation_run),'simulation_finding',(SELECT count(*) FROM simulation_finding),'simulation_result_hashes',(SELECT coalesce(jsonb_agg(result_hash ORDER BY id),'[]') FROM simulation_run WHERE result_hash IS NOT NULL)) FROM tenant")"
 
 docker compose exec -T database pg_dump -U "${admin_user}" -d "${source_db}" -Fc -f "${dump_path}"
 docker compose exec -T database createdb -U "${admin_user}" "${restore_db}"
 docker compose exec -T database pg_restore -U "${admin_user}" -d "${restore_db}" --no-owner --exit-on-error "${dump_path}" >/dev/null
 
 restore_counts="$(docker compose exec -T database psql -At -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${restore_db}" \
-  -c "SELECT json_build_object('tenant',count(*),'entity',(SELECT count(*) FROM entity),'fact',(SELECT count(*) FROM fact_assertion),'migration',(SELECT count(*) FROM schema_migration)) FROM tenant")"
+  -c "SELECT json_build_object('tenant',count(*),'entity',(SELECT count(*) FROM entity),'fact',(SELECT count(*) FROM fact_assertion),'migration',(SELECT count(*) FROM schema_migration),'change_set',(SELECT count(*) FROM change_set),'simulation',(SELECT count(*) FROM simulation_run),'simulation_finding',(SELECT count(*) FROM simulation_finding),'simulation_result_hashes',(SELECT coalesce(jsonb_agg(result_hash ORDER BY id),'[]') FROM simulation_run WHERE result_hash IS NOT NULL)) FROM tenant")"
 test "${source_counts}" = "${restore_counts}"
 
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${restore_db}" >/dev/null <<'SQL'

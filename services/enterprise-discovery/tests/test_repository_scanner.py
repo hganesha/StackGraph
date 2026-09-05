@@ -240,6 +240,72 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertTrue(hygiene["tests"]["applicable"])
         self.assertFalse(hygiene["tests"]["present"])
 
+    def test_monorepo_manifests_become_evidence_backed_components(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "package.json").write_text(json.dumps({
+                "name": "portfolio", "private": True, "workspaces": ["apps/*"],
+            }))
+            (root / "pnpm-workspace.yaml").write_text("packages:\n  - apps/*\n")
+            (root / "apps" / "api").mkdir(parents=True)
+            (root / "apps" / "api" / "package.json").write_text(json.dumps({
+                "name": "api", "dependencies": {"fastify": "5.5.0"},
+            }))
+            (root / "apps" / "api" / "Dockerfile").write_text("FROM node:22-slim\n")
+            (root / "apps" / "web").mkdir(parents=True)
+            (root / "apps" / "web" / "package.json").write_text(json.dumps({
+                "name": "web", "dependencies": {"react": "19.1.0"},
+            }))
+
+            result = scan_repository(request(root))
+
+        contains = [
+            fact for fact in result["facts"]
+            if fact["predicate"] == "CONTAINS"
+            and fact.get("subject", {}).get("type") == "Repository"
+            and fact.get("object_entity", {}).get("type") == "Component"
+        ]
+        component_paths = {fact["properties"]["path"] for fact in contains}
+        self.assertEqual(component_paths, {".", "apps/api", "apps/web"})
+        api_component = next(fact for fact in contains if fact["properties"]["path"] == "apps/api")
+        self.assertTrue(api_component["properties"]["independently_deployable"])
+        self.assertEqual(api_component["properties"]["frameworks"], ["fastify"])
+        self.assertEqual(api_component["evidence"][0]["locator"]["path"], "apps/api/package.json")
+        profile = next(
+            fact["object_value"] for fact in result["facts"]
+            if fact.get("object_value", {}).get("record_kind") == "repository_profile"
+        )
+        labels = {item["classification"] for item in profile["classifications"]}
+        self.assertIn("MONOREPO", labels)
+        self.assertIn("FULL_STACK_APPLICATION", labels)
+        component_dependencies = [
+            fact for fact in result["facts"]
+            if fact["predicate"] == "DEPENDS_ON"
+            and fact.get("subject", {}).get("type") == "Component"
+        ]
+        self.assertEqual(
+            {fact["properties"]["component_path"] for fact in component_dependencies},
+            {"apps/api", "apps/web"},
+        )
+
+    def test_container_digest_is_canonical_and_mutable_tag_is_limited(self) -> None:
+        digest = "a" * 64
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Dockerfile").write_text(
+                f"FROM ghcr.io/acme/runtime@sha256:{digest}\nFROM node:22-slim\n"
+            )
+
+            result = scan_repository(request(root))
+
+        based_on = [fact for fact in result["facts"] if fact["predicate"] == "BASED_ON"]
+        immutable = next(fact for fact in based_on if fact["properties"]["image_digest"])
+        mutable = next(fact for fact in based_on if fact["properties"]["image_digest"] is None)
+        self.assertEqual(immutable["object_entity"]["key"], f"container-image:sha256:{digest}")
+        self.assertEqual(immutable["properties"]["identity_state"], "DIGEST_RESOLVED")
+        self.assertEqual(mutable["properties"]["identity_state"], "MUTABLE_TAG_UNRESOLVED")
+        self.assertTrue(mutable["properties"]["limitations"])
+
     def test_custom_registry_manifest_emits_internal_package_publication(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

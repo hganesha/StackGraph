@@ -22,6 +22,7 @@ docker compose build -q api seed >/dev/null
 docker compose exec -T database createdb -U "${admin_user}" "${database_name}"
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
   -f /docker-entrypoint-initdb.d/010-schema.sql >/dev/null
+docker compose run --rm --no-deps -e STACKGRAPH_DATABASE_URL="${admin_url}" migrate >/dev/null
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \
   -f /stackgraph/tests/neo4j-projection-smoke.sql >/dev/null
 docker compose exec -T database psql -v ON_ERROR_STOP=1 -U "${admin_user}" -d "${database_name}" \

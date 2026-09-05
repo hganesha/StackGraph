@@ -1,6 +1,6 @@
 # StackGraph Phase 2 Integrated Implementation Plan
 
-**Status:** implementation-ready plan; implementation has not started
+**Status:** backend primary vertical slice implemented; UI delivery and later safety-gated expansion remain in progress
 **Baseline:** `origin/main` at `1328bf8` on 2026-09-05
 **Primary vertical slice:** `UPGRADE Package`
 **North star:** Discover → Understand → Recommend → Compile → Simulate → Govern → Execute → Verify → Learn

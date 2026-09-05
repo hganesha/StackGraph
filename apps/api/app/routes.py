@@ -129,10 +129,63 @@ from app.models import (
     ServiceStatusList,
     SemanticSearchRequest,
     SemanticSearchResponse,
+    ActionTypeList,
+    ActionSubjectList,
+    ValidTargetList,
+    ChangeScopeList,
+    MutationCompileRequest,
+    MutationCompileResult,
+    MutationValidateRequest,
+    ObservedMutationCreateRequest,
+    ObservedMutationList,
+    ObservedMutationModel,
+    RecommendationCompileRequest,
+    RepositoryFingerprintList,
+    SimulationCreateRequest,
+    SimulationRunModel,
 )
 
 
 class ReadModelsProtocol(Protocol):
+    async def phase2_feature_enabled(
+        self, flag_key: str, *, tenant_id: UUID | None,
+    ) -> bool: ...
+    async def action_types(self, *, tenant_id: UUID | None) -> ActionTypeList: ...
+    async def action_subjects(
+        self, predicate: str, *, tenant_id: UUID | None, query: str | None, limit: int,
+    ) -> ActionSubjectList: ...
+    async def valid_targets(
+        self, entity_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> ValidTargetList: ...
+    async def scopes(self, entity_id: UUID, *, tenant_id: UUID | None) -> ChangeScopeList: ...
+    async def repository_fingerprints(
+        self, repository_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> RepositoryFingerprintList: ...
+    async def record_observed_mutation(
+        self, request: ObservedMutationCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> ObservedMutationModel: ...
+    async def change_history(
+        self, subject_id: UUID, *, tenant_id: UUID | None, limit: int,
+    ) -> ObservedMutationList: ...
+    async def compile_mutation(
+        self, request: MutationCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult: ...
+    async def validate_mutation(
+        self, request: MutationValidateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult: ...
+    async def compile_modernization_recommendation(
+        self, recommendation_id: UUID, request: RecommendationCompileRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult: ...
+    async def submit_simulation(
+        self, request: SimulationCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> SimulationRunModel: ...
+    async def simulation(
+        self, run_id: UUID, *, tenant_id: UUID | None,
+    ) -> SimulationRunModel: ...
+    async def cancel_simulation(
+        self, run_id: UUID, *, tenant_id: UUID | None, actor_key: str,
+    ) -> SimulationRunModel: ...
     async def estate_summary(
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
         namespaces: list[str] | None = None, sort: str = "priority",
@@ -448,6 +501,197 @@ def _require(principal: Principal, capability: str) -> None:
 
 def _ask_service(request: Request) -> AskServiceProtocol:
     return request.app.state.ask_service
+
+
+async def _require_phase2_feature(
+    request: Request, *, tenant_id: UUID | None, setting: str, flag_key: str, code: str,
+) -> None:
+    if not getattr(request.app.state.settings, setting, False):
+        raise APIError(503, code, "This change capability is disabled by the active feature policy.")
+    if not await _store(request).phase2_feature_enabled(flag_key, tenant_id=tenant_id):
+        raise APIError(503, code, "This change capability is disabled by the active feature policy.")
+
+
+@router.get(
+    "/action-types", response_model=ActionTypeList,
+    response_model_exclude_none=True, operation_id="listActionTypes", tags=["changes"],
+)
+async def list_action_types(request: Request) -> ActionTypeList:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    return await _store(request).action_types(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/action-types/{predicate}/subjects", response_model=ActionSubjectList,
+    response_model_exclude_none=True, operation_id="listActionSubjects", tags=["changes"],
+)
+async def list_action_subjects(
+    predicate: Literal["UPGRADE", "REPLACE", "REMOVE", "DEPRECATE", "MIGRATE", "MOVE"],
+    request: Request,
+    query: str | None = Query(default=None, max_length=255),
+    limit: int = Query(default=25, ge=1, le=100),
+) -> ActionSubjectList:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    return await _store(request).action_subjects(
+        predicate, tenant_id=principal.tenant_id, query=query, limit=limit,
+    )
+
+
+@router.get(
+    "/entities/{id}/valid-targets", response_model=ValidTargetList,
+    response_model_exclude_none=True, operation_id="listValidTargets", tags=["changes"],
+)
+async def list_valid_targets(
+    id: UUID, request: Request, limit: int = Query(default=50, ge=1, le=200),
+) -> ValidTargetList:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    return await _store(request).valid_targets(id, tenant_id=principal.tenant_id, limit=limit)
+
+
+@router.get(
+    "/entities/{id}/scopes", response_model=ChangeScopeList,
+    response_model_exclude_none=True, operation_id="listChangeScopes", tags=["changes"],
+)
+async def list_change_scopes(id: UUID, request: Request) -> ChangeScopeList:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    return await _store(request).scopes(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/repositories/{id}/fingerprints", response_model=RepositoryFingerprintList,
+    response_model_exclude_none=True, operation_id="listRepositoryFingerprints",
+    tags=["repositories", "intelligence"],
+)
+async def list_repository_fingerprints(
+    id: UUID, request: Request, limit: int = Query(default=20, ge=1, le=100),
+) -> RepositoryFingerprintList:
+    principal = await _principal(request)
+    return await _store(request).repository_fingerprints(
+        id, tenant_id=principal.tenant_id, limit=limit,
+    )
+
+
+@router.post(
+    "/observed-mutations", response_model=ObservedMutationModel, status_code=201,
+    response_model_exclude_none=True, operation_id="recordObservedMutation", tags=["changes"],
+)
+async def record_observed_mutation(
+    body: ObservedMutationCreateRequest, request: Request,
+) -> ObservedMutationModel:
+    principal = await _principal(request)
+    _require(principal, "review")
+    return await _store(request).record_observed_mutation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/entities/{id}/change-history", response_model=ObservedMutationList,
+    response_model_exclude_none=True, operation_id="listEntityChangeHistory", tags=["changes"],
+)
+async def list_entity_change_history(
+    id: UUID, request: Request, limit: int = Query(default=20, ge=1, le=100),
+) -> ObservedMutationList:
+    principal = await _principal(request)
+    return await _store(request).change_history(id, tenant_id=principal.tenant_id, limit=limit)
+
+
+@router.post(
+    "/mutations/compile", response_model=MutationCompileResult,
+    response_model_exclude_none=True, operation_id="compileMutation", tags=["changes"],
+)
+async def compile_mutation(
+    body: MutationCompileRequest, request: Request, response: Response,
+) -> MutationCompileResult:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    result = await _store(request).compile_mutation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    response.status_code = 200 if result.replayed or result.gate.state != "CLEAR" else 201
+    return result
+
+
+@router.post(
+    "/mutations/validate", response_model=MutationCompileResult,
+    response_model_exclude_none=True, operation_id="validateMutation", tags=["changes"],
+)
+async def validate_mutation(body: MutationValidateRequest, request: Request) -> MutationCompileResult:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    return await _store(request).validate_mutation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/simulations", response_model=SimulationRunModel, status_code=202,
+    response_model_exclude_none=True, operation_id="createSimulation", tags=["changes"],
+)
+async def create_simulation(
+    body: SimulationCreateRequest, request: Request, response: Response,
+) -> SimulationRunModel:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_simulation_enabled",
+        flag_key="CHANGE_SIMULATION", code="CHANGE_SIMULATION_DISABLED",
+    )
+    result = await _store(request).submit_simulation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    response.status_code = 200 if result.replayed else 202
+    return result
+
+
+@router.get(
+    "/simulations/{id}", response_model=SimulationRunModel,
+    response_model_exclude_none=True, operation_id="getSimulation", tags=["changes"],
+)
+async def get_simulation(id: UUID, request: Request) -> SimulationRunModel:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_simulation_enabled",
+        flag_key="CHANGE_SIMULATION", code="CHANGE_SIMULATION_DISABLED",
+    )
+    return await _store(request).simulation(id, tenant_id=principal.tenant_id)
+
+
+@router.delete(
+    "/simulations/{id}", response_model=SimulationRunModel,
+    response_model_exclude_none=True, operation_id="cancelSimulation", tags=["changes"],
+)
+async def cancel_simulation(id: UUID, request: Request) -> SimulationRunModel:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_simulation_enabled",
+        flag_key="CHANGE_SIMULATION", code="CHANGE_SIMULATION_DISABLED",
+    )
+    _require(principal, "review")
+    return await _store(request).cancel_simulation(
+        id, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
 
 
 @router.get(
@@ -971,6 +1215,26 @@ async def review_modernization_candidate(
     return await _store(request).review_modernization_candidate(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
+
+
+@router.post(
+    "/modernization-recommendations/{id}/compile", response_model=MutationCompileResult,
+    response_model_exclude_none=True, operation_id="compileModernizationRecommendation",
+    tags=["changes", "intelligence"],
+)
+async def compile_modernization_recommendation(
+    id: UUID, body: RecommendationCompileRequest, request: Request, response: Response,
+) -> MutationCompileResult:
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    result = await _store(request).compile_modernization_recommendation(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    response.status_code = 200 if result.replayed or result.gate.state != "CLEAR" else 201
+    return result
 
 
 @router.post(

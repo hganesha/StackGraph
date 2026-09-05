@@ -26,6 +26,9 @@ class ActivityActor:
     login: str
     avatar_url: str | None
     is_bot: bool
+    classification: str
+    classification_confidence: float
+    classification_basis: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +52,8 @@ class ActivityCollection:
     pull_requests_status: str
     events: tuple[ActivityEvent, ...]
     limitations: tuple[str, ...]
+    releases_status: str = "NOT_COLLECTED"
+    deployments_status: str = "NOT_COLLECTED"
 
 
 class GitHubRepositoryActivityCollector:
@@ -73,6 +78,8 @@ class GitHubRepositoryActivityCollector:
         *,
         default_branch: str,
         include_pull_requests: bool,
+        include_releases: bool = False,
+        include_deployments: bool = False,
         now: datetime | None = None,
     ) -> ActivityCollection:
         if not default_branch.strip():
@@ -137,6 +144,28 @@ class GitHubRepositoryActivityCollector:
                         f"Pull-request activity exceeded the bounded {self._max_pages * self._page_size}-event collection limit."
                     )
 
+        releases_status = "NOT_COLLECTED"
+        if include_releases:
+            try:
+                release_events, truncated = self._releases(repo_path, window_started_at)
+            except (GitHubApiError, GitHubTransportError) as error:
+                releases_status = "PERMISSION_REQUIRED" if isinstance(error, GitHubApiError) and error.status_code in {403, 404} else "ERROR"
+                limitations.append(f"Release activity could not be collected: {type(error).__name__}.")
+            else:
+                releases_status = "PARTIAL" if truncated else "AVAILABLE"
+                events.extend(release_events)
+
+        deployments_status = "NOT_COLLECTED"
+        if include_deployments:
+            try:
+                deployment_events, truncated = self._deployments(repo_path, window_started_at)
+            except (GitHubApiError, GitHubTransportError) as error:
+                deployments_status = "PERMISSION_REQUIRED" if isinstance(error, GitHubApiError) and error.status_code in {403, 404} else "ERROR"
+                limitations.append(f"Deployment activity could not be collected: {type(error).__name__}.")
+            else:
+                deployments_status = "PARTIAL" if truncated else "AVAILABLE"
+                events.extend(deployment_events)
+
         events.sort(key=lambda event: (event.occurred_at, event.provider_event_key), reverse=True)
         return ActivityCollection(
             window_started_at=window_started_at,
@@ -145,7 +174,62 @@ class GitHubRepositoryActivityCollector:
             pull_requests_status=pull_requests_status,
             events=tuple(events),
             limitations=tuple(dict.fromkeys(limitations)),
+            releases_status=releases_status,
+            deployments_status=deployments_status,
         )
+
+    def _releases(self, repo_path: str, since: datetime) -> tuple[list[ActivityEvent], bool]:
+        events: list[ActivityEvent] = []
+        truncated = False
+        for page in range(1, self._max_pages + 1):
+            result = self._client.get_array(
+                f"{repo_path}/releases",
+                query={"per_page": str(self._page_size), "page": str(page)},
+            )
+            for item in result.data:
+                release_id = item.get("id")
+                occurred_at = _timestamp(item.get("published_at") or item.get("created_at"))
+                if release_id is None or occurred_at is None or occurred_at < since:
+                    continue
+                title = str(item.get("name") or item.get("tag_name") or f"Release {release_id}")
+                events.append(ActivityEvent(
+                    provider_event_key=f"release:{release_id}", event_type="RELEASE",
+                    occurred_at=occurred_at, title=title[:500], actor=_actor(item.get("author")),
+                    revision=str(item.get("target_commitish") or "") or None,
+                    source_url=_https_url(item.get("html_url")),
+                ))
+            if len(result.data) < self._page_size:
+                break
+            if page == self._max_pages:
+                truncated = True
+        return events, truncated
+
+    def _deployments(self, repo_path: str, since: datetime) -> tuple[list[ActivityEvent], bool]:
+        events: list[ActivityEvent] = []
+        truncated = False
+        for page in range(1, self._max_pages + 1):
+            result = self._client.get_array(
+                f"{repo_path}/deployments",
+                query={"per_page": str(self._page_size), "page": str(page)},
+            )
+            for item in result.data:
+                deployment_id = item.get("id")
+                occurred_at = _timestamp(item.get("created_at") or item.get("updated_at"))
+                if deployment_id is None or occurred_at is None or occurred_at < since:
+                    continue
+                environment = str(item.get("environment") or "deployment")
+                events.append(ActivityEvent(
+                    provider_event_key=f"deployment:{deployment_id}", event_type="DEPLOYMENT",
+                    occurred_at=occurred_at, title=f"Deploy to {environment}"[:500],
+                    actor=_actor(item.get("creator")), revision=str(item.get("sha") or "") or None,
+                    branch=str(item.get("ref") or "") or None,
+                    source_url=_https_url(item.get("url")),
+                ))
+            if len(result.data) < self._page_size:
+                break
+            if page == self._max_pages:
+                truncated = True
+        return events, truncated
 
     def _commits(
         self,
@@ -287,13 +371,18 @@ def persist_repository_activity_connection(
             INSERT INTO repository_activity_event(
               tenant_id,repository_entity_id,provider,provider_event_key,event_type,
               occurred_at,title,actor_key,actor_login,actor_avatar_url,actor_is_bot,
+              actor_classification,actor_classification_confidence,actor_classification_basis,
               revision,branch,pull_request_number,source_url
-            ) VALUES (%s,%s,'GITHUB',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ) VALUES (%s,%s,'GITHUB',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT(tenant_id,repository_entity_id,provider,provider_event_key)
             DO UPDATE SET event_type=EXCLUDED.event_type,occurred_at=EXCLUDED.occurred_at,
               title=EXCLUDED.title,actor_key=EXCLUDED.actor_key,
               actor_login=EXCLUDED.actor_login,actor_avatar_url=EXCLUDED.actor_avatar_url,
-              actor_is_bot=EXCLUDED.actor_is_bot,revision=EXCLUDED.revision,
+              actor_is_bot=EXCLUDED.actor_is_bot,
+              actor_classification=EXCLUDED.actor_classification,
+              actor_classification_confidence=EXCLUDED.actor_classification_confidence,
+              actor_classification_basis=EXCLUDED.actor_classification_basis,
+              revision=EXCLUDED.revision,
               branch=EXCLUDED.branch,pull_request_number=EXCLUDED.pull_request_number,
               source_url=EXCLUDED.source_url,observed_at=now()
             """,
@@ -304,6 +393,9 @@ def persist_repository_activity_connection(
                 event.actor.login if event.actor else None,
                 event.actor.avatar_url if event.actor else None,
                 event.actor.is_bot if event.actor else False,
+                event.actor.classification if event.actor else "UNKNOWN",
+                event.actor.classification_confidence if event.actor else 0,
+                event.actor.classification_basis if event.actor else "NO_LINKED_PROVIDER_IDENTITY",
                 event.revision, event.branch, event.pull_request_number, event.source_url,
             ),
         )
@@ -312,12 +404,15 @@ def persist_repository_activity_connection(
         INSERT INTO repository_activity_collection(
           tenant_id,repository_entity_id,source_key,window_started_at,window_ended_at,
           commits_status,pull_requests_status,limitations,collected_at
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now())
+          ,releases_status,deployments_status
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s)
         ON CONFLICT(tenant_id,repository_entity_id,source_key) DO UPDATE
           SET window_started_at=EXCLUDED.window_started_at,
               window_ended_at=EXCLUDED.window_ended_at,
               commits_status=EXCLUDED.commits_status,
               pull_requests_status=EXCLUDED.pull_requests_status,
+              releases_status=EXCLUDED.releases_status,
+              deployments_status=EXCLUDED.deployments_status,
               limitations=EXCLUDED.limitations,collected_at=now()
         """,
         (
@@ -325,8 +420,10 @@ def persist_repository_activity_connection(
             collection.window_started_at, collection.window_ended_at,
             collection.commits_status, collection.pull_requests_status,
             Jsonb(list(collection.limitations)),
+            collection.releases_status, collection.deployments_status,
         ),
     )
+    _refresh_activity_aggregates(connection, tenant_id, repository_id, collection)
     connection.execute(
         """
         DELETE FROM repository_activity_event
@@ -335,6 +432,81 @@ def persist_repository_activity_connection(
         (tenant_id, repository_id, collection.window_started_at - timedelta(days=30)),
     )
     return True
+
+
+def _refresh_activity_aggregates(
+    connection: Connection[dict[str, Any]], tenant_id: UUID, repository_id: UUID,
+    collection: ActivityCollection,
+) -> None:
+    for window_key, days in (("7d", 7), ("30d", 30), ("90d", 90)):
+        window_started_at = collection.window_ended_at - timedelta(days=days)
+        connection.execute(
+            """
+            WITH events AS (
+              SELECT * FROM repository_activity_event
+              WHERE tenant_id=%s AND repository_entity_id=%s
+                AND occurred_at>=%s AND occurred_at<=%s
+            ), totals AS (
+              SELECT count(*) total,
+                     count(*) FILTER (WHERE event_type='COMMIT') commits,
+                     count(*) FILTER (WHERE event_type='PULL_REQUEST_OPENED') prs_opened,
+                     count(*) FILTER (WHERE event_type='PULL_REQUEST_MERGED') prs_merged,
+                     count(*) FILTER (WHERE event_type='DEPLOYMENT') deployments,
+                     count(*) FILTER (WHERE event_type='DEPENDENCY_CHANGE') dependency_changes,
+                     count(*) FILTER (WHERE event_type='ARCHITECTURE_CHANGE') architecture_changes,
+                     count(*) FILTER (WHERE event_type='INCIDENT') incidents,
+                     count(*) FILTER (WHERE event_type='INTERVENTION') interventions,
+                     count(*) FILTER (WHERE event_type='ROLLBACK') rollbacks,
+                     count(DISTINCT actor_key) FILTER (WHERE actor_key IS NOT NULL) contributors,
+                     min(occurred_at) first_change_at,max(occurred_at) last_change_at
+              FROM events
+            ), ownership AS (
+              SELECT coalesce(max(actor_events),0) maximum_actor_events
+              FROM (SELECT count(*) actor_events FROM events
+                    WHERE actor_key IS NOT NULL GROUP BY actor_key) actor_counts
+            ), payload AS (
+              SELECT jsonb_build_object(
+                'commits',commits,'pull_requests_opened',prs_opened,
+                'pull_requests_merged',prs_merged,'contributors',contributors,
+                'velocity_per_week',round(total::numeric/%s::numeric,4),
+                'deployment_frequency_per_week',round(deployments::numeric/%s::numeric,4),
+                'dependency_changes',dependency_changes,
+                'architecture_changes',architecture_changes,'incidents',incidents,
+                'interventions',interventions,'rollbacks',rollbacks,
+                'ownership_concentration',CASE WHEN total=0 THEN NULL
+                  ELSE round(ownership.maximum_actor_events::numeric/total,4) END,
+                'revert_rate',CASE WHEN commits=0 THEN NULL
+                  ELSE round(rollbacks::numeric/commits,4) END,
+                'first_change_at',first_change_at,'last_change_at',last_change_at
+              ) metrics
+              FROM totals,ownership
+            )
+            INSERT INTO repository_activity_aggregate(
+              tenant_id,repository_entity_id,window_key,window_started_at,window_ended_at,
+              metrics,coverage,limitations,input_fingerprint
+            )
+            SELECT %s,%s,%s,%s,%s,payload.metrics,%s,%s,
+                   'sha256:'||encode(digest((payload.metrics||%s::jsonb)::text,'sha256'),'hex')
+            FROM payload
+            ON CONFLICT(tenant_id,repository_entity_id,window_key,window_ended_at)
+            DO UPDATE SET metrics=EXCLUDED.metrics,coverage=EXCLUDED.coverage,
+              limitations=EXCLUDED.limitations,input_fingerprint=EXCLUDED.input_fingerprint,
+              computed_at=now()
+            """,
+            (
+                tenant_id, repository_id, window_started_at, collection.window_ended_at,
+                days / 7, days / 7, tenant_id, repository_id, window_key,
+                window_started_at, collection.window_ended_at,
+                Jsonb({
+                    "commits": collection.commits_status,
+                    "pull_requests": collection.pull_requests_status,
+                    "releases": collection.releases_status,
+                    "deployments": collection.deployments_status,
+                }),
+                Jsonb(list(collection.limitations)),
+                Jsonb({"window_key": window_key, "metrics_version": "repository-activity/1.0.0"}),
+            ),
+        )
 
 
 def _actor(value: object) -> ActivityActor | None:
@@ -346,10 +518,29 @@ def _actor(value: object) -> ActivityActor | None:
         return None
     actor_type = value.get("type")
     normalized_login = login.strip()
+    lowered = normalized_login.casefold()
+    if any(marker in lowered for marker in ("dependabot", "renovate", "snyk-bot")):
+        classification = "DEPENDENCY_BOT"
+        basis = "AUTHORITATIVE_BOT_TYPE_AND_PROVIDER_LOGIN"
+    elif lowered in {"github-actions[bot]", "github-actions"}:
+        classification = "CI_AUTOMATION"
+        basis = "AUTHORITATIVE_BOT_TYPE_AND_PROVIDER_LOGIN"
+    elif actor_type == "Bot" or lowered.endswith("[bot]"):
+        classification = "BOT"
+        basis = "AUTHORITATIVE_PROVIDER_BOT_TYPE"
+    elif actor_type == "User":
+        classification = "HUMAN"
+        basis = "AUTHORITATIVE_PROVIDER_USER_TYPE"
+    else:
+        classification = "UNKNOWN"
+        basis = "PROVIDER_TYPE_UNRECOGNIZED"
     return ActivityActor(
         actor_key=f"github:user:{actor_id}", login=normalized_login,
         avatar_url=_https_url(value.get("avatar_url")),
         is_bot=actor_type == "Bot" or normalized_login.casefold().endswith("[bot]"),
+        classification=classification,
+        classification_confidence=1.0 if classification != "UNKNOWN" else 0.0,
+        classification_basis=basis,
     )
 
 

@@ -121,7 +121,7 @@ _RAW_SECRET_MARKERS: tuple[str, ...] = (
 
 _CONTROLLABLE_SERVICES = frozenset({
     "github-webhook", "github-control-loop", "projection", "intelligence", "graph-intelligence", "embeddings",
-    "mcp",
+    "change-simulator", "mcp",
 })
 
 _OPENROUTER_INTELLIGENCE_REQUIRED_PARAMETERS = frozenset({"max_tokens", "response_format"})
@@ -516,9 +516,10 @@ class AdminReadModelsMixin:
                      concat(left_app.name, ' ↔ ', right_app.name),
                      concat('Explainable application similarity ',round(similarity.score::numeric*100),' percent')
               FROM application_similarity_candidate similarity
-              JOIN entity left_app ON left_app.id=similarity.left_application_id
-              JOIN entity right_app ON right_app.id=similarity.right_application_id
+              JOIN entity left_app ON left_app.id=similarity.left_entity_id
+              JOIN entity right_app ON right_app.id=similarity.right_entity_id
               WHERE similarity.review_state='UNREVIEWED'
+                AND similarity.entity_kind='Application'
             )
             SELECT * FROM queue
             WHERE (%(types)s::text[] IS NULL OR item_type = ANY(%(types)s))
@@ -4001,6 +4002,14 @@ class AdminReadModelsMixin:
                WHERE tenant_id=%s AND status='DEAD_LETTER') embeddings_failed,
               (SELECT max(coalesce(completed_at,started_at,created_at))
                FROM embedding_job WHERE tenant_id=%s) embeddings_last,
+              (SELECT count(*) FROM simulation_run
+               WHERE tenant_id=%s AND status='QUEUED') simulation_pending,
+              (SELECT count(*) FROM simulation_run
+               WHERE tenant_id=%s AND status='RUNNING') simulation_running,
+              (SELECT count(*) FROM simulation_run
+               WHERE tenant_id=%s AND status='FAILED') simulation_failed,
+              (SELECT max(coalesce(completed_at,started_at,created_at))
+               FROM simulation_run WHERE tenant_id=%s) simulation_last,
               (SELECT count(*) FROM ingest_run run JOIN ingest_target target ON target.id=run.ingest_target_id
                JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='deps.dev' AND run.status='PENDING') depsdev_pending,
@@ -4028,7 +4037,7 @@ class AdminReadModelsMixin:
                JOIN ingest_target target ON target.id=run.ingest_target_id JOIN source_system source ON source.id=target.source_system_id
                WHERE run.tenant_id=%s AND source.source_key='osv.dev') osv_last
             """,
-            tuple([tenant_id] * 33),
+            tuple([tenant_id] * 37),
             tenant_id=tenant_id,
         ) or {}
         now = datetime.now(UTC)
@@ -4166,6 +4175,14 @@ class AdminReadModelsMixin:
                 running=int(workload.get("intelligence_running") or 0),
                 failed=int(workload.get("intelligence_failed") or 0),
                 last_activity_at=workload.get("intelligence_last"),
+                controllable=True, management_scope="This workspace",
+            ),
+            service(
+                "change-simulator", "Change simulator", "INTELLIGENCE",
+                pending=int(workload.get("simulation_pending") or 0),
+                running=int(workload.get("simulation_running") or 0),
+                failed=int(workload.get("simulation_failed") or 0),
+                last_activity_at=workload.get("simulation_last"),
                 controllable=True, management_scope="This workspace",
             ),
         ]

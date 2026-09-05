@@ -34,7 +34,8 @@ def test_production_accepts_configured_signed_session_auth() -> None:
     assert settings.default_tenant_id == PRODUCTION_TENANT_ID
 
 
-def test_production_requires_explicit_default_tenant_id() -> None:
+def test_production_requires_explicit_default_tenant_id(monkeypatch) -> None:
+    monkeypatch.delenv("STACKGRAPH_DEFAULT_TENANT_ID", raising=False)
     with pytest.raises(ValidationError, match="default_tenant_id must be explicitly configured"):
         Settings(
             environment="production",

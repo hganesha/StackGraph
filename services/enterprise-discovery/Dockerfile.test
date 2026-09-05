@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir --requirement requirements-test.txt
 COPY services/enterprise-discovery/stackgraph_discovery ./stackgraph_discovery
 COPY services/data-platform/stackgraph_data ./stackgraph_data
 COPY services/enterprise-discovery/tests ./tests
+COPY services/data-platform/tests/test_scanner_ingest_integration.py ./tests/test_scanner_ingest_integration.py
 COPY stackgraph-foundation/contracts /workspace/stackgraph-foundation/contracts
 
 CMD ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]

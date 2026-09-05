@@ -58,6 +58,8 @@
     "OWNS",
     "OPERATES",
     "CONTAINS",
+    "BUILDS",
+    "BASED_ON",
     "REQUIRES",
     "ENABLED_BY",
     "PROVIDED_BY",

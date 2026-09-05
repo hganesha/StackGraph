@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     ai_ask_route: str = "default"
     ai_ask_fallback_enabled: bool = True
     ai_ask_max_evidence_chars: int = Field(default=50_000, ge=1_024, le=200_000)
+    change_compiler_enabled: bool = True
+    change_simulation_enabled: bool = True
+    change_ai_interpretation_enabled: bool = False
+    change_simulation_max_nodes: int = Field(default=100_000, ge=100, le=500_000)
+    change_simulation_max_edges: int = Field(default=500_000, ge=100, le=2_000_000)
+    change_simulation_timeout_seconds: int = Field(default=120, ge=1, le=120)
     credential_encryption_key: str = Field(
         default="stackgraph-local-development-credential-key",
         min_length=32,

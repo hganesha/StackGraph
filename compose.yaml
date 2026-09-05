@@ -19,6 +19,7 @@ services:
       - stackgraph_postgres_data:/var/lib/postgresql/data
       - ./infrastructure/database/init/005-create-app-role.sh:/docker-entrypoint-initdb.d/005-create-app-role.sh:ro
       - ./stackgraph-foundation/schema.sql:/docker-entrypoint-initdb.d/010-schema.sql:ro
+      - ./infrastructure/database/init/020-create-graph.sql:/docker-entrypoint-initdb.d/020-create-graph.sql:ro
       - ./infrastructure/database/init/030-grant-app-role.sh:/docker-entrypoint-initdb.d/030-grant-app-role.sh:ro
       - ./infrastructure/database/tests:/stackgraph/tests:ro
     healthcheck:
@@ -607,6 +608,31 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     entrypoint: ["python", "-m", "stackgraph_ai.modernization_worker"]
     command: ["serve", "--ai-unmapped", "--max-jobs", "${STACKGRAPH_INTELLIGENCE_BATCH_SIZE:-10}", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,psycopg; psycopg.connect(os.environ['STACKGRAPH_DATABASE_URL']).execute('SELECT 1')"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 10s
+
+  simulation-continuous:
+    profiles: [pipeline]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    environment:
+      STACKGRAPH_ENVIRONMENT: development
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+      STACKGRAPH_CHANGE_SIMULATION_MAX_NODES: ${STACKGRAPH_CHANGE_SIMULATION_MAX_NODES:-100000}
+      STACKGRAPH_CHANGE_SIMULATION_MAX_EDGES: ${STACKGRAPH_CHANGE_SIMULATION_MAX_EDGES:-500000}
+      STACKGRAPH_CHANGE_SIMULATION_TIMEOUT_SECONDS: ${STACKGRAPH_CHANGE_SIMULATION_TIMEOUT_SECONDS:-120}
+    entrypoint: ["python", "-m", "app.change_simulation_worker"]
+    command: ["serve", "--poll-seconds", "${STACKGRAPH_PIPELINE_POLL_SECONDS:-2}"]
     depends_on:
       database:
         condition: service_healthy

@@ -741,6 +741,15 @@ class _RepositoryClient:
             data=documents[path],
         )
 
+    def get_array(self, path: str, **_: object) -> ApiResult:
+        if path.endswith(("/commits", "/pulls", "/releases", "/deployments")):
+            return ApiResult(
+                status=200,
+                headers={"etag": '"activity"', "x-ratelimit-remaining": "4999"},
+                data=[],
+            )
+        raise AssertionError(f"unexpected GitHub collection path: {path}")
+
 
 def _blob(content: bytes) -> dict[str, object]:
     return {

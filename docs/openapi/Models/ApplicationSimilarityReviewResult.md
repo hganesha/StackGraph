@@ -1,0 +1,12 @@
+# ApplicationSimilarityReviewResult
+## Properties
+
+| Name | Type | Description | Notes |
+|------------ | ------------- | ------------- | -------------|
+| **candidate\_id** | **UUID** |  | [default to null] |
+| **contract\_version** | **String** |  | [optional] [default to 1.0.0] |
+| **review\_state** | **String** |  | [default to null] |
+| **reviewed\_at** | **Date** |  | [default to null] |
+
+[[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
+

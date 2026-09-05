@@ -45,6 +45,7 @@ from app.enterprise_posture_insights import (
 from app.errors import APIError
 from app.neo4j_graph import Neo4jGraphReader, Neo4jTopology
 from app.read_models_admin import AdminReadModelsMixin
+from app.phase2_changes import Phase2ChangeMixin
 from app.models import (
     ApplicationDetail,
     ApplicationSimilarityCandidate,
@@ -1178,7 +1179,7 @@ class AgeParityError(RuntimeError):
     pass
 
 
-class ReadModelStore(AdminReadModelsMixin):
+class ReadModelStore(Phase2ChangeMixin, AdminReadModelsMixin):
     def __init__(
         self,
         database: Database,
@@ -3526,7 +3527,8 @@ class ReadModelStore(AdminReadModelsMixin):
         )
         collection = await self.database.fetch_one(
             """
-            SELECT commits_status,pull_requests_status,collected_at,limitations
+            SELECT commits_status,pull_requests_status,releases_status,deployments_status,
+                   collected_at,limitations
             FROM repository_activity_collection
             WHERE repository_entity_id=%s
             ORDER BY collected_at DESC,id DESC LIMIT 1
@@ -3539,6 +3541,8 @@ class ReadModelStore(AdminReadModelsMixin):
             SELECT
               count(*) FILTER (WHERE event_type='COMMIT') commit_count,
               count(*) FILTER (WHERE event_type='PULL_REQUEST_MERGED') pull_request_merged_count,
+              count(*) FILTER (WHERE event_type='RELEASE') release_count,
+              count(*) FILTER (WHERE event_type='DEPLOYMENT') deployment_count,
               count(DISTINCT actor_key) FILTER (WHERE actor_key IS NOT NULL) contributor_count,
               max(occurred_at) last_change_at
             FROM repository_activity_event
@@ -3566,7 +3570,8 @@ class ReadModelStore(AdminReadModelsMixin):
             """
             SELECT id,event_type,title,occurred_at,actor_key,actor_login,
                    actor_avatar_url,actor_is_bot,revision,branch,
-                   pull_request_number,source_url
+                   actor_classification,actor_classification_confidence,
+                   actor_classification_basis,pull_request_number,source_url
             FROM repository_activity_event
             WHERE repository_entity_id=%s AND occurred_at>=%s AND occurred_at<=%s
               AND (
@@ -3622,6 +3627,9 @@ class ReadModelStore(AdminReadModelsMixin):
                 actor_key=str(row["actor_key"]), login=str(row["actor_login"]),
                 avatar_url=row.get("actor_avatar_url"),
                 is_bot=bool(row.get("actor_is_bot")),
+                classification=str(row.get("actor_classification") or "UNKNOWN"),
+                classification_confidence=_number(row.get("actor_classification_confidence") or 0),
+                classification_basis=row.get("actor_classification_basis"),
             )
 
         top_contributors: list[RepositoryActivityContributor] = []
@@ -3662,11 +3670,21 @@ class ReadModelStore(AdminReadModelsMixin):
                     if contributor_status in {"AVAILABLE", "PARTIAL"} else None
                 ),
                 last_change_at=aggregate.get("last_change_at"),
+                releases=(
+                    int(aggregate.get("release_count") or 0)
+                    if collection and collection.get("releases_status") in {"AVAILABLE", "PARTIAL"} else None
+                ),
+                deployments=(
+                    int(aggregate.get("deployment_count") or 0)
+                    if collection and collection.get("deployments_status") in {"AVAILABLE", "PARTIAL"} else None
+                ),
             ),
             coverage=RepositoryActivityCoverage(
                 commits=commits_status,
                 pull_requests=pull_requests_status,
                 contributors=contributor_status,
+                releases=(str(collection.get("releases_status") or "NOT_COLLECTED") if collection else "NOT_COLLECTED"),
+                deployments=(str(collection.get("deployments_status") or "NOT_COLLECTED") if collection else "NOT_COLLECTED"),
             ),
             top_contributors=top_contributors,
             events=[
@@ -7049,6 +7067,13 @@ class ReadModelStore(AdminReadModelsMixin):
                 counter_signals=list(row["counter_signals"]), policy_version=row["policy_version"],
                 review_state=row["review_state"], version=row["version"],
                 stale=row["stale_at"] is not None, created_at=row["created_at"],
+                proposed_change_set_id=row.get("proposed_change_set_id"),
+                simulation_eligibility=(
+                    "ELIGIBLE" if row.get("proposed_change_set_id") is not None
+                    else "NOT_SIMULATABLE" if row.get("not_simulatable_reason") is not None
+                    else "UNKNOWN"
+                ),
+                not_simulatable_reason=row.get("not_simulatable_reason"),
             )
             for row in recommendation_rows
         }

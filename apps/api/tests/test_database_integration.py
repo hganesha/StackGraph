@@ -984,6 +984,7 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
         assert {service["key"] for service in services.json()["services"]} == {
             "web", "api", "database", "github-webhook", "github-control-loop",
             "depsdev", "osv", "projection", "intelligence", "graph-intelligence", "embeddings",
+            "mcp", "change-simulator",
         }
         assert raw.status_code == 422 and raw.json()["code"] == "CREDENTIAL_LOOKS_RAW"
         assert ai_saved.status_code == 200 and ai_saved.json()["key_fingerprint"] == "5678"

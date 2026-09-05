@@ -1083,7 +1083,9 @@ def test_service_status_scopes_intelligence_workload_to_active_configuration() -
     assert database.workload_query.count(
         "configuration_fingerprint=scope.fingerprint"
     ) == 4
-    assert len(database.workload_params) == 33
+    assert len(database.workload_params) == 37
+    simulator = next(service for service in result.services if service.key == "change-simulator")
+    assert simulator.controllable is True
     graph_intelligence = next(
         service for service in result.services if service.key == "graph-intelligence"
     )

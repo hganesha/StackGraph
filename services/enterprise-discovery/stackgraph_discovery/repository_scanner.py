@@ -26,7 +26,7 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.10.0"
+SCANNER_VERSION = "1.11.0"
 HTTP_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
@@ -401,6 +401,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies = _dedupe_dependencies(dependencies)
     runtime = _runtime_observations(contents, diagnostics)
     inventory_facts = _repository_profile_facts(scan_input, contents)
+    inventory_facts.extend(_component_facts(scan_input, contents, dependencies))
     inventory_facts.extend(_internal_package_publication_facts(
         scan_input, contents, diagnostics,
     ))
@@ -427,6 +428,15 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         completeness,
         source_file_count=sum(1 for path in contents if _is_source(path)),
     ))
+    facts.extend(_component_dependency_facts(
+        scan_input,
+        dependencies,
+        references,
+        reachable_files,
+        runtime,
+        completeness,
+        source_file_count=sum(1 for path in contents if _is_source(path)),
+    ))
     facts.extend(
         _usage_findings(
             scan_input,
@@ -439,6 +449,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         )
     )
     facts.extend(_code_unit_facts(scan_input, code_units))
+    facts.extend(_repository_fingerprint_facts(scan_input, facts, contents))
     service_keys = {
         entity["key"]
         for fact in facts
@@ -492,6 +503,164 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
         },
         "diagnostics": [item.as_dict() for item in diagnostics],
     }
+
+
+def _repository_fingerprint_facts(
+    scan_input: ScanInput,
+    facts: list[dict[str, Any]],
+    contents: Mapping[str, bytes],
+) -> list[dict[str, Any]]:
+    """Summarize lower-level evidence without overriding or replacing direct facts."""
+    profile = next((
+        fact.get("object_value") for fact in facts
+        if isinstance(fact.get("object_value"), Mapping)
+        and fact["object_value"].get("record_kind") == "repository_profile"
+    ), {})
+    classifications = list(profile.get("classifications") or []) if isinstance(profile, Mapping) else []
+    classification_labels = {str(item.get("classification")) for item in classifications}
+    component_facts = [
+        fact for fact in facts
+        if fact.get("predicate") == "CONTAINS"
+        and fact.get("subject", {}).get("type") == "Repository"
+        and fact.get("object_entity", {}).get("type") == "Component"
+    ]
+    dependency_facts = [
+        fact for fact in facts
+        if fact.get("predicate") == "DEPENDS_ON"
+        and fact.get("subject", {}).get("type") == "Component"
+    ]
+    deployment_facts = [
+        fact for fact in facts
+        if fact.get("predicate") in {"DEPLOYED_AS", "RUNS_ON", "BUILDS", "BASED_ON", "LOCATED_IN"}
+    ]
+    resource_facts = [
+        fact for fact in facts
+        if fact.get("predicate") == "USES"
+        and fact.get("object_entity", {}).get("type") in {"Database", "Storage", "Queue"}
+    ]
+    architectures: list[dict[str, Any]] = []
+
+    def archetype(key: str, label: str, confidence: float, contributions: list[str]) -> None:
+        architectures.append({
+            "key": key, "label": label, "classification": "STANDARD_ARCHETYPE",
+            "confidence": confidence, "feature_contributions": contributions,
+            "rule_version": "repository-archetype/1.0.0",
+        })
+
+    if "LIBRARY_PACKAGE" in classification_labels:
+        archetype("library-package", "Library / package", 0.86, ["LIBRARY_PACKAGE classification"])
+    if "MICROSERVICE" in classification_labels and deployment_facts:
+        archetype(
+            "containerized-service", "Containerized service", 0.84,
+            ["API contract", "declared deployment", "container image relationship"],
+        )
+    if "INFRASTRUCTURE_AS_CODE" in classification_labels and not any(_is_source(path) for path in contents):
+        archetype(
+            "infrastructure-repository", "Infrastructure repository", 0.9,
+            ["infrastructure-as-code", "no admitted application source files"],
+        )
+    if "DATA_ANALYTICS" in classification_labels and resource_facts:
+        archetype(
+            "data-platform", "Data platform", 0.78,
+            ["data/analytics classification", "declared data resource relationships"],
+        )
+    source_fact_keys = sorted({str(fact["idempotency_key"]) for fact in facts})
+    feature_payload = {
+        "identity": {
+            "repository_key": scan_input.repository_key,
+            "repository_name": scan_input.repository_name,
+            "source_revision": scan_input.source_revision,
+        },
+        "structure": {
+            "component_count": len(component_facts),
+            "source_file_count": sum(_is_source(path) for path in contents),
+            "test_file_count": sum(_is_test_file(path) for path in contents),
+        },
+        "components": [
+            {
+                "key": fact["object_entity"]["key"],
+                "path": fact["properties"].get("path"),
+                "kind": fact["properties"].get("component_kind"),
+            }
+            for fact in component_facts
+        ],
+        "languages": list(profile.get("languages") or []) if isinstance(profile, Mapping) else [],
+        "frameworks": sorted({
+            framework for fact in component_facts
+            for framework in fact.get("properties", {}).get("frameworks", [])
+        }),
+        "data_resources": sorted({
+            fact["object_entity"]["key"] for fact in resource_facts
+        }),
+        "container_images": sorted({
+            fact["object_entity"]["key"] for fact in deployment_facts
+            if fact.get("object_entity", {}).get("type") == "ContainerImage"
+        }),
+        "deployment": {
+            "relationship_count": len(deployment_facts),
+            "profile": next((
+                fact["object_value"] for fact in facts
+                if isinstance(fact.get("object_value"), Mapping)
+                and fact["object_value"].get("record_kind") == "deployment_profile"
+            ), None),
+        },
+        "classifications": classifications,
+        "architecture_archetypes": architectures,
+        "dependency_count": len(dependency_facts),
+        "activity": {"coverage": "NOT_AVAILABLE_TO_LOCAL_SCANNER"},
+        "actor_mix": {"coverage": "NOT_AVAILABLE_TO_LOCAL_SCANNER"},
+        "lifecycle": {"coverage": "NOT_COLLECTED"},
+    }
+    fingerprint = sha256_key("repository-fingerprint/1.0.0", feature_payload, source_fact_keys)
+    value = {
+        "record_kind": "repository_fingerprint",
+        "schema_version": "1.0.0",
+        "fingerprint": fingerprint,
+        **feature_payload,
+        "source_fact_keys": source_fact_keys,
+        "confidence": 0.9 if component_facts else 0.7,
+        "limitations": [
+            "activity, actor mix, and lifecycle are joined asynchronously from connector evidence",
+            "archetypes are omitted unless their direct feature threshold is met",
+            "absence reflects scanner bounds and is not evidence of poor engineering performance",
+        ],
+    }
+    evidence: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for fact in facts:
+        for item in fact.get("evidence", []):
+            key = canonical_json(item)
+            if key not in seen:
+                evidence.append(item)
+                seen.add(key)
+            if len(evidence) >= 30:
+                break
+        if len(evidence) >= 30:
+            break
+    if not evidence:
+        return []
+    return [{
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "record_kind": "repository_fingerprint",
+            "fingerprint": fingerprint,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": _repository_ref(scan_input),
+        "predicate": "HAS_PROPERTY",
+        "object_value": value,
+        "assertion_class": "INFERRED",
+        "confidence": value["confidence"],
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": {"profile_schema_version": "1.0.0"},
+        "evidence": evidence,
+    }]
 
 
 def _parse_request(request: Mapping[str, Any]) -> ScanInput:
@@ -1659,6 +1828,45 @@ def _dependency_facts(
     return facts
 
 
+def _component_dependency_facts(
+    scan_input: ScanInput,
+    dependencies: list[Dependency],
+    references: list[Reference],
+    reachable_files: set[str] | None,
+    runtime: dict[tuple[str, str], set[str]] | None,
+    completeness: str,
+    source_file_count: int,
+) -> list[dict[str, Any]]:
+    """Attribute dependencies to canonical components while retaining v1 repository facts."""
+    repository_facts = _dependency_facts(
+        scan_input, dependencies, references, reachable_files, runtime,
+        completeness, source_file_count,
+    )
+    facts: list[dict[str, Any]] = []
+    for dependency, repository_fact in zip(dependencies, repository_facts, strict=True):
+        fact = dict(repository_fact)
+        component = _component_ref(scan_input, dependency.component_path)
+        properties = dict(repository_fact["properties"])
+        properties.update({
+            "attribution": "COMPONENT",
+            "repository_key": scan_input.repository_key,
+        })
+        fact["subject"] = component
+        fact["properties"] = properties
+        fact["idempotency_key"] = sha256_key({
+            "tenant": scan_input.tenant_key,
+            "component": component["key"],
+            "predicate": "DEPENDS_ON",
+            "object": repository_fact["object_entity"]["key"],
+            "scope": dependency.scope,
+            "direct": dependency.direct,
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        })
+        facts.append(fact)
+    return facts
+
+
 def _usage_findings(
     scan_input: ScanInput,
     dependencies: list[Dependency],
@@ -1935,13 +2143,14 @@ def _repository_profile_facts(
     purpose = purpose_source.value if purpose_source else None
     profile: dict[str, Any] = {
         "record_kind": "repository_profile",
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0",
         "descriptions": [source.value for source in description_sources],
         "languages": languages,
         "components": components,
         "key_files": key_files,
         "hygiene": hygiene,
         "operational_signals": operational_signals,
+        "classifications": _repository_classifications(contents),
         "limitations": [
             "purpose is reported only when README or manifest text states it",
             "documentation may be stale or describe only part of a monorepo",
@@ -1985,7 +2194,7 @@ def _repository_profile_facts(
         "observed_at": scan_input.observed_at,
         "source_revision": scan_input.source_revision,
         "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
-        "properties": {"profile_schema_version": "1.0.0"},
+        "properties": {"profile_schema_version": "1.1.0"},
         "evidence": evidence,
     }]
 
@@ -2043,6 +2252,257 @@ def _repository_description_sources(
             deduped.append(source)
             seen.add(key)
     return tuple(deduped)
+
+
+def _repository_classifications(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
+    """Return additive, multi-label classifications backed by visible repository files."""
+    paths = tuple(sorted(contents))
+    lowered = {path.lower() for path in paths}
+    source_paths = [path for path in paths if _is_source(path) and not _is_test_file(path)]
+    deployment_paths = [
+        path for path in paths
+        if _is_compose_file(PurePosixPath(path).name)
+        or PurePosixPath(path).name.lower().startswith("dockerfile")
+        or PurePosixPath(path).suffix.lower() == ".tf"
+        or "/k8s/" in f"/{path.lower()}/"
+        or "/kubernetes/" in f"/{path.lower()}/"
+    ]
+    values: dict[str, tuple[float, set[str]]] = {}
+
+    def add(label: str, confidence: float, *evidence_paths: str) -> None:
+        evidence = {path for path in evidence_paths if path in contents}
+        if not evidence:
+            return
+        prior = values.get(label)
+        if prior is None or confidence > prior[0]:
+            values[label] = (confidence, evidence)
+        else:
+            prior[1].update(evidence)
+
+    monorepo = _monorepo_signals(contents)
+    for signal in monorepo:
+        add("MONOREPO", 0.98, signal.split("#", 1)[0])
+    terraform = [path for path in paths if PurePosixPath(path).suffix.lower() == ".tf"]
+    if terraform:
+        add("INFRASTRUCTURE_AS_CODE", 1.0, *terraform[:12])
+    api_specs = [
+        path for path in paths
+        if PurePosixPath(path).name.lower() in {
+            "openapi.json", "openapi.yaml", "openapi.yml", "swagger.json", "swagger.yaml", "swagger.yml",
+        }
+    ]
+    if api_specs:
+        add("API_DEFINITION", 1.0, *api_specs[:12])
+    if "dbt_project.yml" in lowered or "dbt_project.yaml" in lowered:
+        add("DBT", 1.0, *[path for path in paths if PurePosixPath(path).name.lower().startswith("dbt_project.")])
+        add("DATA_ANALYTICS", 0.95, *[path for path in paths if PurePosixPath(path).name.lower().startswith("dbt_project.")])
+    databricks = [path for path in paths if "databricks" in path.lower()]
+    if databricks:
+        add("DATABRICKS", 0.9, *databricks[:12])
+        add("DATA_ANALYTICS", 0.85, *databricks[:12])
+    notebooks = [path for path in paths if PurePosixPath(path).suffix.lower() == ".ipynb"]
+    if notebooks:
+        add("NOTEBOOKS", 1.0, *notebooks[:12])
+        add("DATA_ANALYTICS", 0.8, *notebooks[:12])
+    sql = [path for path in paths if PurePosixPath(path).suffix.lower() == ".sql"]
+    migrations = [path for path in sql if {"migration", "migrations"} & set(PurePosixPath(path.lower()).parts)]
+    if migrations:
+        add("SQL_SCHEMA_MIGRATION", 0.95, *migrations[:12])
+    docs = [path for path in paths if _is_readme(path) or "docs" in PurePosixPath(path.lower()).parts]
+    if docs and len(docs) >= max(2, len(source_paths)):
+        add("DOCUMENTATION", 0.8, *docs[:12])
+    serverless = [
+        path for path in paths
+        if PurePosixPath(path).name.lower() in {"serverless.yml", "serverless.yaml", "template.yaml", "template.yml"}
+    ]
+    if serverless:
+        add("SERVERLESS", 0.95, *serverless)
+    gitops = [
+        path for path in paths
+        if "argocd" in path.lower() or "helmfile" in path.lower()
+        or "charts" in PurePosixPath(path.lower()).parts
+    ]
+    if gitops:
+        add("GITOPS", 0.85, *gitops[:12])
+    package_manifests = [path for path in paths if PurePosixPath(path).name == "package.json"]
+    python_manifests = [path for path in paths if PurePosixPath(path).name == "pyproject.toml"]
+    public_manifests: list[str] = []
+    cli_manifests: list[str] = []
+    frontend_manifests: list[str] = []
+    backend_manifests: list[str] = []
+    mobile_manifests: list[str] = []
+    for path in package_manifests:
+        try:
+            document = json.loads(contents[path])
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(document, Mapping):
+            continue
+        dependencies = {
+            str(key).lower()
+            for field in ("dependencies", "devDependencies")
+            if isinstance(document.get(field), Mapping)
+            for key in document[field]
+        }
+        if document.get("private") is not True and document.get("name"):
+            public_manifests.append(path)
+        if document.get("bin"):
+            cli_manifests.append(path)
+        if dependencies & {"react", "next", "vue", "@angular/core", "svelte"}:
+            frontend_manifests.append(path)
+        if dependencies & {"express", "fastify", "koa", "@nestjs/core", "hapi"}:
+            backend_manifests.append(path)
+        if dependencies & {"react-native", "expo", "@capacitor/core", "cordova"}:
+            mobile_manifests.append(path)
+    for path in python_manifests:
+        try:
+            document = tomllib.loads(contents[path].decode("utf-8"))
+        except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+            continue
+        project = document.get("project") if isinstance(document, Mapping) else None
+        if isinstance(project, Mapping):
+            public_manifests.append(path)
+            if project.get("scripts"):
+                cli_manifests.append(path)
+            dependency_text = " ".join(map(str, project.get("dependencies") or [])).lower()
+            if any(item in dependency_text for item in ("fastapi", "django", "flask", "starlette")):
+                backend_manifests.append(path)
+    if cli_manifests:
+        add("CLI", 0.98, *cli_manifests)
+    if mobile_manifests:
+        add("MOBILE", 0.95, *mobile_manifests)
+    if frontend_manifests and backend_manifests:
+        add("FULL_STACK_APPLICATION", 0.9, *(frontend_manifests + backend_manifests))
+    if public_manifests and not deployment_paths:
+        add("LIBRARY_PACKAGE", 0.82, *public_manifests[:12])
+    if deployment_paths and not source_paths:
+        add("DEPLOYMENT_ONLY", 0.9, *deployment_paths[:12])
+    if api_specs and deployment_paths and not monorepo:
+        add("MICROSERVICE", 0.8, *(api_specs + deployment_paths)[:12])
+    if terraform and len(deployment_paths) >= 3:
+        add("PLATFORM", 0.75, *deployment_paths[:12])
+    return [
+        {
+            "classification": label,
+            "assertion_class": "INFERRED",
+            "confidence": confidence,
+            "evidence_paths": sorted(evidence),
+            "rule_version": "repository-classification/1.0.0",
+        }
+        for label, (confidence, evidence) in sorted(values.items())
+    ]
+
+
+def _component_ref(scan_input: ScanInput, component_path: str) -> dict[str, str]:
+    normalized = "." if component_path in {"", "."} else str(PurePosixPath(component_path))
+    label = "Repository root" if normalized == "." else PurePosixPath(normalized).name
+    return {
+        "namespace": "ENTERPRISE",
+        "type": "Component",
+        "key": f"component:{scan_input.repository_key}:{quote(normalized, safe='/')}",
+        "name": label,
+    }
+
+
+def _component_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    dependencies: list[Dependency],
+) -> list[dict[str, Any]]:
+    """Promote manifest/build roots to stable, evidence-backed Component entities."""
+    descriptors: dict[str, dict[str, Any]] = {}
+    for path in sorted(contents):
+        name = PurePosixPath(path).name
+        if name not in {"package.json", "pyproject.toml", "requirements.txt", "Pipfile"}:
+            continue
+        component_path = str(PurePosixPath(path).parent)
+        descriptors.setdefault(component_path, {"manifests": [], "builds": []})["manifests"].append(path)
+    for path in sorted(contents):
+        name = PurePosixPath(path).name.lower()
+        if name == "dockerfile" or name.startswith("dockerfile."):
+            component_path = str(PurePosixPath(path).parent)
+            descriptors.setdefault(component_path, {"manifests": [], "builds": []})["builds"].append(path)
+    facts: list[dict[str, Any]] = []
+    for component_path, descriptor in sorted(descriptors.items()):
+        manifests = descriptor["manifests"]
+        builds = descriptor["builds"]
+        evidence_paths = [*manifests, *builds]
+        component_dependencies = [item for item in dependencies if item.component_path == component_path]
+        ecosystems = sorted({item.ecosystem for item in component_dependencies})
+        component_prefix = "" if component_path == "." else f"{component_path.rstrip('/')}/"
+        component_sources = [
+            path for path in contents
+            if path.startswith(component_prefix) and _is_source(path)
+        ]
+        languages = sorted({
+            label for path in component_sources
+            if (label := LANGUAGE_LABELS.get(PurePosixPath(path).suffix.lower())) is not None
+        })
+        names = {item.normalized_name for item in component_dependencies}
+        frameworks = sorted(
+            names & {"react", "next", "vue", "svelte", "express", "fastify", "django", "flask", "fastapi"}
+        )
+        tests = sorted(path for path in component_sources if _is_test_file(path))[:24]
+        profile = {
+            "record_kind": "component_profile",
+            "schema_version": "1.0.0",
+            "path": "." if component_path == "." else component_path,
+            "component_kind": "SERVICE" if builds else "PACKAGE" if manifests else "APPLICATION",
+            "independently_deployable": bool(builds),
+            "languages": languages,
+            "frameworks": frameworks,
+            "ecosystems": ecosystems,
+            "build_systems": sorted({
+                "NPM" if PurePosixPath(path).name == "package.json" else
+                "PYTHON" if PurePosixPath(path).name in {"pyproject.toml", "requirements.txt", "Pipfile"} else
+                "DOCKER"
+                for path in evidence_paths
+            }),
+            "runtime": sorted({"NODE" if item.ecosystem == "npm" else "PYTHON" for item in component_dependencies}),
+            "entry_points": [],
+            "tests": tests,
+            "dependency_count": len(component_dependencies),
+            "limitations": [
+                "component identity is path-stable within a repository; rename reconciliation requires history",
+                "independent deployability is declared only when a component-local container build is present",
+            ],
+            "rule_version": "component-decomposition/1.0.0",
+        }
+        relation = _entity_relationship_fact(
+            scan_input, evidence_paths[0], 1, _repository_ref(scan_input), "CONTAINS",
+            _component_ref(scan_input, component_path), profile,
+            assertion_class="DECLARED", confidence=0.98,
+            evidence_type="COMPONENT_MANIFEST",
+        )
+        facts.append(relation)
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key({
+                "tenant": scan_input.tenant_key,
+                "component": relation["object_entity"]["key"],
+                "record_kind": "component_profile",
+                "source_revision": scan_input.source_revision,
+                "extractor": SCANNER_VERSION,
+            }),
+            "tenant_key": scan_input.tenant_key,
+            "subject": relation["object_entity"],
+            "predicate": "HAS_PROPERTY",
+            "object_value": profile,
+            "assertion_class": "DECLARED",
+            "confidence": 0.98,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {"profile_schema_version": "1.0.0"},
+            "evidence": [
+                _evidence_dict(Evidence(
+                    path=path, evidence_type="COMPONENT_MANIFEST",
+                    content_hash=content_hash(contents[path]), locator={"path": path},
+                ), scan_input)
+                for path in evidence_paths[:12]
+            ],
+        })
+    return facts
 
 
 def _is_readme(path: str) -> bool:
@@ -3278,7 +3738,102 @@ def _deployment_facts(
             facts.extend(_kubernetes_facts(scan_input, path, content, diagnostics))
         elif PurePosixPath(path).suffix.lower() == ".tf":
             facts.extend(_terraform_facts(scan_input, path, content))
+    facts.extend(_deployment_profile_facts(scan_input, contents, diagnostics))
     return facts
+
+
+def _deployment_profile_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    diagnostics: list[Diagnostic],
+) -> list[dict[str, Any]]:
+    providers: set[str] = set()
+    workload_types: set[str] = set()
+    environments: set[str] = set()
+    evidence_paths: list[str] = []
+    for path, content in sorted(contents.items()):
+        name = PurePosixPath(path).name.lower()
+        if name == "dockerfile" or name.startswith("dockerfile."):
+            workload_types.add("CONTAINER_BUILD")
+            evidence_paths.append(path)
+        elif _is_compose_file(name):
+            documents = _decode_yaml_documents(content, path, diagnostics)
+            root = documents[0] if documents else None
+            if isinstance(root, Mapping) and isinstance(root.get("services"), Mapping):
+                workload_types.add("COMPOSE_SERVICE")
+                environments.add("local-compose")
+                evidence_paths.append(path)
+        elif PurePosixPath(path).suffix.lower() in {".yaml", ".yml"} and (
+            "/k8s/" in f"/{path.lower()}/"
+            or "/kubernetes/" in f"/{path.lower()}/"
+            or "/deploy/" in f"/{path.lower()}/"
+        ):
+            documents = _decode_yaml_documents(content, path, diagnostics)
+            found = False
+            for document in documents or []:
+                if not isinstance(document, Mapping) or not document.get("kind"):
+                    continue
+                workload_types.add(f"KUBERNETES_{str(document['kind']).upper()}")
+                metadata = document.get("metadata") if isinstance(document.get("metadata"), Mapping) else {}
+                environments.add(str(metadata.get("namespace") or "default"))
+                found = True
+            if found:
+                evidence_paths.append(path)
+        elif PurePosixPath(path).suffix.lower() == ".tf":
+            text = content.decode("utf-8", errors="replace")
+            for provider, prefix in (("AWS", "aws_"), ("GCP", "google_"), ("AZURE", "azurerm_")):
+                if re.search(rf'\bresource\s+"{prefix}', text):
+                    providers.add(provider)
+            if re.search(r'\bresource\s+"', text):
+                workload_types.add("TERRAFORM_RESOURCE")
+                evidence_paths.append(path)
+    if not evidence_paths:
+        return []
+    profile = {
+        "record_kind": "deployment_profile",
+        "schema_version": "1.0.0",
+        "providers": sorted(providers),
+        "workload_types": sorted(workload_types),
+        "environments": sorted(environments),
+        "verification_level": "DECLARED_CONFIGURATION",
+        "coverage": {
+            "live_state": "NOT_VERIFIED",
+            "registry_metadata": "NOT_COLLECTED",
+            "configuration": "AVAILABLE",
+        },
+        "limitations": [
+            "deployment configuration does not prove that a workload is currently deployed",
+            "provider, environment, and workload fields are omitted when configuration does not declare them",
+        ],
+        "rule_version": "deployment-profile/1.0.0",
+    }
+    return [{
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "repository": scan_input.repository_key,
+            "record_kind": "deployment_profile",
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": _repository_ref(scan_input),
+        "predicate": "HAS_PROPERTY",
+        "object_value": profile,
+        "assertion_class": "DECLARED",
+        "confidence": 0.95,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": {"profile_schema_version": "1.0.0"},
+        "evidence": [
+            _evidence_dict(Evidence(
+                path=path, evidence_type="DEPLOYMENT_CONFIG",
+                content_hash=content_hash(contents[path]), locator={"path": path},
+            ), scan_input)
+            for path in dict.fromkeys(evidence_paths)
+        ],
+    }]
 
 
 def _dockerfile_facts(
@@ -3293,6 +3848,22 @@ def _dockerfile_facts(
         image = match.group("image")
         if image.lower() == "scratch":
             continue
+        built_image = {
+            "namespace": "DEPLOYMENT", "type": "ContainerImage",
+            "key": f"container-build:{scan_input.repository_key}:{path}",
+            "name": f"Local build from {path}",
+        }
+        component_path = str(PurePosixPath(path).parent)
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line_number, _component_ref(scan_input, component_path),
+            "BUILDS", built_image,
+            {"source_kind": "DOCKERFILE", "verification_level": "DECLARED_CONFIGURATION"},
+        ))
+        facts.append(_entity_relationship_fact(
+            scan_input, path, line_number, built_image, "BASED_ON",
+            _container_image_ref(image),
+            {"source_kind": "DOCKERFILE", **_container_image_properties(image)},
+        ))
         deployment = _deployment_ref(scan_input, path, "dockerfile", f"stage-{line_number}")
         facts.append(_entity_relationship_fact(
             scan_input, path, line_number, _repository_ref(scan_input), "DEPLOYED_AS",
@@ -3300,7 +3871,8 @@ def _dockerfile_facts(
         ))
         facts.append(_entity_relationship_fact(
             scan_input, path, line_number, deployment, "RUNS_ON",
-            _container_image_ref(image), {"source_kind": "DOCKERFILE", "image": image},
+            _container_image_ref(image),
+            {"source_kind": "DOCKERFILE", **_container_image_properties(image)},
         ))
     return facts
 
@@ -3329,7 +3901,8 @@ def _compose_facts(
         if isinstance(image, str) and image.strip():
             facts.append(_entity_relationship_fact(
                 scan_input, path, line, deployment, "RUNS_ON", _container_image_ref(image.strip()),
-                {"source_kind": "COMPOSE", "service": service_name, "image": image.strip()},
+                {"source_kind": "COMPOSE", "service": service_name,
+                 **_container_image_properties(image.strip())},
             ))
     return facts
 
@@ -3384,7 +3957,8 @@ def _kubernetes_facts(
         for image in _kubernetes_images(document):
             facts.append(_entity_relationship_fact(
                 scan_input, path, line, deployment, "RUNS_ON", _container_image_ref(image),
-                {"source_kind": "KUBERNETES", "kind": document["kind"], "image": image},
+                {"source_kind": "KUBERNETES", "kind": document["kind"],
+                 **_container_image_properties(image)},
             ))
     return facts
 
@@ -3485,9 +4059,34 @@ def _deployment_ref(
 
 
 def _container_image_ref(image: str) -> dict[str, str]:
+    properties = _container_image_properties(image)
+    identity = properties["image_digest"] or image
     return {
         "namespace": "DEPLOYMENT", "type": "ContainerImage",
-        "key": f"container-image:{image}", "name": image,
+        "key": f"container-image:{identity}", "name": image,
+    }
+
+
+def _container_image_properties(image: str) -> dict[str, Any]:
+    digest_match = re.search(r"@(?P<digest>sha256:[a-fA-F0-9]{64})$", image)
+    without_digest = image.rsplit("@", 1)[0] if digest_match else image
+    last_segment = without_digest.rsplit("/", 1)[-1]
+    tag = last_segment.rsplit(":", 1)[1] if ":" in last_segment else None
+    repository = (
+        without_digest.rsplit(":", 1)[0]
+        if tag is not None else without_digest
+    )
+    digest = digest_match.group("digest").lower() if digest_match else None
+    return {
+        "image": image,
+        "image_repository": repository,
+        "image_tag": tag,
+        "image_digest": digest,
+        "identity_state": "DIGEST_RESOLVED" if digest else "MUTABLE_TAG_UNRESOLVED",
+        "verification_level": "DECLARED_CONFIGURATION",
+        "limitations": [] if digest else [
+            "mutable image tag is an observation and does not identify immutable composition",
+        ],
     }
 
 

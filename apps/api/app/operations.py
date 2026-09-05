@@ -27,6 +27,10 @@ THRESHOLDS: dict[str, tuple[int, str]] = {
     "dead_letter_embedding_jobs": (0, "intelligence-on-call"),
     "embedding_coverage_gap_basis_points": (0, "intelligence-on-call"),
     "embedding_provider_failures_24h": (0, "intelligence-on-call"),
+    "simulation_queue_age_seconds": (300, "data-platform-on-call"),
+    "expired_simulation_leases": (0, "data-platform-on-call"),
+    "failed_simulation_runs": (0, "graph-intelligence-on-call"),
+    "limited_simulations_24h": (0, "graph-intelligence-on-call"),
 }
 
 QUERY = """
@@ -117,6 +121,20 @@ SELECT
    WHERE updated_at>=now()-interval '24 hours'
      AND last_error_class IN ('EMBEDDING_PROVIDER_HTTP','EMBEDDING_PROVIDER_UNAVAILABLE'))
     embedding_provider_failures_24h,
+  coalesce((SELECT extract(epoch FROM now()-min(created_at))::bigint
+            FROM simulation_run WHERE status='QUEUED'),0) simulation_queue_age_seconds,
+  (SELECT count(*) FROM simulation_run
+   WHERE status='RUNNING' AND leased_until<now()) expired_simulation_leases,
+  (SELECT count(*) FROM simulation_run WHERE status='FAILED') failed_simulation_runs,
+  (SELECT count(*) FROM simulation_run
+   WHERE status='LIMITED' AND completed_at>=now()-interval '24 hours') limited_simulations_24h,
+  (SELECT count(*) FROM simulation_run WHERE status IN ('QUEUED','RUNNING')) active_simulation_runs,
+  (SELECT coalesce(avg(extract(epoch FROM (completed_at-started_at))*1000),0)::bigint
+   FROM simulation_run
+   WHERE status IN ('SUCCEEDED','LIMITED','NOT_SIMULATABLE')
+     AND completed_at>=now()-interval '24 hours') simulation_duration_ms_24h,
+  (SELECT coalesce(sum(jsonb_array_length(limitations)),0) FROM simulation_run
+   WHERE completed_at>=now()-interval '24 hours') simulation_limitations_24h,
   (SELECT count(*) FROM ingest_run WHERE status IN ('PENDING','RUNNING')) active_ingest_runs,
   (SELECT count(*) FROM projection_outbox WHERE processed_at IS NULL) pending_projection_events,
   (SELECT count(*) FROM intelligence_job WHERE status IN ('PENDING','RUNNING')) active_intelligence_jobs,

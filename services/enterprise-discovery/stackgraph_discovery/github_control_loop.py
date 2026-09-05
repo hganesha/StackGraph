@@ -448,6 +448,8 @@ def _acquire_scan_publish(
             result.full_name,
             default_branch=result.default_branch,
             include_pull_requests="pull_requests:read" in claimed.permissions,
+            include_releases="contents:read" in claimed.permissions,
+            include_deployments="deployments:read" in claimed.permissions,
         )
         if policy.get("activity_enabled") is True
         else None

@@ -360,7 +360,13 @@
         "applications": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "technologies": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "deployments": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
-        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
+        "graph_intelligence": {
+          "oneOf": [
+            {"$ref": "#/$defs/entityGraphIntelligence"},
+            {"type": "null"}
+          ]
+        }
       },
       "additionalProperties": false
     },
@@ -371,7 +377,10 @@
         "actor_key": {"type": "string", "minLength": 1},
         "login": {"type": "string", "minLength": 1},
         "avatar_url": {"type": ["string", "null"], "format": "uri"},
-        "is_bot": {"type": "boolean"}
+        "is_bot": {"type": "boolean"},
+        "classification": {"enum": ["HUMAN", "BOT", "DEPENDENCY_BOT", "CI_AUTOMATION", "AI_AGENT", "AI_ASSISTED_HUMAN", "UNKNOWN"]},
+        "classification_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "classification_basis": {"type": ["string", "null"]}
       },
       "additionalProperties": false
     },
@@ -380,7 +389,7 @@
       "required": ["id", "event_type", "title", "occurred_at"],
       "properties": {
         "id": {"$ref": "common.schema.json#/$defs/uuid"},
-        "event_type": {"enum": ["COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED"]},
+        "event_type": {"enum": ["COMMIT", "PULL_REQUEST_OPENED", "PULL_REQUEST_MERGED", "RELEASE", "DEPLOYMENT", "DEPENDENCY_CHANGE", "ARCHITECTURE_CHANGE", "INCIDENT", "INTERVENTION", "ROLLBACK"]},
         "title": {"type": "string", "minLength": 1},
         "occurred_at": {"$ref": "common.schema.json#/$defs/timestamp"},
         "actor": {"oneOf": [{"$ref": "#/$defs/repositoryActivityActor"}, {"type": "null"}]},
@@ -408,7 +417,9 @@
         "commits": {"type": ["integer", "null"], "minimum": 0},
         "pull_requests_merged": {"type": ["integer", "null"], "minimum": 0},
         "contributors": {"type": ["integer", "null"], "minimum": 0},
-        "last_change_at": {"type": ["string", "null"], "format": "date-time"}
+        "last_change_at": {"type": ["string", "null"], "format": "date-time"},
+        "releases": {"type": ["integer", "null"], "minimum": 0},
+        "deployments": {"type": ["integer", "null"], "minimum": 0}
       },
       "additionalProperties": false
     },
@@ -418,7 +429,9 @@
       "properties": {
         "commits": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
         "pull_requests": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
-        "contributors": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]}
+        "contributors": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
+        "releases": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]},
+        "deployments": {"enum": ["AVAILABLE", "PARTIAL", "NOT_COLLECTED", "PERMISSION_REQUIRED", "ERROR"]}
       },
       "additionalProperties": false
     },
@@ -478,7 +491,13 @@
         "migration_patterns": {"type": "array", "items": {"$ref": "#/$defs/entitySummary"}},
         "assessments": {"type": "array", "items": {"$ref": "#/$defs/assessmentSummary"}},
         "recommendations": {"type": "array", "items": {"$ref": "#/$defs/recommendationSummary"}},
-        "freshness": {"$ref": "common.schema.json#/$defs/freshness"}
+        "freshness": {"$ref": "common.schema.json#/$defs/freshness"},
+        "graph_intelligence": {
+          "oneOf": [
+            {"$ref": "#/$defs/entityGraphIntelligence"},
+            {"type": "null"}
+          ]
+        }
       },
       "additionalProperties": false
     },
@@ -621,7 +640,20 @@
         "citations": {"type": "array", "items": {"$ref": "#/$defs/citation"}},
         "result_kind": {"enum": ["ANSWER", "TABLE", "GRAPH", "UNSUPPORTED"]},
         "rows": {"type": "array", "items": {"type": "object"}},
-        "graph_highlight": {"$ref": "#/$defs/graphNeighborhood"}
+        "graph_highlight": {"$ref": "#/$defs/graphNeighborhood"},
+        "resolved_entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["entity", "score", "matched_terms"],
+            "properties": {
+              "entity": {"$ref": "#/$defs/entitySummary"},
+              "score": {"type": "number", "minimum": -1, "maximum": 1},
+              "matched_terms": {"type": "array", "items": {"type": "string"}}
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     },

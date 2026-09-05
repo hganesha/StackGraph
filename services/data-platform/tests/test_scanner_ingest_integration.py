@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import psycopg
@@ -13,6 +16,10 @@ from stackgraph_data.scanner_ingest import (
     persist_api_surface_connection,
     persist_scanner_result_connection,
 )
+try:
+    from stackgraph_discovery.repository_scanner import scan_repository
+except ModuleNotFoundError:  # The data-platform-only test image omits discovery code.
+    scan_repository = None
 
 
 DATABASE_URL = os.environ.get("STACKGRAPH_TEST_DATABASE_URL")
@@ -54,6 +61,85 @@ class EnrichmentTargetSelectionTests(unittest.TestCase):
 
 @unittest.skipUnless(DATABASE_URL, "STACKGRAPH_TEST_DATABASE_URL is not configured")
 class ScannerPersistenceIntegrationTests(unittest.TestCase):
+    @unittest.skipIf(scan_repository is None, "enterprise-discovery scanner is not installed")
+    def test_scanner_111_persists_components_builds_and_fingerprint(self) -> None:
+        tenant_key = f"scanner-111-{uuid4()}"
+        repository_key = f"github:repo:{uuid4()}"
+        connection = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        try:
+            tenant = connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'Scanner 1.11 test') RETURNING id",
+                (tenant_key,),
+            ).fetchone()
+            source = connection.execute(
+                "INSERT INTO source_system(tenant_id,source_key,kind) VALUES (%s,'scanner-111','GITHUB') RETURNING id",
+                (tenant["id"],),
+            ).fetchone()
+            target = connection.execute(
+                """
+                INSERT INTO ingest_target(tenant_id,source_system_id,target_kind,target_key,refresh_policy)
+                VALUES (%s,%s,'REPOSITORY',%s,'{}') RETURNING id
+                """,
+                (tenant["id"], source["id"], repository_key),
+            ).fetchone()
+            run = connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind,requested_source_revision)
+                VALUES (%s,%s,'MANUAL','revision-111') RETURNING id
+                """,
+                (tenant["id"], target["id"]),
+            ).fetchone()
+            with TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "package.json").write_text(json.dumps({
+                    "name": "scanner-111", "private": True,
+                    "dependencies": {"fastify": "5.5.0"},
+                }))
+                (root / "Dockerfile").write_text(
+                    f"FROM node@sha256:{'a' * 64}\n",
+                )
+                result = scan_repository({
+                    "scanner_contract_version": "1.0.0",
+                    "run_id": str(run["id"]), "tenant_key": tenant_key,
+                    "target": {
+                        "provider": "github", "repository_id": "111",
+                        "canonical_key": repository_key, "name": "scanner-111",
+                        "default_branch": "main",
+                    },
+                    "snapshot": {
+                        "source_revision": "revision-111", "checkout_root": str(root),
+                        "requested_at": "2026-09-05T12:00:00Z",
+                    },
+                    "limits": {"max_files": 100, "max_bytes": 1_000_000, "deadline_seconds": 30},
+                })
+            persisted = persist_scanner_result_connection(
+                connection, result, target_id=target["id"], run_id=run["id"],
+            )
+            rows = connection.execute(
+                """
+                SELECT fact.predicate,subject.entity_type subject_type,
+                       object_entity.entity_type object_type,
+                       fact.object_value->>'record_kind' record_kind
+                FROM fact_assertion fact
+                JOIN entity subject ON subject.id=fact.subject_entity_id
+                LEFT JOIN entity object_entity ON object_entity.id=fact.object_entity_id
+                WHERE fact.source_snapshot_id=%s
+                """,
+                (persisted.snapshot_id,),
+            ).fetchall()
+            shapes = {
+                (row["predicate"], row["subject_type"], row["object_type"], row["record_kind"])
+                for row in rows
+            }
+            self.assertIn(("CONTAINS", "Repository", "Component", None), shapes)
+            self.assertIn(("DEPENDS_ON", "Component", "Package", None), shapes)
+            self.assertIn(("BUILDS", "Component", "ContainerImage", None), shapes)
+            self.assertIn(("BASED_ON", "ContainerImage", "ContainerImage", None), shapes)
+            self.assertIn(("HAS_PROPERTY", "Repository", None, "repository_fingerprint"), shapes)
+        finally:
+            connection.rollback()
+            connection.close()
+
     def test_api_surface_replays_within_scope_and_isolates_tenant_scope(self) -> None:
         connection = psycopg.connect(DATABASE_URL, row_factory=dict_row)
         try:
