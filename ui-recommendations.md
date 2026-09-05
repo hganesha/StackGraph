@@ -7,6 +7,15 @@
 > **Part II wins** — it revises R1, R3, R4, R5, R7, R8, R9 and R10, adds R11–R16, and
 > replaces the sequencing table in §9. Read Part I for the diagnosis, Part II for the
 > plan.
+>
+> **Superseded in part by [`docs/ui-phase-2-alignment.md`](docs/ui-phase-2-alignment.md).**
+> That document assesses the two plans this one did not read — the integrated
+> implementation plan and `scanner-improvements.md` — and adds U1–U13 for the entity
+> concepts the scanner introduces (Component, container composition, deployment
+> profiles, archetypes, activity, change actors) and the run behaviour the integrated
+> plan requires (async simulation, refusal classes, run provenance, the AI-off state).
+> It also corrects R7′ and revises the ~41-day estimate in §15. R1–R16 below remain
+> normative; where the alignment document differs, it wins.
 
 **Scope:** the UI control surface only — `apps/web`, `packages/design-system`,
 `packages/canvas-ui`, `packages/graph-ui`. No backend, contract, or data-model
