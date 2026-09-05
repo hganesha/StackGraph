@@ -1,0 +1,31 @@
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sg-space-1) var(--sg-space-3);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+}
+.item {
+  white-space: nowrap;
+}
+/* Separators are drawn, not typed, so a wrapped line never starts with a stray dot. */
+.item + .item::before {
+  content: "·";
+  margin-inline-end: var(--sg-space-2);
+  color: var(--sg-surface-border-strong);
+}
+/* A lagging graph or a reduced-coverage run qualifies every number beside it. Louder
+   than the rest of the line, quieter than a tone — this is a caveat, not a finding. */
+.behind {
+  color: var(--sg-text-secondary);
+  font-weight: 500;
+}
+.replayed {
+  color: var(--sg-text-secondary);
+  font-weight: 500;
+}
+.hash {
+  color: var(--sg-text-muted);
+}

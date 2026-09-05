@@ -8,7 +8,14 @@ import {
   type GraphMetric,
   type Namespace,
 } from "@stackgraph/shared";
-import { Drawer, Skeleton, Term, type GlossaryKey } from "@stackgraph/design-system";
+import {
+  Drawer,
+  RunProvenance,
+  Skeleton,
+  Term,
+  graphSnapshotProvenance,
+  type GlossaryKey,
+} from "@stackgraph/design-system";
 import {
   useEntityBlastRadius,
   useGraphIntelligenceCommunities,
@@ -233,6 +240,12 @@ export function GraphIntelligenceSummary({
         </p>
       ) : null}
 
+      {/* Which policy version and which watermark produced the numbers above. A
+          determinism guarantee nobody can check on screen lives only in a test. */}
+      {intelligence?.snapshots?.[0] ? (
+        <RunProvenance {...graphSnapshotProvenance(intelligence.snapshots[0])} />
+      ) : null}
+
       <Limitations limitations={limitations} fallback="This entity's structural coverage is limited." />
 
       <div className={styles.actions}>
@@ -259,6 +272,9 @@ export function GraphIntelligenceSummary({
                 <div><dt>Affected entities</dt><dd>{blastRadius.data.affected_entity_count}</dd></div>
                 <div><dt>Maximum depth</dt><dd>{blastRadius.data.maximum_depth}</dd></div>
               </dl>
+              {blastRadius.data.snapshot ? (
+                <RunProvenance {...graphSnapshotProvenance(blastRadius.data.snapshot)} />
+              ) : null}
               {blastRadius.data.impacts.length ? (
                 <ol className={styles.paths}>
                   {blastRadius.data.impacts.map((impact) => {

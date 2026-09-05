@@ -7,6 +7,8 @@ export { ConfidenceChip } from "./components/ConfidenceChip";
 export { StatTile } from "./components/StatTile";
 export { StatusStrip } from "./components/StatusStrip";
 export type { StatusStripProps } from "./components/StatusStrip";
+export { RunProvenance, graphSnapshotProvenance } from "./components/RunProvenance";
+export type { RunProvenanceFacts } from "./components/RunProvenance";
 export { StratumBar } from "./components/StratumBar";
 export type { StratumLayer, StratumLayerFact } from "./components/StratumBar";
 export { AttenuationBar } from "./components/AttenuationBar";
@@ -36,6 +38,16 @@ export {
   GATE_RENDERS,
 } from "./vocabulary/gates";
 export type { GateVerdict } from "./vocabulary/gates";
+export {
+  ESTATE_LEVEL_LABEL,
+  ESTATE_LEVEL_DESCRIPTION,
+  ESTATE_LEVEL_UNIT,
+  formatScopeCount,
+  formatComponentImpact,
+  componentLabelParts,
+  componentLabelText,
+} from "./vocabulary/estate-level";
+export type { EstateLevel, ComponentLabelParts } from "./vocabulary/estate-level";
 export {
   RESOLUTION_LABEL,
   RESOLUTION_DESCRIPTION,
