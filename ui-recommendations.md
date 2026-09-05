@@ -1,5 +1,13 @@
 # StackGraph — UI Control Surface Review and Recommendations
 
+> **Revised for Phase 2.** Part I below is the original review of the shipped
+> control surface. **[Part II](#part-ii--impact-of-the-phase-2-plan)** assesses the
+> Phase 2 backend plan (Enterprise Change Compiler, simulation, change memory, agent
+> control plane) against it and states the required UI changes. Where the two differ,
+> **Part II wins** — it revises R1, R3, R4, R5, R7, R8, R9 and R10, adds R11–R16, and
+> replaces the sequencing table in §9. Read Part I for the diagnosis, Part II for the
+> plan.
+
 **Scope:** the UI control surface only — `apps/web`, `packages/design-system`,
 `packages/canvas-ui`, `packages/graph-ui`. No backend, contract, or data-model
 changes are proposed. Every recommendation below is buildable against read models
@@ -616,7 +624,7 @@ Independent of any redesign, these are wrong today:
 | 9 | `listCapabilityFootprints` — a shipped, tested read model with zero UI call sites | `client.ts:931` |
 | 10 | `getRepositoryCapabilities`, `getCapabilityTaxonomy`, `getPhase3IntelligenceMetrics`, `getBusinessMapRevisions` — also zero call sites | `client.ts` |
 | 11 | No first-run / empty-estate path | all list surfaces |
-| 12 | Business Map persistence is browser-local, so the map a CTO builds does not survive a device change — already logged as P3 in `design-qa.md`, worth re-rating now that maps carry application assignments | `useBusinessMap.ts` |
+| 12 | ~~Business Map persistence is browser-local~~ — **corrected:** `useBusinessMap.ts` does persist server-side via `listBusinessMaps`/`saveBusinessMap`, with `localStorage` as a cache and offline fallback. The P3 in `design-qa.md` is stale. The real remaining gap is that `getBusinessMapRevisions` is fetched by nothing, so the saved revision history is invisible | `useBusinessMap.ts` |
 
 Items 1–5 and 8 are under a day of work in total and should not wait for anything
 else in this document.
@@ -682,3 +690,537 @@ distinctive. Explicitly:
   shape *and* numeral *and* label. Hover adds detail; it never carries meaning.
 - **Do not ship a heat map without a legend on screen.** Not in a popover, not in a
   tooltip — inline, permanent, beside the grid.
+
+---
+---
+
+# Part II — Impact of the Phase 2 plan
+
+**Assessed against:** *StackGraph Phase 2 Improvements* (Enterprise Change Compiler,
+Action Grammar, Mutation IR, impact simulation, change memory, AI dependency graph,
+agent control plane).
+
+**Verdict in one line:** Phase 2 does not invalidate Part I — it **raises the stakes
+on every recommendation in it and moves one of them to the centre of the product.**
+
+Part I diagnosed a control surface that renders no pictures. Phase 2 introduces
+something more consequential: **for the first time, the UI has to stop people.**
+Everything in the shipped surface is advisory — tones, labels, limitations placed
+beside the number they qualify, an explicit product rule that `EMPTY` is not `DANGER`
+and `UNEVALUABLE` stays quiet. That restraint is correct for a system that *describes*
+an estate. It is insufficient for a system that **gates changes to one.**
+
+That single shift drives most of what follows.
+
+---
+
+## 11. What Phase 2 changes about the UI plan
+
+### 11.1 The five structural consequences
+
+| # | Phase 2 clause | Consequence for the UI |
+|---|---|---|
+| 1 | §5 "Do not make an unconstrained chatbot the primary simulator interface. The preferred UX is a contextual command surface." | **R10c stops being a navigation improvement and becomes the product's primary interaction surface.** Promoted to R11 and re-specced. |
+| 2 | §5 Resolution states; §10 "Low-confidence matches must never silently enter deterministic simulation"; §18 "No unresolved entity should silently become a Mutation subject" | The design system needs a **blocking state class** it does not have, and a **resolution axis** distinct from confidence. |
+| 3 | §12 "Blast radius must not mean generic N-hop graph traversal" — DIRECT / TRANSITIVE / CONTEXT / STOP / INFORMATIONAL | **R3 as drawn in Part I is wrong.** Rings must band by impact classification, not hop distance. |
+| 4 | §13 `diff(G, G')` hypothetical estate overlay | Every visualisation in Part I gains a **second, simulated state**. The heat grid becomes before/after. This makes R1 substantially stronger. |
+| 5 | §14 "AI must not manufacture the underlying impact graph" | The Strata mono/sans rule stops being a nice epistemic touch and becomes a **safety boundary rendered in type.** |
+
+### 11.2 The design-system gap Phase 2 opens
+
+Today's tonal vocabulary in `packages/canvas-ui/src/vocabulary.ts` has four tones —
+`neutral | positive | caution | danger | quiet` — and every one of them is *advisory*.
+The file's own comments make the philosophy explicit and correct:
+
+> *"An empty optional concern is a correct result; severity comes from policy, not
+> from emptiness."*
+> *"`UNEVALUABLE` is quiet, never danger: an incomplete observation must not read as
+> non-conformance."*
+
+Phase 2 introduces states that are **not advisory**:
+
+- an **Unresolved** subject that *blocks* compilation;
+- a **material ambiguity** that *blocks* simulation;
+- a **DENY** or **ESCALATE** verdict from the capability compiler;
+- a **contradiction** between two authoritative sources that invalidates a plan.
+
+None of these are "danger tone, more so". A `danger` chip on a table row and a wall
+that stops you submitting a change are different classes of object, and conflating
+them will either make blocking states too quiet to work or make advisory states too
+loud to live with.
+
+**Required addition to the design system: a `gate` class**, distinct from the four
+tones, with exactly four members and its own component:
+
+| Gate state | Meaning | Visual treatment |
+|---|---|---|
+| `BLOCKED` | Cannot proceed. A required input is unresolved or contradicted. | Full-width barrier bar above the action; the action control is `disabled` **and** the reason is stated inline, never only in a tooltip |
+| `ESCALATE` | Can proceed only with a named approval. | Barrier bar with the approver role named and the request action inline |
+| `CONSTRAIN` | Can proceed, narrower than requested. | Inline notice on the scope control showing what was removed and why |
+| `CLEAR` | Nothing is in the way. | No component rendered — absence is the signal |
+
+Rules: a gate always names the *specific* blocking entity or contradiction and links
+to its evidence; a gate is never dismissible; a gate never uses the domain ramps.
+`BLOCKED` and `ESCALATE` are the **only** places in the product allowed a filled
+(rather than hairline) surface — because they are the only places where the reader
+must not be able to skim past.
+
+### 11.3 The colour budget is now over-subscribed — resolve it deliberately
+
+Part I asked for one new sequential ramp. Phase 2 arrives with **five new semantic
+axes** at once: resolution state (3 values), impact classification (5), gate verdict
+(4), contradiction status, and before/after diff polarity. A five-hue budget cannot
+absorb that, and trying will destroy the discipline that makes the current UI good.
+
+**Assign each axis a channel, and hold the line:**
+
+| Axis | Channel | Rationale |
+|---|---|---|
+| Domain (Business/Enterprise/…) | **Hue** — the four existing ramps | Already learned; do not touch |
+| Confidence | **Segments** — existing `ConfidenceChip` | Already correct; do not touch |
+| Resolution (Resolved/Inferred/Unresolved) | **Typography + glyph** — see R12 | It is an *identity* claim, and Strata already encodes epistemic status in type |
+| Impact classification (Direct/Transitive/Context) | **Position** — ring band, see R3′ | Distance from centre already means this; colour would be redundant |
+| Gate verdict | **The one filled surface in the system** | Deliberately the loudest thing in the product, used nowhere else |
+| Entropy / spread | **The one sequential ramp** from R1 | Legended surfaces only |
+| Before/after diff | **Fill pattern** — solid = now, hatched = simulated | Survives greyscale and colour-blindness; carries no new hue |
+
+Net new hues: **zero.** Net new ramps: **one** (unchanged from Part I).
+
+---
+
+## 12. Revisions to existing recommendations
+
+### R1′ — Heat Grid becomes the *simulated* heat grid  *(strengthened)*
+
+Phase 2 §13 gives the heat grid a second state. The flagship screen is no longer
+"where the estate is scattered" — it is **"where the estate is scattered, and what
+this change would do to it."**
+
+- Add a fourth mode to the existing view switch: **Now · Simulated · Difference.**
+- In *Difference*, each capability cell shows only the delta, hatched for simulated
+  values, with the numeral signed (`−0.14`, `+0.03`).
+- The headline becomes a sentence a board understands:
+  *"This change reduces payment-capability spread from 0.71 to 0.44 and touches
+  8 capabilities, one of them Tier-0."*
+- Cells whose delta cannot be computed render **"Not simulatable"** with the reason —
+  never a zero delta. A missing simulation must not read as "no effect".
+
+Still zero backend work for the *Now* state (`/capabilities/footprints` remains
+unused). The *Simulated* state consumes `POST /simulations`.
+
+**This is now the strongest single screen in the roadmap** and should stay the
+flagship.
+
+### R3′ — Blast Radius Ring: bands by classification, not by hop  *(corrected)*
+
+Phase 2 §12 is explicit: *"Blast radius must not mean generic N-hop graph
+traversal."* The ring I specified in Part I bands by `impact.distance`, which is
+exactly the generic traversal Phase 2 rejects. **Revised:**
+
+- **Bands are impact classifications**, in this fixed order outward:
+  `DIRECT` → `TRANSITIVE` → `CONTEXT`. Hop distance becomes a numeral on each
+  plotted entity, not the ring itself.
+- **`STOP` boundaries are drawn**, as a hairline arc terminating a branch, labelled
+  with why traversal stopped ("Owner — not an impact path"). Showing where the engine
+  *deliberately stopped looking* is what separates this from a dependency tree, and
+  it is the thing that makes the result auditable.
+- **`INFORMATIONAL` sits outside the outermost band**, visually detached, so it can
+  never be read as impact.
+- The **business capability terminus is the visual destination** — per §22, "a blast
+  radius of 73 repositories is much less meaningful than: Payment Authorization, a
+  Tier-0 business capability, is affected." Draw the arc that reaches a capability
+  solid and terminate it in a labelled node; everything else is subordinate.
+- Per-hop `ConfidenceChip` and per-hop evidence chips stay exactly as specified.
+- The traversal policy that produced the ring is named beneath it
+  (*"Policy: package-upgrade impact, 4 edge types, max depth 6"*), because §12 makes
+  the policy the reason the picture is trustworthy.
+
+The UUID defect fix from Part I is unchanged and still ships immediately.
+
+### R4′ — Stratum Bar gains a sixth band and a provenance reading  *(extended)*
+
+Phase 2 §31 adds an AI supply-chain layer (Agent → Harness → Model → Prompt →
+Context Source → Tool → Dataset). The `Namespace` union in
+`packages/shared/src/contracts/read-models.ts:10` currently has six members —
+`BUSINESS | ENTERPRISE | TECHNOLOGY | OSS | DEPLOYMENT | INTELLIGENCE` — where
+`INTELLIGENCE` means *StackGraph's own assessments*, not *the customer's AI estate*.
+Those are different things and must not share a band.
+
+- The bar becomes **six bands**: Business · Enterprise · Technology · OSS ·
+  Deployment · **AI**.
+- **Do not give AI a sixth hue.** It renders in the existing intelligence violet at a
+  distinct 300-stop with the `strata` glyph, and is separated by label and position —
+  exactly the argument `vocabulary.ts` already makes for domains.
+- Add a **second reading** to the expanded state, required by §19: not just *how much*
+  of each layer is known, but **how well-evidenced it is** — the share of that layer's
+  simulation-relevant edges carrying corroborating provenance. A layer that is 90%
+  populated and 20% corroborated is the single most dangerous state in a simulation
+  product, and today nothing surfaces it.
+
+### R5′ — Drift Timeline absorbs predicted-vs-actual  *(strengthened)*
+
+Phase 2 §30 is the best thing in the plan and it lands directly on R5. Extend the
+drift strip with a fourth row, and give it its own surface:
+
+```
+Change memory                  142 similar changes on record
+                               119 succeeded · 18 needed intervention · 5 rolled back
+
+Strongest failure predictors   Runtime mismatch      7.8×  ████████
+                               High schema fan-out   4.1×  ████
+                               Tier-0 dependency     3.7×  ████
+                               Low test coverage     2.9×  ███
+```
+
+And — the honest chart nobody ships — a **calibration plot**: predicted impact on one
+axis, observed impact on the other, one dot per executed change, the diagonal drawn.
+Dots above the line are under-prediction; dots below are over-prediction. **Publishing
+your own miss rate is a trust move no competitor will copy**, and it is the natural
+home for the "Learn" stage of the lifecycle.
+
+Place the failure-predictor bars **inside the simulation result**, not only on a
+dashboard: a predictor that matches the current change is the most decision-relevant
+thing on the screen.
+
+### R7′ — Version Spread Comb is promoted to the target picker  *(promoted)*
+
+Phase 2 §6 specifies contextual target autofill with exactly the data the comb draws:
+
+```
+10.x    21 repos      11.x    47 repos
+12.x   143 repos      13.x   171 repos
+```
+
+The comb is no longer a decoration on `OccupantChip`. It is **the control you choose
+a target version with** — click a tooth to set the target, and the estate mass sitting
+to the left of your choice is the migration you just proposed, shown as you choose it.
+Suggested targets (`Consolidate estate` / `Candidate upgrade` / `Latest — resolved at
+execution`) render as labelled markers above the comb.
+
+Promoted from Phase 2 to **Phase 1** of the delivery sequence; it is now on the
+critical path for the first vertical slice (`UPGRADE Package`).
+
+### R8′ — the Change Brief joins the Estate Brief  *(split)*
+
+The Estate Brief in Part I is the quarterly board artifact. Phase 2 creates a second,
+higher-frequency artifact that matters more operationally: **the plan document that
+goes to a change board.** Terraform's `plan` output is the reference, and its power is
+that it is *readable by someone who did not write it*.
+
+`/simulations/{id}` renders as a **Change Brief**: the mutation in grammar tokens, the
+gate verdict, deterministic findings in mono, AI interpretation in sans and visually
+partitioned, the impact ring, the prior-outcomes strip, and the verification plan —
+one page, printable, with the as-of stamp and the policy version.
+
+Both briefs share a layout system; build the Change Brief **first**, because it is
+used weekly rather than quarterly.
+
+### R9′ — Evidence Temperature becomes corroboration depth  *(escalated)*
+
+Phase 2 §19 makes relationship provenance safety-critical and gives it a shape:
+
+```
+PaymentService DEPENDS_ON CustomerService
+✓ generated OpenAPI client   ✓ endpoint reference in source
+✓ runtime traffic            ✓ architecture documentation
+```
+
+Four independent corroborations is a materially different claim from one, and the
+Part I proposal (a single degree mark) cannot express it. **Revised:** the mark
+becomes **1–4 stacked hairlines** — corroboration depth, not mere presence. On any
+edge that participates in a simulation, the mark is **mandatory, not decorative**, and
+a single-source edge in a `DIRECT` impact band must be visibly weaker than a
+four-source one.
+
+Escalated from "consistency polish" to **Phase 1, blocking** — §19's own framing is
+"prefer fewer trustworthy edges over a huge noisy graph", and the UI is where that
+preference either becomes visible or is lost.
+
+### R10′ — command-surface items re-scoped
+
+- **(a) Rail counts** — unchanged, still worth doing.
+- **(b) Rail grouping** — **revised.** The three verbs in Part I (Explore / Decide /
+  Operate) predate the Phase 2 lifecycle. Use the lifecycle's own spine instead:
+  **Understand** (Estate, Business Map, Applications, Technologies, Architecture) ·
+  **Change** (Simulate, Recommendations, Reviews, Change memory) · **Operate**
+  (Scan health, Admin, About). "Change" is a new rail group and the product's centre
+  of gravity.
+- **(c) ⌘K palette** — **superseded by R11.** Do not build the Part I version; it
+  would have to be rebuilt six months later.
+- **(d) Saved views** — unchanged, and now extends naturally to saved ChangeSets.
+
+---
+
+## 13. New recommendations required by Phase 2
+
+### R11 — The Command Bar *(new flagship — supersedes R10c)*
+
+**What.** A grammar-constrained command surface, opened with ⌘K from anywhere, that
+compiles keystrokes into a Mutation. It is the primary interface of Phase 2 and the
+plan is explicit (§5) that it must **not** be a chat box.
+
+Four states, each with a distinct visual register:
+
+```
+1  EMPTY        upgrade|
+                ── estate-backed candidates, counted, never generated ──
+                Library    2,847      Runtime   17
+                Framework      8      Database   6      Platform  9
+
+2  RESOLVING    upgrade newt|
+                Newtonsoft.Json          pkg:nuget/Newtonsoft.Json   171 repos  ✓ Resolved
+                Newtonsoft.Json.Schema   pkg:nuget/…Schema            14 repos  ✓ Resolved
+                Newtonsoft.Json.Bson     pkg:nuget/…Bson               3 repos  ✓ Resolved
+
+3  TOKENISED    [ Upgrade ] [ Newtonsoft.Json ] [ → 14.x ] [ estate ]
+                ── the comb (R7′) sits directly beneath, targets marked ──
+
+4  COMPILED     Mutation ready · 382 repos in scope · 3 unresolved   [ Simulate ]
+                                                       ↑ blocks
+```
+
+**Design requirements that are not negotiable:**
+- **Every candidate comes from the estate.** `GET /action-types`,
+  `/action-types/{predicate}/subjects`, `/entities/{id}/valid-targets`,
+  `/entities/{id}/scopes`. Nothing in the dropdown is LLM-generated, and the surface
+  should say so once, quietly, at the foot: *"Suggestions come from your estate."*
+- **Tokens, not text.** Once resolved, the input is chips carrying canonical IDs. The
+  displayed label is for humans; the token holds `pkg:nuget/Newtonsoft.Json`. Show the
+  canonical ID in mono on hover — it is a scanned fact and belongs in mono under the
+  Strata rule.
+- **Free text is a compiler, not the interface.** Natural language is one of the seven
+  entry points in §7, and it must visibly *produce tokens* rather than bypass them.
+  When NL is used, animate the compilation: the sentence resolves into chips, so the
+  user learns the grammar by watching it happen. This is the single best onboarding
+  mechanism available and costs one transition.
+- **Ungrounded input fails visibly and specifically.** "Plant a tree in my garden"
+  must return *"No estate entity matches 'tree'. StackGraph can only change things it
+  has found in your repositories."* — not an empty dropdown, and not an LLM apology.
+- **The three resolution states are always visible** (R12), and material unresolved
+  components render the `BLOCKED` gate on the Simulate control with the count and the
+  list.
+
+**Why it differentiates.** Every AI tool in this market is converging on a chat box.
+Shipping a *constrained, estate-backed, tokenising* command surface is a visible bet
+in the opposite direction, and it is legible in a five-second demo: type a sentence,
+watch it become a plan, watch an invalid one get refused. **No competitor can offer
+the refusal**, because refusing requires knowing what actually exists.
+
+**Effort.** ~5 days for states 1–3 against the Context API; ~2 more for NL
+compilation and the token animation. This is the largest single UI investment in
+Phase 2 and it is correctly placed.
+
+### R12 — Resolution State as a first-class visual  *(new, blocking)*
+
+Phase 2 §5 and §10 define three states that carry safety weight and have no
+representation in the current design system. They are **not** confidence — an entity
+can be resolved with certainty and still be a low-confidence fact, or ambiguous
+between two entities each of which is well-evidenced. Two axes, two components.
+
+| State | Treatment | Behaviour |
+|---|---|---|
+| **Resolved** | Mono label, canonical ID on hover, no adornment | Proceeds silently |
+| **Inferred** | Sans label + `n candidates` counter, always expandable inline | Renders a chooser; cannot be dismissed by ignoring it |
+| **Unresolved** | Struck label + reason | Raises the `BLOCKED` gate on any control that would consume it |
+
+Add `RESOLUTION_LABEL`, `RESOLUTION_TONE` and `RESOLUTION_DESCRIPTION` maps to the
+vocabulary module alongside the existing `POLICY_*`, `POSTURE_*` and `COMPARISON_*`
+maps, so the new axis inherits the "every visual signal has a text equivalent"
+guarantee for free. Add all three to the glossary in
+`packages/design-system/src/glossary/terms.ts`.
+
+**The 100% ambiguity-surfacing goal in §10 is a UI commitment, not a backend one.**
+The backend can detect ambiguity perfectly and still fail the goal if the UI renders
+an inferred match as though it were resolved. Treat that as a test.
+
+### R13 — The Contradiction Ledger *(new — most under-rated idea in the plan)*
+
+Phase 2 §33 describes the Contradiction Engine and gives it a natural picture:
+
+```
+Node runtime — 4 sources disagree
+  Source code       Node 18   ●───────────── 47 repos    observed 2d ago
+  Dockerfiles       Node 20   ────●───────── 41 repos    observed 2d ago
+  Documentation     Node 16   ●───────────── —           updated 14mo ago
+  Policy            Node 22   ──────────●───  standard    set 3mo ago
+
+  Nobody is on the standard. Docs are 14 months stale.
+  8 applications · 2 business capabilities affected
+```
+
+A **disagreement comb**: one row per source, positioned on a shared axis, with
+observation recency and scale on each row. The engine "does not need to immediately
+determine truth" (§33) — which is precisely why this must be a *picture of a
+disagreement* rather than a finding with a severity. A severity implies a verdict.
+
+**Why it differentiates.** Every enterprise has this problem and no tool has a screen
+for it. It is also the most immediately *recognisable* screen in the entire roadmap —
+every architect who sees it will recognise their own estate in it within five seconds.
+Extends directly to §32's assumption drift ("AI context says OrdersDB is
+authoritative; the estate migrated to LedgerDB") which is the same comb with a
+different axis.
+
+**Where it lives.** A new surface under the **Change** rail group, plus an inline
+contradiction badge anywhere a contradicted entity appears in a mutation — a change
+built on a contradicted assumption is the failure mode §32 exists to prevent, and the
+warning has to reach the person compiling the change, not just a dashboard.
+
+**Effort.** ~2 days. Highest recognition-per-day ratio in Part II.
+
+### R14 — The Simulation Result: a hard visual partition *(new, architectural)*
+
+Phase 2 §14 requires deterministic findings and AI interpretation to be separable.
+The Strata typographic rule already encodes exactly this distinction — **mono = a
+scanner read it, sans = StackGraph reasoned it** — which means StackGraph already owns
+the right primitive and simply has to make it structural rather than incidental.
+
+**Requirement: findings and interpretation never interleave.** Not alternating cards,
+not a summary paragraph above a table with prose in the cells. A ruled partition, in
+this order:
+
+```
+┌ FOUND ─────────────────────────────── deterministic, evidence-backed ┐
+│  382  direct repositories          ▏▏▏▎ 4 sources                    │
+│   71  applications                 ▏▏   2 sources                    │
+│    8  business capabilities        ▏▏▏  3 sources    ← 1 is Tier-0   │
+│   23  dependency constraint conflicts                                │
+│   17  call sites with no linked test                                 │
+└──────────────────────────────────────────────────────────────────────┘
+┌ INTERPRETED ──────────────────────── AI reading of the findings above ┐
+│  Risk · Rollout · Verification, in sans, each citing the rows above   │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+- The interpretation panel is **collapsible; the findings panel is not.** Whether the
+  AI commentary is present must never change what the deterministic result says.
+- Every interpretation claim **cites a finding row by name**. An interpretation that
+  cannot cite one is a hallucination and should render as *"Not derived from the
+  findings above"* rather than being suppressed — surfacing the ungrounded claim is
+  more useful than hiding it.
+- Corroboration depth (R9′) renders on every finding row.
+
+This is one component, but it is the component that makes the "AI must not manufacture
+the impact graph" guarantee *visible*, which is the whole positioning claim in §2.
+
+### R15 — Suggested Changes replace the estate fold *(new — revises §5.1)*
+
+Phase 2 §8 ("avoid the blank-page problem") supersedes the third element of the
+above-the-fold proposal in Part I. "Three findings" becomes **three simulatable
+changes**, each carrying its own Simulate action:
+
+```
+HIGH   Internal API /customer/v1 is scheduled for retirement       [ Simulate ]
+       31 known consumers · 4 business capabilities
+
+MED    143 repositories are on React 18; React 19 is available     [ Simulate ]
+       Estimated spread reduction 0.31 → 0.12
+
+MED    PostgreSQL is fragmented across four major versions         [ Simulate ]
+       37 databases · 2 unsupported
+```
+
+Every one of these is already producible from shipped read models (deterministic
+insights, modernization opportunities, capability footprints) — the only new thing is
+that the row **carries a proposed ChangeSet** (§16) instead of ending in a link to a
+repository. The revised fold is therefore: **stratum bar (R4′) → drift + change
+memory (R5′) → three simulatable changes (R15)** — know / trend / act, in that order.
+
+Per §16, `Simulate recommendation` becomes a **standard row action everywhere a
+recommendation appears** — Modernization, insight cards, application Findings tab,
+review queue. One component, six call sites.
+
+### R16 — Agent Control Plane surfaces *(new, later phase — 2F)*
+
+For §34–35, two surfaces, both of which should be designed now and built last so the
+vocabulary is consistent from the start:
+
+- **Capability envelope card.** `READ / EXECUTE / CONDITIONAL / PROHIBITED / ESCALATE`
+  rendered as five fixed bands, always all five shown even when empty — an empty
+  `PROHIBITED` band is a statement, and the same logic that made `PostureMeter` render
+  "Not scored" rather than a blank applies here.
+- **Flight recorder.** A single horizontal trace: objective → context retrieved →
+  tools available → calls → actions → assets affected → verification → outcome. The
+  differentiator in §35 is *cross-system reconstruction*, so the trace must visibly
+  span systems — the lane changes where the action crosses from StackGraph to GitHub
+  to the deployment platform, and the seams are the point.
+
+Both consume the gate vocabulary from §11.2, which is why that must be defined in
+Phase 1 rather than invented here.
+
+---
+
+## 14. Additional non-negotiables introduced by Phase 2
+
+Add these to the seven in §8, and treat them as review gates on every new surface:
+
+8. **Deterministic findings and AI interpretation never interleave.** A ruled
+   partition, findings first, interpretation collapsible. If a reader cannot tell in
+   under a second which half they are reading, the component has failed.
+9. **No inferred or unresolved entity enters a simulation silently.** 100% ambiguity
+   surfacing (§10) is a UI commitment. A resolved-looking chip over an ambiguous match
+   is the most dangerous single bug this product can ship.
+10. **A gate is never a tone.** Blocking states get the one filled surface in the
+    system; advisory states keep hairlines. Never promote a `caution` tone to do a
+    gate's job, and never demote a gate to a chip to keep a screen calm.
+11. **Every simulation-relevant edge shows its corroboration depth.** §19's
+    "prefer fewer trustworthy edges" is only real if the UI makes a one-source edge
+    look weaker than a four-source one.
+12. **The command surface never invents a candidate.** If it is in the dropdown, it is
+    in the estate. This is the product's core claim rendered as an interaction, and
+    one convenience-driven exception destroys it.
+13. **A missing simulation is never a zero.** "Not simulatable" with a reason, always
+    — the same discipline `CELL_STATE_LABEL` already applies to "None found" versus
+    "Not observed", which is the best distinction in the existing product.
+
+---
+
+## 15. Revised sequencing
+
+**This replaces the table in §9.** Aligned to the Phase 2A–2F delivery sequence, so
+UI and backend land together rather than the UI arriving after the API it needs.
+
+| Backend phase | UI work | Effort | Success criterion |
+|---|---|---|---|
+| **Pre-2A — repairs** | §7 defects 1–5, 8; the §4 language pass; **the gate + resolution vocabulary defined in the design system** | 3 d | No machine-facing text reaches a user; the blocking vocabulary exists before anything needs it |
+| **2A — deterministic foundation** | **R11** command bar states 1–3 · **R12** resolution states · **R9′** corroboration depth · **R7′** comb as target picker | 8 d | A user can compile `UPGRADE Package` into a validated Mutation, or watch it be refused, without seeing a UUID or an enum |
+| **2B — change simulator** | **R14** findings/interpretation partition · **R3′** classification ring · **R1′** simulated heat grid · **R2** attenuation funnel | 7 d | One vertical slice — package upgrade — is compiled, simulated and read end-to-end with every impact traceable to evidence |
+| **2C — recommendation→action** | **R15** suggested changes fold · Simulate-recommendation row action · **R8′** Change Brief | 5 d | A user goes from an estate finding to an evidence-backed simulation without retyping anything |
+| **2D — change memory** | **R5′** drift + prior outcomes + calibration plot · failure predictors inside the simulation result | 4 d | A simulation cites the organisation's own history, and the product publishes its own miss rate |
+| **2E — estate fidelity** | **R4′** six-band stratum bar · **R13** contradiction ledger · Business Map revision history · **R8** Estate Brief | 6 d | Coverage *and* corroboration are legible per layer; source disagreement has a screen |
+| **2F — AI control plane** | **R16** capability envelope · flight recorder | 5 d | An agent's permitted envelope and its actual execution history are both readable by a human |
+| **Continuous** | **R10′** rail counts, lifecycle grouping, saved views · **R6** drift ribbon | 3 d | — |
+
+**≈41 engineering days**, up from ≈16.5, and now spread across the backend's own
+sequence rather than front-loaded. Two things are worth noting about the shape:
+
+- **Pre-2A grew and must not be skipped.** Defining the gate and resolution
+  vocabularies *before* 2A is three days that prevents every subsequent surface from
+  inventing its own blocking treatment. This is the highest-leverage item in the table.
+- **R2 (attenuation funnel) survives untouched from Part I** and is still the cheapest
+  differentiation in either half of this document. It fits naturally in 2B because a
+  simulation finding attenuates exactly the way an insight does.
+
+---
+
+## 16. What Part I got wrong, and one thing worth re-checking
+
+**Corrected in this revision:**
+
+- **R3's rings were the wrong axis.** Banding by hop distance is the generic traversal
+  Phase 2 §12 explicitly rejects. Corrected to classification bands with drawn `STOP`
+  boundaries.
+- **R10c would have been built twice.** The Part I palette (entity search with Ask as
+  fallthrough) inverts Phase 2's priority, which puts grammar first and NL last.
+  Superseded rather than extended.
+- **Defect 12 was wrong.** `useBusinessMap.ts` does persist server-side via
+  `listBusinessMaps`/`saveBusinessMap`; `localStorage` is a cache and offline
+  fallback. The P3 in `design-qa.md` is stale. The real gap is that
+  `getBusinessMapRevisions` is fetched by nothing, so saved history is invisible —
+  which matters more now that §22 raises capability mapping to Very High Priority and
+  a business map becomes an input to governance decisions.
+
+**Worth re-checking as Phase 2 lands:** Part I recommended the `display` type token
+(32px) go to the heat grid's estate-wide spread figure. Under Phase 2 there is a
+better claimant — **the simulated delta**. The design language reserves that size for
+"the two numbers meant to be read from across a room", and "spread 0.71 → 0.44"
+is now the number a room is actually looking at.
