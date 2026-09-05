@@ -3,7 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { StatusStrip } from "@stackgraph/design-system";
-import { useEstateSummary } from "@/lib/queries";
+import { useCapabilityFootprints, useEstateSummary } from "@/lib/queries";
+import { useEstateStrata } from "@/lib/useEstateStrata";
 import { TopBar } from "./TopBar";
 import { LeftRail } from "./LeftRail";
 import { EvidenceDrawerHost } from "@/components/evidence/EvidenceDrawerHost";
@@ -12,6 +13,10 @@ import styles from "./AppShell.module.css";
 /** Stable three-region shell (plan §3.1). On mobile the rail becomes an off-canvas drawer. */
 export function AppShell({ children }: { children: ReactNode }) {
   const { data } = useEstateSummary();
+  // One request, generously cached, shared with the capability heat grid. It is what
+  // gives the Business band a denominator.
+  const footprints = useCapabilityFootprints();
+  const strata = useEstateStrata(data, footprints.data);
   const [navOpen, setNavOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -58,6 +63,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           evidenceRatio={data.coverage.facts_with_evidence_ratio}
           asOf={data.as_of}
           contractVersion={data.contract_version}
+          layers={strata.layers}
+          weakestLayer={strata.weakest}
         />
       ) : (
         <div className={styles.statusPlaceholder} />

@@ -4,7 +4,7 @@ import { useDeferredValue, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { TechnologyEstateHierarchyNode } from "@stackgraph/shared";
-import { ConfidenceChip, CitationChip, DomainBadge, Skeleton } from "@stackgraph/design-system";
+import { ConfidenceChip, CitationChip, DomainBadge, Skeleton, Term } from "@stackgraph/design-system";
 import { useGraphNeighborhood, useTechnologyEstateHierarchy } from "@/lib/queries";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./technologies.module.css";
@@ -46,6 +46,10 @@ function TechnologyBranch({
         )}
       </span>
       <span className={styles.branchMeta}>
+        {/* "Declared" and "Observed" are the right words and stay. Their gloss lives in
+            the panel header rather than on the chip: a row here is a <summary>, which
+            is itself interactive, and a <Term> trigger inside one is a focusable
+            control nested in a focusable control. */}
         {node.parent_technology_id == null ? (
           <span className={node.direct ? styles.declared : styles.observed}>
             {node.direct ? "Declared" : "Observed"}
@@ -320,6 +324,10 @@ export function TechnologyHierarchyView() {
               <div>
                 <h2>Dependency hierarchy</h2>
                 <p>{deferredSearch ? `${searchResults.length} matches` : `${roots.length} root technologies`}</p>
+                <p className={styles.panelGloss}>
+                  Root technologies are marked <Term id="declared">Declared</Term> or{" "}
+                  <Term id="observed">Observed</Term>.
+                </p>
               </div>
               <span>Collapsed by default</span>
             </header>

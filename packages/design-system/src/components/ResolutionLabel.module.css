@@ -1,0 +1,52 @@
+.wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.row {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sg-space-2);
+  min-inline-size: 0;
+}
+.label {
+  color: var(--sg-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Mono: a resolved subject is a canonical coordinate a scanner produced. */
+.resolved {
+  font-size: var(--sg-type-mono-data-size);
+  line-height: var(--sg-type-mono-data-line);
+}
+/* Sans: an inferred subject is StackGraph's reading, not a scanned fact. */
+.inferred {
+  font-style: normal;
+}
+.unresolved {
+  text-decoration: line-through;
+  color: var(--sg-text-muted);
+}
+.state {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+  white-space: nowrap;
+}
+.reason {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}
+.chooser {
+  display: block;
+  padding-block-start: var(--sg-space-1);
+}
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

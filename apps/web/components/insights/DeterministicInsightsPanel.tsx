@@ -8,23 +8,58 @@ import {
   type DeterministicInsight,
   type InsightSeverity,
 } from "@stackgraph/shared";
-import { CitationChip, Skeleton } from "@stackgraph/design-system";
+import {
+  AttenuationBar,
+  CitationChip,
+  IconAttenuation,
+  Skeleton,
+  Term,
+  type AttenuationStage,
+} from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./deterministic-insights.module.css";
 
 type SeverityFilter = "ALL" | InsightSeverity;
 
 const SEVERITY_ORDER: InsightSeverity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
+
+/** Sentence case, always. A shouted enum is a machine talking (§4). */
+const SEVERITY_LABEL: Record<InsightSeverity, string> = {
+  CRITICAL: "Critical",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low",
+  INFO: "Info",
+};
+/**
+ * The eight evidence classes, in the order a finding narrows through them.
+ *
+ * Labels say what was established, not which config file said so: "Deploy config" and
+ * "Public config" name our inputs, and a reader does not have our inputs (§4).
+ */
 const STAGES: Array<{ key: keyof DeterministicInsight["stages"]; label: string }> = [
   { key: "present", label: "Present" },
   { key: "referenced", label: "Referenced" },
-  { key: "statically_reachable", label: "Reachable" },
-  { key: "runtime_observed", label: "Runtime" },
-  { key: "deployed", label: "Deploy config" },
-  { key: "production", label: "Prod config" },
-  { key: "externally_exposed", label: "Public config" },
-  { key: "business_critical", label: "Biz critical" },
+  { key: "statically_reachable", label: "Reachable in code" },
+  { key: "runtime_observed", label: "Seen at runtime" },
+  { key: "deployed", label: "Deployed" },
+  { key: "production", label: "In production" },
+  { key: "externally_exposed", label: "Internet-facing" },
+  { key: "business_critical", label: "Business-critical" },
 ];
+
+/**
+ * `dependency.unsupported-runtime` → "Unsupported runtime".
+ *
+ * The rule key is a stable identifier we route on; it is not a name for a human. It
+ * keeps its place on the `title`, where an engineer filing a bug can still copy it
+ * (defect §7.3).
+ */
+function ruleLabel(ruleKey: string): string {
+  const leaf = ruleKey.split(".").pop() ?? ruleKey;
+  const words = leaf.replaceAll("-", " ").replaceAll("_", " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 function severityClass(severity: InsightSeverity) {
   if (severity === "CRITICAL") return styles.severityCritical;
@@ -40,13 +75,18 @@ function effortLabel(value: string) {
 function InsightCard({ insight }: { insight: DeterministicInsight }) {
   const openEvidence = useEvidenceStore((state) => state.open);
   const visibleRepositories = insight.affected_repositories.slice(0, 3);
+  const stages: AttenuationStage[] = STAGES.map(({ key, label }) => ({
+    key,
+    label,
+    value: insight.stages[key] ?? null,
+  }));
 
   return (
     <article className={styles.card}>
       <header className={styles.cardHead}>
         <div className={styles.badges}>
-          <span className={`${styles.severity} ${severityClass(insight.severity)}`}>{insight.severity}</span>
-          <span className={styles.rule}>{insight.rule_key}</span>
+          <span className={`${styles.severity} ${severityClass(insight.severity)}`}>{SEVERITY_LABEL[insight.severity]}</span>
+          <span className={styles.rule} title={`Rule ${insight.rule_key}`}>{ruleLabel(insight.rule_key)}</span>
         </div>
         <div className={styles.score} aria-label={`Priority ${insight.priority_score.toFixed(1)} out of 100`}>
           <span>{insight.priority_score.toFixed(1)}</span>
@@ -67,22 +107,19 @@ function InsightCard({ insight }: { insight: DeterministicInsight }) {
         </dl>
       </div>
 
-      <div
-        className={styles.funnel}
-        role="region"
-        aria-label="Observed impact stages"
-        tabIndex={0}
-      >
-        {STAGES.map(({ key, label }) => {
-          const value = insight.stages[key];
-          const known = value != null;
-          return (
-            <div key={key} className={known ? styles.stageKnown : styles.stageUnknown}>
-              <span>{label}</span>
-              <strong>{known ? value : "Unknown"}</strong>
-            </div>
-          );
-        })}
+      <div className={styles.funnel}>
+        <div className={styles.funnelHead}>
+          <IconAttenuation size={16} />
+          <span>
+            How far this actually reaches
+          </span>
+          <small>
+            Each row is an independent class of evidence. The drop between them is what
+            separates <Term id="attenuation">a finding worth acting on</Term> from a
+            lockfile entry.
+          </small>
+        </div>
+        <AttenuationBar stages={stages} />
       </div>
 
       {insight.recommendation ? (
@@ -172,7 +209,7 @@ export function DeterministicInsightsPanel({
         <div className={styles.filters} role="group" aria-label="Filter deterministic findings by severity">
           <button type="button" aria-pressed={severity === "ALL"} onClick={() => setSeverity("ALL")}>All</button>
           {SEVERITY_ORDER.filter((item) => availableSeverities.has(item)).map((item) => (
-            <button key={item} type="button" aria-pressed={severity === item} onClick={() => setSeverity(item)}>{item.toLowerCase()}</button>
+            <button key={item} type="button" aria-pressed={severity === item} onClick={() => setSeverity(item)}>{SEVERITY_LABEL[item]}</button>
           ))}
         </div>
       ) : null}

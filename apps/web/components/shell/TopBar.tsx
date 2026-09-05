@@ -14,6 +14,11 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
   const router = useRouter();
   const cycle = () => setChoice(choice === "light" ? "dark" : choice === "dark" ? "system" : "light");
   const ThemeIcon = choice === "light" ? IconSun : choice === "dark" ? IconMoon : IconContrast;
+  // A three-state cycle behind an icon that changes with the state gives a reader no
+  // way to know which state they are in, or what pressing it will do (defect §7.8).
+  // Both are now on the control itself.
+  const THEME_LABEL = { light: "Light", dark: "Dark", system: "System" } as const;
+  const NEXT_THEME = { light: "dark", dark: "system", system: "light" } as const;
   const initials = session.actorKey
     ? session.actorKey.split(/[^A-Za-z0-9]+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("")
     : "SG";
@@ -52,8 +57,15 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
 
       <div className={styles.right}>
         {config.dataSource === "fixtures" ? <span className={styles.badge}>fixtures</span> : null}
-        <button className={styles.iconBtn} type="button" onClick={cycle} aria-label={`Theme: ${choice}`} title={`Theme: ${choice}`}>
-          <ThemeIcon size={17} stroke={1.5} />
+        <button
+          className={styles.theme}
+          type="button"
+          onClick={cycle}
+          aria-label={`Theme: ${THEME_LABEL[choice]}. Switch to ${THEME_LABEL[NEXT_THEME[choice]].toLowerCase()}.`}
+          title={`Theme: ${THEME_LABEL[choice]} — switch to ${THEME_LABEL[NEXT_THEME[choice]].toLowerCase()}`}
+        >
+          <ThemeIcon size={17} stroke={1.5} aria-hidden="true" />
+          <span className={styles.themeLabel}>{THEME_LABEL[choice]}</span>
         </button>
         <button
           className={styles.tenant}

@@ -154,18 +154,10 @@
   border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
 }
 
-.paths li > div:first-child {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sg-space-3);
-}
-
-.paths span,
-.paths p {
-  color: var(--sg-text-muted);
-  font-size: var(--sg-type-small-size);
-  overflow-wrap: anywhere;
-}
+/* The path itself now owns its own type and colour (see impact-path.module.css).
+   Descendant rules here used to grey out everything inside a path row, which was
+   correct when the row was a UUID string and is wrong now that it carries names,
+   domain badges, and a confidence chip. */
 
 .similarityList {
   display: flex;

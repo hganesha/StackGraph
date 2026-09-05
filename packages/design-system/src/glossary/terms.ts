@@ -172,6 +172,57 @@ export const GLOSSARY = {
     note: "A starting point for a human decision, never a conclusion. Always read what the two share and what differs before acting.",
   },
 
+  // ── Reading a picture ──────────────────────────────────────────────────────
+  spread: {
+    term: "Spread",
+    body:
+      "How many different ways one business capability is implemented across the applications behind it. Low spread means one way of doing the job; high spread means the same job is being done several different ways at once.",
+    note:
+      "Computed as technology entropy over the capability's footprint. High spread is not automatically wrong — it is the cost of every future change to that capability, stated in advance.",
+  },
+  reuseSignal: {
+    term: "Reuse",
+    body:
+      "How much of a capability is built on things already used elsewhere in the estate, rather than rebuilt for it.",
+  },
+  attenuation: {
+    term: "Attenuation",
+    body:
+      "How a finding narrows as each class of evidence is applied: present in a lockfile, then referenced in code, then reachable, then seen at runtime, then deployed, then in production, then internet-facing, then behind a business-critical capability.",
+    note:
+      "The drop between stages is the point. A stage nobody checked is shown as unchecked, never as zero — those are different facts.",
+  },
+  corroboration: {
+    term: "Corroboration",
+    body:
+      "How many independent sources agree on one relationship — a generated client, a reference in source, observed traffic, an architecture document. Shown as one to four stacked hairlines beside the claim.",
+    note:
+      "Four agreeing sources is a materially stronger claim than one. Where the mark is absent, the number is a direct count rather than something inferred from sources.",
+  },
+  stratum: {
+    term: "Estate layers",
+    body:
+      "The five layers the estate is stacked in — Business over Enterprise over Technology over OSS over Deployment — drawn as five bands, each filled to how much of that layer is populated and evidenced.",
+    note:
+      "Where a band is hatched, nothing measures that layer yet. That is a gap in what we can report, not a finding about your estate.",
+  },
+
+  // ── Blocking and identity ──────────────────────────────────────────────────
+  gate: {
+    term: "Gate",
+    body:
+      "Something standing between you and a change: a subject that could not be resolved, a contradiction between two sources, or an approval that has not been given. A gate always names what is in the way and links to its evidence.",
+    note:
+      "A gate is not a warning. Warnings can be read past; a gate cannot be dismissed, and the control it governs stays disabled until it clears.",
+  },
+  resolution: {
+    term: "Resolution",
+    body:
+      "Whether StackGraph knows exactly which thing in your estate you meant. Resolved means one match; inferred means several, and you choose; unresolved means nothing in your estate matches.",
+    note:
+      "Not the same as confidence. Something can be resolved beyond doubt and still rest on a weak fact, or be ambiguous between two things that are each well evidenced.",
+  },
+
   // ── Governance ─────────────────────────────────────────────────────────────
   governed: {
     term: "Governed",

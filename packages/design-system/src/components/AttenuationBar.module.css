@@ -1,0 +1,74 @@
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  inline-size: 100%;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(96px, 128px) 1fr auto minmax(0, auto);
+  align-items: center;
+  gap: var(--sg-space-2);
+  min-block-size: 18px;
+}
+.label {
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar {
+  display: block;
+  block-size: 10px;
+  background: var(--sg-surface-sunken);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  block-size: 100%;
+  background: var(--sg-color-domain-enterprise-400);
+  border-radius: 2px;
+}
+/* Hatched, full width: nobody looked here. Not a quantity, so it must not read as one. */
+.unchecked {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--sg-surface-border) 0 3px,
+    transparent 3px 7px
+  );
+}
+/* The last stage that was actually checked — the one the reader is meant to act on. */
+.act {
+  background: var(--sg-color-domain-enterprise-600);
+}
+.value {
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-primary);
+  text-align: end;
+  min-inline-size: 68px;
+}
+.eyebrow {
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+  white-space: nowrap;
+}
+
+/* Narrow: the label column would squeeze the track to nothing, so the row stacks
+   rather than compressing. */
+@media (max-width: 480px) {
+  .row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "label value" "bar bar" "eyebrow eyebrow";
+    row-gap: 2px;
+    margin-block-end: var(--sg-space-2);
+  }
+  .label { grid-area: label; }
+  .bar { grid-area: bar; }
+  .value { grid-area: value; }
+  .eyebrow { grid-area: eyebrow; }
+}

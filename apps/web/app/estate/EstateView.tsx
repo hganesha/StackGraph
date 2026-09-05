@@ -21,6 +21,7 @@ import { SemanticMatches } from "@/components/estate/SemanticMatches";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
+import { CapabilityHeatGrid } from "@/features/estate/CapabilityHeatGrid";
 import styles from "./estate.module.css";
 
 const DOMAIN_ORDER: Namespace[] = [
@@ -84,15 +85,19 @@ function EstateDomainSection({
           <DomainIcon namespace={domain} size={16} />
         </span>
         <strong>{namespaceLabel(domain)}</strong>
+        {/* One denominator per row. "3 of 50 match" beside "50 loaded" made a reader
+            work out which 50 was which (defect §7.5). */}
         <span className={styles.domainCount}>
-          {items.length === loadedCount ? `${loadedCount} loaded` : `${items.length} of ${loadedCount} match`}
+          {items.length === loadedCount
+            ? `${loadedCount} loaded`
+            : `${loadedCount} loaded · ${items.length} match your filters`}
         </span>
       </button>
       {open ? (
         <div id={contentId} className={styles.domainTable}>
           {items.length ? (
             <RankedTable
-              caption={`${items.length} matching · ${loadedCount} loaded · sorted by ${sort}`}
+              caption={`${loadedCount} loaded · ${items.length} match your filters · sorted by ${sort}`}
               items={items}
               renderRowHref={hrefFor}
               onOpen={onOpen}
@@ -224,19 +229,20 @@ export function EstateView() {
   const hasMore = activeDomainEstates.some((estate) => estate.hasNextPage);
   // The canvas is a peer view of the same estate, not a filter on the ranked list, so
   // it reads its own URL param and leaves the filter query untouched.
-  const estateView = searchParams?.get("view") === "canvas" ? "canvas" : "ranked";
+  const viewParam = searchParams?.get("view");
+  const estateView = viewParam === "canvas" ? "canvas" : viewParam === "heat" ? "heat" : "ranked";
 
   return (
     <div className={styles.page}>
       <header className={styles.head}>
-        <h1 className={styles.title}>Software Estate</h1>
+        <h1 className={styles.title}>Your estate</h1>
         <p className={styles.subtitle}>
-          Everything found across your connected repositories, grouped by domain and ranked by
-          priority.
+          Everything StackGraph found across your repositories — and what it means.
         </p>
         <nav className={styles.viewSwitch} aria-label="Estate view">
           {([
             ["ranked", "Ranked list", "/estate"],
+            ["heat", "Heat grid", "/estate?view=heat"],
             ["canvas", "Architecture canvas", "/estate?view=canvas"],
           ] as const).map(([id, label, href]) =>
             estateView === id ? (
@@ -254,6 +260,8 @@ export function EstateView() {
 
       {estateView === "canvas" ? (
         <ArchitectureWorkspace scope="ESTATE" variant="embedded" initialDensity="compact" />
+      ) : estateView === "heat" ? (
+        <CapabilityHeatGrid />
       ) : (
         <>
 
@@ -300,7 +308,7 @@ export function EstateView() {
       {/* Exact matches stay above; retrieval is offered beside them, never instead. */}
       <SemanticMatches query={query.q} />
 
-      <section className={styles.tableWrap} aria-label="Ranked items">
+      <section className={styles.tableWrap} aria-label="Everything found">
         {isLoading || !overview.data ? (
           <div className={styles.tableSkeleton}>
             {[0, 1, 2, 3, 4].map((i) => (

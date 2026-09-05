@@ -2,6 +2,7 @@
 
 import type { CanvasOccupantGroupView, CanvasOccupantView } from "@stackgraph/shared";
 import { POLICY_LABEL, POLICY_TONE } from "./vocabulary";
+import { VersionComb } from "./VersionComb";
 import styles from "./canvas.module.css";
 
 /**
@@ -46,9 +47,19 @@ export function OccupantChip({
     <>
       <span className={styles.chipName}>{group.label}</span>
       {multiple ? (
-        <span className={styles.chipVersions}>
-          {group.members.length} versions
-        </span>
+        <>
+          <span className={styles.chipVersions}>
+            {group.members.length} versions
+          </span>
+          {/* The count says how many; the comb says how far apart. Three versions of
+              one package is a very different fact depending on whether they span one
+              minor release or eight years. */}
+          <VersionComb
+            versions={group.versions}
+            policyStatus={group.policy_status}
+            label={group.label}
+          />
+        </>
       ) : single ? (
         <span className={styles.chipVersion}>{single}</span>
       ) : null}

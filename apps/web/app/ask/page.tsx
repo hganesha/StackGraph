@@ -67,6 +67,27 @@ const SUGGESTIONS = [
   "Which accepted decisions have not been implemented?",
 ];
 
+/**
+ * Sentence case, always. `WAITING_FOR_DATA` rendered as "WAITING FOR DATA" in caps is a
+ * machine talking to a person (defect §7.4).
+ */
+const REPORT_STATUS_LABELS: Record<string, string> = {
+  ACTION_REQUIRED: "Action required",
+  WATCH: "Watch",
+  HEALTHY: "Healthy",
+  WAITING_FOR_DATA: "Needs more data",
+};
+
+function reportStatusLabel(status: string): string {
+  return REPORT_STATUS_LABELS[status] ?? status.replaceAll("_", " ").toLowerCase();
+}
+
+/** `in_scope` → "In scope". Column keys are field names, not headings. */
+function columnLabel(key: string): string {
+  const words = key.replaceAll("_", " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 const MAP_SUGGESTIONS = [
   "Where are the largest gaps in this business map?",
   "Which mapped capabilities need the most maturity attention?",
@@ -422,11 +443,11 @@ function InsightOverview({
                   key={report.key}
                   type="button"
                   className={styles.reportCard}
-                  aria-label={`${report.title}: ${report.metric_value} ${report.metric_label}. ${report.status.replaceAll("_", " ")}`}
+                  aria-label={`${report.title}: ${report.metric_value} ${report.metric_label}. ${reportStatusLabel(report.status)}`}
                   onClick={() => onOpen(report)}
                 >
                   <span className={`${styles.reportStatus} ${styles[`status${report.status}`]}`}>
-                    {report.status.replaceAll("_", " ")}
+                    {reportStatusLabel(report.status)}
                   </span>
                   <strong>{report.title}</strong>
                   <span className={styles.reportMetric}>{report.metric_value}</span>
@@ -481,7 +502,7 @@ function AnswerView({
             <thead>
               <tr>
                 {Object.keys(response.rows[0]).map((k) => (
-                  <th key={k}>{k.replaceAll("_", " ")}</th>
+                  <th key={k}>{columnLabel(k)}</th>
                 ))}
               </tr>
             </thead>

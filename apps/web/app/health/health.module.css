@@ -17,6 +17,10 @@
 .subtitle {
   color: var(--sg-text-secondary);
 }
+.provenance {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}
 .tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

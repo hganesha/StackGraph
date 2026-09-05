@@ -3,10 +3,10 @@ import { expect, test, type Page } from "@playwright/test";
 
 // [route, page <h1>, left-rail link label] — the rail label is not always the heading.
 const primaryRoutes = [
-  ["/estate", "Software Estate", "Estate"],
+  ["/estate", "Your estate", "Estate"],
   ["/applications", "Applications", "Applications"],
   ["/technologies", "Technologies", "Technologies"],
-  ["/modernization", "Modernization", "Modernization"],
+  ["/modernization", "What to fix first", "Modernization"],
   ["/ask", "Ask your estate", "Ask"],
 ] as const;
 
@@ -26,7 +26,7 @@ async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void>
 
 test("five primary surfaces form a keyboard-accessible evidence journey", async ({ page }, testInfo) => {
   await page.goto("/estate");
-  await expect(page.getByRole("heading", { level: 1, name: "Software Estate" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Your estate" })).toBeVisible();
 
   const skip = page.getByRole("link", { name: "Skip to content" });
   if (testInfo.project.name === "chromium" || testInfo.project.name === "firefox") {
@@ -144,9 +144,9 @@ test("the about surface introduces the product and stays accessible", async ({ p
     await expect(page.getByRole("heading", { level: 3, name: new RegExp(`^${domain}`) })).toBeVisible();
   }
   await expectNoSeriousAccessibilityViolations(page);
-  await page.getByRole("link", { name: /Software Estate/ }).click();
+  await page.getByRole("link", { name: /Your estate/ }).click();
   await expect(page).toHaveURL(/\/estate$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Software Estate" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Your estate" })).toBeVisible();
 });
 
 test("live source failure is announced without losing the application shell", async ({ page }) => {

@@ -1,12 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import {
   IconArrowDown,
   IconArrowUp,
+  IconBookmark,
   IconChevronDown,
   IconSearch,
+  IconX,
 } from "@tabler/icons-react";
 import { LENSES, activeFilterCount, type EstateQuery } from "@/lib/estateFilters";
+import { useSavedViews } from "@/lib/useSavedViews";
 import styles from "./FilterBar.module.css";
 
 interface Props {
@@ -24,6 +28,9 @@ interface Props {
 
 export function FilterBar({ query, setQuery, applyLens, reset, resultCount, total, hasMore = false, incremental = false, showDomain = true }: Props) {
   const active = activeFilterCount(query);
+  const savedViews = useSavedViews();
+  const [naming, setNaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
 
   return (
     <div className={styles.bar}>
@@ -134,8 +141,8 @@ export function FilterBar({ query, setQuery, applyLens, reset, resultCount, tota
         <div className={styles.summary}>
           <span className={`${styles.count} sg-mono`}>
             {incremental
-              ? `${resultCount === total ? total : `${resultCount} of ${total}`} loaded${hasMore ? " · more available" : ""}`
-              : `${resultCount} of ${total}`}
+              ? `${total} loaded${resultCount === total ? "" : ` · ${resultCount} match your filters`}${hasMore ? " · more available" : ""}`
+              : `${total} loaded · ${resultCount} match your filters`}
           </span>
           {active > 0 ? (
             <button type="button" className={styles.clear} onClick={reset}>
@@ -143,6 +150,74 @@ export function FilterBar({ query, setQuery, applyLens, reset, resultCount, tota
             </button>
           ) : null}
         </div>
+      </div>
+
+      {/* Saved views (R10d). The query already serialises itself to the URL, so this is
+          a name and a query object — kept in this browser, never on the server. */}
+      <div className={styles.savedViews}>
+        {savedViews.views.map((view) => (
+          <span key={view.id} className={styles.savedView}>
+            <button
+              type="button"
+              className={styles.savedViewApply}
+              onClick={() => setQuery(view.query)}
+              title={`Apply ${view.name}`}
+            >
+              <IconBookmark size={13} stroke={1.75} aria-hidden="true" />
+              {view.name}
+            </button>
+            <button
+              type="button"
+              className={styles.savedViewRemove}
+              onClick={() => savedViews.remove(view.id)}
+              aria-label={`Forget the saved view ${view.name}`}
+              title={`Forget ${view.name}`}
+            >
+              <IconX size={12} stroke={1.75} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+
+        {naming ? (
+          <form
+            className={styles.saveForm}
+            onSubmit={(event) => {
+              event.preventDefault();
+              savedViews.save(draftName, query);
+              setDraftName("");
+              setNaming(false);
+            }}
+          >
+            <label className={styles.srOnly} htmlFor="saved-view-name">
+              Name this view
+            </label>
+            <input
+              id="saved-view-name"
+              className={styles.saveInput}
+              value={draftName}
+              autoFocus
+              placeholder="Name this view…"
+              onChange={(event) => setDraftName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setNaming(false);
+              }}
+            />
+            <button type="submit" className={styles.saveConfirm} disabled={!draftName.trim()}>
+              Save
+            </button>
+            <button type="button" className={styles.saveCancel} onClick={() => setNaming(false)}>
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <button type="button" className={styles.saveTrigger} onClick={() => setNaming(true)}>
+            <IconBookmark size={13} stroke={1.75} aria-hidden="true" />
+            Save this view
+          </button>
+        )}
+        {savedViews.views.length ? (
+          <span className={styles.savedViewNote}>Saved in this browser only</span>
+        ) : null}
       </div>
     </div>
   );

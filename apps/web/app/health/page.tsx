@@ -72,6 +72,12 @@ export default function HealthPage() {
           Scan coverage, fact freshness, and enrichment progress across the estate. Updated{" "}
           {formatRelative(data.as_of)}.
         </p>
+        {/* Operator telemetry belongs here rather than in the strip that is on screen on
+            every page. It answers "are we all looking at the same read models", which is
+            a question operators ask and nobody else ever does. */}
+        <p className={styles.provenance}>
+          Read models on contract <span className="sg-mono">{data.contract_version}</span>
+        </p>
       </header>
 
       <section className={styles.tiles} aria-label="Coverage">

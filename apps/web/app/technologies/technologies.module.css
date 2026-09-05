@@ -250,6 +250,12 @@
   padding: 1px var(--sg-space-2);
   border-radius: var(--sg-radius-pill);
 }
+/* The gloss for the two chips below, where a <Term> trigger is not nested inside the
+   interactive <summary> each row is built from. */
+.panelGloss {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
 .catalogTag {
   padding: 1px var(--sg-space-2);
   color: var(--sg-color-domain-intelligence-700);

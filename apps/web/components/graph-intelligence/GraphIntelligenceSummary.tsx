@@ -2,9 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { formatRelative, type EntityGraphIntelligence, type GraphMetric } from "@stackgraph/shared";
+import {
+  formatRelative,
+  type EntityGraphIntelligence,
+  type GraphMetric,
+  type Namespace,
+} from "@stackgraph/shared";
 import { Drawer, Skeleton, Term, type GlossaryKey } from "@stackgraph/design-system";
-import { useEntityBlastRadius, useGraphIntelligenceCommunities, useSimilarApplications } from "@/lib/queries";
+import {
+  useEntityBlastRadius,
+  useGraphIntelligenceCommunities,
+  useGraphNeighborhood,
+  useSimilarApplications,
+} from "@/lib/queries";
+import { ImpactPath, type ImpactHop } from "./ImpactPath";
 import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import styles from "./graph-intelligence-summary.module.css";
@@ -19,18 +30,34 @@ const METRIC_LABELS: Record<string, { label: string; term?: GlossaryKey }> = {
   "reachability.downstream_dependencies": { label: "Dependencies" },
   "reachability.upstream_depth": { label: "Impact depth" },
   "reachability.downstream_depth": { label: "Dependency depth" },
-  "centrality.pagerank": { label: "PageRank", term: "centrality" },
-  "centrality.betweenness": { label: "Betweenness", term: "centrality" },
-  "structure.articulation_point": { label: "Bridge / SPOF", term: "articulationPoint" },
+  // The algorithm name is the gloss, not the label. A reader needs to know what the
+  // number says about their estate, not which paper it came from (§4).
+  "centrality.pagerank": { label: "How central", term: "centrality" },
+  "centrality.betweenness": { label: "How often on the path between others", term: "centrality" },
+  // Not "Single point of failure": that is the panel's own headline status, and a
+  // metric row repeating it verbatim reads as the same claim made twice. This says what
+  // the metric measures — the gloss carries the term.
+  "structure.articulation_point": { label: "Splits the estate if removed", term: "articulationPoint" },
   "degree.in": { label: "Dependents" },
   "degree.out": { label: "Direct dependencies" },
 };
 
 const STATUS_LABELS: Record<EntityGraphIntelligence["primary_status"], string> = {
-  STRUCTURALLY_CRITICAL: "Structurally critical",
+  // "Structurally critical" is what the model calls it; "single point of failure" is
+  // what it means, and it is the phrase that gets a room's attention.
+  STRUCTURALLY_CRITICAL: "Single point of failure",
   ELEVATED: "Elevated",
   TYPICAL: "Typical",
-  WAITING_FOR_DATA: "Waiting for data",
+  WAITING_FOR_DATA: "Needs more data",
+};
+
+/** Sentence case, never a lower-cased enum. */
+const REVIEW_STATE_LABELS: Record<string, string> = {
+  CONFIRMED: "Confirmed",
+  POSSIBLE: "Possible",
+  REJECTED: "Rejected",
+  NOT_APPLICABLE: "Not applicable",
+  UNREVIEWED: "Not reviewed yet",
 };
 
 function displayMetric(metric: GraphMetric) {
@@ -109,6 +136,10 @@ export function GraphIntelligenceSummary({
   const [showBlastRadius, setShowBlastRadius] = useState(false);
   const [showSimilarity, setShowSimilarity] = useState(false);
   const blastRadius = useEntityBlastRadius(entityId, showBlastRadius);
+  // Names for the hops between the subject and its target. Depth 2 covers most paths
+  // the traversal returns; anything beyond it renders as an unnamed step rather than
+  // as a UUID. Fetched only while the drawer is open.
+  const neighborhood = useGraphNeighborhood(entityId, 2, { enabled: showBlastRadius });
   const communityKey = intelligence?.community_keys?.[0];
   const communities = useGraphIntelligenceCommunities({ enabled: Boolean(communityKey) });
   const similarity = useSimilarApplications(entityId, showSimilarity && similarityAvailable);
@@ -131,6 +162,16 @@ export function GraphIntelligenceSummary({
     () => (community?.representative_entities ?? []).filter((entity) => entity.id !== entityId).slice(0, 3),
     [community, entityId],
   );
+  // A hop is only nameable if it is in the neighbourhood we loaded. Everything else
+  // renders as an unnamed step — never as its id.
+  const nodesById = useMemo(() => {
+    const index = new Map<string, { name: string; domain: Namespace }>();
+    for (const node of neighborhood.data?.nodes ?? []) {
+      index.set(node.id, { name: node.label, domain: node.namespace });
+    }
+    return index;
+  }, [neighborhood.data]);
+
   // Snapshot limitations qualify the same numbers the entity limitations do, so they
   // are shown together rather than hidden one drawer away.
   const limitations = useMemo(
@@ -220,19 +261,42 @@ export function GraphIntelligenceSummary({
               </dl>
               {blastRadius.data.impacts.length ? (
                 <ol className={styles.paths}>
-                  {blastRadius.data.impacts.map((impact) => (
-                    <li key={`${impact.target.id}:${impact.entity_ids.join(":")}`}>
-                      <div><strong>{impact.target.name}</strong><span>{impact.distance} hop{impact.distance === 1 ? "" : "s"} · {Math.round(impact.minimum_confidence * 100)}% minimum confidence</span></div>
-                      <p className="sg-mono">{impact.entity_ids.join(" → ")}</p>
-                      <div className={styles.facts}>
-                        {impact.supporting_fact_ids.map((factId) => (
-                          <button key={factId} type="button" onClick={() => openEvidence(factId, `Blast-radius path fact ${factId.slice(0, 8)}`)}>
-                            Evidence {factId.slice(0, 8)}
-                          </button>
-                        ))}
-                      </div>
-                    </li>
-                  ))}
+                  {blastRadius.data.impacts.map((impact) => {
+                    const hops: ImpactHop[] = impact.entity_ids.map((id, index) => {
+                      const node = nodesById.get(id);
+                      const isSubject = index === 0 && id === blastRadius.data.entity.id;
+                      const isTarget = index === impact.entity_ids.length - 1 && id === impact.target.id;
+                      return {
+                        id,
+                        name: isSubject
+                          ? blastRadius.data.entity.name
+                          : isTarget
+                            ? impact.target.name
+                            : node?.name ?? null,
+                        domain: node?.domain,
+                        kind: isTarget ? impact.target.kind : isSubject ? blastRadius.data.entity.kind : undefined,
+                      };
+                    });
+                    return (
+                      <li key={`${impact.target.id}:${impact.entity_ids.join(":")}`}>
+                        <ImpactPath
+                          hops={hops}
+                          distance={impact.distance}
+                          minimumConfidence={impact.minimum_confidence}
+                          targetName={impact.target.name}
+                          targetDomain={nodesById.get(impact.target.id)?.domain}
+                        />
+                        {/* The best thing in this drawer already. Left exactly as it was. */}
+                        <div className={styles.facts}>
+                          {impact.supporting_fact_ids.map((factId) => (
+                            <button key={factId} type="button" onClick={() => openEvidence(factId, `Blast-radius path fact ${factId.slice(0, 8)}`)}>
+                              Evidence {factId.slice(0, 8)}
+                            </button>
+                          ))}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ol>
               ) : <p className={styles.waiting}>No application or capability impact path is present in this complete snapshot.</p>}
               <Limitations
@@ -265,7 +329,7 @@ export function GraphIntelligenceSummary({
                 {similarity.data.candidates.map((candidate) => (
                   <li key={candidate.id}>
                     <header>
-                      <div><strong>{candidate.application.name}</strong><span>{candidate.review_state.replaceAll("_", " ").toLowerCase()}</span></div>
+                      <div><strong>{candidate.application.name}</strong><span>{REVIEW_STATE_LABELS[candidate.review_state] ?? candidate.review_state}</span></div>
                       <span className="sg-mono">{Math.round(candidate.score * 100)}%</span>
                     </header>
                     <DetailList label="Why it matches" details={candidate.overlaps} />

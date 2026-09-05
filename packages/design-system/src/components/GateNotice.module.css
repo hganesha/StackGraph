@@ -1,0 +1,58 @@
+.gate {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sg-space-3);
+  inline-size: 100%;
+  padding: var(--sg-space-3) var(--sg-space-4);
+  border-radius: var(--sg-radius-control);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+}
+
+/* The two filled surfaces in the system. Nothing else fills. */
+.blocked {
+  background: var(--sg-color-signal-danger-500);
+  color: var(--sg-on-accent);
+}
+.escalate {
+  background: var(--sg-color-domain-business-600);
+  color: var(--sg-on-accent);
+}
+/* A narrowing is not a wall, so it keeps the hairline language everything else uses. */
+.constrain {
+  background: var(--sg-surface-card);
+  color: var(--sg-text-primary);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+}
+
+.glyph {
+  display: flex;
+  flex: none;
+  padding-block-start: 1px;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+  flex: 1;
+}
+.label {
+  font-size: var(--sg-type-body-size);
+  line-height: var(--sg-type-body-line);
+  font-weight: 600;
+}
+.reason {
+  opacity: 0.95;
+}
+/* What the verdict means, once, under the specific reason — so the class is learned
+   from the first gate a reader meets rather than from documentation. */
+.meaning {
+  opacity: 0.75;
+}
+.action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--sg-space-2);
+}

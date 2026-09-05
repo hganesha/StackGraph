@@ -1,0 +1,17 @@
+.mark {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1px;
+  block-size: 10px;
+  vertical-align: baseline;
+}
+.line {
+  inline-size: 2px;
+  block-size: 100%;
+  background: var(--sg-surface-border);
+}
+/* Quiet by design: this is a sub-visual property of a number, present everywhere and
+   loud nowhere. It reads as weight, not as an alert. */
+.on {
+  background: var(--sg-text-muted);
+}

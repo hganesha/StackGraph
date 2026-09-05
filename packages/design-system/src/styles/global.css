@@ -6,6 +6,53 @@
 :root {
   /* Text/icon color on a saturated domain-500 fill. Constant across themes. */
   --sg-on-accent: #ffffff; /* stylelint-disable-line color-no-hex -- the one literal; components use the token */
+
+  /* ---- the one sequential ramp ----
+     Strata allows five hues and says colour never carries meaning alone. A heat map
+     is by definition a sequential encoding, so exactly one ramp is licensed, and it
+     is aliased from the existing intelligence violet rather than introducing a hue:
+     spread is an *inference*, not a domain and not an error.
+
+     Deliberately NOT the danger ramp. Red in Strata means low confidence or a real
+     error, and high spread is neither.
+
+     Licensed only where a legend is permanently on screen — the capability heat grid
+     and the canvas drift ribbon. Banned in tables, chips, badges and cells. Every
+     surface using it also prints the numeral, so the encoding survives greyscale. */
+  --sg-ramp-spread-0: var(--sg-color-domain-intelligence-50);
+  --sg-ramp-spread-1: var(--sg-color-domain-intelligence-100);
+  --sg-ramp-spread-2: var(--sg-color-domain-intelligence-200);
+  --sg-ramp-spread-3: var(--sg-color-domain-intelligence-400);
+  --sg-ramp-spread-4: var(--sg-color-domain-intelligence-600);
+  --sg-ramp-spread-5: var(--sg-color-domain-intelligence-700);
+  --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-900);
+  --sg-ramp-spread-ink-high: var(--sg-on-accent);
+}
+
+/* Dark keeps the same ordering; the low end has to darken rather than lighten, or the
+   ramp inverts against the page and "more" starts reading as "less". */
+:root[data-theme="dark"] {
+  --sg-ramp-spread-0: var(--sg-color-domain-intelligence-900);
+  --sg-ramp-spread-1: var(--sg-color-domain-intelligence-800);
+  --sg-ramp-spread-2: var(--sg-color-domain-intelligence-700);
+  --sg-ramp-spread-3: var(--sg-color-domain-intelligence-600);
+  --sg-ramp-spread-4: var(--sg-color-domain-intelligence-400);
+  --sg-ramp-spread-5: var(--sg-color-domain-intelligence-300);
+  --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-100);
+  --sg-ramp-spread-ink-high: var(--sg-color-domain-intelligence-900);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sg-ramp-spread-0: var(--sg-color-domain-intelligence-900);
+    --sg-ramp-spread-1: var(--sg-color-domain-intelligence-800);
+    --sg-ramp-spread-2: var(--sg-color-domain-intelligence-700);
+    --sg-ramp-spread-3: var(--sg-color-domain-intelligence-600);
+    --sg-ramp-spread-4: var(--sg-color-domain-intelligence-400);
+    --sg-ramp-spread-5: var(--sg-color-domain-intelligence-300);
+    --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-100);
+    --sg-ramp-spread-ink-high: var(--sg-color-domain-intelligence-900);
+  }
 }
 
 /* ---- reset ---- */

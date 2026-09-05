@@ -19,6 +19,7 @@ import {
 import { useEstateDomainSummary } from "@/lib/queries";
 import { useCan } from "@/lib/session";
 import { CanvasControls, type CanvasView } from "./CanvasControls";
+import { ConformanceRibbon } from "./ConformanceRibbon";
 import { CanvasDetailPanel } from "./CanvasDetailPanel";
 import { PolicyIntentDialog, type PolicySubmission } from "./PolicyIntentDialog";
 import { useCanvasPolicy } from "./useCanvasPolicy";
@@ -266,6 +267,12 @@ export function ArchitectureWorkspace({
         projection={projection.data ?? null}
         summaryVisible={variant === "workspace"}
       />
+
+      {/* Drift and compare both answer one question the grid can only answer cell by
+          cell: how much of this matches. The ribbon states it once, above the frame. */}
+      {(view === "drift" || view === "compare") && comparison.data ? (
+        <ConformanceRibbon comparison={comparison.data} />
+      ) : null}
 
       {governing && draftProfile ? (
         <p className={styles.draftBanner} role="status">
