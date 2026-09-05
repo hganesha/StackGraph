@@ -14,8 +14,10 @@
 > concepts the scanner introduces (Component, container composition, deployment
 > profiles, archetypes, activity, change actors) and the run behaviour the integrated
 > plan requires (async simulation, refusal classes, run provenance, the AI-off state).
-> It also corrects R7′ and revises the ~41-day estimate in §15. R1–R16 below remain
-> normative; where the alignment document differs, it wins.
+> It is verified against the shipped Phase 2 contract, which confirms R3′'s
+> classification set, R11's command states, and R7′'s two series — and corrects R7′,
+> R11 and the ~41-day estimate in §15. R1–R16 below remain normative; where the
+> alignment document differs, it wins.
 
 **Scope:** the UI control surface only — `apps/web`, `packages/design-system`,
 `packages/canvas-ui`, `packages/graph-ui`. No backend, contract, or data-model
