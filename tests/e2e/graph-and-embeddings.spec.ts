@@ -19,10 +19,10 @@ async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void>
 test("application overview exposes snapshot intelligence and explainable similarity", async ({ page }) => {
   await page.goto(billingApplication);
 
-  const panel = page.getByRole("region", { name: "Structurally critical" });
-  await expect(panel.getByRole("heading", { name: "Structurally critical" })).toBeVisible();
+  const panel = page.getByRole("region", { name: "Single point of failure" });
+  await expect(panel.getByRole("heading", { name: "Single point of failure" })).toBeVisible();
   await expect(panel.getByText("Upstream impact", { exact: true })).toBeVisible();
-  await expect(panel.getByText("Bridge / SPOF")).toBeVisible();
+  await expect(panel.getByText("Splits the estate if removed")).toBeVisible();
 
   await panel.getByRole("button", { name: "View blast radius" }).click();
   const blast = page.getByRole("dialog", { name: "Blast radius" });
@@ -43,8 +43,8 @@ test("application overview exposes snapshot intelligence and explainable similar
 test("structural vocabulary is defined where it is used", async ({ page }, testInfo) => {
   await page.goto(billingApplication);
 
-  const panel = page.getByRole("region", { name: "Structurally critical" });
-  const term = panel.getByRole("button", { name: "Bridge / SPOF" });
+  const panel = page.getByRole("region", { name: "Single point of failure" });
+  const term = panel.getByRole("button", { name: "Splits the estate if removed" });
   await expect(term).toBeVisible();
 
   // Closed by default, so a screen reader reading the metric does not hear the whole
@@ -61,7 +61,7 @@ test("structural vocabulary is defined where it is used", async ({ page }, testI
 test("blast-radius evidence opens on top of the drawer that raised it", async ({ page }) => {
   await page.goto(billingApplication);
 
-  const panel = page.getByRole("region", { name: "Structurally critical" });
+  const panel = page.getByRole("region", { name: "Single point of failure" });
   await panel.getByRole("button", { name: "View blast radius" }).click();
   const blast = page.getByRole("dialog", { name: "Blast radius" });
 
@@ -76,7 +76,7 @@ test("scan health reports graph and semantic readiness", async ({ page }) => {
   await expect(page.getByText("Projection lag")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Semantic intelligence" })).toBeVisible();
   await expect(page.getByText("Active coverage")).toBeVisible();
-  await expect(page.getByText("100%")).toBeVisible();
+  await expect(page.getByRole("main").getByText("100%")).toBeVisible();
 });
 
 test("architecture risk findings open the impacted application", async ({ page }) => {
@@ -123,7 +123,7 @@ test("queue findings decided elsewhere link to where they were found", async ({ 
 test("an entity says which community it sits in, and what that means", async ({ page }) => {
   await page.goto(billingApplication);
 
-  const panel = page.getByRole("region", { name: "Structurally critical" });
+  const panel = page.getByRole("region", { name: "Single point of failure" });
   // Asserted around the glossary term rather than through it: Term keeps its definition
   // in the same paragraph, so a match spanning the word itself also spans the tooltip.
   await expect(panel.getByText(/of 14 entities that depend on each other/)).toBeVisible();
@@ -162,7 +162,7 @@ test("a repository carries the graph panel and its own lens", async ({ page }) =
 
   // Repositories rank in structural risk and are the likeliest single point of failure,
   // and this was the one entity type with no panel at all.
-  const panel = page.getByRole("region", { name: "Structurally critical" });
+  const panel = page.getByRole("region", { name: "Single point of failure" });
   await expect(panel).toBeVisible();
 
   await panel.getByRole("link", { name: "Explore dependencies" }).click();

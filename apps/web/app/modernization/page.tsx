@@ -42,7 +42,7 @@ export default function ModernizationPage() {
   return (
     <div className={styles.page}>
       <header className={styles.head}>
-        <h1 className={styles.title}>Modernization</h1>
+        <h1 className={styles.title}>What to fix first</h1>
         <p className={styles.subtitle}>
           Modernization opportunities across the estate, ranked by priority, with the effort each one carries.
         </p>
@@ -51,7 +51,7 @@ export default function ModernizationPage() {
       <aside className={styles.status} aria-label="Recommendation status">
         <span className={styles.eyebrow}>Recommendation status</span>
         <div>
-          <strong>{governed ? "Governed scoring active" : "Pilot guidance"}</strong>
+          <strong>{governed ? "Ranked using your approved policy" : "Draft ranking — not yet approved"}</strong>
           <p>
             {governed
               ? "Rankings follow the active policy and approved calibration set."
@@ -68,7 +68,7 @@ export default function ModernizationPage() {
             <p>Set an effort budget to see which initiatives fit inside it.</p>
           </div>
           <label className={styles.budgetControl}>
-            <span className={styles.budgetLabel}>Effort budget</span>
+            <span className={styles.budgetLabel}>How much work you can take on this quarter</span>
             <input
               type="range"
               min={0}
@@ -101,8 +101,12 @@ export default function ModernizationPage() {
               <dd>{usedPoints}<span> / {budgetPoints}</span></dd>
             </div>
             <div>
-              <dt>Portfolio value</dt>
-              <dd>{Math.round(scenario.data?.total_score ?? 0)}</dd>
+              <dt>
+                Combined value
+              </dt>
+              <dd title="The summed priority score of everything the optimiser picked. Points are comparable to each other, not to money or time.">
+                {Math.round(scenario.data?.total_score ?? 0)}<span> pts</span>
+              </dd>
             </div>
           </dl>
         )}

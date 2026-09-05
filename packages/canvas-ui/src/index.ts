@@ -6,6 +6,7 @@ export type { CanvasEmphasis, CanvasMode } from "./CanvasCell";
 export { CanvasAspectRail } from "./CanvasAspectRail";
 export { ClassificationTray } from "./ClassificationTray";
 export { OccupantChip, VersionRow } from "./OccupantChip";
+export { VersionComb } from "./VersionComb";
 export { PostureMeter } from "./PostureMeter";
 export { CellIcon, isKnownIconKey, unknownIconKeys } from "./icons";
 export {

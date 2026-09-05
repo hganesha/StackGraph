@@ -59,8 +59,8 @@ export default function ReviewsPage() {
       </header>
 
       <div className={styles.note}>
-        The cross-estate queue is tenant-scoped and ordered by confidence and recency. Decisions remain
-        optimistic and audited by the originating workflow.
+        Everything waiting on a decision across your estate, most confident and most recent
+        first. Your decision applies immediately and is recorded in the audit trail.
       </div>
 
       {isLoading ? (

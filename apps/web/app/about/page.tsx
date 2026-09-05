@@ -77,7 +77,7 @@ const STARTING_POINTS: Array<{ href: string; icon: Icon; title: string; body: st
   {
     href: "/estate",
     icon: IconLayoutDashboard,
-    title: "Software Estate",
+    title: "Your estate",
     body: "Everything discovered so far, grouped by domain and ranked by priority.",
   },
   {

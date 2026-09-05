@@ -193,3 +193,86 @@
     padding-inline: var(--sg-space-2);
   }
 }
+
+/* ── Saved views (R10d) ───────────────────────────────────────────────────── */
+.savedViews {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding-block-start: 10px;
+  margin-block-start: 10px;
+  border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.savedView {
+  display: inline-flex;
+  align-items: center;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-surface-sunken);
+}
+.savedViewApply {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px var(--sg-space-2);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.savedViewApply:hover {
+  color: var(--sg-text-primary);
+}
+.savedViewRemove {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px 3px 0;
+  color: var(--sg-text-muted);
+}
+.savedViewRemove:hover {
+  color: var(--sg-text-primary);
+}
+.saveTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px var(--sg-space-2);
+  border: var(--sg-border-hairline) dashed var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-pill);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.saveTrigger:hover {
+  color: var(--sg-text-primary);
+  background: var(--sg-surface-sunken);
+}
+.saveForm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+}
+.saveInput {
+  inline-size: 180px;
+  padding: 3px var(--sg-space-2);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border-strong);
+  border-radius: var(--sg-radius-control);
+  background: var(--sg-surface-card);
+  font-size: var(--sg-type-small-size);
+}
+.saveConfirm,
+.saveCancel {
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-color-domain-enterprise-600);
+}
+.saveConfirm:disabled {
+  color: var(--sg-text-muted);
+  cursor: default;
+}
+.saveCancel {
+  color: var(--sg-text-muted);
+}
+/* Stated, not implied: this does not follow the analyst to another machine. */
+.savedViewNote {
+  margin-inline-start: auto;
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}

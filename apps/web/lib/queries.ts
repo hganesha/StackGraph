@@ -88,10 +88,15 @@ export function useServiceStatus() {
   });
 }
 
-export function useGraphNeighborhood(centerId: string, depth = 1) {
+export function useGraphNeighborhood(
+  centerId: string,
+  depth = 1,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ["graph", centerId, depth],
     queryFn: () => stackGraphClient.getGraphNeighborhood(centerId, depth),
+    enabled: Boolean(centerId) && (options?.enabled ?? true),
   });
 }
 
@@ -222,5 +227,21 @@ export function useReviewQueue() {
   return useQuery({
     queryKey: ["reviews", "queue"],
     queryFn: () => stackGraphClient.getReviewQueue({ limit: 50 }),
+  });
+}
+
+/**
+ * `/capabilities/footprints` — technology spread and reuse per business capability.
+ *
+ * A shipped, tested read model with, until now, zero call sites anywhere in the web
+ * app (defect §7.9). It backs the capability heat grid and the Business band of the
+ * stratum bar, so it is cached generously: it changes only when a scan lands.
+ */
+export function useCapabilityFootprints(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["capabilities", "footprints"],
+    queryFn: () => stackGraphClient.listCapabilityFootprints(),
+    staleTime: 300_000,
+    enabled: options?.enabled ?? true,
   });
 }

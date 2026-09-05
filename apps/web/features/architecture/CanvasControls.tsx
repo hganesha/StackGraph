@@ -7,6 +7,12 @@ import styles from "./architecture.module.css";
 
 export type CanvasView = "actual" | "target" | "drift" | "compare";
 
+/** `stackgraph-reference-v1` → "Reference v1". A key is a routing handle, not a name. */
+function referenceModelLabel(key: string): string {
+  const leaf = key.replace(/^stackgraph-/, "").replaceAll("-", " ").trim();
+  return leaf.charAt(0).toUpperCase() + leaf.slice(1);
+}
+
 const EMPHASIS_OPTIONS: Array<{ value: CanvasEmphasis; label: string; hint: string }> = [
   { value: "posture", label: "Health", hint: "Colour cells by how healthy each area looks." },
   { value: "conformance", label: "Your standard", hint: "Colour cells by how well they match the standard you set." },
@@ -172,10 +178,21 @@ export function CanvasControls({
       ) : null}
 
       {summaryVisible && projection ? (
-        <p className={styles.provenance}>
-          As of {new Date(projection.as_of).toLocaleString()} · model{" "}
-          {projection.reference_model_key}@{projection.reference_model_version} · template{" "}
-          {projection.template_key}@{projection.template_version} · {projection.method_version}
+        /* The full machine string — model key, template key, method version — stays on
+           the `title` for anyone debugging a projection. What a reader needs is which
+           standard this was judged against and when (defect §7.3). */
+        <p
+          className={styles.provenance}
+          title={`model ${projection.reference_model_key}@${projection.reference_model_version} · template ${projection.template_key}@${projection.template_version} · ${projection.method_version}`}
+        >
+          Standard: {referenceModelLabel(projection.reference_model_key)} v
+          {projection.reference_model_version} · Checked{" "}
+          {new Date(projection.as_of).toLocaleString(undefined, {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
         </p>
       ) : null}
     </div>

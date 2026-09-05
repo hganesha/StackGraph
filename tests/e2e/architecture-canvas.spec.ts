@@ -266,7 +266,7 @@ test.describe("architecture canvas", () => {
 test.describe("canvas across surfaces", () => {
   test("the estate exposes the canvas as a peer view", async ({ page }) => {
     await page.goto("/estate?view=canvas");
-    await expect(page.getByRole("heading", { level: 1, name: "Software Estate" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Your estate" })).toBeVisible();
     await waitForCanvas(page);
     await expect(page.locator('[role="gridcell"]')).toHaveCount(43);
     await expectNoSeriousAccessibilityViolations(page);

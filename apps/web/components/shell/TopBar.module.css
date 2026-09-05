@@ -105,6 +105,33 @@
 .iconBtn:hover {
   background: var(--sg-surface-sunken);
 }
+/* Icon plus the current state in words. The icon alone was ambiguous in all three
+   states, and "system" has no obvious glyph in any icon set. */
+.theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  block-size: 32px;
+  padding-inline: var(--sg-space-2);
+  border-radius: var(--sg-radius-control);
+  color: var(--sg-text-secondary);
+}
+.theme:hover {
+  background: var(--sg-surface-sunken);
+}
+.themeLabel {
+  font-size: var(--sg-type-small-size);
+}
+@media (max-width: 620px) {
+  .themeLabel {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 .tenantAvatar {
   inline-size: 28px;
   block-size: 28px;

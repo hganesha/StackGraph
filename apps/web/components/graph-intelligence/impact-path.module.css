@@ -1,0 +1,72 @@
+.path {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+}
+.trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sg-space-1);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-1);
+  min-inline-size: 0;
+}
+.hop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-inline-size: 26ch;
+  padding: 2px var(--sg-space-2);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-surface-card);
+  font-size: var(--sg-type-small-size);
+}
+.hopName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The destination is what the reader came for; the route is subordinate to it. */
+.terminus {
+  border-color: var(--sg-surface-border-strong);
+  background: var(--sg-surface-sunken);
+  font-weight: 600;
+}
+.unnamed {
+  color: var(--sg-text-muted);
+  border-style: dashed;
+}
+.arrow {
+  color: var(--sg-text-muted);
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sg-space-3);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}
+.terminusReading strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--sg-text-primary);
+}
+.confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  color: var(--sg-text-muted);
+}
+.unnamedNote {
+  color: var(--sg-text-muted);
+}

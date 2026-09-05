@@ -30,6 +30,20 @@
 .spacer {
   flex: 1;
 }
-.contract .v {
-  color: var(--sg-text-muted);
+/* The headline the bands are drawn to support: where the knowledge runs out. It is
+   the one thing on this strip a reader should act on, so it keeps the end position the
+   contract version used to waste. */
+.weakest {
+  min-inline-size: 0;
+}
+.weakest .v {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .weakest {
+    display: none;
+  }
 }

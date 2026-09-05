@@ -1,0 +1,140 @@
+.wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  padding: 0;
+  color: inherit;
+  text-align: start;
+}
+.chevron {
+  display: flex;
+  color: var(--sg-text-muted);
+}
+
+/* Collapsed: five 3px bands side by side, no taller than the strip they replaced. */
+.bands {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.band {
+  display: block;
+  inline-size: 34px;
+  block-size: 3px;
+  background: var(--sg-surface-border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  inline-size: 0;
+  block-size: 100%;
+  background: var(--sg-color-domain-enterprise-500);
+  border-radius: 1px;
+}
+/* No measure exists yet — hatched across the full band, never an empty one. An
+   unmeasured layer must not read as an empty layer. */
+.unmeasured {
+  inline-size: 100%;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--sg-surface-border-strong) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.legend {
+  display: flex;
+  gap: var(--sg-space-2);
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-muted);
+}
+.legendItem {
+  inline-size: 34px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel {
+  position: absolute;
+  inset-block-end: calc(100% + var(--sg-space-2));
+  inset-inline-start: 0;
+  z-index: 20;
+  min-inline-size: min(560px, calc(100vw - var(--sg-space-8)));
+  padding: var(--sg-space-3);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  box-shadow: var(--sg-elevation-raised);
+}
+.table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--sg-type-small-size);
+}
+.table th {
+  text-align: start;
+  font-weight: 600;
+  color: var(--sg-text-primary);
+  padding-block: 3px;
+  padding-inline-end: var(--sg-space-3);
+  white-space: nowrap;
+}
+.table td {
+  padding-block: 3px;
+  padding-inline-end: var(--sg-space-3);
+  vertical-align: top;
+}
+.cellBand {
+  inline-size: 96px;
+}
+.rowBand {
+  display: block;
+  inline-size: 96px;
+  block-size: 6px;
+  margin-block-start: 5px;
+  background: var(--sg-surface-sunken);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cellValue {
+  color: var(--sg-text-primary);
+  text-align: end;
+  white-space: nowrap;
+}
+.cellReading {
+  color: var(--sg-text-secondary);
+  inline-size: 100%;
+}
+.cellReading small {
+  display: block;
+  color: var(--sg-text-muted);
+}
+.reason {
+  font-style: normal;
+}
+.facts {
+  font-style: normal;
+}
+
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .legend {
+    display: none;
+  }
+}

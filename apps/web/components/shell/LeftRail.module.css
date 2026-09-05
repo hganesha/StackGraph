@@ -9,10 +9,31 @@
   overflow-y: auto;
 }
 .group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.group + .group {
+  margin-block-start: var(--sg-space-4);
+}
+/* The grouping already existed structurally, as bare dividers. Naming it costs three
+   words and tells a new reader what the product is for. */
+.groupLabel {
+  padding-inline: var(--sg-space-3);
+  padding-block-end: var(--sg-space-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sg-text-muted);
+}
+.groupList {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  margin: 0;
+  padding: 0;
 }
 .item {
   display: flex;
@@ -43,7 +64,39 @@
   color: var(--sg-color-domain-enterprise-500);
 }
 .label {
+  flex: 1;
   font-size: var(--sg-type-body-size);
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+}
+.count {
+  min-inline-size: 20px;
+  padding-inline: 5px;
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-surface-border);
+  color: var(--sg-text-secondary);
+  font-family: var(--sg-font-evidence);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+/* A dot, not a count: that any service is degraded is the signal; how many is a
+   question for Scan health. */
+.dot {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: var(--sg-radius-pill);
+  background: var(--sg-color-signal-danger-500);
+}
+.visuallyHidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .compact {
   inline-size: 64px;
@@ -53,7 +106,8 @@
   justify-content: center;
   padding-inline: var(--sg-space-2);
 }
-.compact .label {
+.compact .label,
+.compact .groupLabel {
   position: absolute;
   inline-size: 1px;
   block-size: 1px;
@@ -65,14 +119,6 @@
 }
 .compact .icon {
   inline-size: 20px;
-}
-.divider {
-  block-size: 1px;
-  background: var(--sg-surface-border);
-  margin: var(--sg-space-3) var(--sg-space-2);
-}
-.spacer {
-  flex: 1;
 }
 
 /* ---- mobile: off-canvas drawer ---- */
@@ -96,14 +142,22 @@
     justify-content: flex-start;
     padding: var(--sg-space-2) var(--sg-space-3);
   }
-  .compact .label {
+  .compact .label,
+  .compact .groupLabel {
     position: static;
     inline-size: auto;
     block-size: auto;
-    margin: 0;
     overflow: visible;
     clip: auto;
     white-space: normal;
+  }
+  .compact .groupLabel {
+    margin: 0;
+    padding-inline: var(--sg-space-3);
+    padding-block-end: var(--sg-space-1);
+  }
+  .compact .label {
+    margin: 0;
   }
   .open {
     transform: translateX(0);

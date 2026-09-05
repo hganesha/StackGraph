@@ -297,6 +297,14 @@
   list-style: none;
   min-inline-size: 0;
 }
+/* A flex item's default `min-width: auto` refuses to shrink below its content's
+   minimum, so a chip carrying a fixed-width mark (the version comb) could push itself
+   past the cell that owns it. The chip already clips its own overflow; the item just
+   has to be allowed to reach that size. */
+.occupants > li {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
 .overflow {
   display: inline-flex;
   align-items: center;
@@ -745,4 +753,28 @@ button.trayRow:focus-visible {
   font-size: 10px;
   line-height: 14px;
   color: var(--sg-text-secondary);
+}
+
+/* ── Version spread comb (R7) ──────────────────────────────────────────────── */
+/* Shrinks before the package name does, and is clipped rather than squashed: a comb at
+   half width would misstate the spread it exists to show. */
+.comb {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+.combBase {
+  stroke: var(--sg-surface-border-strong);
+  stroke-width: 1;
+}
+.combTick {
+  stroke: var(--sg-text-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+/* The newest version, carrying the group's most severe status — the one tick a reader
+   is asked to act on. */
+.combLeading {
+  stroke: var(--canvas-tone-line, var(--sg-text-primary));
+  stroke-width: 2;
 }

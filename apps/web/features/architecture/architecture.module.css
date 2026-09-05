@@ -713,3 +713,117 @@
   font-size: var(--sg-type-small-size);
   color: var(--sg-text-primary);
 }
+
+/* ── Conformance ribbon (R6) ────────────────────────────────────────────────
+   The whole comparison as one band, above the grid it summarises. */
+.ribbon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-2);
+  padding: var(--sg-space-3) var(--sg-space-4);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+}
+.ribbonHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sg-space-3);
+  flex-wrap: wrap;
+}
+.ribbonHead h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  font-size: var(--sg-type-h3-size);
+  font-weight: 600;
+}
+.ribbonSentence {
+  color: var(--sg-text-secondary);
+}
+.ribbonTrack {
+  display: flex;
+  inline-size: 100%;
+  block-size: 22px;
+  border-radius: var(--sg-radius-control);
+  overflow: hidden;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.ribbonSegment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+  block-size: 100%;
+  border-inline-end: var(--sg-border-hairline) solid var(--sg-surface-card);
+  background: var(--canvas-tone-fill, var(--sg-surface-sunken));
+  color: var(--canvas-tone-ink, var(--sg-text-secondary));
+  overflow: hidden;
+}
+.ribbonSegment:last-child {
+  border-inline-end: 0;
+}
+.ribbonCount {
+  font-size: var(--sg-type-small-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ribbonOther {
+  background: var(--sg-surface-sunken);
+  color: var(--sg-text-muted);
+}
+
+/* The same four tone classes the cells use, so a segment and a cell in the same state
+   are the same colour. `quiet` covers UNEVALUABLE — never danger. */
+.ribbonTone-neutral {
+  --canvas-tone-fill: var(--sg-color-domain-enterprise-100);
+  --canvas-tone-ink: var(--sg-color-domain-enterprise-800);
+}
+.ribbonTone-positive {
+  --canvas-tone-fill: var(--sg-color-domain-oss-100);
+  --canvas-tone-ink: var(--sg-color-domain-oss-800);
+}
+.ribbonTone-caution {
+  --canvas-tone-fill: var(--sg-color-domain-business-100);
+  --canvas-tone-ink: var(--sg-color-domain-business-800);
+}
+.ribbonTone-danger {
+  --canvas-tone-fill: var(--sg-color-signal-danger-100);
+  --canvas-tone-ink: var(--sg-color-signal-danger-700);
+}
+.ribbonTone-quiet {
+  --canvas-tone-fill: var(--sg-surface-sunken);
+  --canvas-tone-ink: var(--sg-text-muted);
+}
+
+.ribbonLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2) var(--sg-space-4);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--sg-type-small-size);
+  color: var(--sg-text-secondary);
+}
+.ribbonLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+}
+.ribbonSwatch {
+  inline-size: 12px;
+  block-size: 12px;
+  border-radius: 2px;
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  background: var(--canvas-tone-fill, var(--sg-surface-sunken));
+}
+.ribbonLegendCount {
+  color: var(--sg-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ribbonExpand {
+  color: var(--sg-color-domain-enterprise-600);
+  font-size: var(--sg-type-small-size);
+  text-decoration: underline;
+}
