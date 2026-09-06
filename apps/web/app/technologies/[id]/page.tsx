@@ -9,6 +9,7 @@ import { useEvidenceStore } from "@/lib/evidenceStore";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
+import { ChangeHistory } from "@/features/intelligence/ChangeHistory";
 import { useEntityGraphMetrics } from "@/lib/queries";
 import styles from "./technology.module.css";
 
@@ -80,6 +81,8 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
       />
 
       <CriticalEdges entityId={id} />
+
+      <ChangeHistory entityId={id} entityName={data.technology.name} />
 
       {data.catalog_profile ? (
         <section className={styles.catalog} aria-label="OSS catalog intelligence">

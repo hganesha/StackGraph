@@ -1,0 +1,107 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-3);
+  padding: var(--sg-space-5);
+  background: var(--sg-surface-card);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-4);
+}
+.head h3 {
+  font-size: var(--sg-type-h3-size);
+  line-height: var(--sg-type-h3-line);
+  font-weight: 600;
+}
+.head p {
+  color: var(--sg-text-secondary);
+  max-inline-size: 62ch;
+}
+.thin {
+  padding: var(--sg-space-2) var(--sg-space-3);
+  background: var(--sg-surface-sunken);
+  border-inline-start: 2px solid var(--sg-surface-border-strong);
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sg-space-3);
+}
+.stats dt {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.stats dd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sg-space-2);
+}
+.stats strong {
+  font-size: var(--sg-type-h3-size);
+  font-variant-numeric: tabular-nums;
+}
+.stats small {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+  white-space: nowrap;
+}
+.calibration {
+  color: var(--sg-text-secondary);
+  font-size: var(--sg-type-small-size);
+  max-inline-size: 74ch;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sg-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sg-type-small-size);
+}
+.list > li {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr) minmax(0, auto) auto;
+  align-items: baseline;
+  gap: var(--sg-space-2);
+  padding-block: 3px;
+  border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border);
+}
+.list > li:last-child {
+  border-block-end: 0;
+}
+.predicate {
+  color: var(--sg-text-primary);
+  font-weight: 600;
+}
+.versions {
+  color: var(--sg-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.outcome,
+.when,
+.quiet {
+  color: var(--sg-text-muted);
+}
+.when {
+  white-space: nowrap;
+}
+.quiet {
+  font-size: var(--sg-type-small-size);
+  max-inline-size: 66ch;
+}
+
+@media (max-width: 640px) {
+  .list > li {
+    grid-template-columns: 1fr auto;
+  }
+}

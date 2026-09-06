@@ -10,6 +10,7 @@ import { useEntityGraphMetrics } from "@/lib/queries";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
+import { ChangeHistory } from "@/features/intelligence/ChangeHistory";
 import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
 import { RecommendationFocus } from "./RecommendationFocus";
 import { RepositoryActivityPanel } from "./RepositoryActivityPanel";
@@ -169,6 +170,8 @@ export default function RepositoryPage({
       />
 
       <CriticalEdges entityId={id} />
+
+      <ChangeHistory entityId={id} entityName={data.repository.name} />
 
       <div className={styles.grid}>
         <section className={styles.card} aria-labelledby="repository-shape-heading">
