@@ -4,6 +4,7 @@
   gap: var(--sg-space-2);
   min-inline-size: 0;
 }
+.wrap > small { max-inline-size: 48ch; color: var(--sg-text-muted); font-size: 10px; }
 .button {
   display: inline-flex;
   align-items: center;

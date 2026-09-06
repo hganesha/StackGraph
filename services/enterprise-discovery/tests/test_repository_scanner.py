@@ -498,6 +498,39 @@ class RepositoryScannerTests(unittest.TestCase):
         self.assertEqual(public_entrypoint["properties"]["source_kind"], "KUBERNETES")
         self.assertEqual(public_entrypoint["evidence"][0]["locator"]["path"], "k8s/service.yaml")
 
+    def test_deployment_profile_detects_planned_provider_configuration(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "vercel.json").write_text('{"framework":"nextjs"}\n')
+            (root / "supabase").mkdir()
+            (root / "supabase" / "config.toml").write_text('project_id = "billing"\n')
+            (root / "serverless.yml").write_text("provider:\n  name: aws\n")
+            (root / "app.yaml").write_text("runtime: python313\n")
+            (root / "azure.yaml").write_text("name: billing\n")
+            (root / "databricks.yml").write_text("bundle:\n  name: billing\n")
+            (root / "fabric").mkdir()
+            (root / "fabric" / "item.metadata.json").write_text('{"type":"DataPipeline"}\n')
+
+            result = scan_repository(request(root))
+
+        fact = next(
+            item for item in result["facts"]
+            if item.get("object_value", {}).get("record_kind") == "deployment_profile"
+        )
+        profile = fact["object_value"]
+        self.assertEqual(
+            profile["providers"],
+            ["AWS", "AZURE", "DATABRICKS", "GCP", "MICROSOFT_FABRIC", "SUPABASE", "VERCEL"],
+        )
+        self.assertTrue({
+            "WEB_APPLICATION", "MANAGED_BACKEND", "SERVERLESS_FUNCTION",
+            "APP_ENGINE_SERVICE", "AZURE_DEVELOPER_PROJECT", "DATABRICKS_BUNDLE",
+            "FABRIC_ITEM",
+        }.issubset(profile["workload_types"]))
+        self.assertEqual(profile["verification_level"], "DECLARED_CONFIGURATION")
+        self.assertEqual(profile["coverage"]["live_state"], "NOT_VERIFIED")
+        self.assertEqual(len(fact["evidence"]), 7)
+
     def test_local_compose_builds_emit_services_but_image_dependencies_do_not(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)

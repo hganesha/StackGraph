@@ -92,6 +92,21 @@
 .quiet {
   color: var(--sg-text-muted);
 }
+.plotWrap { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(240px, 1fr); align-items: center; gap: var(--sg-space-3); padding: var(--sg-space-3); background: var(--sg-surface-sunken); }
+.plotWrap h4, .drift h4, .similar h4 { font-size: var(--sg-type-body-size); }
+.plotWrap p, .drift p, .similar > p { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.plot { inline-size: 100%; max-block-size: 180px; }
+.plot text { fill: var(--sg-text-muted); font-size: 9px; }
+.plot circle { fill: var(--sg-color-domain-enterprise-500); stroke: var(--sg-surface-card); stroke-width: 2px; }
+.axis { fill: none; stroke: var(--sg-surface-border-strong); stroke-width: 1px; }
+.ideal { fill: none; stroke: var(--sg-text-muted); stroke-dasharray: 3 3; stroke-width: 1px; }
+.plotText { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.drift { display: flex; align-items: center; justify-content: space-between; gap: var(--sg-space-4); }
+.similar { display: flex; flex-direction: column; gap: var(--sg-space-2); padding-block-start: var(--sg-space-3); border-block-start: var(--sg-border-hairline) solid var(--sg-surface-border); }
+.similar ol { display: flex; flex-direction: column; gap: var(--sg-space-1); margin: 0; padding: 0; list-style: none; }
+.similar li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: var(--sg-space-2); color: var(--sg-text-secondary); font-size: var(--sg-type-small-size); }
+.similar li strong { overflow: hidden; color: var(--sg-text-primary); text-overflow: ellipsis; white-space: nowrap; }
+.similar time { color: var(--sg-text-muted); }
 .when {
   white-space: nowrap;
 }
@@ -104,4 +119,6 @@
   .list > li {
     grid-template-columns: 1fr auto;
   }
+  .plotWrap { grid-template-columns: 1fr; }
+  .similar li { grid-template-columns: 1fr auto; }
 }

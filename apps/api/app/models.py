@@ -2747,6 +2747,9 @@ class ObservedMutationModel(ContractModel):
     evidence_fact_ids: list[UUID]
     graph_watermark_before: str | None = None
     predicted_simulation_run_id: UUID | None = None
+    predicted_finding_count: int | None = Field(default=None, ge=0)
+    observed_impact_count: int = Field(default=0, ge=0)
+    unexpected_impact_count: int = Field(default=0, ge=0)
     resolution: str | None = None
     confidence: float = Field(ge=0, le=1)
     input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
@@ -2758,6 +2761,10 @@ class ObservedMutationList(ContractModel):
     contract_version: Literal["1.0.0"] = "1.0.0"
     subject: EntitySummary
     outcomes: list[ObservedMutationModel]
+    similar_outcomes: list[ObservedMutationModel] = Field(default_factory=list)
+    similarity_method: Literal["ENTITY_TYPE_AND_PREDICATE/1.0.0"] = "ENTITY_TYPE_AND_PREDICATE/1.0.0"
+    minimum_predictor_sample: int = Field(default=5, ge=1)
+    limitations: list[GateReason] = Field(default_factory=list)
     page_info: PageInfo
 
 
@@ -3017,6 +3024,7 @@ class ContradictionLedgerItem(ContractModel):
     claims: list[ContradictionClaim] = Field(min_length=2)
     affected_entity_count: int = Field(ge=0)
     last_verified_at: datetime
+    version: int = Field(default=1, ge=1)
     limitations: list[GateReason] = Field(default_factory=list)
 
     @model_validator(mode="after")

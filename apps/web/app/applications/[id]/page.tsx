@@ -8,6 +8,7 @@ import { ConfidenceChip, DomainBadge, Skeleton } from "@stackgraph/design-system
 import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
 import { TechnologyWorkspace } from "./TechnologyWorkspace";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
+import { RecommendationSimulationUnavailable } from "@/features/change/RecommendationSimulationUnavailable";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
 import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
@@ -258,6 +259,7 @@ export default function ApplicationPage({
                     </div>
                     <h3>{recommendation.title}</h3>
                     <p>{recommendation.rationale}</p>
+                    <RecommendationSimulationUnavailable reason="this investigative recommendation is not linked to a modernization proposal" />
                   </article>
                 ))}
               </div>

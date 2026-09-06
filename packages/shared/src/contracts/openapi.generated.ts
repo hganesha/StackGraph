@@ -1142,6 +1142,7 @@ export interface ContradictionLedgerItem {
   predicate: string;
   status?: "OPEN";
   subject: EntitySummary;
+  version?: number;
 }
 
 export interface ContradictionResolveRequest {
@@ -2214,8 +2215,12 @@ export interface ObservedMutationCreateRequest {
 
 export interface ObservedMutationList {
   contract_version?: "1.0.0";
+  limitations?: Array<GateReason>;
+  minimum_predictor_sample?: number;
   outcomes: Array<ObservedMutationModel>;
   page_info: PageInfo;
+  similar_outcomes?: Array<ObservedMutationModel>;
+  similarity_method?: "ENTITY_TYPE_AND_PREDICATE/1.0.0";
   subject: EntitySummary;
 }
 
@@ -2232,7 +2237,9 @@ export interface ObservedMutationModel {
   intervention_required: boolean;
   observed_at: string;
   observed_impact: Record<string, unknown>;
+  observed_impact_count?: number;
   predicate: "UPGRADE" | "REPLACE" | "REMOVE" | "DEPRECATE" | "MIGRATE" | "MOVE";
+  predicted_finding_count?: number | null;
   predicted_simulation_run_id?: string | null;
   resolution?: string | null;
   rolled_back: boolean;
@@ -2241,6 +2248,7 @@ export interface ObservedMutationModel {
   subject: EntitySummary;
   success?: boolean | null;
   unexpected_impact: Record<string, unknown>;
+  unexpected_impact_count?: number;
 }
 
 export interface PackageSource {

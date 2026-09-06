@@ -258,6 +258,7 @@ class EstateGovernanceMixin:
         rows = await self.database.fetch_all(
             """
             SELECT contradiction.id,contradiction.dimension,contradiction.status,
+                   contradiction.version,
                    contradiction.subject_entity_id,contradiction.updated_at,
                    subject.entity_type,subject.name,subject.canonical_key,
                    subject.properties->>'curated_description' summary,
@@ -298,7 +299,7 @@ class EstateGovernanceMixin:
                     confidence=float(claim["confidence"]), observed_at=claim["observed_at"],
                     evidence_fact_ids=claim["evidence_ids"],
                 ) for claim in claims], affected_entity_count=len(row["dependent_ids"]),
-                last_verified_at=row["updated_at"],
+                last_verified_at=row["updated_at"], version=row["version"],
             ))
         return ContradictionLedger(
             as_of=datetime.now(UTC), method_version="assumption-registry/1.0.0",

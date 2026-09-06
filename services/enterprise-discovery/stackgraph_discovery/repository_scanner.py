@@ -3753,6 +3753,7 @@ def _deployment_profile_facts(
     evidence_paths: list[str] = []
     for path, content in sorted(contents.items()):
         name = PurePosixPath(path).name.lower()
+        lowered_path = path.lower()
         if name == "dockerfile" or name.startswith("dockerfile."):
             workload_types.add("CONTAINER_BUILD")
             evidence_paths.append(path)
@@ -3787,6 +3788,56 @@ def _deployment_profile_facts(
             if re.search(r'\bresource\s+"', text):
                 workload_types.add("TERRAFORM_RESOURCE")
                 evidence_paths.append(path)
+        elif name == "vercel.json":
+            providers.add("VERCEL")
+            workload_types.add("WEB_APPLICATION")
+            evidence_paths.append(path)
+        elif lowered_path == "supabase/config.toml" or lowered_path.startswith("supabase/migrations/"):
+            providers.add("SUPABASE")
+            workload_types.add("MANAGED_BACKEND")
+            if lowered_path.startswith("supabase/migrations/"):
+                workload_types.add("DATABASE_MIGRATION")
+            evidence_paths.append(path)
+        elif name in {"serverless.yml", "serverless.yaml", "template.yaml", "template.yml"}:
+            text = content.decode("utf-8", errors="replace")
+            provider_match = re.search(r"(?im)^\s*name\s*:\s*(aws|google|gcp|azure)\s*$", text)
+            provider_name = provider_match.group(1).lower() if provider_match else ""
+            if provider_name == "aws" or "AWS::Serverless::" in text:
+                providers.add("AWS")
+            elif provider_name in {"google", "gcp"}:
+                providers.add("GCP")
+            elif provider_name == "azure":
+                providers.add("AZURE")
+            workload_types.add("SERVERLESS_FUNCTION")
+            evidence_paths.append(path)
+        elif name in {"app.yaml", "app.yml"}:
+            providers.add("GCP")
+            workload_types.add("APP_ENGINE_SERVICE")
+            evidence_paths.append(path)
+        elif name in {"cloudbuild.yaml", "cloudbuild.yml"}:
+            providers.add("GCP")
+            workload_types.add("BUILD_PIPELINE")
+            evidence_paths.append(path)
+        elif name == "azure.yaml":
+            providers.add("AZURE")
+            workload_types.add("AZURE_DEVELOPER_PROJECT")
+            evidence_paths.append(path)
+        elif name in {"host.json", "function.json"}:
+            providers.add("AZURE")
+            workload_types.add("SERVERLESS_FUNCTION")
+            evidence_paths.append(path)
+        elif name in {"databricks.yml", "databricks.yaml", "databricks.json"}:
+            providers.add("DATABRICKS")
+            workload_types.add("DATABRICKS_BUNDLE")
+            evidence_paths.append(path)
+        elif (
+            name in {"item.metadata.json", "platform.json"}
+            or ".platform" in PurePosixPath(lowered_path).parts
+            or "fabric" in PurePosixPath(lowered_path).parts
+        ):
+            providers.add("MICROSOFT_FABRIC")
+            workload_types.add("FABRIC_ITEM")
+            evidence_paths.append(path)
     if not evidence_paths:
         return []
     profile = {
@@ -3805,7 +3856,7 @@ def _deployment_profile_facts(
             "deployment configuration does not prove that a workload is currently deployed",
             "provider, environment, and workload fields are omitted when configuration does not declare them",
         ],
-        "rule_version": "deployment-profile/1.0.0",
+        "rule_version": "deployment-profile/1.1.0",
     }
     return [{
         "fact_contract_version": "1.0.0",

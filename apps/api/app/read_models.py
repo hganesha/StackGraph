@@ -1379,7 +1379,7 @@ class ReadModelStore(
               ON community.run_id=%s::uuid AND community.tenant_id=%s
              AND community.entity_id=e.id AND community.algorithm_key='wcc'
             WHERE (
-                (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service')
+                (e.namespace='ENTERPRISE' AND e.entity_type IN ('Application','Service','Repository')
                   AND e.tenant_id=(SELECT tenant_id FROM tenant_scope)
                   AND (
                     e.entity_type<>'Service'

@@ -1,0 +1,32 @@
+.section { display: flex; flex-direction: column; gap: var(--sg-space-4); }
+.card { display: flex; flex-direction: column; gap: var(--sg-space-4); padding: var(--sg-space-5); background: var(--sg-surface-sunken); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-card); }
+.card > header { display: flex; align-items: flex-start; gap: var(--sg-space-3); }
+.card > header svg { flex: none; margin-block-start: 2px; }
+.card h3 { font-size: var(--sg-type-h3-size); }
+.card header p, .quiet { color: var(--sg-text-secondary); }
+.posture { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; align-items: end; gap: var(--sg-space-3); padding: var(--sg-space-4); background: var(--sg-surface-card); border-inline-start: 4px solid var(--sg-color-signal-danger-500); }
+.posture[data-engaged="false"] { border-inline-start-color: var(--sg-color-signal-warning-500); }
+.posture > div, .posture label { display: flex; flex-direction: column; gap: var(--sg-space-1); }
+.posture span, .posture small, .form span, .envelope small { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.posture input, .form input:not([type="range"]), .form select, .form textarea { inline-size: 100%; padding: var(--sg-space-2) var(--sg-space-3); color: var(--sg-text-primary); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-control); font: inherit; }
+.posture button, .form button, .actions button, .drills button { min-block-size: 36px; padding-inline: var(--sg-space-3); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-control); font-weight: 600; }
+.posture button:disabled, .form button:disabled, .actions button:disabled, .drills button:disabled { opacity: .5; }
+.releaseGate { display: flex; align-items: flex-start; gap: var(--sg-space-2); color: var(--sg-text-secondary); font-size: var(--sg-type-small-size); }
+.releaseGate svg { flex: none; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: var(--sg-space-3); }
+.form label { display: flex; flex-direction: column; gap: var(--sg-space-1); }
+.form .wide { grid-column: 1 / -1; }
+.form textarea { min-block-size: 72px; resize: vertical; }
+.envelope, .flight, .drillResult { display: flex; flex-direction: column; gap: var(--sg-space-3); padding: var(--sg-space-4); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-control); }
+.envelopeHead { display: flex; justify-content: space-between; gap: var(--sg-space-3); }
+.envelopeHead > div { display: flex; flex-direction: column; }
+.envelopeHead > span { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.bands { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sg-space-2); }
+.bands > div { display: flex; min-inline-size: 0; flex-direction: column; gap: 2px; padding: var(--sg-space-2); background: var(--sg-surface-sunken); }
+.bands span { overflow: hidden; color: var(--sg-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.actions, .drills { display: flex; flex-wrap: wrap; gap: var(--sg-space-2); }
+.decision { padding: var(--sg-space-2) var(--sg-space-3); background: var(--sg-surface-sunken); }
+.flight code { overflow-wrap: anywhere; color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.drillResult ul { margin: 0; padding-inline-start: var(--sg-space-5); color: var(--sg-text-secondary); }
+.error { color: var(--sg-color-signal-danger-700); }
+@media (max-width: 760px) { .posture, .form { grid-template-columns: 1fr; } .form .wide { grid-column: auto; } .bands { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

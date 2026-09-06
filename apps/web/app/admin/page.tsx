@@ -11,6 +11,7 @@ import {
   IconRefresh,
   IconScale,
   IconServer2,
+  IconShieldLock,
   IconTrendingUp,
   IconUsers,
   type Icon,
@@ -24,12 +25,14 @@ import { CodePoliciesSection } from "@/components/admin/CodePoliciesSection";
 import { ArchitectureProfilesSection } from "@/components/admin/ArchitectureProfilesSection";
 import { MembersSection } from "@/components/admin/MembersSection";
 import { ServicesSection } from "@/components/admin/ServicesSection";
+import { AgentControlSection } from "@/components/admin/AgentControlSection";
 import styles from "@/components/admin/admin.module.css";
 
 const TABS = [
   { key: "data", label: "Data & sources", description: "Connections and refresh", icon: IconDatabase },
   { key: "services", label: "Services & health", description: "Runtime status and controls", icon: IconServer2 },
   { key: "intelligence", label: "Intelligence", description: "AI provider and models", icon: IconBrain },
+  { key: "agent", label: "Agent control", description: "Permissions, recording, and safety", icon: IconShieldLock },
   { key: "governance", label: "Policies & rules", description: "Modernization and code policy", icon: IconScale },
   { key: "access", label: "People & access", description: "Members and roles", icon: IconUsers },
 ] as const;
@@ -167,6 +170,7 @@ export default function AdminPage() {
             ) : null}
             {tab === "services" ? <ServicesSection /> : null}
             {tab === "intelligence" ? <IntelligenceSection /> : null}
+            {tab === "agent" ? <AgentControlSection /> : null}
             {tab === "governance" ? (
               <div className={styles.section}>
                 <SectionTabs scope="policy" label="Policy and rule settings" items={GOVERNANCE_VIEWS} active={governanceView} onChange={(key) => setGovernanceView(key as typeof governanceView)} />

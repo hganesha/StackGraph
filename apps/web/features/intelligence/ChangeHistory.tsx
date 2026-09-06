@@ -37,9 +37,38 @@ function countUnexpected(mutation: ObservedMutationModel): boolean {
   return Boolean(unexpected && typeof unexpected === "object" && Object.keys(unexpected).length > 0);
 }
 
+function CalibrationPlot({ outcomes }: { outcomes: ObservedMutationModel[] }) {
+  const points = outcomes.filter((item) => item.predicted_finding_count != null).map((item) => ({
+    id: item.id,
+    label: `${item.subject.name} on ${new Date(item.observed_at).toLocaleDateString()}`,
+    predicted: item.predicted_finding_count ?? 0,
+    actual: (item.observed_impact_count ?? 0) + (item.unexpected_impact_count ?? 0),
+  }));
+  if (!points.length) return null;
+  const maximum = Math.max(1, ...points.flatMap((point) => [point.predicted, point.actual]));
+  const x = (value: number) => 30 + (value / maximum) * 180;
+  const y = (value: number) => 130 - (value / maximum) * 100;
+  return (
+    <div className={styles.plotWrap}>
+      <div>
+        <h4>Predicted versus actual</h4>
+        <p>{points.length} simulated outcome{points.length === 1 ? "" : "s"}; diagonal means finding count matched observed impact quantity.</p>
+      </div>
+      <svg className={styles.plot} viewBox="0 0 240 160" role="img" aria-label={`Calibration plot for ${points.length} outcomes. Predicted findings are horizontal and observed impact is vertical.`}>
+        <path d="M30 130H220M30 130V20" className={styles.axis} />
+        <path d="M30 130L210 30" className={styles.ideal} />
+        {points.map((point) => <circle key={point.id} cx={x(point.predicted)} cy={y(point.actual)} r="4"><title>{point.label}: {point.predicted} predicted, {point.actual} observed</title></circle>)}
+        <text x="124" y="153">Predicted findings</text><text x="8" y="77" transform="rotate(-90 8 77)">Observed impact</text>
+      </svg>
+      <ul className={styles.plotText}>{points.map((point) => <li key={point.id}>{point.label}: {point.predicted} predicted; {point.actual} observed.</li>)}</ul>
+    </div>
+  );
+}
+
 export function ChangeHistory({ entityId, entityName }: { entityId: string; entityName?: string }) {
   const query = useEntityChangeHistory(entityId);
   const outcomes = query.data?.outcomes ?? [];
+  const similarOutcomes = query.data?.similar_outcomes ?? [];
 
   const stats = useMemo<Outcomes>(() => {
     let succeeded = 0;
@@ -65,6 +94,13 @@ export function ChangeHistory({ entityId, entityName }: { entityId: string; enti
         .sort((a, b) => new Date(a.observed_at).getTime() - new Date(b.observed_at).getTime())
         .map((item) => (item.success && !item.rolled_back ? 1 : 0)),
     [outcomes],
+  );
+  const driftSeries = useMemo(
+    () => [...outcomes, ...similarOutcomes]
+      .filter((item) => item.predicted_simulation_run_id)
+      .sort((a, b) => new Date(a.observed_at).getTime() - new Date(b.observed_at).getTime())
+      .map((item) => countUnexpected(item) ? 1 : 0),
+    [outcomes, similarOutcomes],
   );
 
   if (query.isLoading) {
@@ -189,6 +225,15 @@ export function ChangeHistory({ entityId, entityName }: { entityId: string; enti
         </p>
       )}
 
+      <CalibrationPlot outcomes={[...outcomes, ...similarOutcomes]} />
+
+      {driftSeries.length > 1 ? (
+        <div className={styles.drift}>
+          <div><h4>Prediction drift</h4><p>Misses across exact and comparable simulated changes, oldest first. A high point is an unexpected impact.</p></div>
+          <Sparkline points={driftSeries} label={`Prediction drift across ${driftSeries.length} simulated changes. High points are misses.`} />
+        </div>
+      ) : null}
+
       <ol className={styles.list}>
         {[...outcomes]
           .sort((a, b) => new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime())
@@ -221,6 +266,13 @@ export function ChangeHistory({ entityId, entityName }: { entityId: string; enti
             </li>
           ))}
       </ol>
+
+      <div className={styles.similar}>
+        <h4>Comparable changes</h4>
+        <p>Deterministic filter: same subject type and predicate in this tenant. No semantic similarity is claimed.</p>
+        {similarOutcomes.length ? <ol>{similarOutcomes.slice(0, 6).map((item) => <li key={item.id}><strong>{item.subject.name}</strong><span>{PREDICATE_LABEL[item.predicate as ChangePredicate] ?? item.predicate}</span><span>{item.rolled_back ? "Rolled back" : item.intervention_required ? "Intervention" : item.success ? "Went cleanly" : "Unknown outcome"}</span><time dateTime={item.observed_at}>{new Date(item.observed_at).toLocaleDateString()}</time></li>)}</ol> : <p className={styles.quiet}>No comparable changes are recorded elsewhere yet.</p>}
+      </div>
+      {query.data?.limitations?.map((item) => <p key={item.code} className={styles.thin}>{item.message}</p>)}
     </section>
   );
 }

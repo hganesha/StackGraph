@@ -34,6 +34,10 @@ const Archetypes = dynamic(
   () => import("@/features/intelligence/Archetypes").then((m) => m.Archetypes),
   { loading: () => <Skeleton height={420} /> },
 );
+const EstateFidelityWorkspace = dynamic(
+  () => import("@/features/estate/EstateFidelityWorkspace").then((m) => m.EstateFidelityWorkspace),
+  { loading: () => <Skeleton height={520} /> },
+);
 import { SuggestedChanges } from "@/features/change/SuggestedChanges";
 import styles from "./estate.module.css";
 
@@ -248,8 +252,10 @@ export function EstateView() {
       ? "canvas"
       : viewParam === "heat"
         ? "heat"
-        : viewParam === "archetypes"
+      : viewParam === "archetypes"
           ? "archetypes"
+          : viewParam === "fidelity"
+            ? "fidelity"
           : "ranked";
 
   return (
@@ -264,6 +270,7 @@ export function EstateView() {
             ["ranked", "Ranked list", "/estate"],
             ["heat", "Heat grid", "/estate?view=heat"],
             ["archetypes", "Archetypes", "/estate?view=archetypes"],
+            ["fidelity", "Fidelity & lineage", "/estate?view=fidelity"],
             ["canvas", "Architecture canvas", "/estate?view=canvas"],
           ] as const).map(([id, label, href]) =>
             estateView === id ? (
@@ -285,6 +292,8 @@ export function EstateView() {
         <CapabilityHeatGrid />
       ) : estateView === "archetypes" ? (
         <Archetypes />
+      ) : estateView === "fidelity" ? (
+        <EstateFidelityWorkspace />
       ) : (
         <>
 

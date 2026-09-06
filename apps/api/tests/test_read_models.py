@@ -1150,7 +1150,7 @@ def test_estate_pagination_uses_constant_query_count_and_keyset_cursor() -> None
     assert "e.namespace='BUSINESS' AND e.entity_type='BusinessCapability'" in estate_queries
     assert "FROM current_capability_application_relationship mapping" in estate_queries
     assert "mapping.capability_entity_id=e.id" in estate_queries
-    assert "e.entity_type IN ('Application','Service')" in estate_queries
+    assert "e.entity_type IN ('Application','Service','Repository')" in estate_queries
     assert "FROM current_relationship active_service" in estate_queries
     assert "active_service.source_entity_id=e.id OR active_service.target_entity_id=e.id" in estate_queries
     assert "relationship.relationship_type IN ('CONTAINS','IMPLEMENTED_BY')" in estate_queries

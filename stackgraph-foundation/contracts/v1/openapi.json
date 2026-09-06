@@ -6706,6 +6706,12 @@
           },
           "subject": {
             "$ref": "#/components/schemas/EntitySummary"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
           }
         },
         "required": [
@@ -13266,6 +13272,19 @@
             "title": "Contract Version",
             "type": "string"
           },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "minimum_predictor_sample": {
+            "default": 5,
+            "minimum": 1.0,
+            "title": "Minimum Predictor Sample",
+            "type": "integer"
+          },
           "outcomes": {
             "items": {
               "$ref": "#/components/schemas/ObservedMutationModel"
@@ -13275,6 +13294,19 @@
           },
           "page_info": {
             "$ref": "#/components/schemas/PageInfo"
+          },
+          "similar_outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ObservedMutationModel"
+            },
+            "title": "Similar Outcomes",
+            "type": "array"
+          },
+          "similarity_method": {
+            "const": "ENTITY_TYPE_AND_PREDICATE/1.0.0",
+            "default": "ENTITY_TYPE_AND_PREDICATE/1.0.0",
+            "title": "Similarity Method",
+            "type": "string"
           },
           "subject": {
             "$ref": "#/components/schemas/EntitySummary"
@@ -13359,6 +13391,12 @@
             "title": "Observed Impact",
             "type": "object"
           },
+          "observed_impact_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Observed Impact Count",
+            "type": "integer"
+          },
           "predicate": {
             "enum": [
               "UPGRADE",
@@ -13370,6 +13408,18 @@
             ],
             "title": "Predicate",
             "type": "string"
+          },
+          "predicted_finding_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Finding Count"
           },
           "predicted_simulation_run_id": {
             "anyOf": [
@@ -13425,6 +13475,12 @@
             "additionalProperties": true,
             "title": "Unexpected Impact",
             "type": "object"
+          },
+          "unexpected_impact_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unexpected Impact Count",
+            "type": "integer"
           }
         },
         "required": [

@@ -10,17 +10,39 @@ from pydantic import ValidationError
 
 from app.agent_control import _fingerprint
 from app.models import (
+    AgentAuthorizeRequest,
     AgentOperationRequest,
     CapabilityBandModel,
     CapabilityEnvelopeCompileRequest,
     CapabilityEnvelopeModel,
 )
+from app.read_models import ReadModelStore
 from tests.test_api import app_with_stubs, request
 
 
 NOW = datetime(2026, 9, 5, 18, 0, tzinfo=UTC)
 ENVELOPE_ID = UUID("00000000-0000-4000-8000-000000000a01")
 MIGRATION = Path(__file__).parents[3] / "infrastructure/database/migrations/055_e1_estate_fidelity_and_agent_control.sql"
+
+
+class _Cursor:
+    def __init__(self, row=None):
+        self.row = row
+
+    async def fetchone(self):
+        row, self.row = self.row, None
+        return row
+
+
+class _Session:
+    def __init__(self, database):
+        self.database = database
+
+    async def __aenter__(self):
+        return self.database
+
+    async def __aexit__(self, *_):
+        return False
 
 
 def test_compile_request_rejects_duplicate_operations() -> None:
@@ -50,6 +72,38 @@ def test_hashing_is_canonical_and_sensitive_to_event_order() -> None:
     assert _fingerprint({"events": ["context", "action"]}) != _fingerprint({
         "events": ["action", "context"],
     })
+
+
+def test_execution_release_flag_denies_even_when_kill_switch_is_disengaged() -> None:
+    class Database:
+        def session(self, _tenant_id):
+            return _Session(self)
+
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            assert "phase2_feature_flag" in query
+            return {"enabled": False}
+
+        async def execute(self, query, params=None):
+            if "FROM agent_capability_envelope" in query:
+                return _Cursor({
+                    "actor_key": "local-user", "status": "ACTIVE",
+                    "valid_until": datetime(2099, 1, 1, tzinfo=UTC),
+                })
+            if "FROM agent_envelope_operation" in query:
+                return _Cursor({"band": "EXECUTE"})
+            if "FROM agent_kill_switch" in query:
+                return _Cursor({"engaged": False})
+            if "INSERT INTO agent_authorization_decision" in query:
+                return _Cursor()
+            raise AssertionError(query)
+
+    result = asyncio.run(ReadModelStore(Database()).authorize_agent_operation(
+        ENVELOPE_ID, AgentAuthorizeRequest(operation_key="repository.write"),
+        tenant_id=UUID("00000000-0000-0000-0000-000000000001"), actor_key="local-user",
+    ))
+
+    assert result.decision == "DENY"
+    assert result.reason_codes == ["CHANGE_EXECUTION_DISABLED"]
 
 
 def test_agent_control_routes_expose_default_deny_and_authorization() -> None:

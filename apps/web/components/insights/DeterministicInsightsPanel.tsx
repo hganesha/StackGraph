@@ -17,6 +17,7 @@ import {
   type AttenuationStage,
 } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { RecommendationSimulationUnavailable } from "@/features/change/RecommendationSimulationUnavailable";
 import styles from "./deterministic-insights.module.css";
 
 type SeverityFilter = "ALL" | InsightSeverity;
@@ -137,6 +138,7 @@ function InsightCard({ insight }: { insight: DeterministicInsight }) {
             <strong>{insight.recommendation.title}</strong>
           </div>
           <p>{insight.recommendation.rationale}</p>
+          <RecommendationSimulationUnavailable reason="this deterministic finding has no canonical proposed ChangeSet yet" />
         </div>
       ) : null}
 

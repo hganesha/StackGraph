@@ -286,6 +286,12 @@ class AgentControlMixin:
     ) -> AgentAuthorizationDecisionModel:
         if tenant_id is None:
             raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
+        # The tenant kill switch is an emergency control, not the release gate.  A
+        # non-read operation needs both controls to permit it so accidentally
+        # disengaging the switch cannot enable the unfinished execution plane.
+        execution_enabled = await self.phase2_feature_enabled(
+            "CHANGE_EXECUTION", tenant_id=tenant_id,
+        )
         now = datetime.now(UTC)
         decision_id = uuid4()
         request_fingerprint = _fingerprint({
@@ -320,6 +326,8 @@ class AgentControlMixin:
                 decision, reason_codes = "DENY", ["OPERATION_NOT_IN_ENVELOPE"]
             elif operation["band"] == "PROHIBITED":
                 decision, reason_codes = "DENY", ["OPERATION_PROHIBITED"]
+            elif operation["band"] != "READ" and not execution_enabled:
+                decision, reason_codes = "DENY", ["CHANGE_EXECUTION_DISABLED"]
             elif operation["band"] != "READ" and (switch is None or switch["engaged"]):
                 decision, reason_codes = "DENY", ["KILL_SWITCH_ENGAGED"]
             elif operation["band"] in {"ESCALATE", "CONDITIONAL"}:

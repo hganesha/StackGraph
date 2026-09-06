@@ -60,6 +60,23 @@ EXACT_MANIFEST_NAMES = {
     "docker-compose.yaml": "DEPLOYMENT_CONFIG",
     "compose.yml": "DEPLOYMENT_CONFIG",
     "compose.yaml": "DEPLOYMENT_CONFIG",
+    "vercel.json": "DEPLOYMENT_CONFIG",
+    "serverless.yml": "DEPLOYMENT_CONFIG",
+    "serverless.yaml": "DEPLOYMENT_CONFIG",
+    "template.yml": "DEPLOYMENT_CONFIG",
+    "template.yaml": "DEPLOYMENT_CONFIG",
+    "app.yml": "DEPLOYMENT_CONFIG",
+    "app.yaml": "DEPLOYMENT_CONFIG",
+    "cloudbuild.yml": "DEPLOYMENT_CONFIG",
+    "cloudbuild.yaml": "DEPLOYMENT_CONFIG",
+    "azure.yaml": "DEPLOYMENT_CONFIG",
+    "host.json": "DEPLOYMENT_CONFIG",
+    "function.json": "DEPLOYMENT_CONFIG",
+    "databricks.yml": "DEPLOYMENT_CONFIG",
+    "databricks.yaml": "DEPLOYMENT_CONFIG",
+    "databricks.json": "DEPLOYMENT_CONFIG",
+    "item.metadata.json": "DEPLOYMENT_CONFIG",
+    "platform.json": "DEPLOYMENT_CONFIG",
     "Makefile": "BUILD_CONFIG",
 }
 
@@ -593,7 +610,10 @@ def manifest_kind(path: str) -> str | None:
     if pure_path.suffix.lower() == ".tf":
         return "INFRASTRUCTURE_CONFIG"
     if pure_path.suffix.lower() in {".yaml", ".yml", ".toml", ".json", ".properties"} and any(
-        part in {".github", "workflows", "deploy", "deployment", "k8s", "kubernetes", "config"}
+        part in {
+            ".github", ".platform", "workflows", "deploy", "deployment", "k8s",
+            "kubernetes", "config", "supabase", "fabric",
+        }
         for part in lowered_parts
     ):
         return "BUILD_OR_DEPLOYMENT_CONFIG"

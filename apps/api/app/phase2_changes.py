@@ -84,6 +84,19 @@ def _freshness(value: datetime | None) -> str:
     return "FRESH" if value >= datetime.now(UTC) - timedelta(days=30) else "STALE"
 
 
+def _impact_quantity(value: Any) -> int:
+    """Count numeric impact leaves without treating booleans as quantities."""
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return max(0, int(value))
+    if isinstance(value, dict):
+        return sum(_impact_quantity(item) for item in value.values())
+    if isinstance(value, list):
+        return sum(_impact_quantity(item) for item in value)
+    return 0
+
+
 def _clear_gate() -> ChangeGate:
     return ChangeGate(state="CLEAR", reasons=[])
 
@@ -208,6 +221,9 @@ class Phase2ChangeMixin:
             rolled_back=row["rolled_back"], evidence_fact_ids=row["evidence_fact_ids"],
             graph_watermark_before=row["graph_watermark_before"],
             predicted_simulation_run_id=row["predicted_simulation_run_id"],
+            predicted_finding_count=row.get("predicted_finding_count"),
+            observed_impact_count=_impact_quantity(row["observed_impact"]),
+            unexpected_impact_count=_impact_quantity(row["unexpected_impact"]),
             resolution=row["resolution"], confidence=float(row["confidence"]),
             input_fingerprint=row["input_fingerprint"], observed_at=row["observed_at"],
             created_at=row["created_at"],
@@ -291,8 +307,13 @@ class Phase2ChangeMixin:
                 outcome_id = created["id"]
         row = await self.database.fetch_one(
             """
-            SELECT outcome.*,entity.entity_type,entity.name,entity.canonical_key
+            SELECT outcome.*,entity.entity_type,entity.name,entity.canonical_key,
+                   predicted.finding_count predicted_finding_count
             FROM observed_mutation outcome JOIN entity ON entity.id=outcome.subject_entity_id
+            LEFT JOIN LATERAL (
+              SELECT count(*)::int finding_count FROM simulation_finding finding
+              WHERE finding.simulation_run_id=outcome.predicted_simulation_run_id
+            ) predicted ON outcome.predicted_simulation_run_id IS NOT NULL
             WHERE outcome.id=%s
             """,
             (outcome_id,), tenant_id=tenant_id,
@@ -316,15 +337,49 @@ class Phase2ChangeMixin:
             raise APIError(404, "ENTITY_NOT_FOUND", "The change-history subject was not found.")
         rows = await self.database.fetch_all(
             """
-            SELECT outcome.*,entity.entity_type,entity.name,entity.canonical_key
+            SELECT outcome.*,entity.entity_type,entity.name,entity.canonical_key,
+                   predicted.finding_count predicted_finding_count
             FROM observed_mutation outcome JOIN entity ON entity.id=outcome.subject_entity_id
+            LEFT JOIN LATERAL (
+              SELECT count(*)::int finding_count FROM simulation_finding finding
+              WHERE finding.simulation_run_id=outcome.predicted_simulation_run_id
+            ) predicted ON outcome.predicted_simulation_run_id IS NOT NULL
             WHERE outcome.subject_entity_id=%s
             ORDER BY outcome.observed_at DESC,outcome.id DESC LIMIT %s
             """,
             (subject_id, limit + 1), tenant_id=tenant_id,
         )
+        predicates = sorted({row["predicate"] for row in rows})
+        similar_rows = await self.database.fetch_all(
+            """
+            SELECT outcome.*,entity.entity_type,entity.name,entity.canonical_key,
+                   predicted.finding_count predicted_finding_count
+            FROM observed_mutation outcome JOIN entity ON entity.id=outcome.subject_entity_id
+            LEFT JOIN LATERAL (
+              SELECT count(*)::int finding_count FROM simulation_finding finding
+              WHERE finding.simulation_run_id=outcome.predicted_simulation_run_id
+            ) predicted ON outcome.predicted_simulation_run_id IS NOT NULL
+            WHERE outcome.subject_entity_id<>%s AND entity.entity_type=%s
+              AND outcome.predicate=ANY(%s::text[])
+            ORDER BY outcome.observed_at DESC,outcome.id DESC LIMIT %s
+            """,
+            (subject_id, subject["entity_type"], predicates, limit), tenant_id=tenant_id,
+        ) if predicates else []
+        limitations = []
+        if len(rows) + len(similar_rows) < 5:
+            limitations.append(GateReason(
+                code="CHANGE_MEMORY_SAMPLE_THIN",
+                message="Fewer than five exact or comparable outcomes are available; rates remain descriptive counts.",
+            ))
+        if not similar_rows:
+            limitations.append(GateReason(
+                code="NO_COMPARABLE_CHANGES",
+                message="No changes with the same subject type and predicate are recorded elsewhere in this tenant.",
+            ))
         return ObservedMutationList(
             subject=_entity(subject), outcomes=[self._observed_mutation(row) for row in rows[:limit]],
+            similar_outcomes=[self._observed_mutation(row) for row in similar_rows],
+            limitations=limitations,
             page_info=PageInfo(has_next_page=len(rows) > limit),
         )
 
