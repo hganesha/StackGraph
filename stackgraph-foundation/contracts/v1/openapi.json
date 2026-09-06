@@ -377,6 +377,37 @@
         "title": "ActionSubject",
         "type": "object"
       },
+      "ActionSubjectCapability": {
+        "additionalProperties": false,
+        "description": "One subject type a predicate may apply to, and whether it can compile today.\n\n\u00a74 wants the bounded grammar visible rather than hidden until it works. A predicate with\none active subject type and three planned ones is a different thing from a predicate that\ndoes not exist, and only a per-subject lifecycle can express the difference.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "lifecycle": {
+            "enum": [
+              "ACTIVE",
+              "DISABLED",
+              "RETIRED"
+            ],
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "subject_type": {
+            "minLength": 1,
+            "title": "Subject Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_type",
+          "lifecycle",
+          "enabled"
+        ],
+        "title": "ActionSubjectCapability",
+        "type": "object"
+      },
       "ActionSubjectList": {
         "additionalProperties": false,
         "properties": {
@@ -495,6 +526,13 @@
             },
             "minItems": 1,
             "title": "Subject Types",
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "$ref": "#/components/schemas/ActionSubjectCapability"
+            },
+            "title": "Subjects",
             "type": "array"
           }
         },

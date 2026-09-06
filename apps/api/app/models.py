@@ -2547,11 +2547,27 @@ class EntityResolution(ContractModel):
     evidence_fact_ids: list[UUID] = Field(default_factory=list)
 
 
+class ActionSubjectCapability(ContractModel):
+    """One subject type a predicate may apply to, and whether it can compile today.
+
+    §4 wants the bounded grammar visible rather than hidden until it works. A predicate with
+    one active subject type and three planned ones is a different thing from a predicate that
+    does not exist, and only a per-subject lifecycle can express the difference.
+    """
+
+    subject_type: str = Field(min_length=1)
+    lifecycle: Literal["ACTIVE", "DISABLED", "RETIRED"]
+    enabled: bool
+
+
 class ActionTypeSummary(ContractModel):
     predicate: ActionPredicate
     label: str = Field(min_length=1)
     description: str = Field(min_length=1)
     subject_types: list[str] = Field(min_length=1)
+    subjects: list[ActionSubjectCapability] = Field(default_factory=list)
+    # True when at least one subject type can compile. A predicate is offerable if anything can
+    # be done with it, not only if everything can.
     enabled: bool
     lifecycle: Literal["ACTIVE", "DISABLED", "RETIRED"]
     ontology_version: str = Field(min_length=1)

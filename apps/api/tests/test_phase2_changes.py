@@ -438,3 +438,34 @@ def test_coverage_reports_registry_enrichment_when_a_target_exceeds_the_estate()
     assert result.coverage is not None
     assert result.coverage.registry_enumeration == "AVAILABLE"
     assert "TARGET_PROVIDER_ESTATE_ONLY" not in [item.code for item in result.limitations]
+
+
+def test_action_types_surface_the_whole_bounded_grammar_with_lifecycle() -> None:
+    class OntologyDatabase(CompilerDatabase):
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return [
+                    {"predicate": "UPGRADE", "subject_type": "Package",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "ACTIVE"},
+                    {"predicate": "UPGRADE", "subject_type": "Runtime",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "DISABLED"},
+                    {"predicate": "DEPRECATE", "subject_type": "API",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "DISABLED"},
+                ]
+            return await super().fetch_all(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(OntologyDatabase()).action_types(tenant_id=TENANT_ID))
+
+    by_predicate = {item.predicate: item for item in result.action_types}
+    # §4 wants the bounded vocabulary visible, so a reader can tell a planned predicate from
+    # one that will never exist.
+    assert set(by_predicate) == {"UPGRADE", "DEPRECATE"}
+    assert by_predicate["DEPRECATE"].enabled is False
+    # UPGRADE stays offerable because one of its subject types compiles. Publishing the planned
+    # half of the grammar must not disable the half that works.
+    assert by_predicate["UPGRADE"].enabled is True
+    assert set(by_predicate["UPGRADE"].subject_types) == {"Package", "Runtime"}
+    by_subject = {item.subject_type: item for item in by_predicate["UPGRADE"].subjects}
+    assert by_subject["Package"].enabled is True
+    assert by_subject["Runtime"].enabled is False
+    assert by_subject["Runtime"].lifecycle == "DISABLED"

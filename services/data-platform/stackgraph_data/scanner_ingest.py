@@ -248,6 +248,7 @@ def persist_scanner_result_connection(
     # Typed estate profiles are projected after the fact loop: the deployment table is keyed by
     # workload, but the profile record that describes coverage and limitations is emitted once
     # per repository, so both halves have to be in hand before either row can be written.
+    profiles_enabled = _phase2_flag_enabled(connection, tenant_id, "SCANNER_PROFILES")
     # Resolved before the loop rather than as facts happen to arrive: a component profile is
     # emitted on a Component subject, so relying on a Repository fact appearing first would
     # attach components to no repository the moment the scanner reorders its output.
@@ -368,7 +369,7 @@ def persist_scanner_result_connection(
             )
         record = fact.get("object_value")
         record_kind = record.get("record_kind") if isinstance(record, Mapping) else None
-        if fact["predicate"] == "HAS_PROPERTY" and record_kind == "component_profile":
+        if profiles_enabled and fact["predicate"] == "HAS_PROPERTY" and record_kind == "component_profile":
             _persist_component_profile(
                 connection,
                 tenant_id=tenant_id,
@@ -391,14 +392,15 @@ def persist_scanner_result_connection(
                 "properties": fact.get("properties") or {},
             })
 
-    _persist_deployment_profiles(
-        connection,
-        tenant_id=tenant_id,
-        repository_id=repository_entity_id,
-        source_revision=str(result["source_revision"]),
-        deployments=deployment_facts,
-        aggregate=deployment_aggregate,
-    )
+    if profiles_enabled:
+        _persist_deployment_profiles(
+            connection,
+            tenant_id=tenant_id,
+            repository_id=repository_entity_id,
+            source_revision=str(result["source_revision"]),
+            deployments=deployment_facts,
+            aggregate=deployment_aggregate,
+        )
 
     connection.execute("SELECT publish_source_snapshot(%s)", (snapshot_id,))
     run_status = "SUCCEEDED" if result["completeness"] == "COMPLETE" else "PARTIAL"
@@ -1079,6 +1081,27 @@ _DEPLOYMENT_WORKLOAD_BY_SOURCE = {
     "DOCKERFILE": "CONTAINER_BUILD",
     "TERRAFORM": "TERRAFORM_RESOURCE",
 }
+
+
+def _phase2_flag_enabled(
+    connection: Connection[dict[str, Any]], tenant_id: UUID, flag_key: str,
+) -> bool:
+    """Read a Phase 2 feature flag, preferring a tenant override over the deployment default.
+
+    SCANNER_PROFILES was seeded in migration 047 and read by no code, so the kill switch the
+    plan asked for did not exist. Turning it off now stops typed profiles being written; the
+    read surfaces already degrade to related entities with an explicit coverage status, which
+    is what a kill switch should leave behind.
+    """
+    row = connection.execute(
+        """
+        SELECT enabled FROM phase2_feature_flag
+        WHERE flag_key=%s AND (tenant_id IS NULL OR tenant_id=%s)
+        ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
+        """,
+        (flag_key, tenant_id),
+    ).fetchone()
+    return bool(row and row["enabled"])
 
 
 def _persist_component_profile(

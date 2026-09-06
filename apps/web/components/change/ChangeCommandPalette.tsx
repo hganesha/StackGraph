@@ -246,7 +246,22 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                         onClick={() => chooseAction(action.predicate)}
                       >
                         <strong>{action.label}</strong>
-                        <span>{action.subject_types.join(" · ")}</span>
+                        {/* §4: the bounded grammar is shown, and a subject type that cannot
+                            compile yet says so rather than looking available. */}
+                        <span>
+                          {(action.subjects?.length
+                            ? action.subjects
+                            : action.subject_types.map((subject_type) => ({
+                                subject_type,
+                                enabled: action.enabled,
+                                lifecycle: action.lifecycle,
+                              }))
+                          )
+                            .map((subject) =>
+                              subject.enabled ? subject.subject_type : `${subject.subject_type} (planned)`,
+                            )
+                            .join(" · ")}
+                        </span>
                         <IconArrowRight size={16} stroke={1.5} aria-hidden="true" />
                       </button>
                     ))}

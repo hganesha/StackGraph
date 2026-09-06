@@ -22,6 +22,7 @@ from app.impact_traversal import (
 )
 from app.models import (
     ActionSubject,
+    ActionSubjectCapability,
     ActionSubjectList,
     ActionTypeList,
     ActionTypeSummary,
@@ -235,11 +236,19 @@ class Phase2ChangeMixin:
             item = grouped.setdefault(row["predicate"], {
                 "predicate": row["predicate"], "label": row["predicate"].title(),
                 "description": descriptions[row["predicate"]], "subject_types": [],
-                "enabled": row["lifecycle"] == "ACTIVE", "lifecycle": row["lifecycle"],
+                "subjects": [], "enabled": False, "lifecycle": row["lifecycle"],
                 "ontology_version": row["ontology_version"],
             })
+            active = row["lifecycle"] == "ACTIVE"
             item["subject_types"].append(row["subject_type"])
-            item["enabled"] = item["enabled"] and row["lifecycle"] == "ACTIVE"
+            item["subjects"].append(ActionSubjectCapability(
+                subject_type=row["subject_type"], lifecycle=row["lifecycle"], enabled=active,
+            ))
+            # Offerable when *any* subject type can compile. ANDing across subjects would mean
+            # publishing the planned half of the grammar disables the half that works.
+            item["enabled"] = item["enabled"] or active
+            if active:
+                item["lifecycle"] = "ACTIVE"
         return ActionTypeList(
             action_types=[ActionTypeSummary(**item) for item in grouped.values()],
             policy_version=ONTOLOGY_VERSION,

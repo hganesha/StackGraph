@@ -9,6 +9,12 @@ export interface ActionSubject {
   resolution?: "RESOLVED";
 }
 
+export interface ActionSubjectCapability {
+  enabled: boolean;
+  lifecycle: "ACTIVE" | "DISABLED" | "RETIRED";
+  subject_type: string;
+}
+
 export interface ActionSubjectList {
   contract_version?: "1.0.0";
   page_info: PageInfo;
@@ -30,6 +36,7 @@ export interface ActionTypeSummary {
   ontology_version: string;
   predicate: "UPGRADE" | "REPLACE" | "REMOVE" | "DEPRECATE" | "MIGRATE" | "MOVE";
   subject_types: Array<string>;
+  subjects?: Array<ActionSubjectCapability>;
 }
 
 export interface AgentApprovalDecisionRequest {
