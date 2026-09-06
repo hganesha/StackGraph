@@ -1,0 +1,42 @@
+.card { display: flex; flex-direction: column; gap: var(--sg-space-4); padding: var(--sg-space-5); background: var(--sg-surface-sunken); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-card); }
+.card > header { display: flex; align-items: flex-start; gap: var(--sg-space-3); }
+.card > header svg { flex: none; margin-block-start: 2px; }
+.card h3 { font-size: var(--sg-type-h3-size); }
+.card header p, .quiet, .terminal { color: var(--sg-text-secondary); }
+.coverage { inline-size: 100%; border-collapse: collapse; font-size: var(--sg-type-small-size); }
+.coverage th, .coverage td { padding: var(--sg-space-2); border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border); text-align: start; vertical-align: top; }
+.coverage thead th { color: var(--sg-text-muted); font-weight: 600; }
+.coverage tbody th { font-weight: 600; white-space: nowrap; }
+.coverage td:last-child { color: var(--sg-text-secondary); }
+.coverage tr[data-status="GENERATED"] td:nth-child(2) { color: var(--sg-text-primary); font-weight: 600; }
+.coverage tr[data-status="GENERATION_DISABLED"] td:nth-child(2) { color: var(--sg-color-signal-warning-700); }
+.scenarios, .limitations, .failures { margin: 0; padding: 0; list-style: none; }
+.scenarios { display: flex; flex-direction: column; gap: var(--sg-space-3); }
+.scenario { display: flex; flex-direction: column; gap: var(--sg-space-2); padding: var(--sg-space-3); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-inline-start: 4px solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-control); }
+.scenario[data-severity="HIGH"] { border-inline-start-color: var(--sg-color-signal-warning-500); }
+.scenario[data-severity="CRITICAL"] { border-inline-start-color: var(--sg-color-signal-danger-500); }
+.scenario p { color: var(--sg-text-secondary); }
+.scenarioHead { display: flex; align-items: flex-start; gap: var(--sg-space-2); }
+.scenarioHead > span { display: flex; flex-direction: column; }
+.scenarioHead small, .provenance { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.expectations { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sg-space-2); margin: 0; }
+.expectations dt { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.expectations dd { margin: 0; font-size: var(--sg-type-small-size); }
+.limitations { display: flex; flex-direction: column; gap: 2px; color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.limitations li::before { content: "— "; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: var(--sg-space-3); }
+.form label, .recorder label { display: flex; flex-direction: column; gap: var(--sg-space-1); }
+.form span, .recorder span { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.form input, .recorder input { inline-size: 100%; padding: var(--sg-space-2) var(--sg-space-3); color: var(--sg-text-primary); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-control); font: inherit; }
+.form button, .actions button { min-block-size: 36px; padding-inline: var(--sg-space-3); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-control); font-weight: 600; }
+.form button:disabled, .actions button:disabled { opacity: .5; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sg-space-2); }
+.actions small { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.evaluation, .recorder { display: flex; flex-direction: column; gap: var(--sg-space-3); padding: var(--sg-space-4); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-control); }
+.tally { display: flex; flex-wrap: wrap; gap: var(--sg-space-4); color: var(--sg-text-secondary); }
+.tally b { color: var(--sg-text-primary); font-size: var(--sg-type-h3-size); }
+.recorder .wide { grid-column: 1 / -1; }
+.failures { display: flex; flex-direction: column; gap: var(--sg-space-1); font-size: var(--sg-type-small-size); }
+.error { color: var(--sg-color-signal-danger-700); }
+.visuallyHidden { position: absolute; overflow: hidden; clip-path: inset(50%); inline-size: 1px; block-size: 1px; white-space: nowrap; }
+@media (max-width: 760px) { .form, .expectations { grid-template-columns: 1fr; } }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { IconAlertTriangle, IconPlayerPlay, IconShieldCheck, IconShieldLock } from "@tabler/icons-react";
 import {
@@ -12,6 +13,13 @@ import {
 } from "@stackgraph/shared";
 import { GateNotice, Skeleton } from "@stackgraph/design-system";
 import styles from "./AgentControlSection.module.css";
+
+// §36 is the last thing an operator reaches on this tab and the heaviest part of it, so it is
+// split out of the admin entry bundle rather than paid for by everyone who opens the page.
+const ImmuneSystemSection = dynamic(
+  () => import("./ImmuneSystemSection").then((m) => m.ImmuneSystemSection),
+  { loading: () => <Skeleton height={420} /> },
+);
 
 export function AgentControlSection() {
   const queryClient = useQueryClient();
@@ -148,6 +156,8 @@ export function AgentControlSection() {
         {drill ? <div className={styles.drillResult}><strong>{drill.drill_kind.replaceAll("_", " ")} · {drill.status}</strong><ul>{drill.checks.map((check, index) => <li key={index}>{String(check.check ?? "check")} — {check.passed ? "passed" : "failed"}</li>)}</ul></div> : null}
         {requestError ? <p className={styles.error} role="alert">{requestError.message}</p> : null}
       </section>
+
+      <ImmuneSystemSection />
     </div>
   );
 }

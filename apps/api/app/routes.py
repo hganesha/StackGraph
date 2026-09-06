@@ -13,11 +13,18 @@ from fastapi.responses import RedirectResponse
 from app.auth import Principal
 from app.errors import APIError
 from app.models import (
+    AdversarialScenarioClass,
+    AdversarialScenarioGenerateRequest,
+    AdversarialScenarioList,
     ApplicationDetail,
     ApplicationSimilarityList,
     ApplicationSimilarityReviewRequest,
     ApplicationSimilarityReviewResult,
     AIProviderConfiguration,
+    HarnessEvaluationCompleteRequest,
+    HarnessEvaluationModel,
+    HarnessEvaluationRecordRequest,
+    HarnessEvaluationStartRequest,
     AIProviderConfigurationUpdateRequest,
     AIProviderConnectionTest,
     AskRequest,
@@ -272,6 +279,27 @@ class ReadModelsProtocol(Protocol):
     async def run_agent_control_drill(
         self, request: AgentControlDrillRequest, *, tenant_id: UUID | None, actor_key: str,
     ) -> AgentControlDrillResult: ...
+    async def generate_adversarial_scenarios(
+        self, request: AdversarialScenarioGenerateRequest, *, tenant_id: UUID | None,
+        actor_key: str,
+    ) -> AdversarialScenarioList: ...
+    async def adversarial_scenarios(
+        self, *, tenant_id: UUID | None, scenario_class: str | None, limit: int,
+    ) -> AdversarialScenarioList: ...
+    async def start_harness_evaluation(
+        self, request: HarnessEvaluationStartRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessEvaluationModel: ...
+    async def record_harness_evaluation_result(
+        self, evaluation_id: UUID, request: HarnessEvaluationRecordRequest, *,
+        tenant_id: UUID | None,
+    ) -> HarnessEvaluationModel: ...
+    async def complete_harness_evaluation(
+        self, evaluation_id: UUID, request: HarnessEvaluationCompleteRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessEvaluationModel: ...
+    async def harness_evaluation(
+        self, evaluation_id: UUID, *, tenant_id: UUID | None,
+    ) -> HarnessEvaluationModel: ...
     async def estate_components(
         self, *, tenant_id: UUID | None, cursor: UUID | None, limit: int,
     ) -> EstateComponentList: ...
@@ -977,6 +1005,92 @@ async def run_agent_control_drill(
     _require(principal, "admin")
     return await _store(request).run_agent_control_drill(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/immune-system/scenarios", response_model=AdversarialScenarioList,
+    response_model_exclude_none=True, operation_id="generateAdversarialScenarios",
+    tags=["immune-system"],
+)
+async def generate_adversarial_scenarios(
+    body: AdversarialScenarioGenerateRequest, request: Request,
+) -> AdversarialScenarioList:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).generate_adversarial_scenarios(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/immune-system/scenarios", response_model=AdversarialScenarioList,
+    response_model_exclude_none=True, operation_id="listAdversarialScenarios",
+    tags=["immune-system"],
+)
+async def list_adversarial_scenarios(
+    request: Request,
+    scenario_class: AdversarialScenarioClass | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> AdversarialScenarioList:
+    principal = await _principal(request)
+    return await _store(request).adversarial_scenarios(
+        tenant_id=principal.tenant_id, scenario_class=scenario_class, limit=limit,
+    )
+
+
+@router.post(
+    "/immune-system/evaluations", response_model=HarnessEvaluationModel, status_code=201,
+    response_model_exclude_none=True, operation_id="startHarnessEvaluation",
+    tags=["immune-system"],
+)
+async def start_harness_evaluation(
+    body: HarnessEvaluationStartRequest, request: Request,
+) -> HarnessEvaluationModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).start_harness_evaluation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/immune-system/evaluations/{id}", response_model=HarnessEvaluationModel,
+    response_model_exclude_none=True, operation_id="getHarnessEvaluation",
+    tags=["immune-system"],
+)
+async def get_harness_evaluation(id: UUID, request: Request) -> HarnessEvaluationModel:
+    principal = await _principal(request)
+    return await _store(request).harness_evaluation(id, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/immune-system/evaluations/{id}/results", response_model=HarnessEvaluationModel,
+    response_model_exclude_none=True, operation_id="recordHarnessEvaluationResult",
+    tags=["immune-system"],
+)
+async def record_harness_evaluation_result(
+    id: UUID, body: HarnessEvaluationRecordRequest, request: Request,
+) -> HarnessEvaluationModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).record_harness_evaluation_result(
+        id, body, tenant_id=principal.tenant_id,
+    )
+
+
+@router.post(
+    "/immune-system/evaluations/{id}/finish", response_model=HarnessEvaluationModel,
+    response_model_exclude_none=True, operation_id="finishHarnessEvaluation",
+    tags=["immune-system"],
+)
+async def finish_harness_evaluation(
+    id: UUID, body: HarnessEvaluationCompleteRequest, request: Request,
+) -> HarnessEvaluationModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).complete_harness_evaluation(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 
 

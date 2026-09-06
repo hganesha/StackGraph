@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -3444,3 +3444,162 @@ class AgentControlDrillResult(ContractModel):
     checks: list[dict[str, Any]]
     performed_by: str
     performed_at: datetime
+
+
+AdversarialScenarioClass = Literal[
+    "STALE_CONTEXT",
+    "CONFLICTING_DOCUMENTATION",
+    "PARTIAL_TOOL_OUTAGE",
+    "MALFORMED_API_RESPONSE",
+    "UNEXPECTED_SCHEMA_CHANGE",
+    "MALICIOUS_REPOSITORY_CONTENT",
+    "CONCURRENT_AGENT_ACTIONS",
+    "TOPOLOGY_DOCUMENTATION_MISMATCH",
+]
+
+ADVERSARIAL_SCENARIO_CLASSES: tuple[str, ...] = get_args(AdversarialScenarioClass)
+
+
+class AdversarialScenarioModel(ContractModel):
+    id: UUID
+    scenario_key: str = Field(min_length=1)
+    scenario_class: AdversarialScenarioClass
+    title: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    stimulus: dict[str, Any]
+    expected_behaviour: dict[str, Any]
+    derived_from_entity_id: UUID | None = None
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    generator_version: str
+    estate_watermark: str
+    input_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    created_at: datetime
+
+
+class ScenarioClassCoverage(ContractModel):
+    """Why a scenario class has the population it has.
+
+    A class with no scenarios is never left to read as "this estate is safe from it": the
+    status says whether generation was attempted and what the estate did or did not supply.
+    """
+
+    scenario_class: AdversarialScenarioClass
+    status: Literal["GENERATED", "NOT_DERIVABLE", "NOT_ATTEMPTED", "GENERATION_DISABLED"]
+    scenario_count: int = Field(ge=0)
+    detail: str = Field(min_length=1)
+
+
+class AdversarialScenarioGenerateRequest(ContractModel):
+    scenario_classes: list[AdversarialScenarioClass] = Field(default_factory=list, max_length=8)
+    limit_per_class: int = Field(default=5, ge=1, le=25)
+    stale_after_days: int = Field(default=90, ge=1, le=3650)
+
+    @model_validator(mode="after")
+    def validate_unique_classes(self) -> "AdversarialScenarioGenerateRequest":
+        if len(self.scenario_classes) != len(set(self.scenario_classes)):
+            raise ValueError("scenario classes must be unique")
+        return self
+
+
+class AdversarialScenarioList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    generation_enabled: bool
+    scenarios: list[AdversarialScenarioModel] = Field(default_factory=list)
+    coverage: list[ScenarioClassCoverage] = Field(min_length=8, max_length=8)
+    estate_watermark: str | None = None
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_every_class_is_accounted_for(self) -> "AdversarialScenarioList":
+        covered = [item.scenario_class for item in self.coverage]
+        if sorted(covered) != sorted(ADVERSARIAL_SCENARIO_CLASSES):
+            raise ValueError("coverage must state every adversarial scenario class exactly once")
+        return self
+
+
+class HarnessEvaluationStartRequest(ContractModel):
+    harness_key: str = Field(min_length=1, max_length=255)
+    harness_version: str = Field(min_length=1, max_length=255)
+    scenario_ids: list[UUID] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_unique_scenarios(self) -> "HarnessEvaluationStartRequest":
+        if len(self.scenario_ids) != len(set(self.scenario_ids)):
+            raise ValueError("scenario ids must be unique")
+        return self
+
+
+class HarnessEvaluationRecordRequest(ContractModel):
+    scenario_id: UUID
+    outcome: Literal["PASSED", "FAILED", "INCONCLUSIVE"]
+    observed_behaviour: dict[str, Any] = Field(default_factory=dict)
+    diagnosis: str | None = Field(default=None, max_length=4000)
+
+    @model_validator(mode="after")
+    def validate_failures_are_diagnosed(self) -> "HarnessEvaluationRecordRequest":
+        # §36 routes failures into the Harness Factory as `failure → diagnosis → mutation`.
+        # An undiagnosed failure cannot enter that loop, so it is refused at the edge rather
+        # than recorded as a dead end.
+        if self.outcome == "FAILED" and not (self.diagnosis or "").strip():
+            raise ValueError("a failed scenario must carry a diagnosis")
+        return self
+
+
+class HarnessEvaluationResultModel(ContractModel):
+    id: UUID
+    scenario_id: UUID
+    scenario_key: str
+    scenario_class: AdversarialScenarioClass
+    outcome: Literal["PASSED", "FAILED", "INCONCLUSIVE"]
+    observed_behaviour: dict[str, Any] = Field(default_factory=dict)
+    diagnosis: str | None = None
+    recorded_at: datetime
+
+
+class PromotionPosture(ContractModel):
+    """The champion/challenger half of §36, stated instead of silently missing.
+
+    A1 requires promotion to stay disabled until offline evaluation, rollback, and governance
+    are proven. `NOT_IMPLEMENTED` is the honest description: there is no promotion table and no
+    champion column, so this is not a switch somebody can flip by accident.
+    """
+
+    state: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
+    reason: str = Field(min_length=1)
+    blocked_by: list[str] = Field(min_length=1)
+
+
+class HarnessEvaluationModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    harness_key: str
+    harness_version: str
+    execution_mode: Literal["OFFLINE"] = "OFFLINE"
+    status: Literal["RUNNING", "COMPLETED", "ABANDONED"]
+    scenario_count: int = Field(ge=0)
+    passed_count: int = Field(ge=0)
+    failed_count: int = Field(ge=0)
+    inconclusive_count: int = Field(ge=0)
+    unevaluated_count: int = Field(ge=0)
+    unevaluated_scenario_ids: list[UUID] = Field(default_factory=list)
+    estate_watermark: str
+    created_by: str
+    started_at: datetime
+    completed_at: datetime | None = None
+    results: list[HarnessEvaluationResultModel] = Field(default_factory=list)
+    promotion: PromotionPosture
+
+    @model_validator(mode="after")
+    def validate_counts_are_reconcilable(self) -> "HarnessEvaluationModel":
+        recorded = self.passed_count + self.failed_count + self.inconclusive_count
+        if recorded + self.unevaluated_count != self.scenario_count:
+            raise ValueError("recorded and unevaluated outcomes must account for every scenario")
+        if len(self.unevaluated_scenario_ids) != self.unevaluated_count:
+            raise ValueError("every unevaluated scenario must be named, not only counted")
+        return self
+
+
+class HarnessEvaluationCompleteRequest(ContractModel):
+    status: Literal["COMPLETED", "ABANDONED"]
+    note: str | None = Field(default=None, max_length=4000)

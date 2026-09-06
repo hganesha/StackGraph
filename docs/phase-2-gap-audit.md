@@ -445,16 +445,54 @@ the typed profile projection instead of being dead. And §33's contradiction eng
 runtime disagreement across version pins, manifest engines, container base images, and
 documentation, promoting it into the ledger the compiler already gates on.
 
-### Deliberately still open
+### Closed since the audit
 
-**Container composition profiles.** Blocked on digest resolution, which needs registry access
-outside the scanner's boundary. The read surfaces already degrade honestly.
+The four items this audit left open have been built. They are recorded here because the reasons
+for deferring them were stated, and a reader who found those reasons persuasive is owed the
+reason they no longer hold.
 
-**Registry-enumerated target versions.** Targets remain limited to what has been collected. This
-is now stated in the response rather than left to be inferred from a short list.
+**Container composition profiles.** A registry client resolves an image reference to an immutable
+digest, verifies the digest it computes against the one the registry returned, and writes the
+digest-keyed profile the read surface was already shaped for. Tag history is kept rather than
+overwritten, so a tag that has moved reads as a moved tag instead of silently replacing what
+production ran. It runs after a scan, never during one, behind `REGISTRY_ENRICHMENT`, which
+defaults off: reaching an external registry is an operator's decision. Layers are recorded;
+`coverage.os_packages` still says `NOT_COLLECTED`, because nothing has read inside the layers.
 
-**AI supply-chain producers.** The vocabulary is registered and the contract agrees, but no
-connector emits agents, models, prompts, tools, or datasets. The endpoint says so.
+**Registry-enumerated target versions.** npm and PyPI catalogues are enumerated into
+`package_version_catalog`, with prereleases, yanks, deprecations, and support status separated
+rather than collapsed. `package_catalog_collection` records what each enumeration achieved, so a
+package the registry answered partially is distinguishable from a package with two releases.
+`valid_targets` joins the catalogue and keeps reporting its coverage.
 
-**§36's immune system.** Explicitly a later-stage capability in the plan, and correctly still
-deferred.
+**AI supply-chain producers.** The scanner now emits the vocabulary migration 055 registered:
+`ORCHESTRATES` for a declared harness, `ACCESSES` for SDKs and MCP servers, `GROUNDED_BY` for
+vector stores, and `INVOKES` for models — `DECLARED` from configuration, `INFERRED` from source,
+never the same confidence for both. The harness is resolved before anything is attached to it, so
+the same repository does not produce two different graphs depending on how a package name sorted.
+The endpoint still distinguishes an estate with no AI supply chain from one that was never
+scanned for it.
+
+**§36's immune system.** The half the plan asks for is built and the half it forbids is
+unrepresentable. Eight generators derive adversarial scenarios from rows that exist — stale facts,
+open contradictions, partial catalogue collections, quarantined interpretations, datastores with
+consumers, harnesses grounded by retrieved content, subjects under competing ChangeSets, and
+declared topologies with nothing observed beside them. A class that derived nothing says why, so
+`NOT_DERIVABLE` never reads as immunity. Evaluation is `OFFLINE` by a column that admits one
+value; a failure cannot be recorded without a diagnosis, `INCONCLUSIVE` is a first-class outcome
+rather than a rounded pass, unanswered scenarios are named rather than counted, and a finished
+evaluation is immutable. There is no promotion table and no champion column: A1 requires that
+loop to stay closed until rollback and governance are proven, and `PromotionPosture` states the
+omission in the API response instead of leaving it to be inferred from a missing endpoint.
+
+### Still open
+
+**Container package inventory.** Layers are recorded but not opened, so the OS and language
+packages inside an image remain uncollected. The container profile says so.
+
+**Registries beyond npm and PyPI.** `package_version_catalog` admits nuget, maven, cargo, and go;
+only npm and PyPI have enumerators. A package in another ecosystem has no catalogue row, and
+target coverage reports that rather than implying the registry is small.
+
+**Champion/challenger promotion.** Deliberately unbuilt, per A1. Adding it is a migration
+somebody has to write and review, which is the point.

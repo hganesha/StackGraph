@@ -14,6 +14,8 @@ from app.database import DatabaseReadiness
 from app.errors import APIError
 from app.main import create_app
 from app.models import (
+    ADVERSARIAL_SCENARIO_CLASSES,
+    AdversarialScenarioList,
     AIProviderConfiguration,
     AIProviderConnectionTest,
     ApplicationSimilarityList,
@@ -25,6 +27,9 @@ from app.models import (
     AgentAuthorizationDecisionModel,
     AgentControlDrillResult,
     AgentKillSwitchModel,
+    HarnessEvaluationModel,
+    PromotionPosture,
+    ScenarioClassCoverage,
     AssumptionList,
     AssumptionModel,
     CapabilityBandModel,
@@ -114,6 +119,7 @@ from app.models import (
 
 
 NOW = datetime(2026, 8, 19, 14, 10, tzinfo=UTC)
+EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000b01")
 
 
 class StubDatabase:
@@ -247,6 +253,68 @@ class StubReadModels:
             operation_key=request.operation_key, decision="ALLOW", reason_codes=[],
             request_fingerprint="sha256:" + "b" * 64, decided_at=NOW,
         )
+
+    def _scenario_coverage(self, status, detail):
+        return [
+            ScenarioClassCoverage(
+                scenario_class=item, status=status, scenario_count=0, detail=detail,
+            )
+            for item in ADVERSARIAL_SCENARIO_CLASSES
+        ]
+
+    async def generate_adversarial_scenarios(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        self.last_scenario_classes = list(request.scenario_classes)
+        return AdversarialScenarioList(
+            generation_enabled=True, scenarios=[],
+            coverage=self._scenario_coverage(
+                "NOT_DERIVABLE", "This estate supplies no evidence for this class.",
+            ),
+            estate_watermark="facts:empty;projection:empty",
+        )
+
+    async def adversarial_scenarios(self, *, tenant_id, scenario_class, limit):
+        self.last_tenant_id = tenant_id
+        self.last_scenario_class = scenario_class
+        return AdversarialScenarioList(
+            generation_enabled=False, scenarios=[],
+            coverage=self._scenario_coverage(
+                "GENERATION_DISABLED", "Adversarial generation is disabled for this tenant.",
+            ),
+        )
+
+    def _evaluation(self, evaluation_id, actor_key="local-user"):
+        return HarnessEvaluationModel(
+            id=evaluation_id, harness_key="agent-harness:example", harness_version="1.0.0",
+            status="RUNNING", scenario_count=1, passed_count=0, failed_count=0,
+            inconclusive_count=0, unevaluated_count=1,
+            unevaluated_scenario_ids=[UUID("00000000-0000-4000-8000-000000000c01")],
+            estate_watermark="facts:empty;projection:empty", created_by=actor_key,
+            started_at=NOW,
+            promotion=PromotionPosture(
+                reason="Champion/challenger promotion is not implemented.",
+                blocked_by=["OFFLINE_EVALUATION_UNPROVEN"],
+            ),
+        )
+
+    async def start_harness_evaluation(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._evaluation(EVALUATION_ID, actor_key)
+
+    async def harness_evaluation(self, evaluation_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return self._evaluation(evaluation_id)
+
+    async def record_harness_evaluation_result(self, evaluation_id, request, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return self._evaluation(evaluation_id)
+
+    async def complete_harness_evaluation(self, evaluation_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._evaluation(evaluation_id)
 
     async def agent_kill_switch(self, *, tenant_id):
         self.last_tenant_id = tenant_id

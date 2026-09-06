@@ -548,6 +548,213 @@
         "title": "ActionTypeSummary",
         "type": "object"
       },
+      "AdversarialScenarioGenerateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "limit_per_class": {
+            "default": 5,
+            "maximum": 25.0,
+            "minimum": 1.0,
+            "title": "Limit Per Class",
+            "type": "integer"
+          },
+          "scenario_classes": {
+            "items": {
+              "enum": [
+                "STALE_CONTEXT",
+                "CONFLICTING_DOCUMENTATION",
+                "PARTIAL_TOOL_OUTAGE",
+                "MALFORMED_API_RESPONSE",
+                "UNEXPECTED_SCHEMA_CHANGE",
+                "MALICIOUS_REPOSITORY_CONTENT",
+                "CONCURRENT_AGENT_ACTIONS",
+                "TOPOLOGY_DOCUMENTATION_MISMATCH"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Scenario Classes",
+            "type": "array"
+          },
+          "stale_after_days": {
+            "default": 90,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Stale After Days",
+            "type": "integer"
+          }
+        },
+        "title": "AdversarialScenarioGenerateRequest",
+        "type": "object"
+      },
+      "AdversarialScenarioList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "coverage": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioClassCoverage"
+            },
+            "maxItems": 8,
+            "minItems": 8,
+            "title": "Coverage",
+            "type": "array"
+          },
+          "estate_watermark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estate Watermark"
+          },
+          "generation_enabled": {
+            "title": "Generation Enabled",
+            "type": "boolean"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/AdversarialScenarioModel"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generation_enabled",
+          "coverage"
+        ],
+        "title": "AdversarialScenarioList",
+        "type": "object"
+      },
+      "AdversarialScenarioModel": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "derived_from_entity_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From Entity Id"
+          },
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "estate_watermark": {
+            "title": "Estate Watermark",
+            "type": "string"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "expected_behaviour": {
+            "additionalProperties": true,
+            "title": "Expected Behaviour",
+            "type": "object"
+          },
+          "generator_version": {
+            "title": "Generator Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "scenario_class": {
+            "enum": [
+              "STALE_CONTEXT",
+              "CONFLICTING_DOCUMENTATION",
+              "PARTIAL_TOOL_OUTAGE",
+              "MALFORMED_API_RESPONSE",
+              "UNEXPECTED_SCHEMA_CHANGE",
+              "MALICIOUS_REPOSITORY_CONTENT",
+              "CONCURRENT_AGENT_ACTIONS",
+              "TOPOLOGY_DOCUMENTATION_MISMATCH"
+            ],
+            "title": "Scenario Class",
+            "type": "string"
+          },
+          "scenario_key": {
+            "minLength": 1,
+            "title": "Scenario Key",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "stimulus": {
+            "additionalProperties": true,
+            "title": "Stimulus",
+            "type": "object"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scenario_key",
+          "scenario_class",
+          "title",
+          "description",
+          "stimulus",
+          "expected_behaviour",
+          "severity",
+          "generator_version",
+          "estate_watermark",
+          "input_fingerprint",
+          "created_at"
+        ],
+        "title": "AdversarialScenarioModel",
+        "type": "object"
+      },
       "AgentApprovalDecisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11010,6 +11217,309 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HarnessEvaluationCompleteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "enum": [
+              "COMPLETED",
+              "ABANDONED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HarnessEvaluationCompleteRequest",
+        "type": "object"
+      },
+      "HarnessEvaluationModel": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "estate_watermark": {
+            "title": "Estate Watermark",
+            "type": "string"
+          },
+          "execution_mode": {
+            "const": "OFFLINE",
+            "default": "OFFLINE",
+            "title": "Execution Mode",
+            "type": "string"
+          },
+          "failed_count": {
+            "minimum": 0.0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "harness_key": {
+            "title": "Harness Key",
+            "type": "string"
+          },
+          "harness_version": {
+            "title": "Harness Version",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "inconclusive_count": {
+            "minimum": 0.0,
+            "title": "Inconclusive Count",
+            "type": "integer"
+          },
+          "passed_count": {
+            "minimum": 0.0,
+            "title": "Passed Count",
+            "type": "integer"
+          },
+          "promotion": {
+            "$ref": "#/components/schemas/PromotionPosture"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessEvaluationResultModel"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "scenario_count": {
+            "minimum": 0.0,
+            "title": "Scenario Count",
+            "type": "integer"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "RUNNING",
+              "COMPLETED",
+              "ABANDONED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unevaluated_count": {
+            "minimum": 0.0,
+            "title": "Unevaluated Count",
+            "type": "integer"
+          },
+          "unevaluated_scenario_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Unevaluated Scenario Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "harness_key",
+          "harness_version",
+          "status",
+          "scenario_count",
+          "passed_count",
+          "failed_count",
+          "inconclusive_count",
+          "unevaluated_count",
+          "estate_watermark",
+          "created_by",
+          "started_at",
+          "promotion"
+        ],
+        "title": "HarnessEvaluationModel",
+        "type": "object"
+      },
+      "HarnessEvaluationRecordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnosis": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "observed_behaviour": {
+            "additionalProperties": true,
+            "title": "Observed Behaviour",
+            "type": "object"
+          },
+          "outcome": {
+            "enum": [
+              "PASSED",
+              "FAILED",
+              "INCONCLUSIVE"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "scenario_id": {
+            "format": "uuid",
+            "title": "Scenario Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "outcome"
+        ],
+        "title": "HarnessEvaluationRecordRequest",
+        "type": "object"
+      },
+      "HarnessEvaluationResultModel": {
+        "additionalProperties": false,
+        "properties": {
+          "diagnosis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnosis"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_behaviour": {
+            "additionalProperties": true,
+            "title": "Observed Behaviour",
+            "type": "object"
+          },
+          "outcome": {
+            "enum": [
+              "PASSED",
+              "FAILED",
+              "INCONCLUSIVE"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "scenario_class": {
+            "enum": [
+              "STALE_CONTEXT",
+              "CONFLICTING_DOCUMENTATION",
+              "PARTIAL_TOOL_OUTAGE",
+              "MALFORMED_API_RESPONSE",
+              "UNEXPECTED_SCHEMA_CHANGE",
+              "MALICIOUS_REPOSITORY_CONTENT",
+              "CONCURRENT_AGENT_ACTIONS",
+              "TOPOLOGY_DOCUMENTATION_MISMATCH"
+            ],
+            "title": "Scenario Class",
+            "type": "string"
+          },
+          "scenario_id": {
+            "format": "uuid",
+            "title": "Scenario Id",
+            "type": "string"
+          },
+          "scenario_key": {
+            "title": "Scenario Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scenario_id",
+          "scenario_key",
+          "scenario_class",
+          "outcome",
+          "recorded_at"
+        ],
+        "title": "HarnessEvaluationResultModel",
+        "type": "object"
+      },
+      "HarnessEvaluationStartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "harness_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Harness Key",
+            "type": "string"
+          },
+          "harness_version": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Harness Version",
+            "type": "string"
+          },
+          "scenario_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Scenario Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "harness_key",
+          "harness_version",
+          "scenario_ids"
+        ],
+        "title": "HarnessEvaluationStartRequest",
+        "type": "object"
+      },
       "IdentityReviewRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13968,6 +14478,37 @@
         "title": "Phase3IntelligenceMetrics",
         "type": "object"
       },
+      "PromotionPosture": {
+        "additionalProperties": false,
+        "description": "The champion/challenger half of \u00a736, stated instead of silently missing.\n\nA1 requires promotion to stay disabled until offline evaluation, rollback, and governance\nare proven. `NOT_IMPLEMENTED` is the honest description: there is no promotion table and no\nchampion column, so this is not a switch somebody can flip by accident.",
+        "properties": {
+          "blocked_by": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Blocked By",
+            "type": "array"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "const": "NOT_IMPLEMENTED",
+            "default": "NOT_IMPLEMENTED",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "blocked_by"
+        ],
+        "title": "PromotionPosture",
+        "type": "object"
+      },
       "ProviderQuota": {
         "additionalProperties": false,
         "properties": {
@@ -15800,6 +16341,54 @@
           "recent_jobs"
         ],
         "title": "ScanStatus",
+        "type": "object"
+      },
+      "ScenarioClassCoverage": {
+        "additionalProperties": false,
+        "description": "Why a scenario class has the population it has.\n\nA class with no scenarios is never left to read as \"this estate is safe from it\": the\nstatus says whether generation was attempted and what the estate did or did not supply.",
+        "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "scenario_class": {
+            "enum": [
+              "STALE_CONTEXT",
+              "CONFLICTING_DOCUMENTATION",
+              "PARTIAL_TOOL_OUTAGE",
+              "MALFORMED_API_RESPONSE",
+              "UNEXPECTED_SCHEMA_CHANGE",
+              "MALICIOUS_REPOSITORY_CONTENT",
+              "CONCURRENT_AGENT_ACTIONS",
+              "TOPOLOGY_DOCUMENTATION_MISMATCH"
+            ],
+            "title": "Scenario Class",
+            "type": "string"
+          },
+          "scenario_count": {
+            "minimum": 0.0,
+            "title": "Scenario Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "GENERATED",
+              "NOT_DERIVABLE",
+              "NOT_ATTEMPTED",
+              "GENERATION_DISABLED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_class",
+          "status",
+          "scenario_count",
+          "detail"
+        ],
+        "title": "ScenarioClassCoverage",
         "type": "object"
       },
       "Score": {
@@ -22838,6 +23427,306 @@
         "summary": "Review Identity Assertion",
         "tags": [
           "identity"
+        ]
+      }
+    },
+    "/immune-system/evaluations": {
+      "post": {
+        "operationId": "startHarnessEvaluation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessEvaluationStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessEvaluationModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Harness Evaluation",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/evaluations/{id}": {
+      "get": {
+        "operationId": "getHarnessEvaluation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessEvaluationModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Harness Evaluation",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/evaluations/{id}/finish": {
+      "post": {
+        "operationId": "finishHarnessEvaluation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessEvaluationCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessEvaluationModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finish Harness Evaluation",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/evaluations/{id}/results": {
+      "post": {
+        "operationId": "recordHarnessEvaluationResult",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessEvaluationRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessEvaluationModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Harness Evaluation Result",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/scenarios": {
+      "get": {
+        "operationId": "listAdversarialScenarios",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scenario_class",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "STALE_CONTEXT",
+                    "CONFLICTING_DOCUMENTATION",
+                    "PARTIAL_TOOL_OUTAGE",
+                    "MALFORMED_API_RESPONSE",
+                    "UNEXPECTED_SCHEMA_CHANGE",
+                    "MALICIOUS_REPOSITORY_CONTENT",
+                    "CONCURRENT_AGENT_ACTIONS",
+                    "TOPOLOGY_DOCUMENTATION_MISMATCH"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scenario Class"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdversarialScenarioList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Adversarial Scenarios",
+        "tags": [
+          "immune-system"
+        ]
+      },
+      "post": {
+        "operationId": "generateAdversarialScenarios",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdversarialScenarioGenerateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdversarialScenarioList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate Adversarial Scenarios",
+        "tags": [
+          "immune-system"
         ]
       }
     },

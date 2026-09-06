@@ -39,6 +39,38 @@ export interface ActionTypeSummary {
   subjects?: Array<ActionSubjectCapability>;
 }
 
+export interface AdversarialScenarioGenerateRequest {
+  limit_per_class?: number;
+  scenario_classes?: Array<"STALE_CONTEXT" | "CONFLICTING_DOCUMENTATION" | "PARTIAL_TOOL_OUTAGE" | "MALFORMED_API_RESPONSE" | "UNEXPECTED_SCHEMA_CHANGE" | "MALICIOUS_REPOSITORY_CONTENT" | "CONCURRENT_AGENT_ACTIONS" | "TOPOLOGY_DOCUMENTATION_MISMATCH">;
+  stale_after_days?: number;
+}
+
+export interface AdversarialScenarioList {
+  contract_version?: "1.0.0";
+  coverage: Array<ScenarioClassCoverage>;
+  estate_watermark?: string | null;
+  generation_enabled: boolean;
+  limitations?: Array<string>;
+  scenarios?: Array<AdversarialScenarioModel>;
+}
+
+export interface AdversarialScenarioModel {
+  created_at: string;
+  derived_from_entity_id?: string | null;
+  description: string;
+  estate_watermark: string;
+  evidence_fact_ids?: Array<string>;
+  expected_behaviour: Record<string, unknown>;
+  generator_version: string;
+  id: string;
+  input_fingerprint: string;
+  scenario_class: "STALE_CONTEXT" | "CONFLICTING_DOCUMENTATION" | "PARTIAL_TOOL_OUTAGE" | "MALFORMED_API_RESPONSE" | "UNEXPECTED_SCHEMA_CHANGE" | "MALICIOUS_REPOSITORY_CONTENT" | "CONCURRENT_AGENT_ACTIONS" | "TOPOLOGY_DOCUMENTATION_MISMATCH";
+  scenario_key: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  stimulus: Record<string, unknown>;
+  title: string;
+}
+
 export interface AgentApprovalDecisionRequest {
   decision: "APPROVED" | "REJECTED";
   expected_version: number;
@@ -1861,6 +1893,56 @@ export interface GraphRiskList {
   snapshot?: GraphAnalysisSnapshot | null;
 }
 
+export interface HarnessEvaluationCompleteRequest {
+  note?: string | null;
+  status: "COMPLETED" | "ABANDONED";
+}
+
+export interface HarnessEvaluationModel {
+  completed_at?: string | null;
+  contract_version?: "1.0.0";
+  created_by: string;
+  estate_watermark: string;
+  execution_mode?: "OFFLINE";
+  failed_count: number;
+  harness_key: string;
+  harness_version: string;
+  id: string;
+  inconclusive_count: number;
+  passed_count: number;
+  promotion: PromotionPosture;
+  results?: Array<HarnessEvaluationResultModel>;
+  scenario_count: number;
+  started_at: string;
+  status: "RUNNING" | "COMPLETED" | "ABANDONED";
+  unevaluated_count: number;
+  unevaluated_scenario_ids?: Array<string>;
+}
+
+export interface HarnessEvaluationRecordRequest {
+  diagnosis?: string | null;
+  observed_behaviour?: Record<string, unknown>;
+  outcome: "PASSED" | "FAILED" | "INCONCLUSIVE";
+  scenario_id: string;
+}
+
+export interface HarnessEvaluationResultModel {
+  diagnosis?: string | null;
+  id: string;
+  observed_behaviour?: Record<string, unknown>;
+  outcome: "PASSED" | "FAILED" | "INCONCLUSIVE";
+  recorded_at: string;
+  scenario_class: "STALE_CONTEXT" | "CONFLICTING_DOCUMENTATION" | "PARTIAL_TOOL_OUTAGE" | "MALFORMED_API_RESPONSE" | "UNEXPECTED_SCHEMA_CHANGE" | "MALICIOUS_REPOSITORY_CONTENT" | "CONCURRENT_AGENT_ACTIONS" | "TOPOLOGY_DOCUMENTATION_MISMATCH";
+  scenario_id: string;
+  scenario_key: string;
+}
+
+export interface HarnessEvaluationStartRequest {
+  harness_key: string;
+  harness_version: string;
+  scenario_ids: Array<string>;
+}
+
 export interface HTTPValidationError {
   detail?: Array<ValidationError>;
 }
@@ -2313,6 +2395,12 @@ export interface Phase3IntelligenceMetrics {
   successful_validation_rate?: number | null;
 }
 
+export interface PromotionPosture {
+  blocked_by: Array<string>;
+  reason: string;
+  state?: "NOT_IMPLEMENTED";
+}
+
 export interface ProviderQuota {
   backoff_until?: string | null;
   limit?: number | null;
@@ -2587,6 +2675,13 @@ export interface ScanStatus {
   policy: ScanPolicy;
   quotas: Array<ProviderQuota>;
   recent_jobs: Array<RescanJob>;
+}
+
+export interface ScenarioClassCoverage {
+  detail: string;
+  scenario_class: "STALE_CONTEXT" | "CONFLICTING_DOCUMENTATION" | "PARTIAL_TOOL_OUTAGE" | "MALFORMED_API_RESPONSE" | "UNEXPECTED_SCHEMA_CHANGE" | "MALICIOUS_REPOSITORY_CONTENT" | "CONCURRENT_AGENT_ACTIONS" | "TOPOLOGY_DOCUMENTATION_MISMATCH";
+  scenario_count: number;
+  status: "GENERATED" | "NOT_DERIVABLE" | "NOT_ATTEMPTED" | "GENERATION_DISABLED";
 }
 
 export interface Score {
