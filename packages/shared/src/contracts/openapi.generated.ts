@@ -991,6 +991,14 @@ export interface ChangeScopeList {
   subject: EntitySummary;
 }
 
+export interface ChangeSetCompileRequest {
+  atomic?: boolean;
+  entry_point?: "API" | "PULL_REQUEST" | "CHANGE_TICKET" | "ARCHITECTURE_CHANGE" | "AGENT_PROPOSAL";
+  external_reference?: string | null;
+  idempotency_key: string;
+  mutations: Array<ChangeSetMutationRequest>;
+}
+
 export interface ChangeSetModel {
   atomic?: boolean;
   created_at?: string | null;
@@ -999,6 +1007,14 @@ export interface ChangeSetModel {
   lifecycle: "DRAFT" | "VALIDATED" | "REJECTED" | "SUPERSEDED" | "SUBMITTED" | "EXECUTED" | "CANCELLED";
   mutations: Array<MutationIR>;
   schema_version?: "changeset/1.0.0";
+}
+
+export interface ChangeSetMutationRequest {
+  predicate: "UPGRADE" | "REPLACE" | "REMOVE" | "DEPRECATE" | "MIGRATE" | "MOVE";
+  scope_id?: string | null;
+  subject_id?: string | null;
+  subject_query?: string | null;
+  target_version?: string | null;
 }
 
 export interface Citation {

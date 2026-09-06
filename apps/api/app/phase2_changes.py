@@ -6,6 +6,7 @@ import json
 import re
 import socket
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4, uuid5
@@ -26,6 +27,7 @@ from app.models import (
     ActionTypeSummary,
     ChangeGate,
     ChangeScope,
+    ChangeSetCompileRequest,
     ChangeScopeList,
     ChangeSetModel,
     EntityResolution,
@@ -111,6 +113,57 @@ def _impact_quantity(value: Any) -> int:
 
 def _clear_gate() -> ChangeGate:
     return ChangeGate(state="CLEAR", reasons=[])
+
+
+@dataclass
+class MutationDraft:
+    """One compiled-but-unpersisted mutation and everything the gate decided about it."""
+
+    mutation: MutationIR
+    predicate: str
+    resolution: Any
+    target: ValidTarget | None
+    scope: ChangeScope | None
+    errors: list[MutationValidationError]
+    reasons: list[GateReason]
+    fingerprint: str
+
+
+def _change_set_conflicts(drafts: list["MutationDraft"]) -> list[GateReason]:
+    """Reject a ChangeSet whose mutations disagree with each other.
+
+    C2 requires conflict detection, and the cases that matter are the ones a per-mutation gate
+    cannot see: two mutations moving the same subject in the same scope to different targets,
+    and the same mutation listed twice. Either would make the set's stated effect depend on the
+    order it happened to be applied in.
+    """
+    reasons: list[GateReason] = []
+    by_subject: dict[tuple[str, str], set[str]] = {}
+    seen_fingerprints: set[str] = set()
+    duplicated = False
+    for draft in drafts:
+        if draft.fingerprint in seen_fingerprints:
+            duplicated = True
+        seen_fingerprints.add(draft.fingerprint)
+        if draft.resolution.entity is None or draft.scope is None or draft.target is None:
+            continue
+        key = (str(draft.resolution.entity.id), draft.scope.id)
+        by_subject.setdefault(key, set()).add(draft.target.version)
+    if duplicated:
+        reasons.append(GateReason(
+            code="DUPLICATE_MUTATION",
+            message="The ChangeSet lists the same mutation more than once.",
+        ))
+    conflicting = sorted(key for key, versions in by_subject.items() if len(versions) > 1)
+    if conflicting:
+        reasons.append(GateReason(
+            code="CONFLICTING_MUTATIONS",
+            message=(
+                "Two mutations move the same subject in the same scope to different targets, so "
+                "the ChangeSet's effect would depend on application order."
+            ),
+        ))
+    return reasons
 
 
 class Phase2ChangeMixin:
@@ -623,12 +676,17 @@ class Phase2ChangeMixin:
             ))
         return ChangeScopeList(subject=resolution.entity, scopes=scopes, policy_version=POLICY_KEY + "/1")
 
-    async def compile_mutation(
-        self, request: MutationCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+    async def _compile_draft(
+        self, request: MutationCompileRequest, *, tenant_id: UUID, actor_key: str,
         provenance: dict[str, Any] | None = None,
-    ) -> MutationCompileResult:
-        if tenant_id is None:
-            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+    ) -> "MutationDraft":
+        """Resolve, validate, and gate one mutation without persisting anything.
+
+        Split out so a ChangeSet carrying several mutations compiles each through exactly the
+        same grammar, resolution order, and gates as a single one. C2 requires ordered,
+        atomicity-aware ChangeSets; letting the multi-mutation path validate differently from
+        the single-mutation path would be a second compiler with a second set of rules.
+        """
         predicate = request.predicate
         subject_query = request.subject_query
         target_version = request.target_version
@@ -656,10 +714,15 @@ class Phase2ChangeMixin:
         reasons: list[GateReason] = []
         target: ValidTarget | None = None
         selected_scope: ChangeScope | None = None
-        if predicate != "UPGRADE":
+        capability = await self._action_capability(predicate, "Package", tenant_id=tenant_id)
+        if capability is None or capability["lifecycle"] != "ACTIVE":
             errors.append(MutationValidationError(
                 code="ACTION_NOT_ENABLED", field="predicate",
-                message=f"{predicate} is in the ontology but is not enabled for deterministic compilation.",
+                message=(
+                    f"{predicate} is in the ontology but is not enabled for deterministic compilation."
+                    if capability is not None else
+                    f"{predicate} has no registered capability for a Package subject."
+                ),
             ))
         if resolution.state != "RESOLVED" or resolution.entity is None:
             errors.append(MutationValidationError(
@@ -785,28 +848,133 @@ class Phase2ChangeMixin:
             input_fingerprint=mutation_fingerprint, lifecycle=lifecycle,
             validation_errors=[error for error in errors if error is not None],
         )
-        if errors:
-            for error in errors:
-                if error and not any(reason.code == error.code for reason in reasons):
-                    reasons.append(GateReason(
-                        code=error.code, message=error.message,
-                        evidence_fact_ids=error.evidence_fact_ids,
-                    ))
+        for error in errors:
+            if error and not any(reason.code == error.code for reason in reasons):
+                reasons.append(GateReason(
+                    code=error.code, message=error.message,
+                    evidence_fact_ids=error.evidence_fact_ids,
+                ))
+        return MutationDraft(
+            mutation=mutation, predicate=predicate, resolution=resolution, target=target,
+            scope=selected_scope, errors=[error for error in errors if error is not None],
+            reasons=reasons, fingerprint=mutation_fingerprint,
+        )
+
+    async def _action_capability(
+        self, predicate: str, subject_type: str, *, tenant_id: UUID | None,
+    ) -> dict[str, Any] | None:
+        """Return the registered ActionCapability governing a predicate and subject type.
+
+        C1 says the ontology and its capability rows decide what may compile. Until now this
+        table was read only to list action types while validation was hardcoded to UPGRADE, so
+        enabling a predicate meant editing Python rather than seeding a row.
+        """
+        return await self.database.fetch_one(
+            """
+            SELECT * FROM action_capability
+            WHERE predicate=%s AND subject_type=%s
+            ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
+            """,
+            (predicate, subject_type), tenant_id=tenant_id,
+        )
+
+    async def compile_mutation(
+        self, request: MutationCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+        provenance: dict[str, Any] | None = None,
+    ) -> MutationCompileResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+        return await self._compile_change_set(
+            [request], tenant_id=tenant_id, actor_key=actor_key,
+            idempotency_key=request.idempotency_key, provenance=provenance,
+        )
+
+    async def compile_change_set(
+        self, request: ChangeSetCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult:
+        """Compile a ChangeSet from a pull request, ticket, architecture change, or agent.
+
+        Every one of these entry points reaches the deterministic engine through the same
+        Mutation IR as the command bar, which is what §7 asks for. The source states what it
+        proposes; StackGraph decides whether that grounds in the estate.
+        """
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+        provenance: dict[str, Any] = {"entry_point": request.entry_point}
+        if request.external_reference:
+            provenance["external_reference"] = request.external_reference
+        return await self._compile_change_set(
+            [
+                MutationCompileRequest(
+                    predicate=item.predicate, subject_id=item.subject_id,
+                    subject_query=item.subject_query, target_version=item.target_version,
+                    scope_id=item.scope_id, idempotency_key=request.idempotency_key,
+                )
+                for item in request.mutations
+            ],
+            tenant_id=tenant_id, actor_key=actor_key,
+            idempotency_key=request.idempotency_key, provenance=provenance,
+            atomic=request.atomic,
+        )
+
+    async def _compile_change_set(
+        self, requests: list[MutationCompileRequest], *, tenant_id: UUID, actor_key: str,
+        idempotency_key: str, provenance: dict[str, Any] | None = None, atomic: bool = True,
+    ) -> MutationCompileResult:
+        """Compile an ordered ChangeSet of one or more mutations.
+
+        Every mutation must pass its own gates *and* the set must be internally consistent
+        before anything is persisted. A ChangeSet is atomic by default, so one blocked mutation
+        blocks the set: persisting a partially valid set would offer the user a plan whose
+        stated scope is not the plan that would run.
+        """
+        if not requests:
+            raise APIError(400, "EMPTY_CHANGE_SET", "A ChangeSet must contain at least one mutation.")
+        capability = await self._action_capability("UPGRADE", "Package", tenant_id=tenant_id)
+        max_mutations = int(
+            ((capability or {}).get("validation_rules") or {}).get("max_mutations") or 20
+        )
+        if len(requests) > max_mutations:
+            raise APIError(
+                422, "CHANGE_SET_TOO_LARGE",
+                f"A ChangeSet may carry at most {max_mutations} mutations.",
+                {"requested": len(requests), "limit": max_mutations},
+            )
+        drafts = [
+            await self._compile_draft(
+                item, tenant_id=tenant_id, actor_key=actor_key, provenance=provenance,
+            )
+            for item in requests
+        ]
+        reasons: list[GateReason] = []
+        for reason in (item for draft in drafts for item in draft.reasons):
+            if not any(existing.code == reason.code for existing in reasons):
+                reasons.append(reason)
+        reasons.extend(_change_set_conflicts(drafts))
+
+        if reasons or any(draft.errors for draft in drafts):
+            first = drafts[0]
             result = MutationCompileResult(
-                command_state="TOKENISED" if resolution.state != "UNRESOLVED" else "RESOLVING",
-                draft=mutation, gate=ChangeGate(state="BLOCKED", reasons=reasons),
+                command_state=(
+                    "TOKENISED" if first.resolution.state != "UNRESOLVED" else "RESOLVING"
+                ),
+                draft=first.mutation, gate=ChangeGate(state="BLOCKED", reasons=reasons),
             )
             await self._audit_change(
                 tenant_id=tenant_id, actor_key=actor_key, action="change_set.compile_blocked",
-                target_kind="mutation_draft", target_id=mutation.input_fingerprint,
+                target_kind="mutation_draft", target_id=first.fingerprint,
                 detail={
-                    "predicate": predicate,
+                    "predicate": first.predicate,
+                    "mutations": len(drafts),
                     "reason_codes": [reason.code for reason in reasons],
-                    "entry_point": mutation.provenance["entry_point"],
+                    "entry_point": first.mutation.provenance["entry_point"],
                 },
             )
             return result
-        change_fingerprint = _fingerprint({"atomic": True, "mutations": [mutation_fingerprint]})
+
+        change_fingerprint = _fingerprint({
+            "atomic": atomic, "mutations": [draft.fingerprint for draft in drafts],
+        })
         async with self.database.session(tenant_id) as connection:
             existing_cursor = await connection.execute(
                 """
@@ -816,12 +984,12 @@ class Phase2ChangeMixin:
                 ORDER BY (idempotency_key=%s) DESC
                 LIMIT 1
                 """,
-                (tenant_id, request.idempotency_key, change_fingerprint, request.idempotency_key),
+                (tenant_id, idempotency_key, change_fingerprint, idempotency_key),
             )
             existing = await existing_cursor.fetchone()
             if (
                 existing
-                and existing["idempotency_key"] == request.idempotency_key
+                and existing["idempotency_key"] == idempotency_key
                 and existing["input_fingerprint"] != change_fingerprint
             ):
                 raise APIError(
@@ -833,53 +1001,62 @@ class Phase2ChangeMixin:
                 change_set_id = existing["id"]
                 created_at = existing["created_at"]
                 mutation_cursor = await connection.execute(
-                    "SELECT id FROM mutation WHERE change_set_id=%s ORDER BY ordinal LIMIT 1",
+                    "SELECT id FROM mutation WHERE change_set_id=%s ORDER BY ordinal",
                     (change_set_id,),
                 )
-                mutation_row = await mutation_cursor.fetchone()
-                assert mutation_row is not None
-                mutation.id = mutation_row["id"]
+                for draft, row in zip(drafts, await mutation_cursor.fetchall()):
+                    draft.mutation.id = row["id"]
             else:
                 change_set_id = uuid4()
                 created_at = datetime.now(UTC)
-                mutation.id = uuid4()
                 await connection.execute(
                     """
                     INSERT INTO change_set(
-                      id,tenant_id,lifecycle,input_fingerprint,idempotency_key,provenance,created_by,created_at
-                    ) VALUES (%s,%s,'VALIDATED',%s,%s,%s,%s,%s)
+                      id,tenant_id,atomic,lifecycle,input_fingerprint,idempotency_key,
+                      provenance,created_by,created_at
+                    ) VALUES (%s,%s,%s,'VALIDATED',%s,%s,%s,%s,%s)
                     """,
                     (
-                        change_set_id, tenant_id, change_fingerprint, request.idempotency_key,
-                        Jsonb(mutation.provenance), actor_key, created_at,
+                        change_set_id, tenant_id, atomic, change_fingerprint, idempotency_key,
+                        Jsonb(drafts[0].mutation.provenance), actor_key, created_at,
                     ),
                 )
-                await connection.execute(
-                    """
-                    INSERT INTO mutation(
-                      id,tenant_id,change_set_id,ordinal,predicate,subject_entity_id,subject_resolution,
-                      before_state,after_state,scope,constraints,provenance,input_fingerprint,lifecycle
-                    ) VALUES (%s,%s,%s,0,%s,%s,'RESOLVED',%s,%s,%s,%s,%s,%s,'VALIDATED')
-                    """,
-                    (
-                        mutation.id, tenant_id, change_set_id, predicate, resolution.entity.id,
-                        Jsonb(before), Jsonb(after), Jsonb(selected_scope.model_dump(mode="json")),
-                        Jsonb(mutation.constraints), Jsonb(mutation.provenance), mutation_fingerprint,
-                    ),
-                )
+                for ordinal, draft in enumerate(drafts):
+                    draft.mutation.id = uuid4()
+                    assert draft.resolution.entity is not None and draft.scope is not None
+                    await connection.execute(
+                        """
+                        INSERT INTO mutation(
+                          id,tenant_id,change_set_id,ordinal,predicate,subject_entity_id,
+                          subject_resolution,before_state,after_state,scope,constraints,
+                          provenance,input_fingerprint,lifecycle
+                        ) VALUES (%s,%s,%s,%s,%s,%s,'RESOLVED',%s,%s,%s,%s,%s,%s,'VALIDATED')
+                        """,
+                        (
+                            draft.mutation.id, tenant_id, change_set_id, ordinal, draft.predicate,
+                            draft.resolution.entity.id, Jsonb(draft.mutation.before),
+                            Jsonb(draft.mutation.after),
+                            Jsonb(draft.scope.model_dump(mode="json")),
+                            Jsonb(draft.mutation.constraints),
+                            Jsonb(draft.mutation.provenance), draft.fingerprint,
+                        ),
+                    )
         change_set = ChangeSetModel(
-            id=change_set_id, mutations=[mutation], lifecycle="VALIDATED",
-            input_fingerprint=change_fingerprint, created_at=created_at,
+            id=change_set_id, mutations=[draft.mutation for draft in drafts],
+            lifecycle="VALIDATED", input_fingerprint=change_fingerprint, created_at=created_at,
         )
         result = MutationCompileResult(
-            command_state="COMPILED", change_set=change_set, draft=mutation,
+            command_state="COMPILED", change_set=change_set, draft=drafts[0].mutation,
             gate=_clear_gate(), replayed=replayed,
         )
         await self._audit_change(
             tenant_id=tenant_id, actor_key=actor_key, action="change_set.compile",
             target_kind="change_set", target_id=str(change_set_id),
-            detail={"predicate": predicate, "replayed": replayed,
-                    "entry_point": mutation.provenance["entry_point"]},
+            detail={
+                "predicate": drafts[0].predicate, "replayed": replayed,
+                "mutations": len(drafts),
+                "entry_point": drafts[0].mutation.provenance["entry_point"],
+            },
         )
         return result
 
@@ -1276,11 +1453,17 @@ class Phase2ChangeMixin:
     async def _execute_simulation(
         self, run: dict[str, Any], *, max_nodes: int, max_edges: int,
     ) -> None:
+        """Simulate every mutation in the ChangeSet and persist one merged result.
+
+        A ChangeSet is the unit a user submits, so it is the unit that gets a status, a result
+        hash, and a set of findings. Each mutation is walked separately under the same pinned
+        policy and its findings are namespaced by ordinal, so two mutations touching the same
+        dependency fact produce two distinct findings rather than silently colliding.
+        """
         tenant_id = run["tenant_id"]
         change_set = await self._load_change_set(run["change_set_id"], tenant_id=tenant_id)
-        mutation = change_set.mutations[0]
-        if mutation.subject.entity is None or mutation.scope is None:
-            raise RuntimeError("persisted mutation is missing canonical identity or scope")
+        if not change_set.mutations:
+            raise RuntimeError("persisted ChangeSet carries no mutations")
         policy_row = await self.database.fetch_one(
             "SELECT * FROM impact_policy WHERE id=%s", (run["policy_id"],), tenant_id=tenant_id,
         )
@@ -1291,6 +1474,88 @@ class Phase2ChangeMixin:
         policy = ImpactPolicyConfiguration.from_row(policy_row)
         node_budget = min(max_nodes, policy.max_nodes) if policy.max_nodes else max_nodes
         edge_budget = min(max_edges, policy.max_edges) if policy.max_edges else max_edges
+        # Budgets are the ChangeSet's, not each mutation's, so a large set cannot multiply the
+        # traversal cost by its own length.
+        per_mutation_nodes = max(1, node_budget // len(change_set.mutations))
+        per_mutation_edges = max(1, edge_budget // len(change_set.mutations))
+
+        findings: list[dict[str, Any]] = []
+        limitations: list[dict[str, Any]] = []
+        scanner_versions: set[str] = set()
+        limited = False
+        simulatable = 0
+        for ordinal, mutation in enumerate(change_set.mutations):
+            outcome = await self._simulate_mutation(
+                run=run, mutation=mutation, ordinal=ordinal, policy=policy,
+                node_budget=per_mutation_nodes, edge_budget=per_mutation_edges,
+            )
+            findings.extend(outcome["findings"])
+            scanner_versions |= outcome["scanner_versions"]
+            limited = limited or outcome["limited"]
+            simulatable += int(outcome["eligible"] > 0)
+            for limitation in outcome["limitations"]:
+                if not any(item["code"] == limitation["code"] for item in limitations):
+                    limitations.append(limitation)
+
+        if simulatable == 0:
+            status = "NOT_SIMULATABLE"
+        elif limited or simulatable < len(change_set.mutations):
+            # A set where some mutations found no eligible path is constrained, not complete.
+            status = "LIMITED"
+        else:
+            status = "SUCCEEDED"
+
+        findings.sort(key=lambda item: (
+            _CLASSIFICATION_ORDER.index(item["classification"]), item["deterministic_key"],
+        ))
+        canonical_result = [{
+            key: (str(value) if isinstance(value, UUID) else value)
+            for key, value in finding.items() if key not in {"id"}
+        } for finding in findings]
+        result_hash = _fingerprint({
+            "change_set": change_set.input_fingerprint,
+            "estate_watermark": run["estate_watermark"], "policy": run["policy_version"],
+            "policy_schema": policy.schema_version,
+            "findings": canonical_result, "limitations": limitations,
+        })
+        async with self.database.session(tenant_id) as connection:
+            for finding in findings:
+                await connection.execute(
+                    """
+                    INSERT INTO simulation_finding(
+                      id,tenant_id,simulation_run_id,rule_key,rule_version,classification,severity,
+                      title,detail,affected_entity_id,confidence,evidence_fact_ids,path_entity_ids,
+                      fact_payload,curated_evidence,deterministic_key
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(simulation_run_id,deterministic_key) DO NOTHING
+                    """,
+                    (
+                        finding["id"], tenant_id, run["id"], finding["rule_key"],
+                        finding["rule_version"], finding["classification"], finding["severity"],
+                        finding["title"], finding["detail"], finding["affected_entity_id"],
+                        finding["confidence"], finding["evidence_fact_ids"], finding["path_entity_ids"],
+                        Jsonb(finding["fact_payload"]), Jsonb(finding["curated_evidence"]),
+                        finding["deterministic_key"],
+                    ),
+                )
+            await connection.execute(
+                """
+                UPDATE simulation_run SET status=%s,result_hash=%s,limitations=%s,
+                  scanner_versions=%s,completed_at=now(),leased_by=NULL,leased_until=NULL,updated_at=now()
+                WHERE id=%s
+                """,
+                (status, result_hash, Jsonb(limitations), sorted(scanner_versions), run["id"]),
+            )
+        await self._interpret_simulation(run_id=run["id"], tenant_id=tenant_id, findings=findings)
+
+    async def _simulate_mutation(
+        self, *, run: dict[str, Any], mutation: Any, ordinal: int,
+        policy: ImpactPolicyConfiguration, node_budget: int, edge_budget: int,
+    ) -> dict[str, Any]:
+        """Walk the estate for one mutation and return its findings, unpersisted."""
+        tenant_id = run["tenant_id"]
+        if mutation.subject.entity is None or mutation.scope is None:
+            raise RuntimeError("persisted mutation is missing canonical identity or scope")
 
         _, package_name = await self._package_resolution(
             tenant_id=tenant_id, subject_id=mutation.subject.entity.id, query=None,
@@ -1327,6 +1592,9 @@ class Phase2ChangeMixin:
             evidence_fact_ids: list[UUID], path_entity_ids: list[UUID],
             fact_payload: dict[str, Any], curated_evidence: list[dict[str, Any]] | None = None,
         ) -> None:
+            # Namespaced by ordinal so two mutations touching the same dependency fact
+            # produce two findings rather than one silently overwriting the other.
+            key = f"m{ordinal}:{key}"
             findings.append({
                 "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{key}"),
                 "rule_key": rule_key, "rule_version": "2.0.0",
@@ -1503,50 +1771,13 @@ class Phase2ChangeMixin:
                 "message": "No current dependency path met the policy's evidence and confidence thresholds.",
                 "evidence_fact_ids": [row["fact_id"] for row in seed_rows if row["has_evidence"]],
             })
-            status = "NOT_SIMULATABLE"
-        else:
-            status = "LIMITED" if limited else "SUCCEEDED"
-
-        findings.sort(key=lambda item: (_CLASSIFICATION_ORDER.index(item["classification"]), item["deterministic_key"]))
-        canonical_result = [{
-            key: (str(value) if isinstance(value, UUID) else value)
-            for key, value in finding.items() if key not in {"id"}
-        } for finding in findings]
-        result_hash = _fingerprint({
-            "change_set": change_set.input_fingerprint,
-            "estate_watermark": run["estate_watermark"], "policy": run["policy_version"],
-            "policy_schema": policy.schema_version,
-            "findings": canonical_result, "limitations": limitations,
-        })
-        async with self.database.session(tenant_id) as connection:
-            for finding in findings:
-                await connection.execute(
-                    """
-                    INSERT INTO simulation_finding(
-                      id,tenant_id,simulation_run_id,rule_key,rule_version,classification,severity,
-                      title,detail,affected_entity_id,confidence,evidence_fact_ids,path_entity_ids,
-                      fact_payload,curated_evidence,deterministic_key
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT(simulation_run_id,deterministic_key) DO NOTHING
-                    """,
-                    (
-                        finding["id"], tenant_id, run["id"], finding["rule_key"],
-                        finding["rule_version"], finding["classification"], finding["severity"],
-                        finding["title"], finding["detail"], finding["affected_entity_id"],
-                        finding["confidence"], finding["evidence_fact_ids"], finding["path_entity_ids"],
-                        Jsonb(finding["fact_payload"]), Jsonb(finding["curated_evidence"]),
-                        finding["deterministic_key"],
-                    ),
-                )
-            await connection.execute(
-                """
-                UPDATE simulation_run SET status=%s,result_hash=%s,limitations=%s,
-                  scanner_versions=%s,completed_at=now(),leased_by=NULL,leased_until=NULL,updated_at=now()
-                WHERE id=%s
-                """,
-                (status, result_hash, Jsonb(limitations), sorted(scanner_versions), run["id"]),
-            )
-        await self._interpret_simulation(run_id=run["id"], tenant_id=tenant_id, findings=findings)
+        return {
+            "findings": findings,
+            "limitations": limitations,
+            "scanner_versions": scanner_versions,
+            "limited": limited,
+            "eligible": len(eligible_rows),
+        }
 
     async def _seed_dependents(
         self, *, tenant_id: UUID, package_name: str, scope: Any,

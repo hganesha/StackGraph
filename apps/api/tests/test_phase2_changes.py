@@ -5,7 +5,12 @@ from uuid import UUID
 import pytest
 
 from app.errors import APIError
-from app.models import MutationCompileRequest, ObservedMutationCreateRequest
+from app.models import (
+    ChangeSetCompileRequest,
+    ChangeSetMutationRequest,
+    MutationCompileRequest,
+    ObservedMutationCreateRequest,
+)
 from app.read_models import ReadModelStore
 
 
@@ -19,12 +24,16 @@ NOW = datetime(2026, 9, 5, 12, tzinfo=UTC)
 
 
 class Cursor:
-    def __init__(self, row=None):
+    def __init__(self, row=None, rows=None):
         self.row = row
+        self.rows = rows or ([] if row is None else [row])
 
     async def fetchone(self):
         row, self.row = self.row, None
         return row
+
+    async def fetchall(self):
+        return list(self.rows)
 
 
 class Session:
@@ -43,7 +52,8 @@ class CompilerDatabase:
         self.observed_version = observed_version
         self.contradictions = contradictions or []
         self.change_set = None
-        self.mutation_id = None
+        self.mutation_ids = []
+        self.mutation_ordinals = []
         self.audit_actions = []
 
     def session(self, tenant_id):
@@ -53,6 +63,13 @@ class CompilerDatabase:
     async def fetch_one(self, query, params=None, *, tenant_id=None):
         if "FROM phase2_feature_flag" in query:
             return {"enabled": True}
+        if "FROM action_capability" in query:
+            # Compilation is now governed by the registered capability rather than a hardcoded
+            # predicate check, so the double has to serve the row the compiler reads.
+            return {
+                "predicate": "UPGRADE", "subject_type": "Package", "lifecycle": "ACTIVE",
+                "validation_rules": {"max_mutations": 20},
+            }
         raise AssertionError(f"unexpected fetch_one: {query}")
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
@@ -95,16 +112,19 @@ class CompilerDatabase:
                 return Cursor(dict(self.change_set))
             return Cursor()
         if "INSERT INTO change_set" in query:
+            # A ChangeSet now records whether it is atomic, so the fingerprint and key sit one
+            # position later than they did when every set held exactly one mutation.
             self.change_set = {
-                "id": params[0], "input_fingerprint": params[2],
-                "idempotency_key": params[3], "created_at": params[6],
+                "id": params[0], "atomic": params[2], "input_fingerprint": params[3],
+                "idempotency_key": params[4], "created_at": params[7],
             }
             return Cursor()
         if "INSERT INTO mutation" in query:
-            self.mutation_id = params[0]
+            self.mutation_ids.append(params[0])
+            self.mutation_ordinals.append(params[3])
             return Cursor()
         if "SELECT id FROM mutation" in query:
-            return Cursor({"id": self.mutation_id})
+            return Cursor(rows=[{"id": value} for value in self.mutation_ids])
         if "INSERT INTO admin_audit_log" in query:
             self.audit_actions.append(params[2])
             return Cursor()
@@ -218,3 +238,141 @@ def test_observed_outcome_rejects_missing_tenant_evidence() -> None:
         ))
 
     assert raised.value.code == "OUTCOME_EVIDENCE_NOT_FOUND"
+
+
+def change_set_request(mutations, *, key="pr-1", entry_point="PULL_REQUEST", reference="#42"):
+    return ChangeSetCompileRequest(
+        entry_point=entry_point, external_reference=reference,
+        idempotency_key=key,
+        mutations=[
+            ChangeSetMutationRequest(
+                predicate="UPGRADE", subject_id=PACKAGE_ID, target_version=target,
+                scope_id=scope,
+            )
+            for target, scope in mutations
+        ],
+    )
+
+
+COMPONENT_SCOPE = f"component:{REPOSITORY_ID}:apps/api"
+
+
+def test_a_pull_request_compiles_into_a_change_set_through_the_same_mutation_ir() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.command_state == "COMPILED"
+    assert result.change_set is not None
+    # §7's point: the source differs, the intermediate representation does not.
+    assert result.draft.provenance["entry_point"] == "PULL_REQUEST"
+    assert result.draft.provenance["external_reference"] == "#42"
+    assert result.draft.predicate == "UPGRADE"
+
+
+def test_a_change_set_persists_every_mutation_in_order() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", "estate")]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.change_set is not None
+    assert len(result.change_set.mutations) == 2
+    assert database.mutation_ordinals == [0, 1]
+    # Distinct identities, so a finding can point at the mutation that produced it.
+    assert len(set(database.mutation_ids)) == 2
+
+
+def test_two_mutations_on_one_subject_and_scope_with_different_targets_are_refused() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    # The set's effect would otherwise depend on the order it happened to be applied in.
+    assert result.gate.state == "BLOCKED"
+    assert "CONFLICTING_MUTATIONS" in [reason.code for reason in result.gate.reasons]
+    assert result.change_set is None
+    assert database.change_set is None
+
+
+def test_the_same_mutation_listed_twice_is_refused() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("2.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "DUPLICATE_MUTATION" in [reason.code for reason in result.gate.reasons]
+
+
+def test_one_blocked_mutation_blocks_the_whole_atomic_set() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("9.9.9", "estate")]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    # Persisting the valid half would offer a plan whose stated scope is not the plan that runs.
+    assert result.gate.state == "BLOCKED"
+    assert "TARGET_NOT_RESOLVED" in [reason.code for reason in result.gate.reasons]
+    assert database.change_set is None
+    assert database.mutation_ids == []
+
+
+def test_a_change_set_larger_than_the_capability_allows_is_refused() -> None:
+    class SmallLimitDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return {
+                    "predicate": "UPGRADE", "subject_type": "Package", "lifecycle": "ACTIVE",
+                    "validation_rules": {"max_mutations": 1},
+                }
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    with pytest.raises(APIError) as raised:
+        asyncio.run(ReadModelStore(SmallLimitDatabase()).compile_change_set(
+            change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", "estate")]),
+            tenant_id=TENANT_ID, actor_key="ci",
+        ))
+
+    # The bound comes from the registered capability, not from a constant in the compiler.
+    assert raised.value.code == "CHANGE_SET_TOO_LARGE"
+
+
+def test_a_disabled_capability_refuses_compilation() -> None:
+    class DisabledDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return {
+                    "predicate": "REPLACE", "subject_type": "Package", "lifecycle": "DISABLED",
+                    "validation_rules": {},
+                }
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(DisabledDatabase()).compile_mutation(
+        compile_request(), tenant_id=TENANT_ID, actor_key="reviewer",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "ACTION_NOT_ENABLED" in [reason.code for reason in result.gate.reasons]
+
+
+def test_a_predicate_with_no_registered_capability_refuses_compilation() -> None:
+    class UnregisteredDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return None
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(UnregisteredDatabase()).compile_mutation(
+        compile_request(), tenant_id=TENANT_ID, actor_key="reviewer",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "ACTION_NOT_ENABLED" in [reason.code for reason in result.gate.reasons]

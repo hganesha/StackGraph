@@ -2640,6 +2640,46 @@ class MutationCompileRequest(ContractModel):
         return self
 
 
+class ChangeSetMutationRequest(ContractModel):
+    """One mutation inside a multi-mutation ChangeSet.
+
+    Deliberately not `MutationCompileRequest`: an idempotency key belongs to the set, not to
+    each member, and free-form intent is not accepted here. A pull request or ticket states
+    what it changes structurally, so accepting prose per member would put natural language back
+    inside a deterministic path that §9 keeps it out of.
+    """
+
+    predicate: ActionPredicate
+    subject_id: UUID | None = None
+    subject_query: str | None = Field(default=None, min_length=1, max_length=255)
+    target_version: str | None = Field(default=None, min_length=1, max_length=255)
+    scope_id: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_subject(self) -> "ChangeSetMutationRequest":
+        if not (self.subject_id or self.subject_query):
+            raise ValueError("each mutation requires subject_id or subject_query")
+        return self
+
+
+class ChangeSetCompileRequest(ContractModel):
+    """Compile an ordered ChangeSet from any structured entry point.
+
+    §7 asks that a pull request, change ticket, architecture change, or agent proposal reach the
+    simulator through the same Mutation IR as the command bar. They do so here: the caller
+    states what its source proposes, StackGraph resolves every subject and target against the
+    estate, and refuses the whole set if any member does not ground.
+    """
+
+    entry_point: Literal[
+        "API", "PULL_REQUEST", "CHANGE_TICKET", "ARCHITECTURE_CHANGE", "AGENT_PROPOSAL",
+    ] = "API"
+    external_reference: str | None = Field(default=None, min_length=1, max_length=500)
+    mutations: list[ChangeSetMutationRequest] = Field(min_length=1, max_length=20)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    atomic: bool = True
+
+
 class MutationValidationError(ContractModel):
     code: str = Field(pattern=r"^[A-Z][A-Z0-9_]{2,63}$")
     field: str = Field(min_length=1)

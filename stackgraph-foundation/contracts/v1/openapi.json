@@ -5738,6 +5738,63 @@
         "title": "ChangeScopeList",
         "type": "object"
       },
+      "ChangeSetCompileRequest": {
+        "additionalProperties": false,
+        "description": "Compile an ordered ChangeSet from any structured entry point.\n\n\u00a77 asks that a pull request, change ticket, architecture change, or agent proposal reach the\nsimulator through the same Mutation IR as the command bar. They do so here: the caller\nstates what its source proposes, StackGraph resolves every subject and target against the\nestate, and refuses the whole set if any member does not ground.",
+        "properties": {
+          "atomic": {
+            "default": true,
+            "title": "Atomic",
+            "type": "boolean"
+          },
+          "entry_point": {
+            "default": "API",
+            "enum": [
+              "API",
+              "PULL_REQUEST",
+              "CHANGE_TICKET",
+              "ARCHITECTURE_CHANGE",
+              "AGENT_PROPOSAL"
+            ],
+            "title": "Entry Point",
+            "type": "string"
+          },
+          "external_reference": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Reference"
+          },
+          "idempotency_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "mutations": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeSetMutationRequest"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Mutations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mutations",
+          "idempotency_key"
+        ],
+        "title": "ChangeSetCompileRequest",
+        "type": "object"
+      },
       "ChangeSetModel": {
         "additionalProperties": false,
         "properties": {
@@ -5810,6 +5867,80 @@
           "input_fingerprint"
         ],
         "title": "ChangeSetModel",
+        "type": "object"
+      },
+      "ChangeSetMutationRequest": {
+        "additionalProperties": false,
+        "description": "One mutation inside a multi-mutation ChangeSet.\n\nDeliberately not `MutationCompileRequest`: an idempotency key belongs to the set, not to\neach member, and free-form intent is not accepted here. A pull request or ticket states\nwhat it changes structurally, so accepting prose per member would put natural language back\ninside a deterministic path that \u00a79 keeps it out of.",
+        "properties": {
+          "predicate": {
+            "enum": [
+              "UPGRADE",
+              "REPLACE",
+              "REMOVE",
+              "DEPRECATE",
+              "MIGRATE",
+              "MOVE"
+            ],
+            "title": "Predicate",
+            "type": "string"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "subject_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Id"
+          },
+          "subject_query": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Query"
+          },
+          "target_version": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Version"
+          }
+        },
+        "required": [
+          "predicate"
+        ],
+        "title": "ChangeSetMutationRequest",
         "type": "object"
       },
       "Citation": {
@@ -20908,6 +21039,48 @@
         "summary": "Review Capability Inference",
         "tags": [
           "intelligence"
+        ]
+      }
+    },
+    "/change-sets/compile": {
+      "post": {
+        "description": "Compile an ordered ChangeSet from a pull request, ticket, architecture change, or agent.\n\n\u00a77's alternative entry points all reach the deterministic engine through this one contract,\nso no source gets its own compiler and none of them consumes natural language.",
+        "operationId": "compileChangeSet",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeSetCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationCompileResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compile Change Set",
+        "tags": [
+          "changes"
         ]
       }
     },

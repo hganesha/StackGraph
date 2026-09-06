@@ -154,6 +154,7 @@ from app.models import (
     ActionSubjectList,
     ValidTargetList,
     ChangeScopeList,
+    ChangeSetCompileRequest,
     MutationCompileRequest,
     MutationCompileResult,
     MutationValidateRequest,
@@ -718,6 +719,30 @@ async def compile_mutation(
         flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
     )
     result = await _store(request).compile_mutation(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    response.status_code = 200 if result.replayed or result.gate.state != "CLEAR" else 201
+    return result
+
+
+@router.post(
+    "/change-sets/compile", response_model=MutationCompileResult,
+    response_model_exclude_none=True, operation_id="compileChangeSet", tags=["changes"],
+)
+async def compile_change_set(
+    body: ChangeSetCompileRequest, request: Request, response: Response,
+) -> MutationCompileResult:
+    """Compile an ordered ChangeSet from a pull request, ticket, architecture change, or agent.
+
+    §7's alternative entry points all reach the deterministic engine through this one contract,
+    so no source gets its own compiler and none of them consumes natural language.
+    """
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    result = await _store(request).compile_change_set(
         body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
     response.status_code = 200 if result.replayed or result.gate.state != "CLEAR" else 201
