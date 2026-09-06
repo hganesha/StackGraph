@@ -1,17 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { IconContrast, IconMenu2, IconMoon, IconSearch, IconSun, IconX } from "@tabler/icons-react";
 import { useTheme } from "@stackgraph/design-system";
 import { config } from "@stackgraph/shared";
 import { useSession } from "@/lib/session";
 import styles from "./TopBar.module.css";
 
-export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => void; navOpen?: boolean }) {
+export function TopBar({
+  onToggleNav,
+  onOpenChange,
+  navOpen = false,
+}: {
+  onToggleNav?: () => void;
+  onOpenChange: () => void;
+  navOpen?: boolean;
+}) {
   const { choice, setChoice } = useTheme();
   const session = useSession();
-  const router = useRouter();
   const cycle = () => setChoice(choice === "light" ? "dark" : choice === "dark" ? "system" : "light");
   const ThemeIcon = choice === "light" ? IconSun : choice === "dark" ? IconMoon : IconContrast;
   // A three-state cycle behind an icon that changes with the state gives a reader no
@@ -46,12 +52,11 @@ export function TopBar({ onToggleNav, navOpen = false }: { onToggleNav?: () => v
         <span className={styles.name}>StackGraph</span>
       </div>
 
-      {/* Ask your estate — the one global input, present on every screen (plan §3.1). Wired in P2. */}
-      <button className={styles.ask} type="button" aria-label="Ask your estate" onClick={() => router.push("/ask?view=ask")}>
+      <button className={styles.ask} type="button" aria-label="Plan an estate-backed change" onClick={onOpenChange}>
         <span className={styles.askLead} aria-hidden="true">
           <IconSearch size={16} stroke={1.5} />
         </span>
-        <span className={styles.askText}>Ask your estate…</span>
+        <span className={styles.askText}>Plan an estate-backed change…</span>
         <kbd className={styles.kbd}>⌘K</kbd>
       </button>
 

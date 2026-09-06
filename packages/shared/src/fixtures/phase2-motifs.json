@@ -1,0 +1,9 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T12:00:00Z",
+  "motifs": [
+    { "id": "31000000-0000-4000-8000-000000000001", "motif_key": "api-worker-database", "members": [{ "id": "26000000-0000-4000-8000-000000000001", "kind": "Application", "name": "Billing Platform" }, { "id": "32000000-0000-4000-8000-000000000001", "kind": "Service", "name": "Invoice worker" }, { "id": "33000000-0000-4000-8000-000000000001", "kind": "Database", "name": "LedgerDB" }], "minimum_confidence": 0.88, "supporting_fact_ids": ["70000000-0000-4000-8000-000000000181", "70000000-0000-4000-8000-000000000182"], "components": { "occurrences": 12 }, "limitations": [] }
+  ],
+  "limitations": [],
+  "snapshot": null
+}

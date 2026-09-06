@@ -1,0 +1,12 @@
+{
+  "contract_version": "1.0.0",
+  "policy_version": "actions/2.0.0",
+  "action_types": [
+    { "predicate": "UPGRADE", "label": "Upgrade", "description": "Move an estate entity to an observed, supported target.", "subject_types": ["Package", "Runtime", "Framework", "Database"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" },
+    { "predicate": "REPLACE", "label": "Replace", "description": "Replace one canonical entity with another.", "subject_types": ["Package", "Framework", "API", "Service"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" },
+    { "predicate": "REMOVE", "label": "Remove", "description": "Remove an entity from a bounded scope.", "subject_types": ["Package", "API", "Service"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" },
+    { "predicate": "DEPRECATE", "label": "Deprecate", "description": "Mark an API or service for retirement.", "subject_types": ["API", "Service"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" },
+    { "predicate": "MIGRATE", "label": "Migrate", "description": "Move a database, runtime, or framework to a compatible target.", "subject_types": ["Database", "Runtime", "Framework"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" },
+    { "predicate": "MOVE", "label": "Move", "description": "Move a service to an observed platform or deployment target.", "subject_types": ["Service"], "enabled": true, "lifecycle": "ACTIVE", "ontology_version": "actions/2.0.0" }
+  ]
+}

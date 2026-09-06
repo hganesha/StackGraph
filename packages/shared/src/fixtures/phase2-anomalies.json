@@ -1,0 +1,9 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T12:00:00Z",
+  "anomalies": [
+    { "id": "30000000-0000-4000-8000-000000000001", "anomaly_key": "dependency-shape", "cohort_key": "dotnet-api", "cohort_size": 47, "entity": { "id": "00000000-0000-4000-8000-000000000701", "kind": "Repository", "name": "billing-api" }, "score": 0.83, "percentile": 0.96, "reasons": ["More direct database dependencies than 96% of its cohort."], "supporting_fact_ids": ["70000000-0000-4000-8000-000000000171"], "observed_components": { "database_dependencies": 9 }, "limitations": [] }
+  ],
+  "limitations": [],
+  "snapshot": null
+}

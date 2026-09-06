@@ -54,28 +54,20 @@ test("five primary surfaces form a keyboard-accessible evidence journey", async 
   }
 
   // Same caveats as the tab-order branch above: mobile emulation has no hardware
-  // keyboard, and macOS WebKit routes Meta+K through the host's own key handling, so
-  // the document-level shortcut never fires under automation. Chromium and Firefox
-  // verify the binding for real.
+  // keyboard, and macOS WebKit routes Meta+K through the host's own key handling.
+  // Chromium and Firefox verify that the Phase 2 compiler opens without abandoning
+  // the current estate context.
   if (testInfo.project.name !== "webkit" && testInfo.project.name !== "mobile") {
-    // Pressed from a surface that is not Ask. The loop above ends on /ask, and the
-    // shortcut opens /ask?view=ask, so asserting from there passed only while the
-    // assertion outran the navigation it was supposed to be waiting for.
     await page.getByRole("link", { name: "Estate", exact: true }).click();
     await expect(page).toHaveURL(/\/estate$/);
-    // A freshly-clicked nav link means the keydown can land on the outgoing document
-    // and be lost. Settle focus on the new one, then retry the press rather than
-    // asserting once — the binding is what is under test, not the timing.
     await page.locator("main#main").click({ position: { x: 2, y: 2 } });
     const shortcut = process.platform === "darwin" ? "Meta+k" : "Control+k";
     await expect(async () => {
       await page.keyboard.press(shortcut);
-      await expect(page).toHaveURL(/\/ask\?view=ask$/, { timeout: 1_500 });
+      await expect(page.getByRole("dialog", { name: "Plan an estate-backed change" })).toBeVisible({ timeout: 1_500 });
     }).toPass({ timeout: 10_000 });
+    await expect(page).toHaveURL(/\/estate$/);
   }
-  // And again from Ask itself, where it should hold the surface rather than bounce.
-  await page.keyboard.press("ControlOrMeta+k");
-  await expect(page).toHaveURL(/\/ask\?view=ask$/);
 });
 
 test("reduced motion and narrow viewport preserve the primary navigation", async ({ page }) => {

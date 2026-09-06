@@ -99,6 +99,26 @@ import type {
   ApplicationSimilarityList,
   ApplicationSimilarityReviewRequest,
   ApplicationSimilarityReviewResult,
+  ActionPredicate,
+  ActionSubjectList,
+  ActionTypeList,
+  ChangeScopeList,
+  CriticalGraphEdgeList,
+  GraphAnalysisRequestCreate,
+  GraphAnalysisRequestResult,
+  GraphAnomalyList,
+  GraphMotifList,
+  MutationCompileRequest,
+  MutationCompileResult,
+  MutationValidateRequest,
+  ObservedMutationCreateRequest,
+  ObservedMutationList,
+  ObservedMutationModel,
+  RecommendationCompileRequest,
+  RepositoryFingerprintList,
+  SimulationCreateRequest,
+  SimulationRunModel,
+  ValidTargetList,
 } from "../contracts/read-models";
 import type {
   ArchitectureProfileCreateRequest,
@@ -144,6 +164,18 @@ import modernizationScenario from "../fixtures/modernization-scenario.json";
 import modernizationGovernance from "../fixtures/modernization-governance.json";
 import deterministicInsights from "../fixtures/deterministic-insights.json";
 import deterministicInsightGovernance from "../fixtures/deterministic-insight-governance.json";
+import phase2ActionTypes from "../fixtures/phase2-action-types.json";
+import phase2ActionSubjects from "../fixtures/phase2-action-subjects.json";
+import phase2ValidTargets from "../fixtures/phase2-valid-targets.json";
+import phase2ChangeScopes from "../fixtures/phase2-change-scopes.json";
+import phase2MutationCompile from "../fixtures/phase2-mutation-compile.json";
+import phase2SimulationRun from "../fixtures/phase2-simulation-run.json";
+import phase2ChangeHistory from "../fixtures/phase2-change-history.json";
+import phase2RepositoryFingerprints from "../fixtures/phase2-repository-fingerprints.json";
+import phase2CriticalEdges from "../fixtures/phase2-critical-edges.json";
+import phase2Anomalies from "../fixtures/phase2-anomalies.json";
+import phase2Motifs from "../fixtures/phase2-motifs.json";
+import phase2AnalysisRequest from "../fixtures/phase2-analysis-request.json";
 
 export interface CanvasProjectionParams {
   scope: "ESTATE" | "APPLICATION" | "REPOSITORY" | "TARGET";
@@ -255,6 +287,27 @@ export interface StackGraphClient {
   updateServiceControl(serviceKey: string, body: ServiceControlRequest): Promise<ServiceStatus>;
   requestRescan(body: RescanRequest): Promise<RescanJob>;
   listRescans(cursor?: string, limit?: number): Promise<RescanJobList>;
+
+  // ── Phase 2 change compiler and simulation ───────────────────────────────
+  listActionTypes(): Promise<ActionTypeList>;
+  listActionSubjects(predicate: ActionPredicate, query?: string, limit?: number): Promise<ActionSubjectList>;
+  listValidTargets(id: string, limit?: number): Promise<ValidTargetList>;
+  listChangeScopes(id: string): Promise<ChangeScopeList>;
+  listEntityChangeHistory(id: string, limit?: number): Promise<ObservedMutationList>;
+  compileMutation(body: MutationCompileRequest): Promise<MutationCompileResult>;
+  validateMutation(body: MutationValidateRequest): Promise<MutationCompileResult>;
+  compileModernizationRecommendation(id: string, body: RecommendationCompileRequest): Promise<MutationCompileResult>;
+  createSimulation(body: SimulationCreateRequest): Promise<SimulationRunModel>;
+  getSimulation(id: string): Promise<SimulationRunModel>;
+  cancelSimulation(id: string): Promise<SimulationRunModel>;
+  recordObservedMutation(body: ObservedMutationCreateRequest): Promise<ObservedMutationModel>;
+  listRepositoryFingerprints(id: string, limit?: number): Promise<RepositoryFingerprintList>;
+
+  // Previously shipped graph-intelligence paths that were not client-reachable.
+  listEntityCriticalEdges(id: string): Promise<CriticalGraphEdgeList>;
+  listGraphIntelligenceAnomalies(cohortKey?: string, limit?: number): Promise<GraphAnomalyList>;
+  listGraphIntelligenceMotifs(motifKey?: string, limit?: number): Promise<GraphMotifList>;
+  requestGraphAnalysis(body: GraphAnalysisRequestCreate): Promise<GraphAnalysisRequestResult>;
 
   // ── Architecture Canvas ──────────────────────────────────────────────────
   // Canvas fixtures are an order of magnitude larger than every other fixture, so the
@@ -428,6 +481,155 @@ let adminCodePolicies: TenantCodePolicyState = {
     compliant_repositories: 0, misaligned_repositories: 0, stale_repositories: 0,
   },
 };
+
+// Phase 2 fixture state models the public lifecycle instead of returning a finished
+// result from POST. This keeps polling, cancellation, replay, and non-terminal UI
+// states testable without a running worker.
+const fixtureSimulations = new Map<string, { run: SimulationRunModel; reads: number }>();
+const fixtureSimulationByKey = new Map<string, string>();
+
+function fixtureBlockedCompile(
+  request: MutationCompileRequest,
+  code: string,
+  field: string,
+  message: string,
+  candidates: ActionSubjectList["subjects"] = [],
+): MutationCompileResult {
+  const base = clone(phase2MutationCompile as MutationCompileResult);
+  const subjectLabel = request.subject_query?.trim() || request.intent?.trim() || "Unresolved subject";
+  base.command_state = candidates.length ? "TOKENISED" : "RESOLVING";
+  base.change_set = null;
+  base.gate = { state: "BLOCKED", reasons: [{ code, message, evidence_fact_ids: [] }] };
+  base.draft.lifecycle = "REJECTED";
+  base.draft.validation_errors = [{ code, field, message, evidence_fact_ids: [] }];
+  base.draft.subject = {
+    state: candidates.length ? "INFERRED" : "UNRESOLVED",
+    entity: null,
+    confidence: candidates.length ? 0.68 : 0,
+    method: candidates.length ? "structural_match" : "no_match",
+    method_version: "identity/2.1.0",
+    evidence_fact_ids: candidates.flatMap((item) => item.evidence_fact_ids ?? []),
+    candidates: candidates.map((item, index) => ({
+      entity: item.entity,
+      confidence: Math.max(0.5, 0.78 - index * 0.08),
+      method: `estate_${item.entity.kind.toLowerCase()}_match`,
+    })),
+  };
+  base.draft.provenance = { entry_point: request.intent ? "COMMAND" : "API", input: subjectLabel };
+  return base;
+}
+
+function fixtureCompile(request: MutationCompileRequest): MutationCompileResult {
+  const intent = request.intent?.trim();
+  if (intent) {
+    const match = /^upgrade\s+(.+?)\s+to\s+([^\s]+)(?:\s+(?:in|within)\s+(.+))?$/i.exec(intent);
+    if (!match) {
+      return fixtureBlockedCompile(
+        request,
+        "UNSUPPORTED_INTENT",
+        "intent",
+        "Use the bounded form ‘Upgrade <package> to <exact version> [in <scope>]’.",
+      );
+    }
+    const subjectText = match[1].trim();
+    const subjects = (phase2ActionSubjects as ActionSubjectList).subjects.filter((item) =>
+      item.entity.name.toLowerCase().includes(subjectText.toLowerCase()),
+    );
+    if (subjects.length !== 1) {
+      return fixtureBlockedCompile(
+        { ...request, subject_query: subjectText },
+        "SUBJECT_NOT_RESOLVED",
+        "subject",
+        subjects.length
+          ? "Choose one exact canonical package; inferred candidates cannot compile."
+          : `No estate entity matches ‘${subjectText}’. StackGraph can only change things it has found.`,
+        subjects,
+      );
+    }
+    request = {
+      ...request,
+      predicate: "UPGRADE",
+      subject_id: subjects[0].entity.id,
+      target_version: match[2],
+      scope_id: match[3]?.toLowerCase() === "estate" || !match[3] ? "scope:estate" : match[3],
+    };
+  }
+  const target = (phase2ValidTargets as ValidTargetList).targets.find(
+    (item) => item.version === request.target_version && item.version !== "latest",
+  );
+  if (!request.subject_id) {
+    return fixtureBlockedCompile(request, "SUBJECT_NOT_RESOLVED", "subject", "Choose one exact canonical package.");
+  }
+  if (!target) {
+    return fixtureBlockedCompile(
+      request,
+      "TARGET_NOT_RESOLVED",
+      "target_version",
+      request.target_version === "latest"
+        ? "Latest is a mutable alias. Choose an exact immutable version before simulation."
+        : "Choose an exact registry-backed target version.",
+    );
+  }
+  const scope = (phase2ChangeScopes as ChangeScopeList).scopes.find((item) => item.id === request.scope_id);
+  if (!scope) {
+    return fixtureBlockedCompile(request, "SCOPE_NOT_RESOLVED", "scope_id", "Choose a scope backed by current dependency evidence.");
+  }
+  const result = clone(phase2MutationCompile as MutationCompileResult);
+  result.draft.scope = clone(scope);
+  result.draft.after = { version: target.version, target_entity_id: target.entity_id, canonical_key: target.canonical_key };
+  result.draft.before = { versions: clone(scope.version_distribution) };
+  if (result.change_set) {
+    result.change_set.mutations = [clone(result.draft)];
+    result.change_set.input_fingerprint = `sha256:fixture-${request.subject_id}-${target.version}-${scope.id}`;
+  }
+  result.replayed = request.idempotency_key.startsWith("replay:");
+  return result;
+}
+
+function fixtureSimulationVariant(id: string): SimulationRunModel | null {
+  const match = /^25000000-0000-4000-8000-00000000000([1-8])$/.exec(id);
+  if (!match) return null;
+  const run = clone(phase2SimulationRun as SimulationRunModel);
+  run.id = id;
+  const variant = Number(match[1]);
+  if (variant === 2) {
+    run.status = "LIMITED";
+    run.limitations = [{
+      code: "PARTIAL_SCAN",
+      message: "Seven repositories were beyond the active scan freshness policy.",
+      evidence_fact_ids: ["70000000-0000-4000-8000-000000000121"],
+    }];
+    run.gate = { state: "CONSTRAIN", reasons: clone(run.limitations) };
+  } else if (variant === 3) {
+    run.status = "NOT_SIMULATABLE";
+    run.findings = [];
+    run.result_hash = null;
+    run.limitations = [{ code: "GRAPH_WATERMARK_STALE", message: "No eligible graph snapshot covers this ChangeSet.", evidence_fact_ids: [] }];
+    run.gate = { state: "BLOCKED", reasons: clone(run.limitations) };
+    run.interpretation = { status: "UNAVAILABLE", limitation: "Interpretation did not run because deterministic simulation was unavailable." };
+  } else if (variant === 4) {
+    run.status = "FAILED";
+    run.findings = [];
+    run.result_hash = null;
+    run.limitations = [{ code: "WORKER_FAILURE", message: "The simulation worker ended before producing a stable result.", evidence_fact_ids: [] }];
+    run.gate = { state: "BLOCKED", reasons: clone(run.limitations) };
+    run.interpretation = { status: "UNAVAILABLE", limitation: "No completed deterministic result was available to interpret." };
+  } else if (variant === 5) {
+    run.status = "CANCELLED";
+    run.findings = [];
+    run.result_hash = null;
+    run.limitations = [{ code: "RUN_CANCELLED", message: "The run was cancelled before traversal completed.", evidence_fact_ids: [] }];
+    run.gate = { state: "BLOCKED", reasons: clone(run.limitations) };
+    run.interpretation = { status: "UNAVAILABLE", limitation: "Cancelled runs are not interpreted." };
+  } else if (variant === 6) {
+    run.interpretation = { status: "QUARANTINED", limitation: "Generated claims did not cite the deterministic findings above.", cited_finding_ids: [] };
+  } else if (variant === 7) {
+    run.interpretation = { status: "UNAVAILABLE", limitation: "AI interpretation is disabled for this tenant.", cited_finding_ids: [] };
+  } else if (variant === 8) {
+    run.replayed = true;
+  }
+  return run;
+}
 {
   const now = "2026-08-19T12:00:00.000Z";
   for (const seed of [
@@ -787,6 +989,164 @@ const fixtureClient: StackGraphClient = {
       next_cursor: end < allItems.length ? String(end) : null,
     };
     return summary;
+  },
+  async listActionTypes() {
+    await delay();
+    return clone(phase2ActionTypes as ActionTypeList);
+  },
+  async listActionSubjects(predicate, query, limit = 25) {
+    await delay();
+    const result = clone(phase2ActionSubjects as ActionSubjectList);
+    result.predicate = predicate;
+    result.subjects = predicate === "UPGRADE"
+      ? result.subjects.filter((item) => !query || item.entity.name.toLowerCase().includes(query.toLowerCase())).slice(0, limit)
+      : [];
+    result.page_info.has_next_page = false;
+    return result;
+  },
+  async listValidTargets(_id, limit = 50) {
+    await delay();
+    const result = clone(phase2ValidTargets as ValidTargetList);
+    result.targets = result.targets.slice(0, limit);
+    return result;
+  },
+  async listChangeScopes() {
+    await delay();
+    return clone(phase2ChangeScopes as ChangeScopeList);
+  },
+  async listEntityChangeHistory(_id, limit = 20) {
+    await delay();
+    const result = clone(phase2ChangeHistory as ObservedMutationList);
+    result.outcomes = result.outcomes.slice(0, limit);
+    return result;
+  },
+  async compileMutation(body) {
+    await delay(220);
+    return fixtureCompile(clone(body));
+  },
+  async validateMutation(body) {
+    await delay();
+    const result = clone(phase2MutationCompile as MutationCompileResult);
+    result.replayed = true;
+    if (result.change_set) result.change_set.id = body.change_set_id;
+    return result;
+  },
+  async compileModernizationRecommendation(_id, body) {
+    await delay();
+    return fixtureCompile({
+      idempotency_key: body.idempotency_key ?? "fixture-recommendation",
+      predicate: "UPGRADE",
+      subject_id: "20000000-0000-4000-8000-000000000001",
+      target_version: "14.0.1",
+      scope_id: "scope:repository:billing",
+    });
+  },
+  async createSimulation(body) {
+    await delay();
+    const existingId = fixtureSimulationByKey.get(body.idempotency_key);
+    if (existingId) {
+      const existing = fixtureSimulations.get(existingId)!;
+      return { ...clone(existing.run), replayed: true };
+    }
+    const template = clone(phase2SimulationRun as SimulationRunModel);
+    const id = body.idempotency_key.startsWith("fixture:")
+      ? template.id
+      : (globalThis.crypto?.randomUUID?.() ?? "25000000-0000-4000-8000-000000000099");
+    const run: SimulationRunModel = {
+      ...template,
+      id,
+      change_set_id: body.change_set_id,
+      status: "QUEUED",
+      started_at: null,
+      completed_at: null,
+      findings: [],
+      interpretation: { status: "UNAVAILABLE", cited_finding_ids: [], limitation: "Interpretation begins after deterministic findings complete." },
+      result_hash: null,
+    };
+    fixtureSimulations.set(id, { run, reads: 0 });
+    fixtureSimulationByKey.set(body.idempotency_key, id);
+    return clone(run);
+  },
+  async getSimulation(id) {
+    await delay(180);
+    const state = fixtureSimulations.get(id);
+    if (!state) {
+      const variant = fixtureSimulationVariant(id);
+      if (variant) return variant;
+      throw new FixtureApiError(404, { code: "SIMULATION_NOT_FOUND", message: "The simulation run was not found." });
+    }
+    state.reads += 1;
+    if (state.run.status === "QUEUED" && state.reads >= 1) {
+      state.run.status = "RUNNING";
+      state.run.started_at = new Date().toISOString();
+    } else if (state.run.status === "RUNNING" && state.reads >= 3) {
+      const completed = clone(phase2SimulationRun as SimulationRunModel);
+      state.run = { ...completed, id, change_set_id: state.run.change_set_id, replayed: state.run.replayed };
+    }
+    fixtureSimulations.set(id, state);
+    return clone(state.run);
+  },
+  async cancelSimulation(id) {
+    await delay();
+    const state = fixtureSimulations.get(id);
+    if (!state) throw new FixtureApiError(404, { code: "SIMULATION_NOT_FOUND", message: "The simulation run was not found." });
+    state.run.status = "CANCELLED";
+    state.run.completed_at = new Date().toISOString();
+    fixtureSimulations.set(id, state);
+    return clone(state.run);
+  },
+  async recordObservedMutation(body) {
+    await delay();
+    const template = clone((phase2ChangeHistory as ObservedMutationList).outcomes[0]);
+    return {
+      ...template,
+      id: globalThis.crypto?.randomUUID?.() ?? "29000000-0000-4000-8000-000000000099",
+      predicate: body.predicate,
+      before: body.before,
+      after: body.after,
+      scope: body.scope,
+      observed_impact: body.observed_impact,
+      unexpected_impact: body.unexpected_impact ?? {},
+      success: body.success ?? null,
+      intervention_required: body.intervention_required ?? false,
+      rolled_back: body.rolled_back ?? false,
+      source_kind: body.source_kind,
+      confidence: body.confidence,
+      correlation_key: body.correlation_key,
+      evidence_fact_ids: body.evidence_fact_ids,
+      graph_watermark_before: body.graph_watermark_before ?? null,
+      predicted_simulation_run_id: body.predicted_simulation_run_id ?? null,
+      resolution: body.resolution ?? null,
+      observed_at: body.observed_at,
+      created_at: new Date().toISOString(),
+      subject: { ...template.subject, id: body.subject_entity_id },
+    };
+  },
+  async listRepositoryFingerprints(_id, limit = 20) {
+    await delay();
+    const result = clone(phase2RepositoryFingerprints as RepositoryFingerprintList);
+    result.snapshots = result.snapshots.slice(0, limit);
+    return result;
+  },
+  async listEntityCriticalEdges() {
+    await delay();
+    return clone(phase2CriticalEdges as CriticalGraphEdgeList);
+  },
+  async listGraphIntelligenceAnomalies(cohortKey, limit = 50) {
+    await delay();
+    const result = clone(phase2Anomalies as GraphAnomalyList);
+    result.anomalies = (result.anomalies ?? []).filter((item) => !cohortKey || item.cohort_key === cohortKey).slice(0, limit);
+    return result;
+  },
+  async listGraphIntelligenceMotifs(motifKey, limit = 50) {
+    await delay();
+    const result = clone(phase2Motifs as GraphMotifList);
+    result.motifs = (result.motifs ?? []).filter((item) => !motifKey || item.motif_key === motifKey).slice(0, limit);
+    return result;
+  },
+  async requestGraphAnalysis() {
+    await delay();
+    return clone(phase2AnalysisRequest as GraphAnalysisRequestResult);
   },
   async getApplication() {
     await delay();
@@ -2165,6 +2525,58 @@ const liveClient: StackGraphClient = {
     req("/admin/rescans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listRescans: (cursor, limit = 50) =>
     req(`/admin/rescans?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  // ── Phase 2 change compiler and simulation ───────────────────────────────
+  listActionTypes: () => req("/action-types"),
+  listActionSubjects: (predicate, query, limit = 25) => {
+    const search = new URLSearchParams({ limit: String(limit) });
+    if (query) search.set("query", query);
+    return req(`/action-types/${encodeURIComponent(predicate)}/subjects?${search.toString()}`);
+  },
+  listValidTargets: (id, limit = 50) =>
+    req(`/entities/${encodeURIComponent(id)}/valid-targets?limit=${limit}`),
+  listChangeScopes: (id) => req(`/entities/${encodeURIComponent(id)}/scopes`),
+  listEntityChangeHistory: (id, limit = 20) =>
+    req(`/entities/${encodeURIComponent(id)}/change-history?limit=${limit}`),
+  compileMutation: (body) =>
+    req("/mutations/compile", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  validateMutation: (body) =>
+    req("/mutations/validate", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  compileModernizationRecommendation: (id, body) =>
+    req(`/modernization-recommendations/${encodeURIComponent(id)}/compile`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  createSimulation: (body) =>
+    req("/simulations", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  getSimulation: (id) => req(`/simulations/${encodeURIComponent(id)}`),
+  cancelSimulation: (id) => req(`/simulations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  recordObservedMutation: (body) =>
+    req("/observed-mutations", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  listRepositoryFingerprints: (id, limit = 20) =>
+    req(`/repositories/${encodeURIComponent(id)}/fingerprints?limit=${limit}`),
+  // ── Graph-intelligence reachability gaps ─────────────────────────────────
+  listEntityCriticalEdges: (id) => req(`/entities/${encodeURIComponent(id)}/critical-edges`),
+  listGraphIntelligenceAnomalies: (cohortKey, limit = 50) => {
+    const search = new URLSearchParams({ limit: String(limit) });
+    if (cohortKey) search.set("cohort_key", cohortKey);
+    return req(`/graph-intelligence/anomalies?${search.toString()}`);
+  },
+  listGraphIntelligenceMotifs: (motifKey, limit = 50) => {
+    const search = new URLSearchParams({ limit: String(limit) });
+    if (motifKey) search.set("motif_key", motifKey);
+    return req(`/graph-intelligence/motifs?${search.toString()}`);
+  },
+  requestGraphAnalysis: (body) =>
+    req("/graph-intelligence/analysis-requests", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
   // ── Architecture Canvas ──────────────────────────────────────────────────
   getArchitectureTaxonomy: () => req("/canvas/taxonomy"),
   listCanvasReferenceModels: () => req("/canvas/reference-models"),

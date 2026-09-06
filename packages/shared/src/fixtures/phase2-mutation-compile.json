@@ -1,0 +1,29 @@
+{
+  "contract_version": "1.0.0",
+  "command_state": "COMPILED",
+  "replayed": false,
+  "gate": { "state": "CLEAR", "reasons": [] },
+  "draft": {
+    "schema_version": "mutation/1.0.0",
+    "id": "23000000-0000-4000-8000-000000000001",
+    "predicate": "UPGRADE",
+    "subject": { "state": "RESOLVED", "entity": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json", "canonical_key": "pkg:nuget/Newtonsoft.Json" }, "candidates": [], "confidence": 1, "method": "canonical_identifier", "method_version": "identity/2.1.0", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000101"] },
+    "before": { "version_distribution": [{ "version": "12.x", "count": 143 }, { "version": "13.x", "count": 171 }] },
+    "after": { "version": "14.0.1", "canonical_key": "pkg:nuget/Newtonsoft.Json@14.0.1" },
+    "scope": { "id": "scope:estate", "kind": "ESTATE", "label": "Entire estate", "entity_id": null, "component_path": null, "affected_count": 382, "evidence_fact_ids": ["70000000-0000-4000-8000-000000000111"], "version_distribution": [{ "version": "10.x", "count": 21 }, { "version": "11.x", "count": 47 }, { "version": "12.x", "count": 143 }, { "version": "13.x", "count": 171 }] },
+    "constraints": { "support": "SUPPORTED", "freshness": "FRESH" },
+    "provenance": { "policy_version": "package-upgrade/3.2.1", "provider": "NuGet" },
+    "input_fingerprint": "sha256:7b188922067c75f153e3dbbdaeac5c0bd96b14d8d12fd77fd8895e5f82ab9f1a",
+    "lifecycle": "VALIDATED",
+    "validation_errors": []
+  },
+  "change_set": {
+    "schema_version": "changeset/1.0.0",
+    "id": "24000000-0000-4000-8000-000000000001",
+    "mutations": [],
+    "atomic": true,
+    "input_fingerprint": "sha256:8c288922067c75f153e3dbbdaeac5c0bd96b14d8d12fd77fd8895e5f82ab9f1b",
+    "lifecycle": "VALIDATED",
+    "created_at": "2026-09-05T14:00:00Z"
+  }
+}

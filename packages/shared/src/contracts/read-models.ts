@@ -2,10 +2,56 @@
 // model is generated from the canonical OpenAPI document in openapi.generated.ts and
 // compiled beside this curated facade; CI fails when the generated artifact drifts.
 
+// Phase 2 change and graph-intelligence contracts are deliberately re-exported from
+// the generated wire model instead of being copied here.  These shapes are consumed
+// directly by the UI and their safety-critical enums (gate, resolution, run status)
+// must not drift from OpenAPI while the curated facade is filled out.
+export type {
+  ActionSubject,
+  ActionSubjectList,
+  ActionTypeList,
+  ActionTypeSummary,
+  ChangeGate,
+  ChangeScope,
+  ChangeScopeList,
+  ChangeSetModel,
+  CriticalGraphEdge,
+  CriticalGraphEdgeList,
+  EntityResolution,
+  GateReason,
+  GraphAnalysisRequestCreate,
+  GraphAnalysisRequestResult,
+  GraphAnomaly,
+  GraphAnomalyList,
+  GraphMotif,
+  GraphMotifList,
+  MutationCompileRequest,
+  MutationCompileResult,
+  MutationIR,
+  MutationValidateRequest,
+  MutationValidationError,
+  ObservedMutationCreateRequest,
+  ObservedMutationList,
+  ObservedMutationModel,
+  RecommendationCompileRequest,
+  RepositoryFingerprintList,
+  RepositoryFingerprintSnapshot,
+  ResolutionCandidate,
+  SimulationCreateRequest,
+  SimulationFinding,
+  SimulationInterpretation,
+  SimulationRunModel,
+  ValidTarget,
+  ValidTargetList,
+  VersionDistribution,
+} from "./openapi.generated";
+
 export type UUID = string;
 export type Timestamp = string;
 export type Confidence = number; // 0..1
 export type ConfidenceLabel = "HIGH" | "MEDIUM" | "LOW";
+export type ActionPredicate = import("./openapi.generated").ActionTypeSummary["predicate"];
+export type SimulationRunStatus = import("./openapi.generated").SimulationRunModel["status"];
 
 export type Namespace =
   | "BUSINESS"

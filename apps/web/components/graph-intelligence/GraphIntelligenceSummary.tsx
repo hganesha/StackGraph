@@ -18,6 +18,7 @@ import {
 import { ImpactPath, type ImpactHop } from "./ImpactPath";
 import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { RunProvenance, graphProvenance } from "@/components/change/RunProvenance";
 import styles from "./graph-intelligence-summary.module.css";
 
 /**
@@ -234,6 +235,13 @@ export function GraphIntelligenceSummary({
       ) : null}
 
       <Limitations limitations={limitations} fallback="This entity's structural coverage is limited." />
+
+      {intelligence?.snapshots?.[0] ? (
+        <details className={styles.provenance}>
+          <summary>Run provenance</summary>
+          <RunProvenance value={graphProvenance(intelligence.snapshots[0])} />
+        </details>
+      ) : null}
 
       <div className={styles.actions}>
         <button type="button" onClick={() => setShowBlastRadius(true)} disabled={waiting}>View blast radius</button>

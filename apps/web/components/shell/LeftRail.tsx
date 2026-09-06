@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   IconActivityHeartbeat,
   IconApps,
-  IconBulb,
   IconChecklist,
   IconHierarchy3,
   IconInfoCircle,
@@ -15,6 +14,8 @@ import {
   IconStack2,
   IconTrendingUp,
   IconLayoutGrid,
+  IconPlayerPlay,
+  IconMessageQuestion,
   type Icon,
 } from "@tabler/icons-react";
 import { useReviewQueue, useServiceStatus } from "@/lib/queries";
@@ -47,14 +48,15 @@ const GROUPS: RailGroup[] = [
       { href: "/applications", label: "Applications", icon: IconApps },
       { href: "/technologies", label: "Technologies", icon: IconStack2 },
       { href: "/architecture", label: "Architecture", icon: IconLayoutGrid },
+      { href: "/ask", label: "Ask", icon: IconMessageQuestion },
     ],
   },
   {
-    key: "decide",
-    label: "Decide",
+    key: "change",
+    label: "Change",
     items: [
+      { href: "/simulate", label: "Simulate", icon: IconPlayerPlay },
       { href: "/modernization", label: "Modernization", icon: IconTrendingUp },
-      { href: "/ask", label: "Ask", icon: IconBulb },
       { href: "/reviews", label: "Reviews", icon: IconChecklist },
     ],
   },

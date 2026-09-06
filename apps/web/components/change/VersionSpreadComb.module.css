@@ -1,0 +1,70 @@
+.figure {
+  padding: var(--sg-space-4);
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-surface-sunken);
+}
+.figure figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sg-space-3);
+  align-items: baseline;
+}
+.figure figcaption strong {
+  font-size: var(--sg-type-small-size);
+}
+.figure figcaption span {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+}
+.comb {
+  display: flex;
+  gap: var(--sg-space-3);
+  align-items: flex-end;
+  min-block-size: 116px;
+  margin-block-start: var(--sg-space-3);
+  overflow-x: auto;
+  padding-block-end: var(--sg-space-1);
+}
+.tooth {
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  gap: 3px;
+  min-inline-size: 54px;
+}
+.count,
+.version,
+.marker {
+  font-family: var(--sg-font-evidence);
+  font-size: 10px;
+  line-height: 14px;
+}
+.count {
+  color: var(--sg-text-secondary);
+}
+.bar {
+  inline-size: 2px;
+  background: var(--sg-color-domain-intelligence-500);
+  border-radius: var(--sg-radius-pill);
+}
+.version {
+  color: var(--sg-text-primary);
+}
+.marker {
+  min-block-size: 14px;
+  color: var(--sg-color-domain-intelligence-700);
+}
+.textEquivalent {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 560px) {
+  .figure figcaption {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
