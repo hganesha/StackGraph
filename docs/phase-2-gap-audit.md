@@ -487,8 +487,22 @@ omission in the API response instead of leaving it to be inferred from a missing
 
 ### Still open
 
-**Container package inventory.** Layers are recorded but not opened, so the OS and language
-packages inside an image remain uncollected. The container profile says so.
+**Container package inventory.** Closed. The enrichment step opens layer blobs and reads dpkg,
+apk, Python `dist-info`, and `node_modules` package databases into `estate_container_package`,
+honouring whiteouts so a package a later layer deleted is not reported as installed. It sits
+behind its own `CONTAINER_PACKAGE_INVENTORY` flag rather than riding on `REGISTRY_ENRICHMENT`,
+because agreeing to read a manifest is not agreeing to pull hundreds of megabytes of layer.
+
+Four bounds keep it safe, and every one that trips is reported: an oversized layer is skipped
+before it is requested, decompression is capped independently of the download because a gzip
+bomb's whole point is that the two numbers are unrelated, only known package-database paths are
+extracted, and the layer count is bounded. RPM databases are detected and deliberately not
+parsed — Berkeley DB, ndb, or SQLite depending on the distribution, and a confident wrong answer
+about what is installed is worse than a stated gap.
+
+`coverage.os_packages` now distinguishes four states, and the read surface names each: an image
+nobody opened, one read in part, one with no package database at all (distroless and scratch have
+none), and one fully read. Before this an empty package list meant all four.
 
 **Registries beyond npm and PyPI.** Closed. Building it exposed a defect in the enumerator that
 shipped before it: `package_registry_identity` was written for npm alone, so the PyPI enumerator

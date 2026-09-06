@@ -54,6 +54,10 @@ DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 # claiming otherwise is not a manifest and is refused rather than buffered.
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_LAYERS = 128
+# A layer blob is the one response that is legitimately large. It is bounded separately from a
+# manifest, and a layer whose *declared* size exceeds the bound is skipped before it is
+# requested rather than buffered and then refused.
+MAX_LAYER_BYTES = 96 * 1024 * 1024
 
 
 class ContainerRegistryError(RuntimeError):
@@ -176,7 +180,26 @@ class ContainerRegistryClient:
         self.max_manifest_bytes = max_manifest_bytes
         self.token_provider = token_provider
 
-    def _get(self, reference: ImageReference, path: str, accept: str) -> tuple[Any, bytes]:
+    def blob(self, reference: ImageReference, digest: str, *, max_bytes: int = MAX_LAYER_BYTES) -> bytes:
+        """Fetch one blob, verifying it hashes to the digest that named it.
+
+        A layer is content-addressed, so a blob that does not hash to its digest is not the
+        layer the manifest referenced, whatever the registry says. Reading packages out of it
+        would attribute another image's contents to this one.
+        """
+        if not DIGEST.fullmatch(digest):
+            raise ContainerRegistryError(f"{digest!r} is not a supported blob digest")
+        _, body = self._get(
+            reference, reference.blob_path(digest), "application/octet-stream",
+            max_bytes=max_bytes,
+        )
+        if _digest_of(body) != digest:
+            raise ContainerRegistryError("the blob does not hash to the digest that named it")
+        return body
+
+    def _get(
+        self, reference: ImageReference, path: str, accept: str, *, max_bytes: int | None = None,
+    ) -> tuple[Any, bytes]:
         _require_allowed(reference.registry_host, self.allowed_registries)
         url = f"https://{reference.registry_host}{path}"
         headers = {"Accept": accept, "User-Agent": "StackGraph-container-registry/1.0"}
@@ -210,8 +233,11 @@ class ContainerRegistryClient:
                 f"the registry answered with status {status}", status_code=status,
             )
         body = response.body
-        if len(body) > self.max_manifest_bytes:
-            raise ContainerRegistryError("the registry response exceeds the manifest byte bound")
+        bound = self.max_manifest_bytes if max_bytes is None else max_bytes
+        if len(body) > bound:
+            raise ContainerRegistryError(
+                f"the registry response exceeds the {bound} byte bound",
+            )
         return response, body
 
     def resolve(self, image: str) -> ResolvedImage:

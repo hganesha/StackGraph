@@ -423,6 +423,33 @@ class EstateFidelityMixin:
                 message="No layer or package composition was collected for this image.",
                 evidence_fact_ids=_fact_ids(row),
             ))
+        # An image whose layers were recorded but never opened has no packages *and* no claim
+        # about packages. Without this the two read identically, and "nothing looked inside"
+        # would be presented as "nothing is installed".
+        coverage = properties.get("coverage")
+        package_coverage = (
+            str(coverage.get("os_packages")) if isinstance(coverage, dict) else None
+        )
+        if package_coverage in {"NOT_COLLECTED", "PARTIAL"}:
+            limitations.append(GateReason(
+                code="CONTAINER_PACKAGES_NOT_COLLECTED" if package_coverage == "NOT_COLLECTED"
+                else "CONTAINER_PACKAGES_PARTIAL",
+                message=(
+                    "The image's layers were not opened, so its installed packages are unknown."
+                    if package_coverage == "NOT_COLLECTED"
+                    else "Only part of the image was read, so its package list is incomplete."
+                ),
+                evidence_fact_ids=_fact_ids(row),
+            ))
+        elif package_coverage == "NOT_APPLICABLE":
+            limitations.append(GateReason(
+                code="CONTAINER_HAS_NO_PACKAGE_DATABASE",
+                message=(
+                    "The image carries no OS or language package database; distroless and "
+                    "scratch images have none."
+                ),
+                evidence_fact_ids=_fact_ids(row),
+            ))
         status = "AVAILABLE" if resolution == "RESOLVED" and (layers or packages) else "PARTIAL"
         return ContainerImageComposition(
             image=_entity(row),

@@ -7,6 +7,10 @@ ran with what a moved tag now points at.
 
 from __future__ import annotations
 
+import gzip
+import hashlib
+import io
+import tarfile
 import unittest
 from datetime import UTC, datetime
 from uuid import UUID
@@ -62,19 +66,27 @@ class Result:
 
 
 class FakeConnection:
-    def __init__(self, *, enabled=True, images=None):
+    def __init__(self, *, enabled=True, packages_enabled=False, images=None):
         self.enabled = enabled
+        self.packages_enabled = packages_enabled
         self.images = images or []
         self.tag_resolutions: list[tuple] = []
         self.profiles: list[tuple] = []
         self.layers: list[tuple] = []
         self.supersedes: list[tuple] = []
+        self.packages: list[tuple] = []
+        self.package_deletes: list[tuple] = []
 
     def execute(self, query, params=()):
         if "set_config" in query:
             return Result([])
         if "FROM phase2_feature_flag" in query:
-            return Result([{"enabled": self.enabled}])
+            flag_key = params[0] if params else "REGISTRY_ENRICHMENT"
+            enabled = (
+                self.packages_enabled if flag_key == "CONTAINER_PACKAGE_INVENTORY"
+                else self.enabled
+            )
+            return Result([{"enabled": enabled}])
         if "FROM entity image" in query:
             return Result(self.images)
         if "INSERT INTO container_tag_resolution" in query:
@@ -89,19 +101,41 @@ class FakeConnection:
         if "INSERT INTO estate_container_layer" in query:
             self.layers.append(params)
             return Result([])
+        if "DELETE FROM estate_container_package" in query:
+            self.package_deletes.append(params)
+            return Result([])
+        if "INSERT INTO estate_container_package" in query:
+            self.packages.append(params)
+            return Result([])
         raise AssertionError(f"unexpected query: {query.strip()[:80]}")
+
+
+def gzip_tar(files: dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        for name, body in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(body)
+            archive.addfile(info, io.BytesIO(body))
+    return gzip.compress(buffer.getvalue())
 
 
 class Registry:
     def __init__(self, outcome):
         self.outcome = outcome
         self.calls: list[str] = []
+        self.blobs: dict[str, bytes] = {}
 
     def resolve(self, image):
         self.calls.append(image)
         if isinstance(self.outcome, Exception):
             raise self.outcome
         return self.outcome
+
+    def blob(self, reference, digest, **_):
+        if digest not in self.blobs:
+            raise ContainerRegistryError("the registry does not hold this blob")
+        return self.blobs[digest]
 
 
 def image_row(canonical_key="container-image:ghcr.io/acme/shipping:2.0.1"):
@@ -211,6 +245,55 @@ class EnrichmentRunTests(unittest.TestCase):
         counts = run_enrichment(connection, tenant_id=TENANT_ID, registry=registry)
         self.assertEqual(1, counts["unresolvable"])
         self.assertEqual([], registry.calls)
+    def test_layers_are_not_read_while_the_package_flag_is_off(self) -> None:
+        registry = Registry(resolved())
+        connection = FakeConnection(images=[image_row()], packages_enabled=False)
+
+        counts = run_enrichment(connection, tenant_id=TENANT_ID, registry=registry)
+
+        # Manifest resolution and layer download are separate decisions with separate costs.
+        self.assertEqual(1, counts["resolved"])
+        self.assertEqual(0, counts["packages_recorded"])
+        self.assertEqual([], connection.packages)
+        coverage = connection.profiles[0][10].obj
+        self.assertEqual("NOT_COLLECTED", coverage["os_packages"])
+
+    def test_reading_layers_writes_packages_and_moves_the_coverage(self) -> None:
+        gzipped = gzip_tar({
+            "var/lib/dpkg/status": b"Package: libc6\nStatus: install ok installed\nVersion: 2.36\n",
+        })
+        digest = f"sha256:{hashlib.sha256(gzipped).hexdigest()}"
+        registry = Registry(resolved(layers=({
+            "digest": digest, "size": len(gzipped),
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        },)))
+        registry.blobs = {digest: gzipped}
+        connection = FakeConnection(images=[image_row()], packages_enabled=True)
+
+        counts = run_enrichment(connection, tenant_id=TENANT_ID, registry=registry)
+
+        self.assertEqual(1, counts["packages_recorded"])
+        self.assertEqual(1, len(connection.packages))
+        self.assertIn("libc6", connection.packages[0])
+        self.assertIn("dpkg", connection.packages[0])
+        # Rewritten wholesale, so a package that disappears from a re-read disappears here too.
+        self.assertEqual(1, len(connection.package_deletes))
+        coverage = connection.profiles[0][10].obj
+        self.assertEqual("AVAILABLE", coverage["os_packages"])
+
+    def test_a_failed_layer_read_never_costs_the_resolved_digest(self) -> None:
+        registry = Registry(resolved(layers=({
+            "digest": "sha256:" + "c" * 64, "size": 64,
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+        },)))
+        registry.blobs = {}
+        connection = FakeConnection(images=[image_row()], packages_enabled=True)
+
+        counts = run_enrichment(connection, tenant_id=TENANT_ID, registry=registry)
+
+        self.assertEqual(1, counts["resolved"])
+        coverage = connection.profiles[0][10].obj
+        self.assertEqual("NOT_COLLECTED", coverage["os_packages"])
 
 
 if __name__ == "__main__":
