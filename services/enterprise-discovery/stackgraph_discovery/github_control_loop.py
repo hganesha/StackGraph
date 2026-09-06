@@ -450,6 +450,9 @@ def _acquire_scan_publish(
             include_pull_requests="pull_requests:read" in claimed.permissions,
             include_releases="contents:read" in claimed.permissions,
             include_deployments="deployments:read" in claimed.permissions,
+            # Detection reads merged pull-request file lists, so it needs the same permission
+            # the pull-request collection already requires and nothing more.
+            include_dependency_changes="pull_requests:read" in claimed.permissions,
         )
         if policy.get("activity_enabled") is True
         else None

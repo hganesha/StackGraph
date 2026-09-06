@@ -148,3 +148,17 @@ ALTER TABLE simulation_interpretation
 COMMENT ON COLUMN simulation_interpretation.quarantined_claims IS
   'Interpretation output that cited no finding, kept visible and separate. §9.1 requires an '
   'uncited claim to be quarantined rather than hidden or allowed to affect gate or risk facts.';
+
+-- 5. Dependency-change coverage ------------------------------------------------------------
+--
+-- The activity aggregate has counted DEPENDENCY_CHANGE since migration 050, but no collector
+-- ever produced one, so the column was structurally zero and H1's change memory could never
+-- fill itself from observed activity. The collector now detects manifest and lockfile moves on
+-- merged pull requests, which needs a coverage status of its own: a repository where detection
+-- was never attempted must not read the same as one where it ran and found nothing.
+
+ALTER TABLE repository_activity_collection
+  ADD COLUMN dependency_changes_status text NOT NULL DEFAULT 'NOT_COLLECTED'
+    CHECK(dependency_changes_status IN (
+      'NOT_COLLECTED','AVAILABLE','PARTIAL','PERMISSION_REQUIRED','ERROR'
+    ));

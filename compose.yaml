@@ -657,6 +657,18 @@ services:
       database:
         condition: service_healthy
 
+  change-memory:
+    profiles: [tools]
+    build:
+      context: ./services/data-platform
+    environment:
+      STACKGRAPH_DATABASE_URL: postgresql://${STACKGRAPH_DB_ADMIN_USER:-stackgraph_admin}:${STACKGRAPH_DB_ADMIN_PASSWORD:-stackgraph_admin}@database:5432/${STACKGRAPH_DB_NAME:-stackgraph}
+    entrypoint: ["python", "-m", "stackgraph_data.change_memory"]
+    command: ["--help"]
+    depends_on:
+      database:
+        condition: service_healthy
+
   ai-prompts:
     profiles: [tools]
     build:
