@@ -22863,6 +22863,60 @@
         ]
       }
     },
+    "/insights/deterministic/{id}/compile": {
+      "post": {
+        "description": "Turn an estate finding into a simulatable ChangeSet without manual re-entry (R1).",
+        "operationId": "compileDeterministicInsight",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationCompileResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compile Deterministic Insight",
+        "tags": [
+          "changes"
+        ]
+      }
+    },
     "/insights/reports": {
       "get": {
         "operationId": "listEnterpriseInsightReports",

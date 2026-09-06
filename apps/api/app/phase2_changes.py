@@ -1161,6 +1161,93 @@ class Phase2ChangeMixin:
         )
         return result
 
+    async def compile_deterministic_insight(
+        self, insight_id: UUID, request: RecommendationCompileRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult:
+        """Compile a deterministic insight into a ChangeSet without re-entering it by hand.
+
+        §8 names version fragmentation and unsupported runtimes among the changes worth
+        surfacing, and R1 requires reaching a simulation from an estate finding without manual
+        re-entry. Insights carry a subject and a recommended action but no target version, so
+        the target is derived the same way the command bar derives it: the version the most
+        repositories already run, which converges the estate without introducing anything it has
+        not exercised.
+
+        Anything that cannot produce a valid proposal is refused with a precise reason rather
+        than a generic failure, because "this cannot be simulated" is only useful if it says why.
+        """
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile an insight.")
+        insights = await self.deterministic_insights(
+            tenant_id=tenant_id, scope_entity_id=None, rule_key=None, limit=500,
+        )
+        insight = next(
+            (item for item in insights.insights if item.id == insight_id), None,
+        )
+        if insight is None:
+            raise APIError(404, "INSIGHT_NOT_FOUND", "The deterministic insight was not found.")
+
+        reason: dict[str, Any] | None = None
+        if insight.recommendation is None:
+            reason = {
+                "code": "NO_RECOMMENDED_ACTION",
+                "message": "The insight reports a condition but recommends no action.",
+            }
+        elif insight.recommendation.action not in {"UPGRADE", "CONSOLIDATE"}:
+            reason = {
+                "code": "ACTION_NOT_ENABLED",
+                "message": (
+                    f"{insight.recommendation.action} insights are not yet compilable; only "
+                    "upgrade and consolidation are."
+                ),
+            }
+        elif insight.subject.kind not in {"Package", "PackageVersion"}:
+            reason = {
+                "code": "SUBJECT_NOT_RESOLVED",
+                "message": (
+                    f"The insight subject is a {insight.subject.kind}; only a canonical package "
+                    "can currently compile."
+                ),
+            }
+        if reason is None:
+            targets = await self.valid_targets(insight.subject.id, tenant_id=tenant_id, limit=200)
+            consolidation = next(
+                (item for item in targets.targets if item.recommendation == "CONSOLIDATE"), None,
+            )
+            if consolidation is None:
+                reason = {
+                    "code": "TARGET_NOT_RESOLVED",
+                    "message": (
+                        "No estate-backed consolidation target exists for this package, so the "
+                        "insight cannot propose an exact version."
+                    ),
+                }
+        if reason is not None:
+            raise APIError(
+                409, "INSIGHT_NOT_SIMULATABLE", reason["message"],
+                {"insight_id": str(insight_id), "reason": reason},
+            )
+
+        idempotency_key = request.idempotency_key or (
+            f"insight:{insight_id}:{insight.input_fingerprint}"
+        )
+        return await self._compile_change_set(
+            [MutationCompileRequest(
+                predicate="UPGRADE", subject_id=insight.subject.id,
+                target_version=consolidation.version, scope_id="estate",
+                idempotency_key=idempotency_key,
+            )],
+            tenant_id=tenant_id, actor_key=actor_key, idempotency_key=idempotency_key,
+            provenance={
+                "entry_point": "DETERMINISTIC_INSIGHT",
+                "insight_id": str(insight_id),
+                "rule_key": insight.rule_key,
+                "rule_version": insight.rule_version,
+                "insight_fingerprint": insight.input_fingerprint,
+            },
+        )
+
     async def compile_modernization_recommendation(
         self, recommendation_id: UUID, request: RecommendationCompileRequest,
         *, tenant_id: UUID | None, actor_key: str,

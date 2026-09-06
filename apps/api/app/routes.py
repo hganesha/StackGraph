@@ -726,6 +726,27 @@ async def compile_mutation(
 
 
 @router.post(
+    "/insights/deterministic/{id}/compile", response_model=MutationCompileResult,
+    response_model_exclude_none=True, operation_id="compileDeterministicInsight",
+    tags=["changes"],
+)
+async def compile_deterministic_insight(
+    id: UUID, body: RecommendationCompileRequest, request: Request, response: Response,
+) -> MutationCompileResult:
+    """Turn an estate finding into a simulatable ChangeSet without manual re-entry (R1)."""
+    principal = await _principal(request)
+    await _require_phase2_feature(
+        request, tenant_id=principal.tenant_id, setting="change_compiler_enabled",
+        flag_key="CHANGE_COMPILER", code="CHANGE_COMPILER_DISABLED",
+    )
+    result = await _store(request).compile_deterministic_insight(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    response.status_code = 200 if result.replayed or result.gate.state != "CLEAR" else 201
+    return result
+
+
+@router.post(
     "/change-sets/compile", response_model=MutationCompileResult,
     response_model_exclude_none=True, operation_id="compileChangeSet", tags=["changes"],
 )

@@ -17,6 +17,7 @@ import {
   type AttenuationStage,
 } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
+import { SimulateRecommendation } from "@/features/change/SimulateRecommendation";
 import { RecommendationSimulationUnavailable } from "@/features/change/RecommendationSimulationUnavailable";
 import styles from "./deterministic-insights.module.css";
 
@@ -138,7 +139,21 @@ function InsightCard({ insight }: { insight: DeterministicInsight }) {
             <strong>{insight.recommendation.title}</strong>
           </div>
           <p>{insight.recommendation.rationale}</p>
-          <RecommendationSimulationUnavailable reason="this deterministic finding has no canonical proposed ChangeSet yet" />
+          {/* R1: an estate finding must reach a simulation without manual re-entry. Upgrade and
+              consolidation findings now compile against the estate's own consolidation target;
+              the rest still say why they cannot, rather than offering a button that fails. */}
+          {insight.recommendation.action === "UPGRADE" || insight.recommendation.action === "CONSOLIDATE" ? (
+            <SimulateRecommendation
+              recommendationId={insight.id}
+              source="DETERMINISTIC_INSIGHT"
+              label="Simulate finding"
+              compact
+            />
+          ) : (
+            <RecommendationSimulationUnavailable
+              reason={`a ${insight.recommendation.action.toLowerCase()} finding cannot yet compile to an exact target state`}
+            />
+          )}
         </div>
       ) : null}
 

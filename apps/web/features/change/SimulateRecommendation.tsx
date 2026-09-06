@@ -28,10 +28,18 @@ import styles from "./simulate-recommendation.module.css";
  */
 export function SimulateRecommendation({
   recommendationId,
+  source = "MODERNIZATION",
   label = "Simulate",
   compact = false,
 }: {
   recommendationId: string;
+  /**
+   * Which estate finding this button is compiling. R1 requires the action on modernization,
+   * insight cards, application findings, and the review queue alike; keeping it one component
+   * with a source discriminator is what stops each surface growing its own compile path and
+   * its own way of losing provenance.
+   */
+  source?: "MODERNIZATION" | "DETERMINISTIC_INSIGHT";
   label?: string;
   compact?: boolean;
 }) {
@@ -43,10 +51,15 @@ export function SimulateRecommendation({
     setBusy(true);
     setGate(null);
     try {
-      const idempotencyKey = `rec:${recommendationId}:${Date.now()}`;
-      const compiled = await stackGraphClient.compileModernizationRecommendation(recommendationId, {
-        idempotency_key: idempotencyKey,
-      });
+      const idempotencyKey = `${source === "DETERMINISTIC_INSIGHT" ? "insight" : "rec"}:${recommendationId}:${Date.now()}`;
+      const compiled =
+        source === "DETERMINISTIC_INSIGHT"
+          ? await stackGraphClient.compileDeterministicInsight(recommendationId, {
+              idempotency_key: idempotencyKey,
+            })
+          : await stackGraphClient.compileModernizationRecommendation(recommendationId, {
+              idempotency_key: idempotencyKey,
+            });
 
       // A gate that is not CLEAR stops here, named, rather than being discovered by a
       // simulation that then has to explain itself.
@@ -57,7 +70,7 @@ export function SimulateRecommendation({
           verdict,
           reason:
             reasons.map((r) => r.message).filter(Boolean).join(" ") ||
-            "This recommendation cannot be compiled into a change yet.",
+            "This finding cannot be compiled into a change yet.",
         });
         return;
       }
@@ -67,7 +80,7 @@ export function SimulateRecommendation({
         setGate({
           verdict: "BLOCKED",
           reason:
-            "The recommendation compiled but produced no change set, so there is nothing to simulate.",
+            "The finding compiled but produced no change set, so there is nothing to simulate.",
         });
         return;
       }

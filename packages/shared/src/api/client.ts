@@ -140,6 +140,7 @@ import type {
   ObservedMutationCreateRequest,
   ObservedMutationList,
   ObservedMutationModel,
+  ChangeSetCompileRequest,
   RecommendationCompileRequest,
   RepositoryFingerprintList,
   SimulationCreateRequest,
@@ -348,6 +349,8 @@ export interface StackGraphClient {
   compileMutation(body: MutationCompileRequest): Promise<MutationCompileResult>;
   validateMutation(body: MutationValidateRequest): Promise<MutationCompileResult>;
   compileModernizationRecommendation(id: string, body: RecommendationCompileRequest): Promise<MutationCompileResult>;
+  compileDeterministicInsight(id: string, body: RecommendationCompileRequest): Promise<MutationCompileResult>;
+  compileChangeSet(body: ChangeSetCompileRequest): Promise<MutationCompileResult>;
   createSimulation(body: SimulationCreateRequest): Promise<SimulationRunModel>;
   getSimulation(id: string): Promise<SimulationRunModel>;
   cancelSimulation(id: string): Promise<SimulationRunModel>;
@@ -1377,6 +1380,26 @@ const fixtureClient: StackGraphClient = {
     result.replayed = true;
     if (result.change_set) result.change_set.id = body.change_set_id;
     return result;
+  },
+  async compileDeterministicInsight(_id, body) {
+    await delay();
+    return fixtureCompile({
+      idempotency_key: body.idempotency_key ?? "fixture-insight",
+      predicate: "UPGRADE",
+      subject_id: "20000000-0000-4000-8000-000000000001",
+      target_version: "14.0.1",
+      scope_id: "estate",
+    });
+  },
+  async compileChangeSet(body) {
+    await delay();
+    return fixtureCompile({
+      idempotency_key: body.idempotency_key,
+      predicate: "UPGRADE",
+      subject_id: "20000000-0000-4000-8000-000000000001",
+      target_version: "14.0.1",
+      scope_id: "estate",
+    });
   },
   async compileModernizationRecommendation(_id, body) {
     await delay();
@@ -2943,6 +2966,14 @@ const liveClient: StackGraphClient = {
     }),
   compileModernizationRecommendation: (id, body) =>
     req(`/modernization-recommendations/${encodeURIComponent(id)}/compile`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  compileDeterministicInsight: (id, body) =>
+    req(`/insights/deterministic/${encodeURIComponent(id)}/compile`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  compileChangeSet: (body) =>
+    req("/change-sets/compile", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
   createSimulation: (body) =>
