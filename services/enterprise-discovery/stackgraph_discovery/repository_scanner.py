@@ -415,6 +415,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     inventory_facts.extend(_application_boundary_facts(scan_input, contents))
     inventory_facts.extend(_service_boundary_facts(scan_input, contents, diagnostics))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
+    inventory_facts.extend(_runtime_contradiction_facts(scan_input, contents))
     pass_a_completed = time.monotonic()
 
     references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
@@ -4441,3 +4442,187 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# §33's canonical contradiction is a runtime whose version is stated differently by code,
+# container, and documentation. Each source is named so a disagreement can say who claimed what
+# rather than only that a disagreement exists.
+_RUNTIME_ALIASES = {
+    "node": "NODE", "nodejs": "NODE", "node.js": "NODE",
+    "python": "PYTHON", "python3": "PYTHON",
+    "ruby": "RUBY",
+}
+_TOOL_VERSIONS_LINE = re.compile(r"^\s*([A-Za-z0-9_.+-]+)\s+([^\s#]+)")
+_DOCKER_FROM = re.compile(
+    r"^\s*FROM\s+(?:--platform=\S+\s+)?(?P<image>[^\s]+)", re.IGNORECASE | re.MULTILINE,
+)
+_README_RUNTIME = re.compile(
+    r"\b(node(?:\.js)?|python)\b[^\n]{0,40}?\bv?(\d+(?:\.\d+){0,2})\b", re.IGNORECASE,
+)
+
+
+def _major(version: str) -> str | None:
+    """Return the leading numeric segment of a version, or None when there isn't one.
+
+    Contradictions are judged on the major version alone. Node 20.11 and Node 20.12 are the
+    same decision; Node 18 and Node 20 are not.
+    """
+    match = re.match(r"\s*[^\d]*(\d+)", version or "")
+    return match.group(1) if match else None
+
+
+def _runtime_declarations(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
+    """Collect every declared runtime version, tagged with the source that declared it."""
+    declarations: list[dict[str, Any]] = []
+
+    def add(runtime: str, version: str, source_kind: str, path: str) -> None:
+        major = _major(version)
+        if runtime and major:
+            declarations.append({
+                "runtime": runtime, "declared_version": version.strip(),
+                "major_version": major, "source_kind": source_kind, "path": path,
+            })
+
+    for path in sorted(contents):
+        if _is_vendored_path_for_declarations(path):
+            continue
+        name = PurePosixPath(path).name.lower()
+        try:
+            text = contents[path].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        if name == ".nvmrc" or name == ".node-version":
+            add("NODE", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".python-version":
+            add("PYTHON", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".ruby-version":
+            add("RUBY", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".tool-versions":
+            for line in text.splitlines():
+                match = _TOOL_VERSIONS_LINE.match(line)
+                if match and (runtime := _RUNTIME_ALIASES.get(match.group(1).lower())):
+                    add(runtime, match.group(2), "VERSION_PIN", path)
+        elif name == "package.json":
+            document = _decode_json_quiet(contents[path])
+            engines = document.get("engines") if isinstance(document, Mapping) else None
+            if isinstance(engines, Mapping) and isinstance(engines.get("node"), str):
+                add("NODE", engines["node"], "MANIFEST_ENGINE", path)
+        elif name == "pyproject.toml":
+            document = _decode_toml_quiet(contents[path])
+            project = document.get("project") if isinstance(document, Mapping) else None
+            requires = project.get("requires-python") if isinstance(project, Mapping) else None
+            if isinstance(requires, str):
+                add("PYTHON", requires, "MANIFEST_ENGINE", path)
+        elif name == "dockerfile" or name.startswith("dockerfile."):
+            for image in _DOCKER_FROM.findall(text):
+                reference = str(image)
+                if "@" in reference or ":" not in reference:
+                    continue
+                repository, tag = reference.rsplit(":", 1)
+                runtime = _RUNTIME_ALIASES.get(repository.rsplit("/", 1)[-1].lower())
+                if runtime:
+                    add(runtime, tag, "CONTAINER_BASE_IMAGE", path)
+        elif _is_readme(path):
+            for runtime_name, version in _README_RUNTIME.findall(text):
+                runtime = _RUNTIME_ALIASES.get(runtime_name.lower())
+                if runtime:
+                    add(runtime, version, "DOCUMENTATION", path)
+    return declarations
+
+
+def _is_vendored_path_for_declarations(path: str) -> bool:
+    return _is_vendored(path)
+
+
+def _decode_json_quiet(content: bytes) -> Any:
+    try:
+        return json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _decode_toml_quiet(content: bytes) -> Any:
+    try:
+        return tomllib.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _runtime_contradiction_facts(
+    scan_input: ScanInput, contents: Mapping[str, bytes],
+) -> list[dict[str, Any]]:
+    """Emit a contradiction observation when sources disagree about a runtime version.
+
+    §33 is explicit that StackGraph does not have to decide which source is right. It surfaces
+    the conflict, who claimed what, and the evidence, and leaves the truth to a human. That is
+    why this records every claim rather than picking a winner, and why the fact is an
+    observation rather than a correction.
+    """
+    declarations = _runtime_declarations(contents)
+    if not declarations:
+        return []
+    by_runtime: dict[str, list[dict[str, Any]]] = {}
+    for declaration in declarations:
+        by_runtime.setdefault(declaration["runtime"], []).append(declaration)
+
+    facts: list[dict[str, Any]] = []
+    for runtime in sorted(by_runtime):
+        claims = sorted(
+            by_runtime[runtime], key=lambda item: (item["source_kind"], item["path"]),
+        )
+        majors = {claim["major_version"] for claim in claims}
+        if len(majors) < 2:
+            continue
+        value = {
+            "record_kind": "runtime_contradiction",
+            "schema_version": "1.0.0",
+            "runtime": runtime,
+            "dimension": f"runtime.{runtime.lower()}.major_version",
+            "disagreeing_major_versions": sorted(majors, key=lambda item: (len(item), item)),
+            "claims": [
+                {
+                    "source_kind": claim["source_kind"], "path": claim["path"],
+                    "declared_version": claim["declared_version"],
+                    "major_version": claim["major_version"],
+                }
+                for claim in claims
+            ],
+            "rule_version": "runtime-contradiction/1.0.0",
+            "limitations": [
+                "the scanner surfaces the disagreement and does not decide which source is authoritative",
+                "documentation claims are prose and may describe a historical version",
+                "a range such as >=18 is compared on its lowest stated major version",
+            ],
+        }
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key({
+                "tenant": scan_input.tenant_key,
+                "repository": scan_input.repository_key,
+                "record_kind": "runtime_contradiction",
+                "runtime": runtime,
+                "claims": value["claims"],
+                "source_revision": scan_input.source_revision,
+                "extractor": SCANNER_VERSION,
+            }),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "HAS_PROPERTY",
+            "object_value": value,
+            "assertion_class": "OBSERVED",
+            "confidence": 0.95,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {"profile_schema_version": "1.0.0"},
+            "evidence": [
+                _evidence_dict(Evidence(
+                    path=claim["path"], evidence_type="RUNTIME_VERSION_DECLARATION",
+                    content_hash=content_hash(contents[claim["path"]]),
+                    locator={"path": claim["path"]},
+                ), scan_input)
+                for claim in claims[:12]
+            ],
+        })
+    return facts

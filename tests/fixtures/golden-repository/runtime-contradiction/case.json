@@ -1,0 +1,91 @@
+{
+  "id": "runtime-contradiction",
+  "title": "Repository whose sources disagree about the Node major version",
+  "why": "\u00a733's canonical example: code says one version, the container another, documentation a third. StackGraph must surface the conflict with every claim named, and must not pick a winner.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": [],
+    "facts": [
+      {
+        "predicate": "HAS_PROPERTY",
+        "subject_type": "Repository",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "runtime": "NODE",
+          "disagreeing_major_versions": [
+            "16",
+            "18",
+            "20",
+            "22"
+          ]
+        }
+      },
+      {
+        "predicate": "HAS_PROPERTY",
+        "subject_type": "Repository",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "claims": [
+            {
+              "source_kind": "MANIFEST_ENGINE",
+              "major_version": "18"
+            }
+          ]
+        },
+        "note": "package.json engines states the floor the code expects"
+      },
+      {
+        "predicate": "HAS_PROPERTY",
+        "subject_type": "Repository",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "claims": [
+            {
+              "source_kind": "VERSION_PIN",
+              "major_version": "20"
+            }
+          ]
+        },
+        "note": ".nvmrc is what a developer actually runs"
+      },
+      {
+        "predicate": "HAS_PROPERTY",
+        "subject_type": "Repository",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "claims": [
+            {
+              "source_kind": "CONTAINER_BASE_IMAGE",
+              "major_version": "22"
+            }
+          ]
+        },
+        "note": "the image is what production actually runs"
+      },
+      {
+        "predicate": "HAS_PROPERTY",
+        "subject_type": "Repository",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "claims": [
+            {
+              "source_kind": "DOCUMENTATION",
+              "major_version": "16"
+            }
+          ]
+        },
+        "note": "the README claim is prose and may be stale, but it is still a claim"
+      }
+    ],
+    "absent_facts": [
+      {
+        "predicate": "HAS_PROPERTY",
+        "record_kind": "runtime_contradiction",
+        "properties": {
+          "runtime": "PYTHON"
+        },
+        "note": "no Python version is declared anywhere; a contradiction must not be invented"
+      }
+    ]
+  }
+}

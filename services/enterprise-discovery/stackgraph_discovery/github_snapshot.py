@@ -80,6 +80,14 @@ EXACT_MANIFEST_NAMES = {
     "Makefile": "BUILD_CONFIG",
     "dbt_project.yml": "DATA_TRANSFORM_MANIFEST",
     "dbt_project.yaml": "DATA_TRANSFORM_MANIFEST",
+    # Version-pin files are the plainest statement a repository makes about which runtime it
+    # expects. §33's canonical contradiction — code says one version, Docker another, docs a
+    # third — cannot be detected without reading them.
+    ".nvmrc": "RUNTIME_VERSION_DECLARATION",
+    ".node-version": "RUNTIME_VERSION_DECLARATION",
+    ".python-version": "RUNTIME_VERSION_DECLARATION",
+    ".ruby-version": "RUNTIME_VERSION_DECLARATION",
+    ".tool-versions": "RUNTIME_VERSION_DECLARATION",
 }
 
 # Analytics estates are carried in files the dependency scanner has no parser for. They are
