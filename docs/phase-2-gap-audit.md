@@ -2,6 +2,11 @@
 
 **Reviewed:** `docs/phase-2-plan.md` and `docs/phase-2-integrated-implementation-plan.md` against the
 code on `claude/phase-2-plan-review-gwjpnl` (merge of `origin/main` at `1b7e3fe`).
+
+> **Status: remediated.** Every gap below has been closed on this branch. The findings are kept
+> as written so the reasoning stays reviewable; [§10 Resolution](#10-resolution) records what
+> changed for each, and the two corrections marked in the text are corrections to *this
+> document*, not to the code.
 **Method:** every plan clause was traced to a producer (scanner, worker, ingest), a persistence
 path, an API surface, and a UI surface. A clause counts as delivered only when all four exist and
 are reachable in a real tenant — a schema plus a read endpoint with no writer is recorded as partial.
@@ -366,3 +371,90 @@ Ordered by how much each unblocks, not by size.
    findings.
 10. **Extend the ontology for the AI supply chain, or remove the endpoint** until there is a
     producer. A read surface that can only return empty is worse than an absent one.
+
+---
+
+## 10. Resolution
+
+What changed on this branch, against the remediation order in §9. Each item names the behaviour
+that is now different, not the files that moved.
+
+### Closed
+
+**1. Golden corpus and scanner benchmark.** Eleven labelled cases covering the repository shapes
+B0 enumerates, an evaluation harness scoring precision and recall over the labelled set only, a
+pytest gate holding both at 1.0, a report that fails on regression past the 0.25-point margin,
+and a §9.2 benchmark for scan latency, peak RSS, and throughput. Both run in CI. Building the
+corpus immediately found two real defects: analytics files were never admitted, so the DBT,
+NOTEBOOKS, DATA_ANALYTICS and SQL_SCHEMA_MIGRATION rules were unreachable dead code; and
+manifests inside vendored trees became Components of the repository with their transitive
+dependencies recorded as its own DECLARED facts.
+
+**2. The impact policy drives traversal.** Edge rules, directions, per-rule and global depth
+bounds, the confidence floor, budgets, and stop conditions are now read from the persisted
+policy. A policy that cannot be interpreted is refused rather than defaulted. A validation
+trigger rejects any policy naming a non-projectable predicate, which is what `SUPPORTS` and
+`BELONGS_TO` were.
+
+**3. Transitive and business impact.** The walk reaches applications, services, and exposed APIs
+transitively, then joins reached applications to the curated capability map with criticality.
+Curated provenance is recorded separately from observed evidence, and every capability finding
+says which it is.
+
+**4. Typed estate profiles are projected.** Component and deployment records now reach
+`estate_component_profile` and `estate_deployment_profile`, superseding older revisions rather
+than accumulating. Container composition stays deferred: it is keyed by immutable digest, and
+resolving one needs registry access the scanner deliberately does not perform.
+
+**5. The interpretation layer exists.** Behind `AI_INTERPRETATION`, with grounding enforced in
+code rather than trusted to the prompt. A claim citing a finding the run did not produce, or
+citing nothing, is quarantined where it cannot touch risk or the gate and stays readable.
+Provider outage, timeout, and unstructured output each leave deterministic findings unchanged.
+
+**6. Change memory fills itself.** The collector detects manifest and lockfile moves on merged
+pull requests; a derivation reads superseded dependency facts as observed mutations and
+correlates them to the merge that carried them. Only increases become upgrades, success stays
+NULL, and an unattributable change carries lower confidence. Writing the direction test found a
+real ordering bug: a single lexical version key ranks `2.0.0-rc1` above `2.0.0`, so every
+release-cutting change would have been dropped.
+
+**7. Multi-mutation ChangeSets and the alternative entry points.** One draft step gates each
+mutation and one set step runs every member through it before persisting anything. Conflict
+detection covers what a per-mutation gate cannot see. `POST /change-sets/compile` carries an
+entry point, so pull requests, tickets, architecture changes, and agent proposals reach the
+engine through the same Mutation IR — none of them accepting prose.
+
+**8. Target intelligence.** Targets carry estate spread, a labelled reason for being offered,
+and support status read rather than assumed. Coverage states what the list was drawn from, so a
+short list does not read as a short registry.
+
+**9. Estate findings reach a simulation.** Deterministic insights compile, deriving their target
+the way the command bar does. The Simulate action gained a source discriminator rather than a
+sibling component, so one placement covers every surface R1 names. The fold fills from insights
+when the optimiser has fewer than three proposals.
+
+**10. Ontology contract synced.** The registry now carries the AI vocabulary the database has
+registered since migration 055, and a contract test asserts that every type and predicate the
+read model queries is declared. The endpoint's empty case now distinguishes uncollected from
+absent.
+
+**Also closed.** `/action-types` publishes the whole bounded grammar with per-subject lifecycle —
+which exposed a defect, since the predicate-level flag was ANDed across subject types and would
+have disabled `UPGRADE Package` the moment a planned subject was seeded. `SCANNER_PROFILES` gates
+the typed profile projection instead of being dead. And §33's contradiction engine now detects
+runtime disagreement across version pins, manifest engines, container base images, and
+documentation, promoting it into the ledger the compiler already gates on.
+
+### Deliberately still open
+
+**Container composition profiles.** Blocked on digest resolution, which needs registry access
+outside the scanner's boundary. The read surfaces already degrade honestly.
+
+**Registry-enumerated target versions.** Targets remain limited to what has been collected. This
+is now stated in the response rather than left to be inferred from a short list.
+
+**AI supply-chain producers.** The vocabulary is registered and the contract agrees, but no
+connector emits agents, models, prompts, tools, or datasets. The endpoint says so.
+
+**§36's immune system.** Explicitly a later-stage capability in the plan, and correctly still
+deferred.
