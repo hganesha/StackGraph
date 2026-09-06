@@ -2787,13 +2787,27 @@ class SimulationFinding(ContractModel):
     path: list[EntitySummary] = Field(default_factory=list)
 
 
+class QuarantinedClaim(ContractModel):
+    """Interpretation output that cited no finding this run produced.
+
+    Kept visible and structurally separate. §9.1 forbids hiding an uncited claim and forbids
+    letting one influence risk, the gate, or any deterministic result.
+    """
+
+    reason: Literal["UNCITED_OUTPUT", "CITED_UNKNOWN_FINDING"]
+    detail: str
+    values: list[str] = Field(default_factory=list)
+
+
 class SimulationInterpretation(ContractModel):
     status: Literal["AVAILABLE", "UNAVAILABLE", "QUARANTINED"]
     risk: str | None = None
     explanation: str | None = None
     rollout: list[str] = Field(default_factory=list)
+    remediation: list[str] = Field(default_factory=list)
     verification: list[str] = Field(default_factory=list)
     cited_finding_ids: list[UUID] = Field(default_factory=list)
+    quarantined_claims: list[QuarantinedClaim] = Field(default_factory=list)
     limitation: str | None = None
 
 

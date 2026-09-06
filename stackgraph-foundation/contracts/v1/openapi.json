@@ -13878,6 +13878,37 @@
         "title": "ProviderQuota",
         "type": "object"
       },
+      "QuarantinedClaim": {
+        "additionalProperties": false,
+        "description": "Interpretation output that cited no finding this run produced.\n\nKept visible and structurally separate. \u00a79.1 forbids hiding an uncited claim and forbids\nletting one influence risk, the gate, or any deterministic result.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "UNCITED_OUTPUT",
+              "CITED_UNKNOWN_FINDING"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reason",
+          "detail"
+        ],
+        "title": "QuarantinedClaim",
+        "type": "object"
+      },
       "RankedItem": {
         "additionalProperties": false,
         "properties": {
@@ -16183,6 +16214,20 @@
               }
             ],
             "title": "Limitation"
+          },
+          "quarantined_claims": {
+            "items": {
+              "$ref": "#/components/schemas/QuarantinedClaim"
+            },
+            "title": "Quarantined Claims",
+            "type": "array"
+          },
+          "remediation": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remediation",
+            "type": "array"
           },
           "risk": {
             "anyOf": [

@@ -1194,8 +1194,12 @@ class ReadModelStore(
         graph_discovery_limit: int = 5000,
         graph_age_timeout_seconds: float = 3.0,
         credential_encryption_key: str = "stackgraph-local-development-credential-key",
+        ai: Any = None,
     ) -> None:
         self.database = database
+        # Optional. Simulation interpretation is the only consumer, and it degrades to an
+        # explicit UNAVAILABLE partition rather than failing when no provider is wired.
+        self.ai = ai
         self.graph_read_mode = graph_read_mode
         self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
         self.neo4j_graph = Neo4jGraphReader(

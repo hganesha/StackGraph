@@ -2300,6 +2300,12 @@ export interface ProviderQuota {
   used: number;
 }
 
+export interface QuarantinedClaim {
+  detail: string;
+  reason: "UNCITED_OUTPUT" | "CITED_UNKNOWN_FINDING";
+  values?: Array<string>;
+}
+
 export interface RankedItem {
   citations?: Array<Citation> | null;
   community_key?: string | null;
@@ -2655,6 +2661,8 @@ export interface SimulationInterpretation {
   cited_finding_ids?: Array<string>;
   explanation?: string | null;
   limitation?: string | null;
+  quarantined_claims?: Array<QuarantinedClaim>;
+  remediation?: Array<string>;
   risk?: string | null;
   rollout?: Array<string>;
   status: "AVAILABLE" | "UNAVAILABLE" | "QUARANTINED";

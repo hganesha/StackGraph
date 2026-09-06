@@ -96,6 +96,12 @@
 .interpretationState { padding: var(--sg-space-5); }
 .interpretationState p { margin-block-start: var(--sg-space-1); color: var(--sg-text-secondary); }
 .quarantined { border-inline-start: 4px solid var(--sg-color-domain-business-500); }
+/* Quarantined claims stay readable. Hiding rejected output would leave a reviewer unable
+   to judge whether the rejection was right. */
+.quarantinedClaims { display: grid; gap: var(--sg-space-3); margin-block-start: var(--sg-space-4); }
+.quarantinedClaims li { padding: var(--sg-space-3); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-control); background: var(--sg-surface-sunken); }
+.quarantinedClaims p { margin-block-start: var(--sg-space-1); color: var(--sg-text-secondary); }
+.quarantinedClaims blockquote { margin-block-start: var(--sg-space-2); padding-inline-start: var(--sg-space-3); border-inline-start: 2px solid var(--sg-surface-border); font-family: var(--sg-font-evidence); font-size: 11px; color: var(--sg-text-secondary); }
 .limitations { padding: var(--sg-space-4); border: var(--sg-border-hairline) solid var(--sg-color-domain-business-500); border-radius: var(--sg-radius-control); }
 .limitations h2 { font-size: var(--sg-type-h3-size); }
 .limitations ul { margin-block-start: var(--sg-space-2); padding-inline-start: var(--sg-space-5); }
