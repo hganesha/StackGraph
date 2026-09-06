@@ -2595,7 +2595,11 @@ class ActionSubjectList(ContractModel):
 
 
 class ValidTarget(ContractModel):
-    entity_id: UUID
+    # None for a version the registry offers that no repository runs. The estate has no entity
+    # for it because the estate does not contain it; one is minted only if a change to it is
+    # actually compiled. Fabricating an id here would put a package the estate never had into
+    # every count taken over the estate.
+    entity_id: UUID | None = None
     version: str = Field(min_length=1)
     canonical_key: str = Field(min_length=1)
     source: str = Field(min_length=1)
@@ -2607,6 +2611,10 @@ class ValidTarget(ContractModel):
     recommendation: Literal["CONSOLIDATE", "CANDIDATE", "LATEST_KNOWN", "NONE"] = "NONE"
     recommendation_detail: str | None = None
     observed_repository_count: int = Field(default=0, ge=0)
+    # Where this option came from. A reader choosing a target should know whether the estate has
+    # ever exercised it or whether it is only on offer.
+    origin: Literal["ESTATE", "REGISTRY_CATALOG"] = "ESTATE"
+    is_prerelease: bool = False
 
 
 class TargetCoverage(ContractModel):

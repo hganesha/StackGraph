@@ -2883,10 +2883,12 @@ export interface ValidationError {
 
 export interface ValidTarget {
   canonical_key: string;
-  entity_id: string;
+  entity_id?: string | null;
   freshness: "FRESH" | "STALE" | "UNKNOWN";
+  is_prerelease?: boolean;
   observed_at: string;
   observed_repository_count?: number;
+  origin?: "ESTATE" | "REGISTRY_CATALOG";
   recommendation?: "CONSOLIDATE" | "CANDIDATE" | "LATEST_KNOWN" | "NONE";
   recommendation_detail?: string | null;
   source: string;

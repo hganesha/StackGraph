@@ -628,6 +628,45 @@ class Phase2ChangeMixin:
             """,
             (package_name,), tenant_id=tenant_id,
         )
+        # The registry's catalogue, which is a different claim from the estate's identity: it
+        # says a version can be chosen, not that anything runs it. Joined here so an upgrade
+        # target need not already exist somewhere in the estate.
+        catalog = await self.database.fetch_all(
+            """
+            SELECT catalog.version, catalog.is_prerelease, catalog.is_yanked,
+                   catalog.is_deprecated, catalog.published_at, catalog.collected_at,
+                   catalog.registry_key, catalog.support_status
+            FROM package_version_catalog catalog
+            WHERE lower(catalog.package_name)=lower(%s) AND NOT catalog.is_yanked
+            ORDER BY catalog.version
+            """,
+            (package_name,), tenant_id=tenant_id,
+        )
+        collection = await self.database.fetch_one(
+            """
+            SELECT status, version_count, limitations, collected_at
+            FROM package_catalog_collection
+            WHERE lower(package_name)=lower(%s)
+            ORDER BY collected_at DESC LIMIT 1
+            """,
+            (package_name,), tenant_id=tenant_id,
+        )
+        known = {row["package_version"] for row in rows}
+        for entry in catalog:
+            if entry["version"] in known:
+                continue
+            # A catalogue version has no entity, because the estate does not run it. The
+            # compiler resolves it to one only if the change is actually submitted.
+            rows.append({
+                "id": None, "canonical_key": f"pkg:{package_name}@{entry['version']}",
+                "package_version": entry["version"], "observed_at": entry["collected_at"],
+                "registry_key": entry["registry_key"],
+                "support_status": (
+                    "UNSUPPORTED" if entry["is_deprecated"]
+                    else str(entry["support_status"] or "UNKNOWN")
+                ),
+                "from_catalog": True, "is_prerelease": entry["is_prerelease"],
+            })
         rows.sort(key=lambda row: _version_key(row["package_version"]), reverse=True)
         observed = await self.database.fetch_all(
             """
@@ -655,6 +694,9 @@ class Phase2ChangeMixin:
         candidates = [
             row["package_version"] for row in rows
             if row["support_status"] not in {"UNSUPPORTED", "END_OF_LIFE", "EOL"}
+            # A prerelease is not the latest thing to upgrade *to*. Offering one as the headline
+            # target would push an estate onto a release its own publisher has not finished.
+            and not row.get("is_prerelease")
         ]
         latest = candidates[0] if candidates else None
 
@@ -662,18 +704,26 @@ class Phase2ChangeMixin:
         for row in rows[:limit]:
             version = row["package_version"]
             support = _SUPPORT_STATUS.get(row["support_status"], "UNKNOWN")
-            if version == latest and version != consolidate:
-                recommendation = "LATEST_KNOWN"
-                detail = "The highest version StackGraph has collected for this package."
-            elif version == consolidate:
+            from_catalog = bool(row.get("from_catalog"))
+            if version == consolidate:
                 recommendation = "CONSOLIDATE"
                 detail = (
                     f"{counts[version]} repositories already run this version, so converging "
                     "here introduces no version the estate has not exercised."
                 )
+            elif version == latest:
+                recommendation = "LATEST_KNOWN"
+                detail = (
+                    "The highest release the registry currently offers."
+                    if from_catalog else
+                    "The highest version StackGraph has collected for this package."
+                )
             elif counts and version not in counts:
                 recommendation = "CANDIDATE"
-                detail = "No repository runs this version yet."
+                detail = (
+                    "The registry offers this release; no repository runs it yet."
+                    if from_catalog else "No repository runs this version yet."
+                )
             else:
                 recommendation = "NONE"
                 detail = None
@@ -683,22 +733,32 @@ class Phase2ChangeMixin:
                 freshness=_freshness(row["observed_at"]), support=support,
                 recommendation=recommendation, recommendation_detail=detail,
                 observed_repository_count=counts.get(version, 0),
+                origin="REGISTRY_CATALOG" if from_catalog else "ESTATE",
+                is_prerelease=bool(row.get("is_prerelease")),
             ))
 
         # Being explicit about where the list came from is the difference between "there are no
-        # newer versions" and "no newer version has been collected". Only the second is true.
-        enumerated = any(target.observed_repository_count == 0 for target in targets)
+        # newer versions" and "no newer version has been collected". A collection record is the
+        # only thing that distinguishes them, so it is read rather than inferred from the shape
+        # of the result.
+        enumerated = collection is not None and collection["status"] in {"AVAILABLE", "PARTIAL"}
+        estate_only = not any(target.origin == "REGISTRY_CATALOG" for target in targets)
         coverage = TargetCoverage(
-            source="MIXED" if enumerated and counts else (
-                "REGISTRY_ENUMERATED" if enumerated else "ESTATE_OBSERVED"
+            source=(
+                "ESTATE_OBSERVED" if not enumerated
+                else "MIXED" if counts and not estate_only
+                else "REGISTRY_ENUMERATED"
             ),
             registry_enumeration="AVAILABLE" if enumerated else "NOT_COLLECTED",
             detail=(
-                "Targets include versions no repository runs, so registry enrichment has "
-                "reached this package."
+                (
+                    f"The registry catalogue was collected "
+                    f"{_freshness(collection['collected_at']).lower()} and offers "
+                    f"{collection['version_count']} versions."
+                )
                 if enumerated else
                 "Every target is a version the estate already runs. A newer release may exist "
-                "that registry enrichment has not collected."
+                "that registry enumeration has not collected."
             ),
         )
         limitations = []
@@ -720,6 +780,8 @@ class Phase2ChangeMixin:
                     "release may exist that has not been collected."
                 ),
             ))
+        for item in collection["limitations"] if collection else []:
+            limitations.append(GateReason(code="TARGET_CATALOG_BOUNDED", message=str(item)))
         return ValidTargetList(
             subject=resolution.entity, targets=targets, policy_version=PROVIDER_VERSION,
             page_info=PageInfo(has_next_page=len(rows) > limit), coverage=coverage,
@@ -934,7 +996,13 @@ class Phase2ChangeMixin:
             "versions": [item.model_dump(mode="json") for item in selected_scope.version_distribution]
             if selected_scope else [],
         }
-        after = {"version": target.version, "target_entity_id": str(target.entity_id)} if target else {}
+        after = {
+            "version": target.version,
+            # A catalogue target has no entity because the estate does not run it. Recording
+            # None honestly is better than minting an entity for something nobody has.
+            "target_entity_id": str(target.entity_id) if target.entity_id else None,
+            "target_origin": target.origin,
+        } if target else {}
         canonical_input = {
             "schema_version": "mutation/1.0.0", "predicate": predicate,
             "subject_entity_id": str(resolution.entity.id) if resolution.entity else None,

@@ -48,9 +48,16 @@ class Session:
 
 
 class CompilerDatabase:
-    def __init__(self, *, observed_version="1.0.0", contradictions=None):
+    def __init__(
+        self, *, observed_version="1.0.0", contradictions=None,
+        catalog_versions=None, catalog_collection=None,
+    ):
         self.observed_version = observed_version
         self.contradictions = contradictions or []
+        # A registry catalogue is absent unless a case supplies one, so the default fixture
+        # still describes an estate nobody has enumerated.
+        self.catalog_versions = catalog_versions or []
+        self.catalog_collection = catalog_collection
         self.change_set = None
         self.mutation_ids = []
         self.mutation_ordinals = []
@@ -70,6 +77,9 @@ class CompilerDatabase:
                 "predicate": "UPGRADE", "subject_type": "Package", "lifecycle": "ACTIVE",
                 "validation_rules": {"max_mutations": 20},
             }
+        if "FROM package_catalog_collection" in query:
+            # No enumeration has run by default, which is what an estate-only target list means.
+            return self.catalog_collection
         raise AssertionError(f"unexpected fetch_one: {query}")
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
@@ -80,6 +90,8 @@ class CompilerDatabase:
                 "canonical_key": "pkg:npm/demo-package", "package_name": "demo-package",
                 "evidence_fact_ids": [FACT_ID],
             }]
+        if "FROM package_version_catalog" in query:
+            return self.catalog_versions
         if "count(DISTINCT f.subject_entity_id)::int repositories" in query:
             # The estate's own version spread, which decides the consolidation target.
             return [{"version": self.observed_version, "repositories": 3}]
@@ -430,14 +442,94 @@ def test_coverage_says_when_a_target_list_is_only_what_the_estate_runs() -> None
     assert "TARGET_PROVIDER_ESTATE_ONLY" in [item.code for item in result.limitations]
 
 
-def test_coverage_reports_registry_enrichment_when_a_target_exceeds_the_estate() -> None:
-    result = asyncio.run(ReadModelStore(CompilerDatabase(observed_version="2.0.0")).valid_targets(
+def catalog_database(**overrides):
+    """A tenant whose registry catalogue has been enumerated."""
+    return CompilerDatabase(
+        observed_version="2.0.0",
+        catalog_versions=[
+            {"version": "4.0.0", "is_prerelease": False, "is_yanked": False,
+             "is_deprecated": False, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "SUPPORTED"},
+            {"version": "5.0.0-rc1", "is_prerelease": True, "is_yanked": False,
+             "is_deprecated": False, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "UNKNOWN"},
+            {"version": "1.0.0", "is_prerelease": False, "is_yanked": False,
+             "is_deprecated": True, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "UNKNOWN"},
+        ],
+        catalog_collection={
+            "status": "AVAILABLE", "version_count": 3, "limitations": [],
+            "collected_at": NOW,
+        },
+        **overrides,
+    )
+
+
+def test_coverage_reports_enumeration_from_the_collection_record_not_the_result_shape() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
         PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
     ))
 
     assert result.coverage is not None
+    # Enumeration is a fact about whether the enumerator ran, so it is read from the collection
+    # record. Inferring it from "a target exists that nobody runs" would call a package
+    # enumerated purely because the estate happened to be fragmented.
     assert result.coverage.registry_enumeration == "AVAILABLE"
+    assert result.coverage.source == "MIXED"
     assert "TARGET_PROVIDER_ESTATE_ONLY" not in [item.code for item in result.limitations]
+
+
+def test_the_registry_offers_upgrade_targets_the_estate_has_never_run() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    # The whole point: 4.0.0 is offerable although no repository has ever run it.
+    assert "4.0.0" in by_version
+    assert by_version["4.0.0"].origin == "REGISTRY_CATALOG"
+    assert by_version["4.0.0"].observed_repository_count == 0
+    # It has no entity, because the estate does not contain it.
+    assert by_version["4.0.0"].entity_id is None
+    assert by_version["2.0.0"].origin == "ESTATE"
+
+
+def test_a_prerelease_is_offered_but_never_as_the_latest_target() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["5.0.0-rc1"].is_prerelease is True
+    # Pushing an estate onto a release the publisher has not finished is not an upgrade.
+    assert by_version["5.0.0-rc1"].recommendation != "LATEST_KNOWN"
+    assert by_version["4.0.0"].recommendation == "LATEST_KNOWN"
+
+
+def test_a_deprecated_catalogue_release_is_marked_unsupported() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    # 1.0.0 is only in the catalogue and npm marks it deprecated.
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["1.0.0"].support == "UNSUPPORTED"
+
+
+def test_a_bounded_catalogue_says_so_rather_than_looking_complete() -> None:
+    database = catalog_database()
+    database.catalog_collection = {
+        "status": "PARTIAL", "version_count": 200,
+        "limitations": ["only the newest 200 of 4212 released versions were catalogued"],
+        "collected_at": NOW,
+    }
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    codes = [item.code for item in result.limitations]
+    assert "TARGET_CATALOG_BOUNDED" in codes
+    assert any("4212" in item.message for item in result.limitations)
 
 
 def test_action_types_surface_the_whole_bounded_grammar_with_lifecycle() -> None:

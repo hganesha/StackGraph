@@ -17658,9 +17658,16 @@
             "type": "string"
           },
           "entity_id": {
-            "format": "uuid",
-            "title": "Entity Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
           },
           "freshness": {
             "enum": [
@@ -17670,6 +17677,11 @@
             ],
             "title": "Freshness",
             "type": "string"
+          },
+          "is_prerelease": {
+            "default": false,
+            "title": "Is Prerelease",
+            "type": "boolean"
           },
           "observed_at": {
             "format": "date-time",
@@ -17681,6 +17693,15 @@
             "minimum": 0.0,
             "title": "Observed Repository Count",
             "type": "integer"
+          },
+          "origin": {
+            "default": "ESTATE",
+            "enum": [
+              "ESTATE",
+              "REGISTRY_CATALOG"
+            ],
+            "title": "Origin",
+            "type": "string"
           },
           "recommendation": {
             "default": "NONE",
@@ -17727,7 +17748,6 @@
           }
         },
         "required": [
-          "entity_id",
           "version",
           "canonical_key",
           "source",
