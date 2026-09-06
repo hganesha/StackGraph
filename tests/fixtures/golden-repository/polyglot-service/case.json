@@ -1,0 +1,25 @@
+{
+  "id": "polyglot-service",
+  "title": "One repository whose dependencies live in Maven, NuGet, crates.io, and the Go proxy",
+  "why": "Until these manifests were parsed a Java, .NET, Rust, or Go service scanned as a repository that depends on nothing — indistinguishable, in every downstream surface, from one that genuinely has no dependencies. This case pins the four parsers and the three places they must not guess: an unresolvable Maven property, a Cargo path dependency, and a Go module a replace directive redirects.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": [],
+    "facts": [
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:maven/org.springframework/spring-core@5.3.30", "note": "the version comes from the pom's own property, resolved rather than left as ${spring.version}"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:maven/junit/junit@4.13.2", "note": "test scope is still a declared dependency"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:nuget/newtonsoft.json@13.0.3"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:nuget/serilog@3.1.1", "note": "Version as a child element, not an attribute"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:cargo/serde@1.0.197"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:cargo/tokio@1.36.0", "note": "the lockfile resolves the caret range the manifest declares"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:golang/github.com/gin-gonic/gin@v1.9.1"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:golang/github.com/acme/shared", "note": "a replace directive redirects the build, so the declared version is not the resolved one"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:maven/com.acme/internal-bom", "note": "the property that names its version is defined in a parent pom the scanner never fetched"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:cargo/local-helpers", "note": "a path dependency is not a crates.io package, and cataloguing it would offer upgrade targets for a crate that was never published"},
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:maven/com.acme/internal-bom@", "note": "an unresolved version must leave the dependency versionless rather than inventing one"},
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:golang/github.com/acme/shared@v0.4.0", "note": "the replaced module keeps no resolved version"}
+    ]
+  }
+}

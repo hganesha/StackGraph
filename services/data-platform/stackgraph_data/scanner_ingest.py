@@ -921,22 +921,31 @@ def _upsert_source_artifact(
     return row["id"]
 
 
-def _persist_dependency_resolution(
+# The public registry each ecosystem resolves against when a repository declares no other one.
+# Without these, only npm dependencies gained a `package_registry_identity` row, which meant the
+# catalogue enumerator could not see a PyPI, Maven, NuGet, crates.io, or Go dependency at all —
+# and `valid_targets` then reported a short registry rather than an unenumerated one.
+PUBLIC_REGISTRIES: dict[str, tuple[str, str, str]] = {
+    "npm": ("npm-public", "NPM", "https://registry.npmjs.org/"),
+    "pypi": ("pypi-public", "PYPI", "https://pypi.org/"),
+    "maven": ("maven-central", "MAVEN", "https://repo1.maven.org/maven2/"),
+    "cargo": ("cargo-public", "CARGO", "https://crates.io/"),
+    "nuget": ("nuget-public", "NUGET", "https://api.nuget.org/"),
+    "golang": ("go-proxy", "GO", "https://proxy.golang.org/"),
+}
+
+
+def _package_registry(
     connection: Connection[dict[str, Any]],
-    tenant_id: UUID,
-    fact_id: UUID,
-    entity_id: UUID,
-    fact: Mapping[str, Any],
-) -> None:
-    properties = fact.get("properties") or {}
-    registry = properties.get("registry_resolution")
-    if properties.get("ecosystem") != "npm" or not isinstance(registry, Mapping):
-        return
-    origin = registry.get("origin")
-    if not isinstance(origin, str):
-        return
-    is_public = registry.get("visibility") == "PUBLIC" and not registry.get("custom_registry")
-    registry_tenant = None if is_public else tenant_id
+    *,
+    tenant_id: UUID | None,
+    source_key: str,
+    registry_key: str,
+    ecosystem: str,
+    origin: str,
+    visibility: str,
+    auth_mode: str,
+) -> UUID:
     source = connection.execute(
         """
         INSERT INTO source_system(tenant_id,source_key,kind,base_uri,metadata)
@@ -944,26 +953,65 @@ def _persist_dependency_resolution(
         ON CONFLICT(tenant_id,source_key) DO UPDATE SET base_uri=EXCLUDED.base_uri
         RETURNING id
         """,
-        (registry_tenant, f"npm:{origin}", origin),
+        (tenant_id, source_key, origin),
     ).fetchone()
     assert source is not None
-    registry_key = "npm-public" if is_public else f"npm-{sha256_key(origin)[7:23]}"
-    package_registry = connection.execute(
+    row = connection.execute(
         """
         INSERT INTO package_registry(
           tenant_id,source_system_id,registry_key,origin_uri,normalized_origin_uri,
           ecosystem,visibility,auth_mode,metadata
-        ) VALUES (%s,%s,%s,%s,%s,'NPM',%s,%s,'{}')
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'{}')
         ON CONFLICT(tenant_id,registry_key) DO UPDATE SET updated_at=now()
         RETURNING id
         """,
         (
-            registry_tenant, source["id"], registry_key, origin, origin,
-            registry.get("visibility") or "UNKNOWN",
-            "NONE" if is_public else "OTHER",
+            tenant_id, source["id"], registry_key, origin, origin, ecosystem, visibility,
+            auth_mode,
         ),
     ).fetchone()
-    assert package_registry is not None
+    assert row is not None
+    return row["id"]
+
+
+def _persist_registry_identity(
+    connection: Connection[dict[str, Any]],
+    tenant_id: UUID,
+    entity_id: UUID,
+    fact: Mapping[str, Any],
+) -> UUID | None:
+    """Record which registry a dependency's package lives in, for every ecosystem.
+
+    npm carries its own resolution metadata because `.npmrc` can point a scope at a private
+    registry. Every other ecosystem StackGraph reads declares no registry in its manifest, so
+    the public default is recorded — which is what the build actually resolves against, and is
+    a claim the catalogue can later act on rather than a gap it cannot see past.
+    """
+    properties = fact.get("properties") or {}
+    ecosystem = str(properties.get("ecosystem") or "")
+    default = PUBLIC_REGISTRIES.get(ecosystem)
+    if default is None:
+        return None
+    registry = properties.get("registry_resolution")
+    if isinstance(registry, Mapping) and isinstance(registry.get("origin"), str):
+        origin = str(registry["origin"])
+        is_public = registry.get("visibility") == "PUBLIC" and not registry.get("custom_registry")
+        visibility = str(registry.get("visibility") or "UNKNOWN")
+        registry_tenant = None if is_public else tenant_id
+        registry_key = default[0] if is_public else f"{ecosystem}-{sha256_key(origin)[7:23]}"
+        auth_mode = "NONE" if is_public else "OTHER"
+        source_key = f"{ecosystem}:{origin}"
+    else:
+        registry_key, _, origin = default
+        visibility = "PUBLIC"
+        registry_tenant = None
+        auth_mode = "NONE"
+        source_key = f"{ecosystem}:{origin}"
+    package_registry_id = _package_registry(
+        connection, tenant_id=registry_tenant, source_key=source_key,
+        registry_key=registry_key, ecosystem=default[1], origin=origin,
+        visibility=visibility, auth_mode=auth_mode,
+    )
     object_key = fact["object_entity"]["key"]
     purl = object_key.split(":pkg:", 1)[-1]
     if not purl.startswith("pkg:"):
@@ -978,11 +1026,30 @@ def _persist_dependency_resolution(
         DO UPDATE SET entity_id=EXCLUDED.entity_id,last_seen_at=now()
         """,
         (
-            registry_tenant, entity_id, package_registry["id"], package_name,
-            properties.get("resolved_version"), purl,
-            registry.get("visibility") or "UNKNOWN",
+            registry_tenant, entity_id, package_registry_id, package_name,
+            properties.get("resolved_version"), purl, visibility,
         ),
     )
+    return package_registry_id
+
+
+def _persist_dependency_resolution(
+    connection: Connection[dict[str, Any]],
+    tenant_id: UUID,
+    fact_id: UUID,
+    entity_id: UUID,
+    fact: Mapping[str, Any],
+) -> None:
+    package_registry_id = _persist_registry_identity(connection, tenant_id, entity_id, fact)
+    properties = fact.get("properties") or {}
+    registry = properties.get("registry_resolution")
+    # `dependency_resolution` records npm's lockfile behaviour, scope routing, and artifact
+    # integrity. Nothing in it applies to the other ecosystems, so they stop at identity rather
+    # than being given empty rows that would read as resolutions nobody performed.
+    if package_registry_id is None or properties.get("ecosystem") != "npm":
+        return
+    if not isinstance(registry, Mapping) or not isinstance(registry.get("origin"), str):
+        return
     artifact = properties.get("artifact") if isinstance(properties.get("artifact"), Mapping) else {}
     connection.execute(
         """
@@ -994,7 +1061,7 @@ def _persist_dependency_resolution(
         ON CONFLICT(fact_assertion_id) DO NOTHING
         """,
         (
-            tenant_id, fact_id, package_registry["id"], registry.get("source") or "UNKNOWN",
+            tenant_id, fact_id, package_registry_id, registry.get("source") or "UNKNOWN",
             properties["requested_spec"], properties.get("resolved_version"),
             artifact.get("resolved_uri"), artifact.get("integrity"), registry.get("scope"),
             registry.get("config_path"), bool(registry.get("custom_registry")),

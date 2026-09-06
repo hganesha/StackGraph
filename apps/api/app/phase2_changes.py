@@ -86,6 +86,29 @@ def _fingerprint(value: Any) -> str:
     return "sha256:" + hashlib.sha256(payload.encode()).hexdigest()
 
 
+# purl type as the scanner mints it, mapped to the catalogue's ecosystem column. They differ in
+# exactly one place — the purl type is `golang` and the catalogue calls it `go` — and conflating
+# them would silently return an empty catalogue for every Go module.
+_PURL_ECOSYSTEMS = {
+    "npm": "npm", "pypi": "pypi", "maven": "maven", "cargo": "cargo", "nuget": "nuget",
+    "golang": "go",
+}
+
+
+def _purl_ecosystem(canonical_key: str) -> tuple[str, str]:
+    """Read the purl type out of a package entity's canonical key.
+
+    An unrecognised type falls back to `npm` because that is where the estate's packages have
+    always come from, and a mismatched prefix returns an empty catalogue rather than another
+    ecosystem's releases.
+    """
+    if canonical_key.startswith("pkg:"):
+        purl_type = canonical_key[4:].split("/", 1)[0]
+        if purl_type in _PURL_ECOSYSTEMS:
+            return purl_type, _PURL_ECOSYSTEMS[purl_type]
+    return "npm", "npm"
+
+
 def _entity(row: dict[str, Any]) -> EntitySummary:
     return EntitySummary(
         id=row["id"], kind=row["entity_type"], name=row["name"],
@@ -606,6 +629,11 @@ class Phase2ChangeMixin:
         )
         if resolution.state != "RESOLVED" or package_name is None or resolution.entity is None:
             raise APIError(404, "PACKAGE_NOT_RESOLVED", "The package does not have a canonical registry identity.")
+        # Six ecosystems are catalogued now, and `serde` names a crate and could name an npm
+        # package. Matching on the name alone would offer one ecosystem's releases as the
+        # other's upgrade targets, so every query below is scoped by purl type.
+        purl_type, ecosystem = _purl_ecosystem(resolution.entity.canonical_key)
+        purl_prefix = f"pkg:{purl_type}/"
         rows = await self.database.fetch_all(
             """
             SELECT e.id,e.canonical_key,pri.package_version,
@@ -625,8 +653,9 @@ class Phase2ChangeMixin:
               ORDER BY valid_from DESC LIMIT 1
             ) support ON true
             WHERE lower(pri.package_name)=lower(%s) AND pri.package_version IS NOT NULL
+              AND pri.purl LIKE %s
             """,
-            (package_name,), tenant_id=tenant_id,
+            (package_name, f"{purl_prefix}%"), tenant_id=tenant_id,
         )
         # The registry's catalogue, which is a different claim from the estate's identity: it
         # says a version can be chosen, not that anything runs it. Joined here so an upgrade
@@ -637,19 +666,20 @@ class Phase2ChangeMixin:
                    catalog.is_deprecated, catalog.published_at, catalog.collected_at,
                    catalog.registry_key, catalog.support_status
             FROM package_version_catalog catalog
-            WHERE lower(catalog.package_name)=lower(%s) AND NOT catalog.is_yanked
+            WHERE lower(catalog.package_name)=lower(%s) AND catalog.ecosystem=%s
+              AND NOT catalog.is_yanked
             ORDER BY catalog.version
             """,
-            (package_name,), tenant_id=tenant_id,
+            (package_name, ecosystem), tenant_id=tenant_id,
         )
         collection = await self.database.fetch_one(
             """
             SELECT status, version_count, limitations, collected_at
             FROM package_catalog_collection
-            WHERE lower(package_name)=lower(%s)
+            WHERE lower(package_name)=lower(%s) AND ecosystem=%s
             ORDER BY collected_at DESC LIMIT 1
             """,
-            (package_name,), tenant_id=tenant_id,
+            (package_name, ecosystem), tenant_id=tenant_id,
         )
         known = {row["package_version"] for row in rows}
         for entry in catalog:
@@ -658,7 +688,8 @@ class Phase2ChangeMixin:
             # A catalogue version has no entity, because the estate does not run it. The
             # compiler resolves it to one only if the change is actually submitted.
             rows.append({
-                "id": None, "canonical_key": f"pkg:{package_name}@{entry['version']}",
+                "id": None,
+                "canonical_key": f"{purl_prefix}{package_name}@{entry['version']}",
                 "package_version": entry["version"], "observed_at": entry["collected_at"],
                 "registry_key": entry["registry_key"],
                 "support_status": (
@@ -679,10 +710,10 @@ class Phase2ChangeMixin:
             JOIN package_registry_identity pri ON pri.entity_id=f.object_entity_id
             LEFT JOIN dependency_resolution dr ON dr.fact_assertion_id=f.id
             WHERE f.tenant_id=%s AND f.predicate='DEPENDS_ON' AND f.system_to IS NULL
-              AND lower(pri.package_name)=lower(%s)
+              AND lower(pri.package_name)=lower(%s) AND pri.purl LIKE %s
             GROUP BY 1
             """,
-            (tenant_id, package_name), tenant_id=tenant_id,
+            (tenant_id, package_name, f"{purl_prefix}%"), tenant_id=tenant_id,
         )
         counts = {
             str(row["version"]): int(row["repositories"])

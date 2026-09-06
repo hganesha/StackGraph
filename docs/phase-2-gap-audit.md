@@ -490,9 +490,20 @@ omission in the API response instead of leaving it to be inferred from a missing
 **Container package inventory.** Layers are recorded but not opened, so the OS and language
 packages inside an image remain uncollected. The container profile says so.
 
-**Registries beyond npm and PyPI.** `package_version_catalog` admits nuget, maven, cargo, and go;
-only npm and PyPI have enumerators. A package in another ecosystem has no catalogue row, and
-target coverage reports that rather than implying the registry is small.
+**Registries beyond npm and PyPI.** Closed. Building it exposed a defect in the enumerator that
+shipped before it: `package_registry_identity` was written for npm alone, so the PyPI enumerator
+could never see a package either, and every non-npm dependency reported no upgrade targets — a
+sentence that reads as "no newer release exists" rather than "nothing asked". Identity is now
+recorded for every ecosystem, against the public registry the build actually resolves against.
+
+The scanner reads `pom.xml`, Gradle build files and version catalogues, `.csproj` and friends,
+`Cargo.toml`, and `go.mod`; the enumerator speaks Maven Central's metadata XML, the NuGet flat
+container, the crates.io API, and the Go module proxy. Each adapter states what its registry does
+not publish rather than defaulting it: Maven has no yank or deprecation signal at all, the NuGet
+flat container carries no release dates, and Go retractions live in a module's own `go.mod` where
+the proxy's list cannot see them. Three places the parsers refuse to guess: an unresolvable Maven
+property leaves the dependency versionless, a Cargo path or git dependency is not a crates.io
+package, and a Go module a `replace` directive redirects keeps no resolved version.
 
 **Champion/challenger promotion.** Deliberately unbuilt, per A1. Adding it is a migration
 somebody has to write and review, which is the point.

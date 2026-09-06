@@ -78,8 +78,8 @@ class GoldenCorpusTests(unittest.TestCase):
                 "ai-supply-chain", "containerized-service", "data-analytics",
                 "generated-vendor-tree",
                 "kubernetes-terraform", "large-bounded-repo", "malformed-input",
-                "npm-single-app", "pnpm-monorepo", "python-library", "runtime-contradiction",
-                "serverless-app",
+                "npm-single-app", "pnpm-monorepo", "polyglot-service", "python-library",
+                "runtime-contradiction", "serverless-app",
             },
             {case.identifier for case in self.cases},
         )
