@@ -1,0 +1,22 @@
+{
+  "id": "ai-supply-chain",
+  "title": "Application whose agent, harness, tools, model, and context source are declared",
+  "why": "§31 asks which processes depend on a model, which agents can reach production, and what happens if a tool is withdrawn. None of that is answerable while the vocabulary is registered but nothing produces it. This case pins the chain and the line between declared and inferred.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": [],
+    "facts": [
+      {"predicate": "ORCHESTRATES", "subject_type": "Application", "object_type": "AgentHarness", "object_key": "agent-harness:github:repo:1:langchain", "note": "the framework the application runs its agent on"},
+      {"predicate": "ACCESSES", "subject_type": "AgentHarness", "object_type": "Tool", "object_key": "ai-tool:github:repo:1:mcp:ticketing", "note": "an MCP server the harness can call, which is a path to production"},
+      {"predicate": "ACCESSES", "subject_type": "AgentHarness", "object_type": "Tool", "object_key": "ai-tool:github:repo:1:mcp:knowledge-base"},
+      {"predicate": "ACCESSES", "subject_type": "AgentHarness", "object_type": "Tool", "object_key": "ai-tool:github:repo:1:anthropic-sdk"},
+      {"predicate": "GROUNDED_BY", "subject_type": "AgentHarness", "object_type": "ContextSource", "object_key": "context-source:github:repo:1:qdrant", "note": "what the agent retrieves from"},
+      {"predicate": "INVOKES", "subject_type": "AgentHarness", "object_type": "AIModel", "object_key": "ai-model:claude-sonnet-4-5", "note": "the model a withdrawal would affect"}
+    ],
+    "absent_facts": [
+      {"predicate": "ORCHESTRATES", "object_key": "agent-harness:github:repo:1:mcp", "note": "the harness is LangChain; MCP is the tool protocol, not a second harness"},
+      {"predicate": "INVOKES", "object_type": "AIModel", "object_key": "ai-model:express", "note": "a plain dependency is not a model"},
+      {"predicate": "ACCESSES", "subject_type": "Application", "object_type": "Tool", "note": "tools hang off the harness, not the application, once a harness is declared"}
+    ]
+  }
+}

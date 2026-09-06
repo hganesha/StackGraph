@@ -88,6 +88,17 @@ EXACT_MANIFEST_NAMES = {
     ".python-version": "RUNTIME_VERSION_DECLARATION",
     ".ruby-version": "RUNTIME_VERSION_DECLARATION",
     ".tool-versions": "RUNTIME_VERSION_DECLARATION",
+    # §31's AI supply chain is declared in configuration, not inferred from prose. These are the
+    # files that actually name an agent's harness, its tools, and its model.
+    ".mcp.json": "AI_CONFIGURATION",
+    "mcp.json": "AI_CONFIGURATION",
+    "claude_desktop_config.json": "AI_CONFIGURATION",
+    "agents.yaml": "AI_CONFIGURATION",
+    "agents.yml": "AI_CONFIGURATION",
+    "agent.yaml": "AI_CONFIGURATION",
+    "agent.yml": "AI_CONFIGURATION",
+    "llm.yaml": "AI_CONFIGURATION",
+    "llm.yml": "AI_CONFIGURATION",
 }
 
 # Analytics estates are carried in files the dependency scanner has no parser for. They are

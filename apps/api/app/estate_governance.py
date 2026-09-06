@@ -395,14 +395,16 @@ class EstateGovernanceMixin:
                 message="AI supply-chain coverage is incomplete; missing nodes are not inferred.",
             )]
         else:
-            # An empty result here means nothing has been collected, not that the estate runs no
-            # AI. The vocabulary is registered in the ontology; no connector emits it yet, and
-            # saying which of those two is true is the whole difference for a reader.
+            # An empty result means the scanner found no declared AI dependency, which is a
+            # real answer rather than a missing one — but only for repositories it has scanned.
+            # Naming what detection reads is what stops a reader concluding the estate runs no
+            # AI when the truth may be that its AI is configured somewhere the scanner is not.
             limitations = [GateReason(
-                code="AI_SUPPLY_CHAIN_NOT_COLLECTED",
+                code="AI_SUPPLY_CHAIN_NOT_DECLARED",
                 message=(
-                    "No connector currently emits agent, model, prompt, tool, or dataset "
-                    "evidence. The AI supply chain is uncollected rather than empty."
+                    "No scanned repository declares an AI SDK, agent framework, MCP "
+                    "configuration, or vector store. Detection reads declared dependencies and "
+                    "configuration only, so an agent assembled at runtime is not represented."
                 ),
             )]
         return AISupplyChain(

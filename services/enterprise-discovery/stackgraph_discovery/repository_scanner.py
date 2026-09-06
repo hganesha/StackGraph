@@ -416,6 +416,7 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     inventory_facts.extend(_service_boundary_facts(scan_input, contents, diagnostics))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
     inventory_facts.extend(_runtime_contradiction_facts(scan_input, contents))
+    inventory_facts.extend(_ai_supply_chain_facts(scan_input, contents, dependencies))
     pass_a_completed = time.monotonic()
 
     references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
@@ -4625,4 +4626,243 @@ def _runtime_contradiction_facts(
                 for claim in claims[:12]
             ],
         })
+    return facts
+
+
+# §31's AI supply chain, detected only from declared evidence. A model identifier in a comment
+# or a prose mention of "our agent" is not a dependency; a manifest entry and a structured
+# configuration file are. Keeping to those is what lets this run at the corpus's zero-false-
+# positive bar.
+_AI_SDK_PACKAGES = {
+    "anthropic": ("ANTHROPIC", "SDK"),
+    "@anthropic-ai/sdk": ("ANTHROPIC", "SDK"),
+    "openai": ("OPENAI", "SDK"),
+    "@ai-sdk/anthropic": ("ANTHROPIC", "SDK"),
+    "@ai-sdk/openai": ("OPENAI", "SDK"),
+    "cohere-ai": ("COHERE", "SDK"),
+    "mistralai": ("MISTRAL", "SDK"),
+    "google-generativeai": ("GOOGLE", "SDK"),
+    "@google/generative-ai": ("GOOGLE", "SDK"),
+    "boto3-bedrock": ("AWS_BEDROCK", "SDK"),
+}
+_AI_HARNESS_PACKAGES = {
+    "langchain": "LANGCHAIN",
+    "langchain-core": "LANGCHAIN",
+    "langgraph": "LANGGRAPH",
+    "llama-index": "LLAMA_INDEX",
+    "llamaindex": "LLAMA_INDEX",
+    "crewai": "CREWAI",
+    "autogen": "AUTOGEN",
+    "pyautogen": "AUTOGEN",
+    "semantic-kernel": "SEMANTIC_KERNEL",
+    "@langchain/core": "LANGCHAIN",
+    "ai": "VERCEL_AI_SDK",
+    "@modelcontextprotocol/sdk": "MCP",
+    "mcp": "MCP",
+}
+_CONTEXT_SOURCE_PACKAGES = {
+    "pinecone-client": "PINECONE",
+    "@pinecone-database/pinecone": "PINECONE",
+    "chromadb": "CHROMA",
+    "weaviate-client": "WEAVIATE",
+    "qdrant-client": "QDRANT",
+    "pgvector": "PGVECTOR",
+    "faiss-cpu": "FAISS",
+    "@qdrant/js-client-rest": "QDRANT",
+}
+# Deliberately anchored: a bare "claude" or "gpt" in prose is not a model reference. A version
+# suffix is what distinguishes an identifier from a brand name.
+_MODEL_IDENTIFIER = re.compile(
+    r"\b(claude-[a-z0-9.\-]*\d[a-z0-9.\-]*"
+    r"|gpt-[0-9][a-z0-9.\-]*"
+    r"|o[1-9](?:-[a-z0-9.\-]+)?"
+    r"|gemini-[0-9][a-z0-9.\-]*"
+    r"|llama-?[0-9][a-z0-9.\-]*"
+    r"|mistral-[a-z0-9.\-]*\d[a-z0-9.\-]*)\b",
+    re.IGNORECASE,
+)
+
+
+def _ai_entity(namespace: str, entity_type: str, key: str, name: str) -> dict[str, str]:
+    return {"namespace": namespace, "type": entity_type, "key": key, "name": name}
+
+
+def _ai_fact(
+    scan_input: ScanInput, subject: Mapping[str, str], predicate: str,
+    object_entity: Mapping[str, str], *, confidence: float, assertion_class: str,
+    path: str, content: bytes, properties: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "subject": subject["key"],
+            "predicate": predicate,
+            "object": object_entity["key"],
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": dict(subject),
+        "predicate": predicate,
+        "object_entity": dict(object_entity),
+        "assertion_class": assertion_class,
+        "confidence": confidence,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": dict(properties),
+        "evidence": [
+            _evidence_dict(Evidence(
+                path=path, evidence_type="AI_DEPENDENCY_DECLARATION",
+                content_hash=content_hash(content), locator={"path": path},
+            ), scan_input)
+        ],
+    }
+
+
+def _ai_supply_chain_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    dependencies: list[Dependency],
+) -> list[dict[str, Any]]:
+    """Emit the AI supply chain this repository declares.
+
+    §31 asks which business processes depend on a model, which agents can reach production, and
+    what happens when a model or tool is withdrawn. None of that is answerable while the
+    vocabulary is registered but nothing produces it.
+
+    Detection is restricted to declared evidence — dependency manifests and structured AI
+    configuration — because the alternative is regex over prose, and an AI inventory built from
+    prose is exactly the "AI inventory rather than a supply-chain graph" the section warns
+    against.
+    """
+    facts: list[dict[str, Any]] = []
+    application = _ai_entity(
+        "ENTERPRISE", "Application", f"application:{scan_input.repository_key}",
+        scan_input.repository_name,
+    )
+    seen: set[tuple[str, str, str]] = set()
+
+    def emit(
+        subject: Mapping[str, str], predicate: str, target: Mapping[str, str], *,
+        confidence: float, assertion_class: str, path: str, properties: Mapping[str, Any],
+    ) -> None:
+        key = (subject["key"], predicate, target["key"])
+        if key in seen:
+            return
+        seen.add(key)
+        facts.append(_ai_fact(
+            scan_input, subject, predicate, target, confidence=confidence,
+            assertion_class=assertion_class, path=path, content=contents[path],
+            properties=properties,
+        ))
+
+    declared = [
+        dependency for dependency in sorted(dependencies, key=lambda item: item.normalized_name)
+        if dependency.declaration.path in contents
+    ]
+    # The harness is resolved before anything is attached to it. Discovering it mid-loop would
+    # make a model or tool hang off the application or the harness depending only on where the
+    # package sorted alphabetically, so the same repository would produce two different graphs.
+    harness: dict[str, str] | None = None
+    for dependency in declared:
+        framework = _AI_HARNESS_PACKAGES.get(dependency.normalized_name)
+        if framework is None:
+            continue
+        harness = _ai_entity(
+            "INTELLIGENCE", "AgentHarness",
+            f"agent-harness:{scan_input.repository_key}:{framework.lower()}", framework,
+        )
+        emit(
+            application, "ORCHESTRATES", harness, confidence=0.9,
+            assertion_class="DECLARED", path=dependency.declaration.path,
+            properties={"framework": framework, "package": dependency.package_purl},
+        )
+        break
+
+    for dependency in declared:
+        name = dependency.normalized_name
+        path = dependency.declaration.path
+        if name in _AI_SDK_PACKAGES:
+            provider, _ = _AI_SDK_PACKAGES[name]
+            tool = _ai_entity(
+                "INTELLIGENCE", "Tool",
+                f"ai-tool:{scan_input.repository_key}:{provider.lower()}-sdk",
+                f"{provider} SDK",
+            )
+            emit(
+                harness or application, "ACCESSES", tool, confidence=0.9,
+                assertion_class="DECLARED", path=path,
+                properties={"provider": provider, "package": dependency.package_purl},
+            )
+        if name in _CONTEXT_SOURCE_PACKAGES:
+            store = _CONTEXT_SOURCE_PACKAGES[name]
+            context = _ai_entity(
+                "INTELLIGENCE", "ContextSource",
+                f"context-source:{scan_input.repository_key}:{store.lower()}", store,
+            )
+            emit(
+                harness or application, "GROUNDED_BY", context, confidence=0.85,
+                assertion_class="DECLARED", path=path,
+                properties={"store": store, "package": dependency.package_purl},
+            )
+
+    for path in sorted(contents):
+        if _is_vendored(path):
+            continue
+        name = PurePosixPath(path).name.lower()
+        if name in {".mcp.json", "mcp.json", "claude_desktop_config.json"}:
+            document = _decode_json_quiet(contents[path])
+            servers = document.get("mcpServers") if isinstance(document, Mapping) else None
+            if not isinstance(servers, Mapping):
+                continue
+            mcp_harness = harness or _ai_entity(
+                "INTELLIGENCE", "AgentHarness",
+                f"agent-harness:{scan_input.repository_key}:mcp", "MCP",
+            )
+            emit(
+                application, "ORCHESTRATES", mcp_harness, confidence=0.95,
+                assertion_class="DECLARED", path=path,
+                properties={"framework": "MCP", "configuration": path},
+            )
+            for server_name in sorted(servers):
+                if not isinstance(server_name, str) or not server_name:
+                    continue
+                emit(
+                    mcp_harness, "ACCESSES",
+                    _ai_entity(
+                        "INTELLIGENCE", "Tool",
+                        f"ai-tool:{scan_input.repository_key}:mcp:{server_name}", server_name,
+                    ),
+                    confidence=0.95, assertion_class="DECLARED", path=path,
+                    properties={"protocol": "MCP", "server": server_name},
+                )
+        elif name in {"agents.yaml", "agents.yml", "agent.yaml", "agent.yml", "llm.yaml", "llm.yml"}:
+            text = contents[path].decode("utf-8", errors="replace")
+            for identifier in sorted(set(_MODEL_IDENTIFIER.findall(text))):
+                emit(
+                    harness or application, "INVOKES",
+                    _ai_entity(
+                        "INTELLIGENCE", "AIModel", f"ai-model:{identifier.lower()}", identifier,
+                    ),
+                    confidence=0.9, assertion_class="DECLARED", path=path,
+                    properties={"declared_in": path},
+                )
+
+    # A model named in an admitted configuration file is a declaration; one named in source is
+    # weaker, so it is recorded as INFERRED rather than pretending the two are equivalent.
+    for path in sorted(contents):
+        if _is_vendored(path) or not _is_source(path) or _is_test_file(path):
+            continue
+        text = contents[path].decode("utf-8", errors="replace")
+        for identifier in sorted(set(_MODEL_IDENTIFIER.findall(text)))[:8]:
+            emit(
+                harness or application, "INVOKES",
+                _ai_entity(
+                    "INTELLIGENCE", "AIModel", f"ai-model:{identifier.lower()}", identifier,
+                ),
+                confidence=0.7, assertion_class="INFERRED", path=path,
+                properties={"declared_in": path, "detection": "SOURCE_IDENTIFIER"},
+            )
     return facts

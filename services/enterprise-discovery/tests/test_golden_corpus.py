@@ -75,7 +75,8 @@ class GoldenCorpusTests(unittest.TestCase):
         # would shrink the corpus while the score still read 100%.
         self.assertEqual(
             {
-                "containerized-service", "data-analytics", "generated-vendor-tree",
+                "ai-supply-chain", "containerized-service", "data-analytics",
+                "generated-vendor-tree",
                 "kubernetes-terraform", "large-bounded-repo", "malformed-input",
                 "npm-single-app", "pnpm-monorepo", "python-library", "runtime-contradiction",
                 "serverless-app",

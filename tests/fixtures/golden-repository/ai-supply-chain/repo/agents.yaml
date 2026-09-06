@@ -1,0 +1,4 @@
+agents:
+  - name: support-triage
+    model: claude-sonnet-4-5
+    tools: [ticketing, knowledge-base]
