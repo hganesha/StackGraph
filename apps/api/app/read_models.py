@@ -4081,7 +4081,7 @@ class ReadModelStore(
     ) -> CapabilityFootprintList:
         rows = await self.database.fetch_all(
             """
-            SELECT footprint.*,entity.namespace,entity.entity_type,entity.canonical_key,
+            SELECT footprint.*,entity.id,entity.namespace,entity.entity_type,entity.canonical_key,
                    entity.name,entity.properties
             FROM capability_footprint footprint
             JOIN entity ON entity.id=footprint.capability_entity_id

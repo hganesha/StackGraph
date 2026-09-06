@@ -353,7 +353,8 @@ class EstateGovernanceMixin:
             raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
         rows = await self.database.fetch_all(
             """
-            SELECT fact.predicate,fact.confidence,fact.subject_entity_id,fact.object_entity_id,
+            SELECT fact.predicate,fact.confidence,subject.id subject_entity_id,
+                   object.id object_entity_id,
                    subject.entity_type subject_entity_type,subject.name subject_name,
                    subject.canonical_key subject_canonical_key,
                    object.entity_type object_entity_type,object.name object_name,

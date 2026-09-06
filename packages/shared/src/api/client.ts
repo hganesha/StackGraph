@@ -540,6 +540,7 @@ const fixtureSimulations = new Map<string, { run: SimulationRunModel; reads: num
 const fixtureSimulationByKey = new Map<string, string>();
 const fixtureEnvelopes = new Map<string, CapabilityEnvelopeModel>();
 const fixtureFlights = new Map<string, FlightRecordModel>();
+const fixtureAssumptions = new Map<string, AssumptionModel>();
 let fixtureKillSwitch: AgentKillSwitchModel = {
   contract_version: "1.0.0", engaged: true,
   reason: "Agent execution is disabled until explicitly enabled.", version: 0,
@@ -1052,6 +1053,218 @@ const fixtureClient: StackGraphClient = {
     await delay();
     const fixture = await import("../fixtures/phase2-estate-strata.json");
     return clone(fixture.default as EstateStrata);
+  },
+  async getAISupplyChain() {
+    await delay();
+    const fixture = await import("../fixtures/phase2-ai-supply-chain.json");
+    return clone(fixture.default as AISupplyChain);
+  },
+  async listEstateLineage(entityId, limit = 100) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-estate-lineage.json");
+    const result = clone(fixture.default as EstateLineageList);
+    result.edges = result.edges
+      .filter((edge) => !entityId || edge.upstream.id === entityId || edge.downstream.id === entityId)
+      .slice(0, limit);
+    return result;
+  },
+  async listAssumptions(subjectId, status, limit = 50) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-assumptions.json");
+    const result = clone(fixture.default as AssumptionList);
+    result.assumptions = [...fixtureAssumptions.values(), ...result.assumptions]
+      .filter((item) => !subjectId || item.subject.id === subjectId)
+      .filter((item) => !status || item.status === status)
+      .slice(0, limit)
+      .map(clone);
+    return result;
+  },
+  async getAssumption(id) {
+    await delay();
+    const assumption = fixtureAssumptions.get(id);
+    if (!assumption) {
+      throw new FixtureApiError(404, { code: "ASSUMPTION_NOT_FOUND", message: "The assumption was not found." });
+    }
+    return clone(assumption);
+  },
+  async createAssumption(body) {
+    await delay();
+    const now = new Date().toISOString();
+    const id = globalThis.crypto?.randomUUID?.() ?? `fixture-assumption-${fixtureAssumptions.size + 1}`;
+    const assumption: AssumptionModel = {
+      id,
+      authority: body.authority,
+      confidence: body.confidence,
+      dependent_entity_ids: body.dependent_entity_ids ?? [],
+      dimension: body.dimension,
+      statement: body.statement,
+      last_verified_at: body.last_verified_at,
+      status: "OPEN",
+      subject: { ...applicationDetail.application, id: body.subject_entity_id },
+      claims: (body.claims ?? []).map((claim, index) => ({
+        ...claim, id: `${id}:claim:${index + 1}`,
+      })),
+      contradiction_ids: [],
+      created_at: now,
+      updated_at: now,
+      version: 1,
+    };
+    fixtureAssumptions.set(id, assumption);
+    return clone(assumption);
+  },
+  async resolveContradiction() {
+    await delay();
+  },
+  async compileCapabilityEnvelope(body) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-capability-envelope.json");
+    const id = globalThis.crypto?.randomUUID?.() ?? `fixture-envelope-${fixtureEnvelopes.size + 1}`;
+    const now = new Date();
+    const envelope: CapabilityEnvelopeModel = {
+      ...clone(fixture.default as CapabilityEnvelopeModel),
+      id,
+      objective: body.objective,
+      environment: body.environment,
+      estate_watermark: body.estate_watermark,
+      risk_tier: body.risk_tier,
+      context_confidence: body.context_confidence,
+      evidence_fact_ids: body.evidence_fact_ids ?? [],
+      bands: (["READ", "EXECUTE", "CONDITIONAL", "PROHIBITED", "ESCALATE"] as const).map((band) => ({
+        band,
+        operations: body.operations
+          .filter((operation) => operation.requested_band === band)
+          .map((operation) => ({ operation_key: operation.operation_key, band, constraints: operation.constraints ?? {} })),
+      })),
+      created_at: now.toISOString(),
+      valid_until: new Date(now.getTime() + (body.ttl_seconds ?? 900) * 1000).toISOString(),
+    };
+    fixtureEnvelopes.set(id, envelope);
+    return clone(envelope);
+  },
+  async getCapabilityEnvelope(id) {
+    await delay();
+    const envelope = fixtureEnvelopes.get(id);
+    if (!envelope) throw new FixtureApiError(404, { code: "ENVELOPE_NOT_FOUND", message: "The capability envelope was not found." });
+    return clone(envelope);
+  },
+  async authorizeAgentOperation(id, body) {
+    await delay();
+    const envelope = fixtureEnvelopes.get(id);
+    if (!envelope) throw new FixtureApiError(404, { code: "ENVELOPE_NOT_FOUND", message: "The capability envelope was not found." });
+    const operation = envelope.bands.flatMap((band) => band.operations ?? []).find((item) => item.operation_key === body.operation_key);
+    const decision = fixtureKillSwitch.engaged ? "DENY" : operation?.band === "READ" ? "ALLOW" : "ESCALATE";
+    return {
+      id: globalThis.crypto?.randomUUID?.() ?? `fixture-authorization-${Date.now()}`,
+      envelope_id: id,
+      operation_key: body.operation_key,
+      decision,
+      reason_codes: fixtureKillSwitch.engaged ? ["KILL_SWITCH_ENGAGED"] : operation ? [] : ["OPERATION_NOT_IN_ENVELOPE"],
+      request_fingerprint: `fixture:${body.operation_key}`,
+      decided_at: new Date().toISOString(),
+    } satisfies AgentAuthorizationDecisionModel;
+  },
+  async decideAgentApproval(id, body) {
+    await delay();
+    const now = new Date().toISOString();
+    return {
+      id,
+      envelope_id: fixtureEnvelopes.keys().next().value ?? "fixture-envelope",
+      operation_key: "fixture.operation",
+      reason_code: "HUMAN_REVIEW_REQUIRED",
+      requested_by: "fixture-agent",
+      status: body.decision,
+      rationale: body.rationale,
+      version: body.expected_version + 1,
+      created_at: now,
+      decided_at: now,
+      decided_by: "fixture-reviewer",
+      expires_at: new Date(Date.now() + 900_000).toISOString(),
+    } satisfies AgentApprovalModel;
+  },
+  async getAgentKillSwitch() {
+    await delay();
+    return clone(fixtureKillSwitch);
+  },
+  async updateAgentKillSwitch(body) {
+    await delay();
+    if (body.expected_version !== fixtureKillSwitch.version) {
+      throw new FixtureApiError(409, { code: "VERSION_CONFLICT", message: "The kill switch changed; reload and try again." });
+    }
+    fixtureKillSwitch = {
+      ...fixtureKillSwitch,
+      engaged: body.engaged,
+      reason: body.reason,
+      version: fixtureKillSwitch.version + 1,
+      updated_by: "fixture-admin",
+      updated_at: new Date().toISOString(),
+    };
+    return clone(fixtureKillSwitch);
+  },
+  async createFlightRecord(body) {
+    await delay();
+    const id = globalThis.crypto?.randomUUID?.() ?? `fixture-flight-${fixtureFlights.size + 1}`;
+    const record: FlightRecordModel = {
+      contract_version: "1.0.0",
+      id,
+      envelope_id: body.envelope_id,
+      objective: body.objective,
+      status: "ACTIVE",
+      event_count: 0,
+      outcome: null,
+      started_by: "fixture-agent",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      events: [],
+    };
+    fixtureFlights.set(id, record);
+    return clone(record);
+  },
+  async getFlightRecord(id) {
+    await delay();
+    const record = fixtureFlights.get(id);
+    if (!record) throw new FixtureApiError(404, { code: "FLIGHT_RECORD_NOT_FOUND", message: "The flight record was not found." });
+    return clone(record);
+  },
+  async appendFlightEvent(id, body) {
+    await delay();
+    const record = fixtureFlights.get(id);
+    if (!record) throw new FixtureApiError(404, { code: "FLIGHT_RECORD_NOT_FOUND", message: "The flight record was not found." });
+    const sequence = record.event_count + 1;
+    const previousHash = record.chain_head ?? null;
+    const eventHash = `fixture:event:${sequence}`;
+    record.events = [...(record.events ?? []), {
+      id: globalThis.crypto?.randomUUID?.() ?? `${id}:event:${sequence}`,
+      ...body,
+      sequence,
+      previous_hash: previousHash,
+      event_hash: eventHash,
+      recorded_at: new Date().toISOString(),
+    }];
+    record.event_count = sequence;
+    record.chain_head = eventHash;
+    fixtureFlights.set(id, record);
+    return clone(record);
+  },
+  async finalizeFlightRecord(id, body) {
+    await delay();
+    const record = fixtureFlights.get(id);
+    if (!record) throw new FixtureApiError(404, { code: "FLIGHT_RECORD_NOT_FOUND", message: "The flight record was not found." });
+    record.status = body.status;
+    record.outcome = body.outcome;
+    record.completed_at = new Date().toISOString();
+    fixtureFlights.set(id, record);
+    return clone(record);
+  },
+  async runAgentControlDrill(body) {
+    await delay();
+    return {
+      id: globalThis.crypto?.randomUUID?.() ?? `fixture-drill-${Date.now()}`,
+      drill_kind: body.drill_kind,
+      status: "PASSED",
+      checks: [{ name: "fixture_control_path", passed: true }],
+      performed_at: new Date().toISOString(),
+      performed_by: "fixture-admin",
+    } satisfies AgentControlDrillResult;
   },
   async listContradictions(subjectId, limit = 50) {
     await delay();
@@ -2490,6 +2703,42 @@ const liveClient: StackGraphClient = {
     return req(`/estate/summary${suffix}`);
   },
   getEstateStrata: () => req("/estate/strata"),
+  getAISupplyChain: () => req("/estate/ai-supply-chain"),
+  listEstateLineage: (entityId, limit = 100) => {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (entityId) query.set("entity_id", entityId);
+    return req(`/estate/lineage?${query.toString()}`);
+  },
+  listAssumptions: (subjectId, status, limit = 50) => {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (subjectId) query.set("subject_id", subjectId);
+    if (status) query.set("status", status);
+    return req(`/assumptions?${query.toString()}`);
+  },
+  getAssumption: (id) => req(`/assumptions/${encodeURIComponent(id)}`),
+  createAssumption: (body) =>
+    req("/assumptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  resolveContradiction: (id, body) =>
+    req(`/contradictions/${encodeURIComponent(id)}/resolve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  compileCapabilityEnvelope: (body) =>
+    req("/agent-control/envelopes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getCapabilityEnvelope: (id) => req(`/agent-control/envelopes/${encodeURIComponent(id)}`),
+  authorizeAgentOperation: (id, body) =>
+    req(`/agent-control/envelopes/${encodeURIComponent(id)}/authorize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  decideAgentApproval: (id, body) =>
+    req(`/agent-control/approvals/${encodeURIComponent(id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getAgentKillSwitch: () => req("/agent-control/kill-switch"),
+  updateAgentKillSwitch: (body) =>
+    req("/agent-control/kill-switch", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  createFlightRecord: (body) =>
+    req("/agent-control/flight-records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getFlightRecord: (id) => req(`/agent-control/flight-records/${encodeURIComponent(id)}`),
+  appendFlightEvent: (id, body) =>
+    req(`/agent-control/flight-records/${encodeURIComponent(id)}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  finalizeFlightRecord: (id, body) =>
+    req(`/agent-control/flight-records/${encodeURIComponent(id)}/finalize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  runAgentControlDrill: (body) =>
+    req("/agent-control/drills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listContradictions: (subjectId, limit = 50) => {
     const query = new URLSearchParams({ limit: String(limit) });
     if (subjectId) query.set("subject_id", subjectId);
