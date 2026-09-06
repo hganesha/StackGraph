@@ -1,0 +1,17 @@
+.card { border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-card); background: var(--sg-surface-card); }
+.heading { display: flex; justify-content: space-between; gap: var(--sg-space-4); align-items: center; padding: var(--sg-space-4); border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border); }
+.heading span { color: var(--sg-text-muted); font-family: var(--sg-font-evidence); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.heading h2 { font-size: var(--sg-type-h3-size); }
+.heading strong { padding: 3px 8px; border: var(--sg-border-hairline) solid var(--sg-surface-border-strong); border-radius: var(--sg-radius-pill); font-size: var(--sg-type-small-size); }
+.card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card dl > div { min-inline-size: 0; padding: var(--sg-space-3) var(--sg-space-4); border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border); }
+.card dl > div:nth-last-child(-n + 2) { border-block-end: 0; }
+.card dt { margin-block-end: 2px; color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.card dd { display: flex; gap: var(--sg-space-2); flex-wrap: wrap; min-inline-size: 0; }
+.card code { display: inline-block; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--sg-font-evidence); font-size: 11px; }
+.card small { color: var(--sg-text-muted); }
+.status { text-transform: lowercase; }
+@media (max-width: 600px) {
+  .card dl { grid-template-columns: 1fr; }
+  .card dl > div:nth-last-child(2) { border-block-end: var(--sg-border-hairline) solid var(--sg-surface-border); }
+}

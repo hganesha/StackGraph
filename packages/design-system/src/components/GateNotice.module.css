@@ -48,7 +48,9 @@
 /* What the verdict means, once, under the specific reason — so the class is learned
    from the first gate a reader meets rather than from documentation. */
 .meaning {
-  opacity: 0.75;
+  /* Filled gates are the strongest surface in the system; their explanatory text
+     must retain full contrast at the small text size used here. */
+  opacity: 1;
 }
 .action {
   display: flex;

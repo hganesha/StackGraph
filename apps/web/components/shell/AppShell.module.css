@@ -67,3 +67,27 @@
     border: none;
   }
 }
+
+/* A Change Brief is a document, not a screenshot of the application chrome. */
+@media print {
+  .shell {
+    display: block;
+    block-size: auto;
+    overflow: visible;
+  }
+  .shell > header,
+  .body > nav,
+  .shell > [role="status"],
+  .statusPlaceholder {
+    display: none !important;
+  }
+  .body {
+    display: block;
+    min-block-size: auto;
+  }
+  .workspace,
+  .workspaceFullBleed {
+    overflow: visible;
+    padding: 0;
+  }
+}

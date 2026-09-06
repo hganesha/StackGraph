@@ -1,0 +1,10 @@
+{
+  "contract_version": "1.0.0",
+  "policy_version": "package-upgrade/3.2.1",
+  "subject": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json", "canonical_key": "pkg:nuget/Newtonsoft.Json" },
+  "scopes": [
+    { "id": "scope:estate", "kind": "ESTATE", "label": "Entire estate", "entity_id": null, "component_path": null, "affected_count": 382, "evidence_fact_ids": ["70000000-0000-4000-8000-000000000111"], "version_distribution": [{ "version": "10.x", "count": 21 }, { "version": "11.x", "count": 47 }, { "version": "12.x", "count": 143 }, { "version": "13.x", "count": 171 }] },
+    { "id": "scope:repository:billing", "kind": "REPOSITORY", "label": "billing-api repository", "entity_id": "00000000-0000-4000-8000-000000000701", "component_path": null, "affected_count": 4, "evidence_fact_ids": ["70000000-0000-4000-8000-000000000112"], "version_distribution": [{ "version": "12.x", "count": 3 }, { "version": "13.x", "count": 1 }] },
+    { "id": "scope:component:billing-api", "kind": "COMPONENT", "label": "Payment API component", "entity_id": "22000000-0000-4000-8000-000000000001", "component_path": "apps/payment-api", "affected_count": 1, "evidence_fact_ids": ["70000000-0000-4000-8000-000000000113"], "version_distribution": [{ "version": "12.x", "count": 1 }] }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "contract_version": "1.0.0",
+  "repository": { "id": "00000000-0000-4000-8000-000000000701", "kind": "Repository", "name": "billing-api", "canonical_key": "github:repo:billing-api" },
+  "snapshots": [
+    { "fingerprint": "sha256:fingerprint-current", "profile": { "classifications": ["microservice", "full-stack app"], "frameworks": ["ASP.NET Core"], "deployment": ["Kubernetes"], "components": ["apps/payment-api"] }, "confidence": 0.94, "fact_id": "70000000-0000-4000-8000-000000000151", "source_revision": "git:45bc9f2", "observed_at": "2026-09-05T12:00:00Z", "system_from": "2026-09-05T12:00:00Z", "system_to": null },
+    { "fingerprint": "sha256:fingerprint-prior", "profile": { "classifications": ["microservice"], "frameworks": ["ASP.NET Core"], "deployment": ["Docker Compose"], "components": ["src/billing"] }, "confidence": 0.9, "fact_id": "70000000-0000-4000-8000-000000000152", "source_revision": "git:08ad19e", "observed_at": "2026-06-01T12:00:00Z", "system_from": "2026-06-01T12:00:00Z", "system_to": "2026-09-05T12:00:00Z" }
+  ],
+  "page_info": { "has_next_page": false, "next_cursor": null }
+}

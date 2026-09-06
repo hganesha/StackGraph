@@ -1,0 +1,10 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T12:00:00Z",
+  "entity": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json" },
+  "edges": [
+    { "source": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json" }, "target": { "id": "00000000-0000-4000-8000-000000000701", "kind": "Repository", "name": "billing-api" }, "score": 0.93, "metric_key": "runtime-dependency", "fact_id": "70000000-0000-4000-8000-000000000161", "supporting_fact_ids": ["70000000-0000-4000-8000-000000000161", "70000000-0000-4000-8000-000000000162", "70000000-0000-4000-8000-000000000163"], "components": { "dependency_depth": 1 }, "limitations": [] }
+  ],
+  "limitations": [],
+  "snapshot": { "analysis_run_id": "analysis-phase2-1", "as_of": "2026-09-05T12:00:00Z", "coverage": { "eligible_edges": 0.97 }, "edge_count": 1822, "node_count": 601, "neo4j_projection_watermark": 9821, "requested_change_watermark": 9821, "policy_hash": "sha256:graph-policy", "policy_key": "runtime-dependency", "policy_version": 4, "status": "SUCCEEDED" }
+}

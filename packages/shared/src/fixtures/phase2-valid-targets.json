@@ -1,0 +1,15 @@
+{
+  "contract_version": "1.0.0",
+  "policy_version": "package-upgrade/3.2.1",
+  "subject": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json", "canonical_key": "pkg:nuget/Newtonsoft.Json" },
+  "targets": [
+    { "version": "13.0.3", "entity_id": "21000000-0000-4000-8000-000000000013", "canonical_key": "pkg:nuget/Newtonsoft.Json@13.0.3", "source": "NuGet", "observed_at": "2026-09-05T12:00:00Z", "freshness": "FRESH", "support": "SUPPORTED" },
+    { "version": "14.0.1", "entity_id": "21000000-0000-4000-8000-000000000014", "canonical_key": "pkg:nuget/Newtonsoft.Json@14.0.1", "source": "NuGet", "observed_at": "2026-09-05T12:00:00Z", "freshness": "FRESH", "support": "SUPPORTED" },
+    { "version": "15.0.0-preview.1", "entity_id": "21000000-0000-4000-8000-000000000015", "canonical_key": "pkg:nuget/Newtonsoft.Json@15.0.0-preview.1", "source": "NuGet", "observed_at": "2026-08-12T12:00:00Z", "freshness": "STALE", "support": "UNKNOWN" },
+    { "version": "latest", "entity_id": "21000000-0000-4000-8000-000000000099", "canonical_key": "pkg:nuget/Newtonsoft.Json@latest", "source": "registry alias", "observed_at": "2026-09-05T12:00:00Z", "freshness": "FRESH", "support": "UNSUPPORTED" }
+  ],
+  "limitations": [
+    { "code": "PREVIEW_COMPATIBILITY_UNKNOWN", "message": "Compatibility for preview releases has not been evaluated.", "evidence_fact_ids": [] }
+  ],
+  "page_info": { "has_next_page": false, "next_cursor": null }
+}

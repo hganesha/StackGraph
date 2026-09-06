@@ -1,0 +1,10 @@
+{
+  "contract_version": "1.0.0",
+  "predicate": "UPGRADE",
+  "subjects": [
+    { "entity": { "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json", "canonical_key": "pkg:nuget/Newtonsoft.Json" }, "dependent_count": 171, "observed_versions": ["10.x", "11.x", "12.x", "13.x"], "resolution": "RESOLVED", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000101"] },
+    { "entity": { "id": "20000000-0000-4000-8000-000000000002", "kind": "Package", "name": "Newtonsoft.Json.Schema", "canonical_key": "pkg:nuget/Newtonsoft.Json.Schema" }, "dependent_count": 14, "observed_versions": ["3.x"], "resolution": "RESOLVED", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000102"] },
+    { "entity": { "id": "20000000-0000-4000-8000-000000000003", "kind": "Package", "name": "Newtonsoft.Json.Bson", "canonical_key": "pkg:nuget/Newtonsoft.Json.Bson" }, "dependent_count": 3, "observed_versions": ["1.x"], "resolution": "RESOLVED", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000103"] }
+  ],
+  "page_info": { "has_next_page": false, "next_cursor": null }
+}

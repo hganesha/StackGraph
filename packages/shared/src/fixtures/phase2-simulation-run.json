@@ -1,0 +1,33 @@
+{
+  "contract_version": "1.0.0",
+  "id": "25000000-0000-4000-8000-000000000001",
+  "change_set_id": "24000000-0000-4000-8000-000000000001",
+  "status": "SUCCEEDED",
+  "created_at": "2026-09-05T14:00:01Z",
+  "started_at": "2026-09-05T14:00:02Z",
+  "completed_at": "2026-09-05T14:00:08Z",
+  "estate_watermark": "estate:2026-09-05T13:58:00Z",
+  "policy_version": "package-upgrade/3.2.1",
+  "provider_version": "nuget/2026-09-05",
+  "scanner_versions": ["dotnet/4.8.0", "container/2.3.1"],
+  "result_hash": "sha256:b4ab02f3ce73b09823d39f66fba267ba2c91887bb0daf0d276ed982d35344296",
+  "replayed": false,
+  "gate": { "state": "CLEAR", "reasons": [] },
+  "limitations": [],
+  "findings": [
+    { "id": "finding-direct-repositories", "title": "Repositories directly affected", "detail": "382 repositories declare Newtonsoft.Json in the selected estate scope.", "severity": "HIGH", "classification": "DIRECT", "confidence": 0.99, "rule_key": "package.direct-dependents", "rule_version": "3.2.1", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000121", "70000000-0000-4000-8000-000000000122", "70000000-0000-4000-8000-000000000123", "70000000-0000-4000-8000-000000000124"], "path": [{ "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json" }, { "id": "00000000-0000-4000-8000-000000000701", "kind": "Repository", "name": "billing-api" }] },
+    { "id": "finding-applications", "title": "Applications transitively affected", "detail": "71 applications depend on repositories in the selected scope.", "severity": "MEDIUM", "classification": "TRANSITIVE", "confidence": 0.94, "rule_key": "application.transitive-dependents", "rule_version": "3.2.1", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000125", "70000000-0000-4000-8000-000000000126"], "path": [{ "id": "20000000-0000-4000-8000-000000000001", "kind": "Package", "name": "Newtonsoft.Json" }, { "id": "00000000-0000-4000-8000-000000000701", "kind": "Repository", "name": "billing-api" }, { "id": "26000000-0000-4000-8000-000000000001", "kind": "Application", "name": "Billing Platform" }] },
+    { "id": "finding-capabilities", "title": "Business capabilities in context", "detail": "8 capabilities are connected to affected applications; one is Tier 0.", "severity": "HIGH", "classification": "CONTEXT", "confidence": 0.89, "rule_key": "capability.context", "rule_version": "2.0.0", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000127", "70000000-0000-4000-8000-000000000128", "70000000-0000-4000-8000-000000000129"], "path": [{ "id": "26000000-0000-4000-8000-000000000001", "kind": "Application", "name": "Billing Platform" }, { "id": "27000000-0000-4000-8000-000000000001", "kind": "BusinessCapability", "name": "Invoice collection" }] },
+    { "id": "finding-stop-boundary", "title": "External reporting branch stopped", "detail": "Traversal stopped at an informational export boundary under the active policy.", "severity": "INFO", "classification": "STOP", "confidence": 1, "rule_key": "boundary.reporting-export", "rule_version": "1.4.0", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000130"], "path": [{ "id": "27000000-0000-4000-8000-000000000001", "kind": "BusinessCapability", "name": "Invoice collection" }, { "id": "28000000-0000-4000-8000-000000000001", "kind": "DataExport", "name": "Quarterly reporting export" }] },
+    { "id": "finding-constraints", "title": "Dependency constraints to update", "detail": "23 project constraints exclude the selected target version.", "severity": "MEDIUM", "classification": "INFORMATIONAL", "confidence": 0.96, "rule_key": "package.version-constraint", "rule_version": "3.1.0", "evidence_fact_ids": ["70000000-0000-4000-8000-000000000131"], "path": [] }
+  ],
+  "interpretation": {
+    "status": "AVAILABLE",
+    "risk": "Moderate rollout risk concentrated in direct package constraints and one Tier-0 capability.",
+    "explanation": "The graph shows broad reach but a bounded set of constraints that can be handled before rollout.",
+    "rollout": ["Start with the four repositories already on 13.x.", "Expand by application boundary after compatibility checks pass.", "Hold the Tier-0 billing capability for the final wave."],
+    "verification": ["Run dependency restore and the linked test suites.", "Verify invoice collection smoke tests before widening rollout.", "Compare the completed estate watermark with the deployment scan."],
+    "cited_finding_ids": ["finding-direct-repositories", "finding-applications", "finding-capabilities", "finding-constraints"],
+    "limitation": null
+  }
+}

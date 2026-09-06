@@ -16,6 +16,8 @@ export const config = {
   apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
   /** Production login guard; API remains the source of truth for authorization. */
   authRequired: process.env.NEXT_PUBLIC_AUTH_REQUIRED === "true",
+  /** Tenant rollout switch for the Phase 2 command and simulation surfaces. */
+  phase2ChangesEnabled: process.env.NEXT_PUBLIC_PHASE2_CHANGES !== "false",
 } as const;
 
 export const isFixtureMode = () => config.dataSource === "fixtures";
