@@ -39,8 +39,9 @@ class Session:
 
 
 class CompilerDatabase:
-    def __init__(self, *, observed_version="1.0.0"):
+    def __init__(self, *, observed_version="1.0.0", contradictions=None):
         self.observed_version = observed_version
+        self.contradictions = contradictions or []
         self.change_set = None
         self.mutation_id = None
         self.audit_actions = []
@@ -81,6 +82,8 @@ class CompilerDatabase:
                 "name": "checkout", "canonical_key": "github:repo:acme/checkout",
                 "component_path": "apps/api", "version": self.observed_version,
             }]
+        if "FROM estate_contradiction contradiction" in query:
+            return self.contradictions
         raise AssertionError(f"unexpected fetch_all: {query}")
 
     async def execute(self, query, params=None):
@@ -148,6 +151,21 @@ def test_compiler_rejects_noop_upgrade_with_cited_reason() -> None:
     assert result.gate.reasons[0].code == "ALREADY_AT_TARGET"
     assert result.gate.reasons[0].evidence_fact_ids == [FACT_ID]
     assert database.audit_actions == ["change_set.compile_blocked"]
+
+
+def test_compiler_blocks_mutation_affected_by_open_contradiction() -> None:
+    database = CompilerDatabase(contradictions=[{
+        "id": UUID("00000000-0000-4000-8000-00000000a007"),
+        "evidence_fact_ids": [FACT_ID],
+    }])
+    result = asyncio.run(ReadModelStore(database).compile_mutation(
+        compile_request(), tenant_id=TENANT_ID, actor_key="reviewer",
+    ))
+
+    assert result.change_set is None
+    assert result.gate.state == "BLOCKED"
+    assert [reason.code for reason in result.gate.reasons] == ["UNRESOLVED_CONTRADICTION"]
+    assert result.gate.reasons[0].evidence_fact_ids == [FACT_ID]
 
 
 def test_compiler_rejects_reused_key_for_different_semantics() -> None:

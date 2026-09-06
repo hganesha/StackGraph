@@ -232,6 +232,111 @@
         "title": "AIProviderConnectionTest",
         "type": "object"
       },
+      "AISupplyChain": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "coverage_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Ratio"
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/AISupplyChainLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "status"
+        ],
+        "title": "AISupplyChain",
+        "type": "object"
+      },
+      "AISupplyChainLink": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "object": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "predicate": {
+            "minLength": 1,
+            "title": "Predicate",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "predicate",
+          "subject",
+          "object",
+          "confidence",
+          "evidence_fact_ids"
+        ],
+        "title": "AISupplyChainLink",
+        "type": "object"
+      },
       "ActionSubject": {
         "additionalProperties": false,
         "properties": {
@@ -403,6 +508,428 @@
           "ontology_version"
         ],
         "title": "ActionTypeSummary",
+        "type": "object"
+      },
+      "AgentApprovalDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "APPROVED",
+              "REJECTED"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "rationale",
+          "expected_version"
+        ],
+        "title": "AgentApprovalDecisionRequest",
+        "type": "object"
+      },
+      "AgentApprovalModel": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "envelope_id": {
+            "format": "uuid",
+            "title": "Envelope Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_key": {
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rationale"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "EXPIRED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "envelope_id",
+          "operation_key",
+          "reason_code",
+          "status",
+          "requested_by",
+          "version",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "AgentApprovalModel",
+        "type": "object"
+      },
+      "AgentAuthorizationDecisionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "ALLOW",
+              "CONSTRAIN",
+              "ESCALATE",
+              "DENY"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "envelope_id": {
+            "format": "uuid",
+            "title": "Envelope Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_key": {
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "request_fingerprint": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Request Fingerprint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "envelope_id",
+          "operation_key",
+          "decision",
+          "reason_codes",
+          "request_fingerprint",
+          "decided_at"
+        ],
+        "title": "AgentAuthorizationDecisionModel",
+        "type": "object"
+      },
+      "AgentAuthorizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation_key": {
+            "pattern": "^[a-z][a-z0-9._:-]{2,127}$",
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "request_payload": {
+            "additionalProperties": true,
+            "title": "Request Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "operation_key"
+        ],
+        "title": "AgentAuthorizeRequest",
+        "type": "object"
+      },
+      "AgentControlDrillRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "drill_kind": {
+            "enum": [
+              "KILL_SWITCH",
+              "ROLLBACK",
+              "AUDIT_RECONSTRUCTION"
+            ],
+            "title": "Drill Kind",
+            "type": "string"
+          },
+          "envelope_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Envelope Id"
+          },
+          "flight_record_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flight Record Id"
+          }
+        },
+        "required": [
+          "drill_kind"
+        ],
+        "title": "AgentControlDrillRequest",
+        "type": "object"
+      },
+      "AgentControlDrillResult": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "drill_kind": {
+            "enum": [
+              "KILL_SWITCH",
+              "ROLLBACK",
+              "AUDIT_RECONSTRUCTION"
+            ],
+            "title": "Drill Kind",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "performed_at": {
+            "format": "date-time",
+            "title": "Performed At",
+            "type": "string"
+          },
+          "performed_by": {
+            "title": "Performed By",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PASSED",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "drill_kind",
+          "status",
+          "checks",
+          "performed_by",
+          "performed_at"
+        ],
+        "title": "AgentControlDrillResult",
+        "type": "object"
+      },
+      "AgentKillSwitchModel": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "engaged",
+          "reason",
+          "version",
+          "updated_by",
+          "updated_at"
+        ],
+        "title": "AgentKillSwitchModel",
+        "type": "object"
+      },
+      "AgentKillSwitchUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "engaged": {
+            "title": "Engaged",
+            "type": "boolean"
+          },
+          "expected_version": {
+            "minimum": 0.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "engaged",
+          "reason",
+          "expected_version"
+        ],
+        "title": "AgentKillSwitchUpdateRequest",
+        "type": "object"
+      },
+      "AgentOperationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "destructive": {
+            "default": false,
+            "title": "Destructive",
+            "type": "boolean"
+          },
+          "operation_key": {
+            "pattern": "^[a-z][a-z0-9._:-]{2,127}$",
+            "title": "Operation Key",
+            "type": "string"
+          },
+          "requested_band": {
+            "enum": [
+              "READ",
+              "EXECUTE",
+              "CONDITIONAL",
+              "PROHIBITED",
+              "ESCALATE"
+            ],
+            "title": "Requested Band",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_key",
+          "requested_band"
+        ],
+        "title": "AgentOperationRequest",
         "type": "object"
       },
       "ApplicationComponentDependencyHierarchy": {
@@ -1923,6 +2450,338 @@
           "citations"
         ],
         "title": "AssessmentSummary",
+        "type": "object"
+      },
+      "AssumptionClaimCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_class": {
+            "enum": [
+              "DECLARED",
+              "OBSERVED",
+              "INFERRED",
+              "CURATED",
+              "EXTERNAL_MEASURED"
+            ],
+            "title": "Assertion Class",
+            "type": "string"
+          },
+          "claim_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Claim Key",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "display_value": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Display Value",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "opposing_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Opposing Fact Ids",
+            "type": "array"
+          },
+          "source_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Source Key",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim_key",
+          "display_value",
+          "source_key",
+          "assertion_class",
+          "confidence",
+          "observed_at"
+        ],
+        "title": "AssumptionClaimCreateRequest",
+        "type": "object"
+      },
+      "AssumptionClaimModel": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_class": {
+            "enum": [
+              "DECLARED",
+              "OBSERVED",
+              "INFERRED",
+              "CURATED",
+              "EXTERNAL_MEASURED"
+            ],
+            "title": "Assertion Class",
+            "type": "string"
+          },
+          "claim_key": {
+            "title": "Claim Key",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "display_value": {
+            "title": "Display Value",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "opposing_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Opposing Fact Ids",
+            "type": "array"
+          },
+          "source_key": {
+            "title": "Source Key",
+            "type": "string"
+          },
+          "supporting_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Supporting Fact Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "claim_key",
+          "display_value",
+          "source_key",
+          "assertion_class",
+          "confidence",
+          "observed_at"
+        ],
+        "title": "AssumptionClaimModel",
+        "type": "object"
+      },
+      "AssumptionCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Authority",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/AssumptionClaimCreateRequest"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "dependent_entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Dependent Entity Ids",
+            "type": "array"
+          },
+          "dimension": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "format": "date-time",
+            "title": "Last Verified At",
+            "type": "string"
+          },
+          "statement": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          },
+          "subject_entity_id": {
+            "format": "uuid",
+            "title": "Subject Entity Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject_entity_id",
+          "dimension",
+          "statement",
+          "authority",
+          "confidence",
+          "last_verified_at"
+        ],
+        "title": "AssumptionCreateRequest",
+        "type": "object"
+      },
+      "AssumptionList": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "items": {
+              "$ref": "#/components/schemas/AssumptionModel"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "assumptions",
+          "page_info"
+        ],
+        "title": "AssumptionList",
+        "type": "object"
+      },
+      "AssumptionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "title": "Authority",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/AssumptionClaimModel"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "contradiction_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Contradiction Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dependent_entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Dependent Entity Ids",
+            "type": "array"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "format": "date-time",
+            "title": "Last Verified At",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "OPEN",
+              "ACCEPTED",
+              "REJECTED",
+              "SUPERSEDED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "dimension",
+          "statement",
+          "status",
+          "authority",
+          "confidence",
+          "last_verified_at",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AssumptionModel",
         "type": "object"
       },
       "BusinessMapApplicationAssignment": {
@@ -3929,6 +4788,34 @@
         "title": "CanvasTemplateModel",
         "type": "object"
       },
+      "CapabilityBandModel": {
+        "additionalProperties": false,
+        "properties": {
+          "band": {
+            "enum": [
+              "READ",
+              "EXECUTE",
+              "CONDITIONAL",
+              "PROHIBITED",
+              "ESCALATE"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityEnvelopeOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "band"
+        ],
+        "title": "CapabilityBandModel",
+        "type": "object"
+      },
       "CapabilityDefinitionModel": {
         "additionalProperties": false,
         "properties": {
@@ -3972,6 +4859,261 @@
           "description"
         ],
         "title": "CapabilityDefinitionModel",
+        "type": "object"
+      },
+      "CapabilityEnvelopeCompileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "context_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Context Confidence",
+            "type": "number"
+          },
+          "environment": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Environment",
+            "type": "string"
+          },
+          "estate_watermark": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Estate Watermark",
+            "type": "string"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "objective": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/AgentOperationRequest"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Operations",
+            "type": "array"
+          },
+          "risk_tier": {
+            "enum": [
+              "TIER_0",
+              "TIER_1",
+              "TIER_2",
+              "TIER_3"
+            ],
+            "title": "Risk Tier",
+            "type": "string"
+          },
+          "subject_entity_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Subject Entity Ids",
+            "type": "array"
+          },
+          "ttl_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 30.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ttl Seconds"
+          }
+        },
+        "required": [
+          "objective",
+          "environment",
+          "estate_watermark",
+          "risk_tier",
+          "context_confidence",
+          "operations"
+        ],
+        "title": "CapabilityEnvelopeCompileRequest",
+        "type": "object"
+      },
+      "CapabilityEnvelopeModel": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_key": {
+            "title": "Actor Key",
+            "type": "string"
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityBandModel"
+            },
+            "maxItems": 5,
+            "minItems": 5,
+            "title": "Bands",
+            "type": "array"
+          },
+          "compiled_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Compiled Hash",
+            "type": "string"
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "context_confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Context Confidence",
+            "type": "number"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "contradiction_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Contradiction Ids",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "ALLOW",
+              "CONSTRAIN",
+              "ESCALATE",
+              "DENY"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_reasons": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Decision Reasons",
+            "type": "array"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "estate_watermark": {
+            "title": "Estate Watermark",
+            "type": "string"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "risk_tier": {
+            "enum": [
+              "TIER_0",
+              "TIER_1",
+              "TIER_2",
+              "TIER_3"
+            ],
+            "title": "Risk Tier",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "EXPIRED",
+              "REVOKED",
+              "CONSUMED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "valid_until": {
+            "format": "date-time",
+            "title": "Valid Until",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actor_key",
+          "objective",
+          "environment",
+          "estate_watermark",
+          "risk_tier",
+          "context_confidence",
+          "decision",
+          "bands",
+          "status",
+          "valid_until",
+          "compiled_hash",
+          "created_at"
+        ],
+        "title": "CapabilityEnvelopeModel",
+        "type": "object"
+      },
+      "CapabilityEnvelopeOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "band": {
+            "enum": [
+              "READ",
+              "EXECUTE",
+              "CONDITIONAL",
+              "PROHIBITED",
+              "ESCALATE"
+            ],
+            "title": "Band",
+            "type": "string"
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "operation_key": {
+            "title": "Operation Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_key",
+          "band"
+        ],
+        "title": "CapabilityEnvelopeOperation",
         "type": "object"
       },
       "CapabilityFootprintList": {
@@ -4807,6 +5949,103 @@
         "title": "CodePolicyViolation",
         "type": "object"
       },
+      "ComponentProfile": {
+        "additionalProperties": false,
+        "description": "Typed scanner reading for an estate component.\n\nA component path is a locator, not its durable identity. The enclosing\n``EntitySummary.id`` remains the canonical route and review key.",
+        "properties": {
+          "classifications": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classifications",
+            "type": "array"
+          },
+          "component_path": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Component Path"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "independently_deployable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independently Deployable"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "confidence",
+          "confidence_label",
+          "freshness"
+        ],
+        "title": "ComponentProfile",
+        "type": "object"
+      },
       "Connector": {
         "additionalProperties": false,
         "properties": {
@@ -5031,6 +6270,486 @@
         "title": "ConnectorUpdateRequest",
         "type": "object"
       },
+      "ContainerCompositionList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerImageComposition"
+            },
+            "title": "Images",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repository",
+          "status",
+          "images",
+          "as_of"
+        ],
+        "title": "ContainerCompositionList",
+        "type": "object"
+      },
+      "ContainerImageComposition": {
+        "additionalProperties": false,
+        "properties": {
+          "architecture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Architecture"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/ContainerImageIdentity"
+          },
+          "image": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerLayer"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "operating_system": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operating System"
+          },
+          "packages": {
+            "items": {
+              "$ref": "#/components/schemas/ContainerPackage"
+            },
+            "title": "Packages",
+            "type": "array"
+          },
+          "scan_status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Scan Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image",
+          "identity",
+          "scan_status",
+          "freshness"
+        ],
+        "title": "ContainerImageComposition",
+        "type": "object"
+      },
+      "ContainerImageIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Reference"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "observed_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observed Tags",
+            "type": "array"
+          },
+          "registry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registry"
+          },
+          "state": {
+            "enum": [
+              "RESOLVED",
+              "INFERRED",
+              "UNRESOLVED"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ContainerImageIdentity",
+        "type": "object"
+      },
+      "ContainerLayer": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "index": {
+            "minimum": 0.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "title": "ContainerLayer",
+        "type": "object"
+      },
+      "ContainerPackage": {
+        "additionalProperties": false,
+        "properties": {
+          "ecosystem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecosystem"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ContainerPackage",
+        "type": "object"
+      },
+      "ContradictionClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_class": {
+            "enum": [
+              "DECLARED",
+              "OBSERVED",
+              "INFERRED",
+              "CURATED",
+              "EXTERNAL_MEASURED"
+            ],
+            "title": "Assertion Class",
+            "type": "string"
+          },
+          "claim_key": {
+            "minLength": 1,
+            "title": "Claim Key",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "display_value": {
+            "minLength": 1,
+            "title": "Display Value",
+            "type": "string"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "source_key": {
+            "minLength": 1,
+            "title": "Source Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_key",
+          "display_value",
+          "source_key",
+          "assertion_class",
+          "confidence",
+          "observed_at",
+          "evidence_fact_ids"
+        ],
+        "title": "ContradictionClaim",
+        "type": "object"
+      },
+      "ContradictionLedger": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "contradictions": {
+            "items": {
+              "$ref": "#/components/schemas/ContradictionLedgerItem"
+            },
+            "title": "Contradictions",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "method_version": {
+            "default": "current-fact-disagreement/1.0.0",
+            "enum": [
+              "current-fact-disagreement/1.0.0",
+              "assumption-registry/1.0.0"
+            ],
+            "title": "Method Version",
+            "type": "string"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "as_of",
+          "contradictions",
+          "page_info"
+        ],
+        "title": "ContradictionLedger",
+        "type": "object"
+      },
+      "ContradictionLedgerItem": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_entity_count": {
+            "minimum": 0.0,
+            "title": "Affected Entity Count",
+            "type": "integer"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ContradictionClaim"
+            },
+            "minItems": 2,
+            "title": "Claims",
+            "type": "array"
+          },
+          "id": {
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "last_verified_at": {
+            "format": "date-time",
+            "title": "Last Verified At",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "predicate": {
+            "minLength": 1,
+            "title": "Predicate",
+            "type": "string"
+          },
+          "status": {
+            "const": "OPEN",
+            "default": "OPEN",
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "id",
+          "subject",
+          "predicate",
+          "claims",
+          "affected_entity_count",
+          "last_verified_at"
+        ],
+        "title": "ContradictionLedgerItem",
+        "type": "object"
+      },
+      "ContradictionResolveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "RESOLVED",
+              "DISMISSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "rationale",
+          "expected_version"
+        ],
+        "title": "ContradictionResolveRequest",
+        "type": "object"
+      },
       "Coverage": {
         "additionalProperties": false,
         "properties": {
@@ -5164,6 +6883,188 @@
           "as_of"
         ],
         "title": "CriticalGraphEdgeList",
+        "type": "object"
+      },
+      "DeploymentAction": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "verb": {
+            "minLength": 1,
+            "title": "Verb",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verb",
+          "target"
+        ],
+        "title": "DeploymentAction",
+        "type": "object"
+      },
+      "DeploymentProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentAction"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confidence_label": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "evidence_fact_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Fact Ids",
+            "type": "array"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "workload_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload Kind"
+          }
+        },
+        "required": [
+          "deployment",
+          "status",
+          "confidence",
+          "confidence_label",
+          "freshness"
+        ],
+        "title": "DeploymentProfile",
+        "type": "object"
+      },
+      "DeploymentProfileList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "profiles": {
+            "items": {
+              "$ref": "#/components/schemas/DeploymentProfile"
+            },
+            "title": "Profiles",
+            "type": "array"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "repository",
+          "profiles",
+          "as_of"
+        ],
+        "title": "DeploymentProfileList",
         "type": "object"
       },
       "DeterministicInsight": {
@@ -6622,6 +8523,126 @@
         "title": "EntitySummary",
         "type": "object"
       },
+      "EstateComponentDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "component": {
+            "$ref": "#/components/schemas/EstateComponentSummary"
+          },
+          "container_images": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Container Images",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "deployments": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Deployments",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "technologies": {
+            "items": {
+              "$ref": "#/components/schemas/EntitySummary"
+            },
+            "title": "Technologies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "component"
+        ],
+        "title": "EstateComponentDetail",
+        "type": "object"
+      },
+      "EstateComponentList": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/EstateComponentSummary"
+            },
+            "title": "Components",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "as_of",
+          "components",
+          "page_info"
+        ],
+        "title": "EstateComponentList",
+        "type": "object"
+      },
+      "EstateComponentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ComponentProfile"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntitySummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "component",
+          "profile"
+        ],
+        "title": "EstateComponentSummary",
+        "type": "object"
+      },
       "EstateCounts": {
         "additionalProperties": false,
         "properties": {
@@ -6653,6 +8674,242 @@
           "technologies"
         ],
         "title": "EstateCounts",
+        "type": "object"
+      },
+      "EstateLineageEdgeModel": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "downstream": {
+            "$ref": "#/components/schemas/EntitySummary"
+          },
+          "evidence_fact_id": {
+            "format": "uuid",
+            "title": "Evidence Fact Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lineage_kind": {
+            "enum": [
+              "COLUMN_TO_TABLE",
+              "TABLE_TO_PIPELINE",
+              "PIPELINE_TO_FEATURE",
+              "FEATURE_TO_MODEL",
+              "MODEL_TO_AGENT",
+              "AGENT_TO_API",
+              "API_TO_PROCESS",
+              "DATASET_TO_CAPABILITY",
+              "OTHER"
+            ],
+            "title": "Lineage Kind",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "upstream": {
+            "$ref": "#/components/schemas/EntitySummary"
+          }
+        },
+        "required": [
+          "id",
+          "upstream",
+          "downstream",
+          "lineage_kind",
+          "confidence",
+          "evidence_fact_id",
+          "observed_at"
+        ],
+        "title": "EstateLineageEdgeModel",
+        "type": "object"
+      },
+      "EstateLineageList": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EstateLineageEdgeModel"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "page_info": {
+            "$ref": "#/components/schemas/PageInfo"
+          }
+        },
+        "required": [
+          "edges",
+          "page_info"
+        ],
+        "title": "EstateLineageList",
+        "type": "object"
+      },
+      "EstateStrata": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/EstateStratumLayer"
+            },
+            "maxItems": 6,
+            "minItems": 6,
+            "title": "Layers",
+            "type": "array"
+          },
+          "method_version": {
+            "const": "estate-strata/1.0.0",
+            "default": "estate-strata/1.0.0",
+            "title": "Method Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "layers"
+        ],
+        "title": "EstateStrata",
+        "type": "object"
+      },
+      "EstateStratumLayer": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "corroboration_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corroboration Ratio"
+          },
+          "coverage_ratio": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Ratio"
+          },
+          "key": {
+            "enum": [
+              "BUSINESS",
+              "ENTERPRISE",
+              "TECHNOLOGY",
+              "OSS",
+              "DEPLOYMENT",
+              "AI"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "observed_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Count"
+          },
+          "population_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Population Count"
+          },
+          "status": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "NOT_COLLECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "status"
+        ],
+        "title": "EstateStratumLayer",
         "type": "object"
       },
       "EstateSummary": {
@@ -6843,6 +9100,278 @@
           "version"
         ],
         "title": "Extractor",
+        "type": "object"
+      },
+      "FlightEventCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "event_type": {
+            "enum": [
+              "OBJECTIVE",
+              "CONTEXT",
+              "TOOL",
+              "CALL",
+              "DECISION",
+              "ACTION",
+              "ASSET",
+              "VERIFICATION",
+              "OUTCOME"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "system_boundary": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "System Boundary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_type",
+          "system_boundary",
+          "payload",
+          "occurred_at"
+        ],
+        "title": "FlightEventCreateRequest",
+        "type": "object"
+      },
+      "FlightEventModel": {
+        "additionalProperties": false,
+        "properties": {
+          "event_hash": {
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "title": "Event Hash",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "OBJECTIVE",
+              "CONTEXT",
+              "TOOL",
+              "CALL",
+              "DECISION",
+              "ACTION",
+              "ASSET",
+              "VERIFICATION",
+              "OUTCOME"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "previous_hash": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Hash"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 1.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "system_boundary": {
+            "title": "System Boundary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "event_type",
+          "system_boundary",
+          "payload",
+          "event_hash",
+          "occurred_at",
+          "recorded_at"
+        ],
+        "title": "FlightEventModel",
+        "type": "object"
+      },
+      "FlightRecordCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "envelope_id": {
+            "format": "uuid",
+            "title": "Envelope Id",
+            "type": "string"
+          },
+          "objective": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          }
+        },
+        "required": [
+          "envelope_id",
+          "objective"
+        ],
+        "title": "FlightRecordCreateRequest",
+        "type": "object"
+      },
+      "FlightRecordFinalizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "additionalProperties": true,
+            "title": "Outcome",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "SUCCEEDED",
+              "FAILED",
+              "ABORTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "outcome"
+        ],
+        "title": "FlightRecordFinalizeRequest",
+        "type": "object"
+      },
+      "FlightRecordModel": {
+        "additionalProperties": false,
+        "properties": {
+          "chain_head": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chain Head"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "envelope_id": {
+            "format": "uuid",
+            "title": "Envelope Id",
+            "type": "string"
+          },
+          "event_count": {
+            "minimum": 0.0,
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/FlightEventModel"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "started_by": {
+            "title": "Started By",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ACTIVE",
+              "SUCCEEDED",
+              "FAILED",
+              "ABORTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "envelope_id",
+          "objective",
+          "status",
+          "event_count",
+          "started_by",
+          "started_at"
+        ],
+        "title": "FlightRecordModel",
         "type": "object"
       },
       "Freshness": {
@@ -16602,6 +19131,487 @@
         ]
       }
     },
+    "/agent-control/approvals/{id}/decision": {
+      "post": {
+        "operationId": "decideAgentApproval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentApprovalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentApprovalModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Agent Approval",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/drills": {
+      "post": {
+        "operationId": "runAgentControlDrill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentControlDrillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentControlDrillResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Agent Control Drill",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/envelopes": {
+      "post": {
+        "operationId": "compileCapabilityEnvelope",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CapabilityEnvelopeCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityEnvelopeModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compile Capability Envelope",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/envelopes/{id}": {
+      "get": {
+        "operationId": "getCapabilityEnvelope",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityEnvelopeModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Capability Envelope",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/envelopes/{id}/authorize": {
+      "post": {
+        "operationId": "authorizeAgentOperation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentAuthorizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAuthorizationDecisionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Operation",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/flight-records": {
+      "post": {
+        "operationId": "createFlightRecord",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlightRecordCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightRecordModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Flight Record",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/flight-records/{id}": {
+      "get": {
+        "operationId": "getFlightRecord",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightRecordModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flight Record",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/flight-records/{id}/events": {
+      "post": {
+        "operationId": "appendFlightEvent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlightEventCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightRecordModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append Flight Event",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/flight-records/{id}/finalize": {
+      "post": {
+        "operationId": "finalizeFlightRecord",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FlightRecordFinalizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightRecordModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Finalize Flight Record",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
+    "/agent-control/kill-switch": {
+      "get": {
+        "operationId": "getAgentKillSwitch",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKillSwitchModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Agent Kill Switch",
+        "tags": [
+          "agent-control"
+        ]
+      },
+      "put": {
+        "operationId": "updateAgentKillSwitch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentKillSwitchUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentKillSwitchModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Kill Switch",
+        "tags": [
+          "agent-control"
+        ]
+      }
+    },
     "/applications/{id}": {
       "get": {
         "operationId": "getApplication",
@@ -16734,6 +19744,175 @@
         "summary": "Ask Estate",
         "tags": [
           "intelligence"
+        ]
+      }
+    },
+    "/assumptions": {
+      "get": {
+        "operationId": "listAssumptions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "subject_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "OPEN",
+                    "ACCEPTED",
+                    "REJECTED",
+                    "SUPERSEDED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssumptionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Assumptions",
+        "tags": [
+          "intelligence",
+          "changes"
+        ]
+      },
+      "post": {
+        "operationId": "createAssumption",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssumptionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssumptionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Assumption",
+        "tags": [
+          "intelligence",
+          "changes"
+        ]
+      }
+    },
+    "/assumptions/{id}": {
+      "get": {
+        "operationId": "getAssumption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssumptionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Assumption",
+        "tags": [
+          "intelligence",
+          "changes"
         ]
       }
     },
@@ -17631,6 +20810,221 @@
         ]
       }
     },
+    "/components": {
+      "get": {
+        "operationId": "listComponents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateComponentList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Components",
+        "tags": [
+          "components"
+        ]
+      }
+    },
+    "/components/{id}": {
+      "get": {
+        "operationId": "getComponent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateComponentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Component",
+        "tags": [
+          "components"
+        ]
+      }
+    },
+    "/contradictions": {
+      "get": {
+        "operationId": "listContradictions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "subject_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Subject Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContradictionLedger"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Contradictions",
+        "tags": [
+          "intelligence",
+          "changes"
+        ]
+      }
+    },
+    "/contradictions/{id}/resolve": {
+      "post": {
+        "operationId": "resolveContradiction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContradictionResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Contradiction",
+        "tags": [
+          "intelligence",
+          "changes"
+        ]
+      }
+    },
     "/duplicate-capability-candidates/{id}/review": {
       "post": {
         "operationId": "reviewDuplicateCapabilityCandidate",
@@ -18172,6 +21566,110 @@
         "summary": "List Valid Targets",
         "tags": [
           "changes"
+        ]
+      }
+    },
+    "/estate/ai-supply-chain": {
+      "get": {
+        "operationId": "getAISupplyChain",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AISupplyChain"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ai Supply Chain",
+        "tags": [
+          "estate"
+        ]
+      }
+    },
+    "/estate/lineage": {
+      "get": {
+        "operationId": "listEstateLineage",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "entity_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateLineageList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Estate Lineage",
+        "tags": [
+          "estate"
+        ]
+      }
+    },
+    "/estate/strata": {
+      "get": {
+        "operationId": "getEstateStrata",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateStrata"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Estate Strata",
+        "tags": [
+          "estate"
         ]
       }
     },
@@ -19718,6 +23216,94 @@
         "summary": "Get Repository Capabilities",
         "tags": [
           "intelligence"
+        ]
+      }
+    },
+    "/repositories/{id}/container-compositions": {
+      "get": {
+        "operationId": "listRepositoryContainerCompositions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContainerCompositionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Repository Container Compositions",
+        "tags": [
+          "repositories",
+          "components"
+        ]
+      }
+    },
+    "/repositories/{id}/deployment-profiles": {
+      "get": {
+        "operationId": "listRepositoryDeploymentProfiles",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Repository Deployment Profiles",
+        "tags": [
+          "repositories",
+          "components"
         ]
       }
     },

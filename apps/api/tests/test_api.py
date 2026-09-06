@@ -20,6 +20,15 @@ from app.models import (
     ApplicationSimilarityReviewResult,
     AskRequest,
     AskResponse,
+    AISupplyChain,
+    AgentApprovalModel,
+    AgentAuthorizationDecisionModel,
+    AgentControlDrillResult,
+    AgentKillSwitchModel,
+    AssumptionList,
+    AssumptionModel,
+    CapabilityBandModel,
+    CapabilityEnvelopeModel,
     CapabilityDefinitionModel,
     CapabilityInferenceReviewRequest,
     CapabilityInferenceReviewResult,
@@ -29,11 +38,22 @@ from app.models import (
     DuplicateCapabilityReviewRequest,
     DuplicateCapabilityReviewResult,
     EmbeddingStatus,
+    ComponentProfile,
+    ContainerCompositionList,
+    ContradictionLedger,
+    DeploymentProfileList,
     EntityGraphIntelligence,
     EntitySummary,
+    EstateComponentDetail,
+    EstateComponentList,
+    EstateComponentSummary,
     EstateCounts,
     EstateSummary,
+    EstateStrata,
+    EstateStratumLayer,
+    EstateLineageList,
     Freshness,
+    FlightRecordModel,
     GraphBlastRadius,
     GraphCommunityList,
     GraphIntelligenceStatus,
@@ -155,6 +175,139 @@ class StubReadModels:
             distributions={}, ranked_items=[],
             coverage=Coverage(repositories_total=0, repositories_scanned=0, facts_with_evidence_ratio=0),
             page_info=PageInfo(has_next_page=False),
+        )
+
+    async def estate_strata(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        layers = [
+            EstateStratumLayer(
+                key=key, label=label, status="NOT_COLLECTED",
+                limitations=[{
+                    "code": f"{key}_STRATUM_NOT_COLLECTED",
+                    "message": "No observations are available.",
+                }],
+            )
+            for key, label in (
+                ("BUSINESS", "Business"), ("ENTERPRISE", "Enterprise"),
+                ("TECHNOLOGY", "Technology"), ("OSS", "OSS"),
+                ("DEPLOYMENT", "Deployment"), ("AI", "AI"),
+            )
+        ]
+        return EstateStrata(as_of=NOW, layers=layers)
+
+    async def contradiction_ledger(self, *, tenant_id, subject_id, limit):
+        self.last_tenant_id = tenant_id
+        return ContradictionLedger(
+            as_of=NOW, contradictions=[], page_info=PageInfo(has_next_page=False),
+            limitations=[{
+                "code": "NO_CURRENT_CONTRADICTIONS",
+                "message": "No current multi-source claim disagreement was detected.",
+            }],
+        )
+
+    async def assumptions(self, *, tenant_id, subject_id, status, limit):
+        self.last_tenant_id = tenant_id
+        return AssumptionList(assumptions=[], page_info=PageInfo(has_next_page=False))
+
+    async def estate_lineage(self, *, tenant_id, entity_id, limit):
+        self.last_tenant_id = tenant_id
+        return EstateLineageList(edges=[], page_info=PageInfo(has_next_page=False))
+
+    async def ai_supply_chain(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return AISupplyChain(as_of=NOW, status="NOT_COLLECTED")
+
+    def _envelope(self, actor_key="operator"):
+        return CapabilityEnvelopeModel(
+            id=UUID("00000000-0000-4000-8000-000000000a01"), actor_key=actor_key,
+            objective="Read the estate", environment="test", estate_watermark="test:1",
+            risk_tier="TIER_3", context_confidence=1, decision="ALLOW",
+            constraints={"least_privilege": True, "short_lived": True},
+            bands=[CapabilityBandModel(band=band) for band in (
+                "READ", "EXECUTE", "CONDITIONAL", "PROHIBITED", "ESCALATE",
+            )], status="ACTIVE", valid_until=NOW, compiled_hash="sha256:" + "a" * 64,
+            created_at=NOW,
+        )
+
+    async def compile_capability_envelope(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._envelope(actor_key)
+
+    async def capability_envelope(self, envelope_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        envelope = self._envelope()
+        return envelope.model_copy(update={"id": envelope_id})
+
+    async def authorize_agent_operation(self, envelope_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return AgentAuthorizationDecisionModel(
+            id=UUID("00000000-0000-4000-8000-000000000a02"), envelope_id=envelope_id,
+            operation_key=request.operation_key, decision="ALLOW", reason_codes=[],
+            request_fingerprint="sha256:" + "b" * 64, decided_at=NOW,
+        )
+
+    async def agent_kill_switch(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return AgentKillSwitchModel(
+            engaged=True, reason="Default deny", version=0,
+            updated_by="system:default-deny", updated_at=NOW,
+        )
+
+    async def update_agent_kill_switch(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return AgentKillSwitchModel(
+            engaged=request.engaged, reason=request.reason, version=request.expected_version + 1,
+            updated_by=actor_key, updated_at=NOW,
+        )
+
+    async def estate_components(self, *, tenant_id, cursor, limit):
+        self.last_tenant_id = tenant_id
+        return EstateComponentList(
+            as_of=NOW, components=[], page_info=PageInfo(has_next_page=False),
+        )
+
+    async def component_detail(self, component_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        component = EntitySummary(
+            id=component_id, kind="Component", name="checkout-api",
+            canonical_key="github:acme/commerce#services/checkout",
+        )
+        return EstateComponentDetail(
+            as_of=NOW,
+            component=EstateComponentSummary(
+                component=component,
+                profile=ComponentProfile(
+                    component_path="services/checkout", status="AVAILABLE", confidence=1,
+                    confidence_label="HIGH",
+                    freshness=Freshness(observed_at=NOW, status="FRESH"),
+                    evidence_fact_ids=[UUID("00000000-0000-4000-8000-000000000706")],
+                ),
+            ),
+        )
+
+    async def repository_container_compositions(self, repository_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return ContainerCompositionList(
+            repository=EntitySummary(id=repository_id, kind="Repository", name="commerce"),
+            status="NOT_COLLECTED", images=[], as_of=NOW,
+            limitations=[{
+                "code": "CONTAINER_IMAGES_NOT_COLLECTED",
+                "message": "No container image relationship was collected.",
+            }],
+        )
+
+    async def repository_deployment_profiles(self, repository_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return DeploymentProfileList(
+            repository=EntitySummary(id=repository_id, kind="Repository", name="commerce"),
+            profiles=[], as_of=NOW,
+            limitations=[{
+                "code": "DEPLOYMENTS_NOT_COLLECTED",
+                "message": "No deployment relationship was collected.",
+            }],
         )
 
     async def architecture_taxonomy(self):

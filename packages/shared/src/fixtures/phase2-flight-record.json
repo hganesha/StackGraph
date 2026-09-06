@@ -1,0 +1,13 @@
+{
+  "contract_version": "1.0.0",
+  "id": "00000000-0000-4000-8000-000000000a03",
+  "envelope_id": "00000000-0000-4000-8000-000000000a01",
+  "objective": "Read the estate",
+  "status": "ACTIVE",
+  "event_count": 0,
+  "outcome": null,
+  "started_by": "fixture-agent",
+  "started_at": "2026-09-05T18:00:00Z",
+  "completed_at": null,
+  "events": []
+}

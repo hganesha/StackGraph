@@ -649,6 +649,44 @@ class Phase2ChangeMixin:
                 message="The proposed upgrade would not change the selected scope.",
                 evidence_fact_ids=selected_scope.evidence_fact_ids,
             ))
+        governed_entity_ids = [
+            entity_id for entity_id in (
+                resolution.entity.id if resolution.entity else None,
+                selected_scope.entity_id if selected_scope else None,
+            ) if entity_id is not None
+        ]
+        contradictions = await self.database.fetch_all(
+            """
+            SELECT DISTINCT contradiction.id,
+              coalesce(array_agg(evidence.fact_assertion_id)
+                FILTER (WHERE evidence.fact_assertion_id IS NOT NULL),'{}') evidence_fact_ids
+            FROM estate_contradiction contradiction
+            LEFT JOIN estate_assumption_dependent dependent
+              ON dependent.assumption_id=contradiction.assumption_id
+            LEFT JOIN estate_contradiction_claim contradiction_claim
+              ON contradiction_claim.contradiction_id=contradiction.id
+            LEFT JOIN estate_assumption_claim_evidence evidence
+              ON evidence.claim_id=contradiction_claim.claim_id
+            WHERE contradiction.status='OPEN'
+              AND (contradiction.subject_entity_id=ANY(%s) OR dependent.entity_id=ANY(%s))
+            GROUP BY contradiction.id
+            """,
+            (governed_entity_ids, governed_entity_ids), tenant_id=tenant_id,
+        ) if governed_entity_ids else []
+        if contradictions:
+            evidence_ids = list(dict.fromkeys(
+                fact_id for item in contradictions for fact_id in item["evidence_fact_ids"]
+            ))
+            errors.append(MutationValidationError(
+                code="UNRESOLVED_CONTRADICTION", field="subject",
+                message="Resolve contradictory estate claims affecting this mutation before compiling.",
+                evidence_fact_ids=evidence_ids,
+            ))
+            reasons.append(GateReason(
+                code="UNRESOLVED_CONTRADICTION",
+                message="The mutation is blocked by the governed contradiction ledger.",
+                evidence_fact_ids=evidence_ids,
+            ))
         before = {
             "versions": [item.model_dump(mode="json") for item in selected_scope.version_distribution]
             if selected_scope else [],

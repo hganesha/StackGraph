@@ -1,0 +1,13 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T15:00:00Z",
+  "method_version": "estate-strata/1.0.0",
+  "layers": [
+    { "key": "BUSINESS", "label": "Business", "status": "AVAILABLE", "population_count": 14, "observed_count": 13, "coverage_ratio": 0.929, "corroboration_ratio": 0.714, "as_of": "2026-09-05T15:00:00Z", "limitations": [] },
+    { "key": "ENTERPRISE", "label": "Enterprise", "status": "AVAILABLE", "population_count": 382, "observed_count": 374, "coverage_ratio": 0.979, "corroboration_ratio": 0.821, "as_of": "2026-09-05T15:00:00Z", "limitations": [] },
+    { "key": "TECHNOLOGY", "label": "Technology", "status": "PARTIAL", "population_count": 117, "observed_count": 91, "coverage_ratio": 0.778, "corroboration_ratio": 0.604, "as_of": "2026-09-05T14:54:00Z", "limitations": [{ "code": "TECHNOLOGY_COVERAGE_PARTIAL", "message": "26 known technology entities do not have a current supporting fact.", "evidence_fact_ids": [] }] },
+    { "key": "OSS", "label": "OSS", "status": "PARTIAL", "population_count": 64, "observed_count": 39, "coverage_ratio": 0.609, "corroboration_ratio": 0.487, "as_of": "2026-09-05T14:54:00Z", "limitations": [{ "code": "OSS_COVERAGE_PARTIAL", "message": "Open-source intelligence is incomplete for 25 known entities.", "evidence_fact_ids": [] }] },
+    { "key": "DEPLOYMENT", "label": "Deployment", "status": "PARTIAL", "population_count": 46, "observed_count": 28, "coverage_ratio": 0.609, "corroboration_ratio": 0.393, "as_of": "2026-09-05T14:42:00Z", "limitations": [{ "code": "DEPLOYMENT_COVERAGE_PARTIAL", "message": "Runtime evidence is not connected for every deployment.", "evidence_fact_ids": [] }] },
+    { "key": "AI", "label": "AI", "status": "NOT_COLLECTED", "limitations": [{ "code": "AI_SUPPLY_CHAIN_NOT_MODELED", "message": "Customer AI supply-chain entities are not modeled; StackGraph intelligence is not substituted for this layer.", "evidence_fact_ids": [] }] }
+  ]
+}

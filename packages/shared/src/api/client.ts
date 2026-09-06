@@ -100,10 +100,36 @@ import type {
   ApplicationSimilarityReviewRequest,
   ApplicationSimilarityReviewResult,
   ActionPredicate,
+  AISupplyChain,
+  AgentApprovalDecisionRequest,
+  AgentApprovalModel,
+  AgentAuthorizationDecisionModel,
+  AgentAuthorizeRequest,
+  AgentControlDrillRequest,
+  AgentControlDrillResult,
+  AgentKillSwitchModel,
+  AgentKillSwitchUpdateRequest,
+  AssumptionCreateRequest,
+  AssumptionList,
+  AssumptionModel,
   ActionSubjectList,
   ActionTypeList,
   ChangeScopeList,
+  CapabilityEnvelopeCompileRequest,
+  CapabilityEnvelopeModel,
+  ContainerCompositionList,
+  ContradictionLedger,
   CriticalGraphEdgeList,
+  DeploymentProfileList,
+  EstateComponentDetail,
+  EstateComponentList,
+  EstateStrata,
+  EstateLineageList,
+  FlightEventCreateRequest,
+  FlightRecordCreateRequest,
+  FlightRecordFinalizeRequest,
+  FlightRecordModel,
+  ContradictionResolveRequest,
   GraphAnalysisRequestCreate,
   GraphAnalysisRequestResult,
   GraphAnomalyList,
@@ -197,9 +223,34 @@ export interface EstateSummaryParams {
 
 export interface StackGraphClient {
   getEstateSummary(params?: EstateSummaryParams): Promise<EstateSummary>;
+  getEstateStrata(): Promise<EstateStrata>;
+  getAISupplyChain(): Promise<AISupplyChain>;
+  listEstateLineage(entityId?: string, limit?: number): Promise<EstateLineageList>;
+  listContradictions(subjectId?: string, limit?: number): Promise<ContradictionLedger>;
+  listAssumptions(subjectId?: string, status?: string, limit?: number): Promise<AssumptionList>;
+  getAssumption(id: string): Promise<AssumptionModel>;
+  createAssumption(body: AssumptionCreateRequest): Promise<AssumptionModel>;
+  resolveContradiction(id: string, body: ContradictionResolveRequest): Promise<void>;
+  compileCapabilityEnvelope(body: CapabilityEnvelopeCompileRequest): Promise<CapabilityEnvelopeModel>;
+  getCapabilityEnvelope(id: string): Promise<CapabilityEnvelopeModel>;
+  authorizeAgentOperation(
+    id: string, body: AgentAuthorizeRequest,
+  ): Promise<AgentAuthorizationDecisionModel>;
+  decideAgentApproval(id: string, body: AgentApprovalDecisionRequest): Promise<AgentApprovalModel>;
+  getAgentKillSwitch(): Promise<AgentKillSwitchModel>;
+  updateAgentKillSwitch(body: AgentKillSwitchUpdateRequest): Promise<AgentKillSwitchModel>;
+  createFlightRecord(body: FlightRecordCreateRequest): Promise<FlightRecordModel>;
+  getFlightRecord(id: string): Promise<FlightRecordModel>;
+  appendFlightEvent(id: string, body: FlightEventCreateRequest): Promise<FlightRecordModel>;
+  finalizeFlightRecord(id: string, body: FlightRecordFinalizeRequest): Promise<FlightRecordModel>;
+  runAgentControlDrill(body: AgentControlDrillRequest): Promise<AgentControlDrillResult>;
+  listComponents(cursor?: string, limit?: number): Promise<EstateComponentList>;
+  getComponent(id: string): Promise<EstateComponentDetail>;
   getApplication(id: string): Promise<ApplicationDetail>;
   updateApplication(id: string, body: EntityDescriptionUpdateRequest): Promise<EntitySummary>;
   getRepository(id: string): Promise<RepositoryDetail>;
+  listRepositoryContainerCompositions(id: string): Promise<ContainerCompositionList>;
+  listRepositoryDeploymentProfiles(id: string): Promise<DeploymentProfileList>;
   updateRepository(id: string, body: EntityDescriptionUpdateRequest): Promise<EntitySummary>;
   getRepositoryActivity(
     id: string,
@@ -487,6 +538,13 @@ let adminCodePolicies: TenantCodePolicyState = {
 // states testable without a running worker.
 const fixtureSimulations = new Map<string, { run: SimulationRunModel; reads: number }>();
 const fixtureSimulationByKey = new Map<string, string>();
+const fixtureEnvelopes = new Map<string, CapabilityEnvelopeModel>();
+const fixtureFlights = new Map<string, FlightRecordModel>();
+let fixtureKillSwitch: AgentKillSwitchModel = {
+  contract_version: "1.0.0", engaged: true,
+  reason: "Agent execution is disabled until explicitly enabled.", version: 0,
+  updated_by: "system:default-deny", updated_at: "2026-09-05T18:00:00Z",
+};
 
 function fixtureBlockedCompile(
   request: MutationCompileRequest,
@@ -989,6 +1047,82 @@ const fixtureClient: StackGraphClient = {
       next_cursor: end < allItems.length ? String(end) : null,
     };
     return summary;
+  },
+  async getEstateStrata() {
+    await delay();
+    const fixture = await import("../fixtures/phase2-estate-strata.json");
+    return clone(fixture.default as EstateStrata);
+  },
+  async listContradictions(subjectId, limit = 50) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-contradictions.json");
+    const result = clone(fixture.default as ContradictionLedger);
+    result.contradictions = result.contradictions
+      .filter((item) => !subjectId || item.subject.id === subjectId)
+      .slice(0, limit);
+    return result;
+  },
+  async listComponents(cursor, limit = 50) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-estate-components.json");
+    const result = clone(fixture.default as EstateComponentList);
+    const start = cursor
+      ? Math.max(0, result.components.findIndex((item) => item.component.id === cursor) + 1)
+      : 0;
+    const all = result.components;
+    result.components = all.slice(start, start + limit);
+    result.page_info = {
+      has_next_page: start + limit < all.length,
+      next_cursor: start + limit < all.length
+        ? result.components.at(-1)?.component.id ?? null
+        : null,
+    };
+    return result;
+  },
+  async getComponent(id) {
+    await delay();
+    const componentFixture = await import("../fixtures/phase2-estate-components.json");
+    const summary = clone(componentFixture.default as EstateComponentList)
+      .components.find((item) => item.component.id === id);
+    if (!summary) {
+      throw new FixtureApiError(404, {
+        code: "COMPONENT_NOT_FOUND", message: "The component was not found.",
+      });
+    }
+    const [deploymentFixture, containerFixture] = await Promise.all([
+      import("../fixtures/phase2-deployment-profiles.json"),
+      import("../fixtures/phase2-container-compositions.json"),
+    ]);
+    return {
+      contract_version: "1.0.0",
+      as_of: summary.profile.freshness.observed_at,
+      component: summary,
+      technologies: [{
+        id: "20000000-0000-4000-8000-000000000001",
+        kind: "Package", name: "Newtonsoft.Json", canonical_key: "pkg:nuget/Newtonsoft.Json",
+      }],
+      deployments: id.endsWith("001")
+        ? [clone((deploymentFixture.default as DeploymentProfileList).profiles[0].deployment)]
+        : [],
+      container_images: id.endsWith("001")
+        ? [clone((containerFixture.default as ContainerCompositionList).images[0].image)]
+        : [],
+      limitations: [],
+    } satisfies EstateComponentDetail;
+  },
+  async listRepositoryContainerCompositions(id) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-container-compositions.json");
+    const result = clone(fixture.default as ContainerCompositionList);
+    result.repository.id = id;
+    return result;
+  },
+  async listRepositoryDeploymentProfiles(id) {
+    await delay();
+    const fixture = await import("../fixtures/phase2-deployment-profiles.json");
+    const result = clone(fixture.default as DeploymentProfileList);
+    result.repository.id = id;
+    return result;
   },
   async listActionTypes() {
     await delay();
@@ -2355,10 +2489,23 @@ const liveClient: StackGraphClient = {
     const suffix = query.size ? `?${query.toString()}` : "";
     return req(`/estate/summary${suffix}`);
   },
+  getEstateStrata: () => req("/estate/strata"),
+  listContradictions: (subjectId, limit = 50) => {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (subjectId) query.set("subject_id", subjectId);
+    return req(`/contradictions?${query.toString()}`);
+  },
+  listComponents: (cursor, limit = 50) =>
+    req(`/components?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  getComponent: (id) => req(`/components/${encodeURIComponent(id)}`),
   getApplication: (id) => req(`/applications/${id}`),
   updateApplication: (id, body) =>
     req(`/applications/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getRepository: (id) => req(`/repositories/${id}`),
+  listRepositoryContainerCompositions: (id) =>
+    req(`/repositories/${encodeURIComponent(id)}/container-compositions`),
+  listRepositoryDeploymentProfiles: (id) =>
+    req(`/repositories/${encodeURIComponent(id)}/deployment-profiles`),
   updateRepository: (id, body) =>
     req(`/repositories/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   getRepositoryActivity: (id, params) => {

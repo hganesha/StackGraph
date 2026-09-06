@@ -32,6 +32,80 @@ export interface ActionTypeSummary {
   subject_types: Array<string>;
 }
 
+export interface AgentApprovalDecisionRequest {
+  decision: "APPROVED" | "REJECTED";
+  expected_version: number;
+  rationale: string;
+}
+
+export interface AgentApprovalModel {
+  created_at: string;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  envelope_id: string;
+  expires_at: string;
+  id: string;
+  operation_key: string;
+  rationale?: string | null;
+  reason_code: string;
+  requested_by: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+  version: number;
+}
+
+export interface AgentAuthorizationDecisionModel {
+  approval_id?: string | null;
+  decided_at: string;
+  decision: "ALLOW" | "CONSTRAIN" | "ESCALATE" | "DENY";
+  envelope_id: string;
+  id: string;
+  operation_key: string;
+  reason_codes: Array<string>;
+  request_fingerprint: string;
+}
+
+export interface AgentAuthorizeRequest {
+  operation_key: string;
+  request_payload?: Record<string, unknown>;
+}
+
+export interface AgentControlDrillRequest {
+  drill_kind: "KILL_SWITCH" | "ROLLBACK" | "AUDIT_RECONSTRUCTION";
+  envelope_id?: string | null;
+  flight_record_id?: string | null;
+}
+
+export interface AgentControlDrillResult {
+  checks: Array<Record<string, unknown>>;
+  drill_kind: "KILL_SWITCH" | "ROLLBACK" | "AUDIT_RECONSTRUCTION";
+  id: string;
+  performed_at: string;
+  performed_by: string;
+  status: "PASSED" | "FAILED";
+}
+
+export interface AgentKillSwitchModel {
+  contract_version?: "1.0.0";
+  engaged: boolean;
+  reason: string;
+  updated_at: string;
+  updated_by: string;
+  version: number;
+}
+
+export interface AgentKillSwitchUpdateRequest {
+  engaged: boolean;
+  expected_version: number;
+  reason: string;
+}
+
+export interface AgentOperationRequest {
+  constraints?: Record<string, unknown>;
+  destructive?: boolean;
+  operation_key: string;
+  requested_band: "READ" | "EXECUTE" | "CONDITIONAL" | "PROHIBITED" | "ESCALATE";
+}
+
 export interface AIProviderConfiguration {
   contract_version?: "1.0.0";
   enabled?: boolean;
@@ -63,6 +137,24 @@ export interface AIProviderConnectionTest {
   models?: Array<string>;
   provider: "openrouter" | "openai" | "anthropic";
   status?: "SUCCEEDED";
+}
+
+export interface AISupplyChain {
+  as_of: string;
+  contract_version?: "1.0.0";
+  coverage_ratio?: number | null;
+  entities?: Array<EntitySummary>;
+  limitations?: Array<GateReason>;
+  links?: Array<AISupplyChainLink>;
+  status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
+}
+
+export interface AISupplyChainLink {
+  confidence: number;
+  evidence_fact_ids: Array<string>;
+  object: EntitySummary;
+  predicate: string;
+  subject: EntitySummary;
 }
 
 export interface ApplicationComponentDependencyHierarchy {
@@ -328,6 +420,63 @@ export interface AssessmentSummary {
   method_version: string;
   rationale?: string | null;
   score?: number | null;
+}
+
+export interface AssumptionClaimCreateRequest {
+  assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
+  claim_key: string;
+  confidence: number;
+  display_value: string;
+  observed_at: string;
+  opposing_fact_ids?: Array<string>;
+  source_key: string;
+  supporting_fact_ids?: Array<string>;
+}
+
+export interface AssumptionClaimModel {
+  assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
+  claim_key: string;
+  confidence: number;
+  display_value: string;
+  id: string;
+  observed_at: string;
+  opposing_fact_ids?: Array<string>;
+  source_key: string;
+  supporting_fact_ids?: Array<string>;
+}
+
+export interface AssumptionCreateRequest {
+  authority: string;
+  claims?: Array<AssumptionClaimCreateRequest>;
+  confidence: number;
+  dependent_entity_ids?: Array<string>;
+  dimension: string;
+  last_verified_at: string;
+  statement: string;
+  subject_entity_id: string;
+}
+
+export interface AssumptionList {
+  assumptions: Array<AssumptionModel>;
+  contract_version?: "1.0.0";
+  page_info: PageInfo;
+}
+
+export interface AssumptionModel {
+  authority: string;
+  claims?: Array<AssumptionClaimModel>;
+  confidence: number;
+  contradiction_ids?: Array<string>;
+  created_at: string;
+  dependent_entity_ids?: Array<string>;
+  dimension: string;
+  id: string;
+  last_verified_at: string;
+  statement: string;
+  status: "OPEN" | "ACCEPTED" | "REJECTED" | "SUPERSEDED";
+  subject: EntitySummary;
+  updated_at: string;
+  version: number;
 }
 
 export interface BusinessMapApplicationAssignment {
@@ -685,12 +834,56 @@ export interface CanvasTemplateModel {
   version: string;
 }
 
+export interface CapabilityBandModel {
+  band: "READ" | "EXECUTE" | "CONDITIONAL" | "PROHIBITED" | "ESCALATE";
+  operations?: Array<CapabilityEnvelopeOperation>;
+}
+
 export interface CapabilityDefinitionModel {
   aliases?: Array<string>;
   description: string;
   key: string;
   name: string;
   parent_key?: string | null;
+}
+
+export interface CapabilityEnvelopeCompileRequest {
+  context_confidence: number;
+  environment: string;
+  estate_watermark: string;
+  evidence_fact_ids?: Array<string>;
+  objective: string;
+  operations: Array<AgentOperationRequest>;
+  risk_tier: "TIER_0" | "TIER_1" | "TIER_2" | "TIER_3";
+  subject_entity_ids?: Array<string>;
+  ttl_seconds?: number | null;
+}
+
+export interface CapabilityEnvelopeModel {
+  actor_key: string;
+  bands: Array<CapabilityBandModel>;
+  compiled_hash: string;
+  constraints?: Record<string, unknown>;
+  context_confidence: number;
+  contract_version?: "1.0.0";
+  contradiction_ids?: Array<string>;
+  created_at: string;
+  decision: "ALLOW" | "CONSTRAIN" | "ESCALATE" | "DENY";
+  decision_reasons?: Array<GateReason>;
+  environment: string;
+  estate_watermark: string;
+  evidence_fact_ids?: Array<string>;
+  id: string;
+  objective: string;
+  risk_tier: "TIER_0" | "TIER_1" | "TIER_2" | "TIER_3";
+  status: "ACTIVE" | "EXPIRED" | "REVOKED" | "CONSUMED";
+  valid_until: string;
+}
+
+export interface CapabilityEnvelopeOperation {
+  band: "READ" | "EXECUTE" | "CONDITIONAL" | "PROHIBITED" | "ESCALATE";
+  constraints?: Record<string, unknown>;
+  operation_key: string;
 }
 
 export interface CapabilityFootprintList {
@@ -832,6 +1025,19 @@ export interface CodePolicyViolation {
   technology: EntitySummary;
 }
 
+export interface ComponentProfile {
+  classifications?: Array<string>;
+  component_path?: string | null;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  evidence_fact_ids?: Array<string>;
+  freshness: Freshness;
+  independently_deployable?: boolean | null;
+  limitations?: Array<GateReason>;
+  runtime?: string | null;
+  status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
+}
+
 export interface Connector {
   created_at: string;
   display_name: string;
@@ -865,6 +1071,85 @@ export interface ConnectorUpdateRequest {
   status?: "CONNECTED" | "NEEDS_REAUTH" | "DISABLED" | "REVOKED" | null;
 }
 
+export interface ContainerCompositionList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  images: Array<ContainerImageComposition>;
+  limitations?: Array<GateReason>;
+  repository: EntitySummary;
+  status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
+}
+
+export interface ContainerImageComposition {
+  architecture?: string | null;
+  evidence_fact_ids?: Array<string>;
+  freshness: Freshness;
+  identity: ContainerImageIdentity;
+  image: EntitySummary;
+  layers?: Array<ContainerLayer>;
+  limitations?: Array<GateReason>;
+  operating_system?: string | null;
+  packages?: Array<ContainerPackage>;
+  scan_status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
+}
+
+export interface ContainerImageIdentity {
+  canonical_reference?: string | null;
+  digest?: string | null;
+  observed_tags?: Array<string>;
+  registry?: string | null;
+  state: "RESOLVED" | "INFERRED" | "UNRESOLVED";
+}
+
+export interface ContainerLayer {
+  command?: string | null;
+  digest?: string | null;
+  index: number;
+  size_bytes?: number | null;
+}
+
+export interface ContainerPackage {
+  ecosystem?: string | null;
+  name: string;
+  version?: string | null;
+}
+
+export interface ContradictionClaim {
+  assertion_class: "DECLARED" | "OBSERVED" | "INFERRED" | "CURATED" | "EXTERNAL_MEASURED";
+  claim_key: string;
+  confidence: number;
+  display_value: string;
+  evidence_fact_ids: Array<string>;
+  observed_at: string;
+  source_key: string;
+}
+
+export interface ContradictionLedger {
+  as_of: string;
+  contract_version?: "1.0.0";
+  contradictions: Array<ContradictionLedgerItem>;
+  limitations?: Array<GateReason>;
+  method_version?: "current-fact-disagreement/1.0.0" | "assumption-registry/1.0.0";
+  page_info: PageInfo;
+}
+
+export interface ContradictionLedgerItem {
+  affected_entity_count: number;
+  claims: Array<ContradictionClaim>;
+  id: string;
+  last_verified_at: string;
+  limitations?: Array<GateReason>;
+  predicate: string;
+  status?: "OPEN";
+  subject: EntitySummary;
+}
+
+export interface ContradictionResolveRequest {
+  expected_version: number;
+  rationale: string;
+  status: "RESOLVED" | "DISMISSED";
+}
+
 export interface Coverage {
   facts_with_evidence_ratio: number;
   repositories_scanned: number;
@@ -889,6 +1174,35 @@ export interface CriticalGraphEdgeList {
   entity: EntitySummary;
   limitations?: Array<Record<string, unknown>>;
   snapshot?: GraphAnalysisSnapshot | null;
+}
+
+export interface DeploymentAction {
+  target: string;
+  target_kind?: string | null;
+  verb: string;
+}
+
+export interface DeploymentProfile {
+  actions?: Array<DeploymentAction>;
+  confidence: number;
+  confidence_label: "HIGH" | "MEDIUM" | "LOW";
+  deployment: EntitySummary;
+  environment?: string | null;
+  evidence_fact_ids?: Array<string>;
+  freshness: Freshness;
+  limitations?: Array<GateReason>;
+  provider?: string | null;
+  region?: string | null;
+  status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
+  workload_kind?: string | null;
+}
+
+export interface DeploymentProfileList {
+  as_of: string;
+  contract_version?: "1.0.0";
+  limitations?: Array<GateReason>;
+  profiles: Array<DeploymentProfile>;
+  repository: EntitySummary;
 }
 
 export interface DeterministicInsight {
@@ -1137,11 +1451,71 @@ export interface EntitySummary {
   summary?: string | null;
 }
 
+export interface EstateComponentDetail {
+  as_of: string;
+  component: EstateComponentSummary;
+  container_images?: Array<EntitySummary>;
+  contract_version?: "1.0.0";
+  deployments?: Array<EntitySummary>;
+  limitations?: Array<GateReason>;
+  technologies?: Array<EntitySummary>;
+}
+
+export interface EstateComponentList {
+  as_of: string;
+  components: Array<EstateComponentSummary>;
+  contract_version?: "1.0.0";
+  limitations?: Array<GateReason>;
+  page_info: PageInfo;
+}
+
+export interface EstateComponentSummary {
+  component: EntitySummary;
+  profile: ComponentProfile;
+  repository?: EntitySummary | null;
+}
+
 export interface EstateCounts {
   applications: number;
   repositories: number;
   services: number;
   technologies: number;
+}
+
+export interface EstateLineageEdgeModel {
+  confidence: number;
+  downstream: EntitySummary;
+  evidence_fact_id: string;
+  id: string;
+  lineage_kind: "COLUMN_TO_TABLE" | "TABLE_TO_PIPELINE" | "PIPELINE_TO_FEATURE" | "FEATURE_TO_MODEL" | "MODEL_TO_AGENT" | "AGENT_TO_API" | "API_TO_PROCESS" | "DATASET_TO_CAPABILITY" | "OTHER";
+  observed_at: string;
+  upstream: EntitySummary;
+}
+
+export interface EstateLineageList {
+  contract_version?: "1.0.0";
+  edges: Array<EstateLineageEdgeModel>;
+  limitations?: Array<GateReason>;
+  page_info: PageInfo;
+}
+
+export interface EstateStrata {
+  as_of: string;
+  contract_version?: "1.0.0";
+  layers: Array<EstateStratumLayer>;
+  method_version?: "estate-strata/1.0.0";
+}
+
+export interface EstateStratumLayer {
+  as_of?: string | null;
+  corroboration_ratio?: number | null;
+  coverage_ratio?: number | null;
+  key: "BUSINESS" | "ENTERPRISE" | "TECHNOLOGY" | "OSS" | "DEPLOYMENT" | "AI";
+  label: string;
+  limitations?: Array<GateReason>;
+  observed_count?: number | null;
+  population_count?: number | null;
+  status: "AVAILABLE" | "PARTIAL" | "NOT_COLLECTED";
 }
 
 export interface EstateSummary {
@@ -1173,6 +1547,50 @@ export interface EvidenceDetail {
 export interface Extractor {
   key: string;
   version: string;
+}
+
+export interface FlightEventCreateRequest {
+  event_type: "OBJECTIVE" | "CONTEXT" | "TOOL" | "CALL" | "DECISION" | "ACTION" | "ASSET" | "VERIFICATION" | "OUTCOME";
+  occurred_at: string;
+  payload: Record<string, unknown>;
+  system_boundary: string;
+}
+
+export interface FlightEventModel {
+  event_hash: string;
+  event_type: "OBJECTIVE" | "CONTEXT" | "TOOL" | "CALL" | "DECISION" | "ACTION" | "ASSET" | "VERIFICATION" | "OUTCOME";
+  id: string;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+  previous_hash?: string | null;
+  recorded_at: string;
+  sequence: number;
+  system_boundary: string;
+}
+
+export interface FlightRecordCreateRequest {
+  envelope_id: string;
+  objective: string;
+}
+
+export interface FlightRecordFinalizeRequest {
+  outcome: Record<string, unknown>;
+  status: "SUCCEEDED" | "FAILED" | "ABORTED";
+}
+
+export interface FlightRecordModel {
+  chain_head?: string | null;
+  completed_at?: string | null;
+  contract_version?: "1.0.0";
+  envelope_id: string;
+  event_count: number;
+  events?: Array<FlightEventModel>;
+  id: string;
+  objective: string;
+  outcome?: Record<string, unknown> | null;
+  started_at: string;
+  started_by: string;
+  status: "ACTIVE" | "SUCCEEDED" | "FAILED" | "ABORTED";
 }
 
 export interface Freshness {

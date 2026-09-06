@@ -1,0 +1,83 @@
+{
+  "contract_version": "1.0.0",
+  "repository": {
+    "id": "00000000-0000-4000-8000-000000000701",
+    "kind": "Repository",
+    "name": "billing-api",
+    "canonical_key": "github:repo:billing-api"
+  },
+  "status": "PARTIAL",
+  "images": [
+    {
+      "image": {
+        "id": "26000000-0000-4000-8000-000000000011",
+        "kind": "ContainerImage",
+        "name": "billing-api",
+        "canonical_key": "ghcr.io/acme/billing-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "identity": {
+        "state": "RESOLVED",
+        "canonical_reference": "ghcr.io/acme/billing-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observed_tags": ["2026.09.05", "production"],
+        "registry": "ghcr.io"
+      },
+      "architecture": "linux/amd64",
+      "operating_system": "Alpine 3.22",
+      "layers": [
+        {
+          "index": 0,
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "command": "FROM node:20-alpine",
+          "size_bytes": 43190272
+        }
+      ],
+      "packages": [
+        { "name": "node", "version": "20.19.4", "ecosystem": "apk" },
+        { "name": "openssl", "version": "3.5.2", "ecosystem": "apk" }
+      ],
+      "scan_status": "AVAILABLE",
+      "freshness": {
+        "observed_at": "2026-09-05T15:00:00Z",
+        "status": "FRESH"
+      },
+      "evidence_fact_ids": ["70000000-0000-4000-8000-000000000041"],
+      "limitations": []
+    },
+    {
+      "image": {
+        "id": "26000000-0000-4000-8000-000000000012",
+        "kind": "ContainerImage",
+        "name": "billing-worker",
+        "canonical_key": "ghcr.io/acme/billing-worker:latest"
+      },
+      "identity": {
+        "state": "UNRESOLVED",
+        "observed_tags": ["latest"],
+        "registry": "ghcr.io"
+      },
+      "layers": [],
+      "packages": [],
+      "scan_status": "PARTIAL",
+      "freshness": {
+        "observed_at": "2026-09-05T15:00:00Z",
+        "status": "FRESH"
+      },
+      "evidence_fact_ids": ["70000000-0000-4000-8000-000000000042"],
+      "limitations": [
+        {
+          "code": "CONTAINER_IDENTITY_UNRESOLVED",
+          "message": "The latest tag does not resolve to an immutable digest.",
+          "evidence_fact_ids": ["70000000-0000-4000-8000-000000000042"]
+        },
+        {
+          "code": "CONTAINER_COMPOSITION_NOT_COLLECTED",
+          "message": "No layer or package composition was collected for this image.",
+          "evidence_fact_ids": ["70000000-0000-4000-8000-000000000042"]
+        }
+      ]
+    }
+  ],
+  "as_of": "2026-09-05T15:00:00Z",
+  "limitations": []
+}

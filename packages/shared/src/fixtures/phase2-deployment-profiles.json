@@ -1,0 +1,39 @@
+{
+  "contract_version": "1.0.0",
+  "repository": {
+    "id": "00000000-0000-4000-8000-000000000701",
+    "kind": "Repository",
+    "name": "billing-api",
+    "canonical_key": "github:repo:billing-api"
+  },
+  "profiles": [
+    {
+      "deployment": {
+        "id": "26000000-0000-4000-8000-000000000021",
+        "kind": "Deployment",
+        "name": "billing-production",
+        "canonical_key": "deployment:billing-production"
+      },
+      "provider": "Vercel",
+      "workload_kind": "Web service",
+      "environment": "production",
+      "region": "iad1",
+      "actions": [
+        { "verb": "DEPLOYS_TO", "target": "Vercel", "target_kind": "PROVIDER" },
+        { "verb": "RUNS_ON", "target": "iad1", "target_kind": "REGION" },
+        { "verb": "RUNS_JOBS_ON", "target": "Databricks", "target_kind": "JOB_PLATFORM" }
+      ],
+      "status": "AVAILABLE",
+      "confidence": 0.93,
+      "confidence_label": "HIGH",
+      "freshness": {
+        "observed_at": "2026-09-05T15:00:00Z",
+        "status": "FRESH"
+      },
+      "evidence_fact_ids": ["70000000-0000-4000-8000-000000000051"],
+      "limitations": []
+    }
+  ],
+  "as_of": "2026-09-05T15:00:00Z",
+  "limitations": []
+}

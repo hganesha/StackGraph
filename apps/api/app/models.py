@@ -2808,3 +2808,534 @@ class SimulationRunModel(ContractModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     replayed: bool = False
+
+
+# --- Estate fidelity read models (S1-S3 / R4') ------------------------------
+
+ReadModelAvailability = Literal["AVAILABLE", "PARTIAL", "NOT_COLLECTED"]
+
+
+class ComponentProfile(ContractModel):
+    """Typed scanner reading for an estate component.
+
+    A component path is a locator, not its durable identity. The enclosing
+    ``EntitySummary.id`` remains the canonical route and review key.
+    """
+
+    component_path: str | None = Field(default=None, min_length=1)
+    classifications: list[str] = Field(default_factory=list)
+    independently_deployable: bool | None = None
+    runtime: str | None = None
+    status: ReadModelAvailability
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    freshness: Freshness
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    limitations: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_available_profile(self) -> "ComponentProfile":
+        if self.status == "AVAILABLE" and (self.component_path is None or not self.evidence_fact_ids):
+            raise ValueError("available component profiles require a path and supporting evidence")
+        return self
+
+
+class EstateComponentSummary(ContractModel):
+    component: EntitySummary
+    repository: EntitySummary | None = None
+    profile: ComponentProfile
+
+    @model_validator(mode="after")
+    def validate_entity_kinds(self) -> "EstateComponentSummary":
+        if self.component.kind != "Component":
+            raise ValueError("component summaries require a Component entity")
+        if self.repository is not None and self.repository.kind != "Repository":
+            raise ValueError("component repositories require a Repository entity")
+        return self
+
+
+class EstateComponentList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    components: list[EstateComponentSummary]
+    page_info: PageInfo
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class EstateComponentDetail(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    component: EstateComponentSummary
+    technologies: list[EntitySummary] = Field(default_factory=list)
+    deployments: list[EntitySummary] = Field(default_factory=list)
+    container_images: list[EntitySummary] = Field(default_factory=list)
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class ContainerImageIdentity(ContractModel):
+    state: ResolutionState
+    canonical_reference: str | None = None
+    digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+    observed_tags: list[str] = Field(default_factory=list)
+    registry: str | None = None
+
+    @model_validator(mode="after")
+    def validate_resolution(self) -> "ContainerImageIdentity":
+        if self.state == "RESOLVED" and self.digest is None:
+            raise ValueError("resolved container identities require an immutable digest")
+        if self.state == "UNRESOLVED" and self.canonical_reference is not None:
+            raise ValueError("unresolved container identities cannot claim a canonical reference")
+        return self
+
+
+class ContainerLayer(ContractModel):
+    index: int = Field(ge=0)
+    digest: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+    command: str | None = None
+    size_bytes: int | None = Field(default=None, ge=0)
+
+
+class ContainerPackage(ContractModel):
+    name: str = Field(min_length=1)
+    version: str | None = None
+    ecosystem: str | None = None
+
+
+class ContainerImageComposition(ContractModel):
+    image: EntitySummary
+    identity: ContainerImageIdentity
+    architecture: str | None = None
+    operating_system: str | None = None
+    layers: list[ContainerLayer] = Field(default_factory=list)
+    packages: list[ContainerPackage] = Field(default_factory=list)
+    scan_status: ReadModelAvailability
+    freshness: Freshness
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    limitations: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_available_composition(self) -> "ContainerImageComposition":
+        if self.scan_status == "AVAILABLE":
+            if self.identity.state != "RESOLVED" or not (self.layers or self.packages):
+                raise ValueError("available compositions require a resolved digest and collected contents")
+        return self
+
+
+class ContainerCompositionList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    status: ReadModelAvailability
+    images: list[ContainerImageComposition]
+    as_of: datetime
+    limitations: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_collection_status(self) -> "ContainerCompositionList":
+        if self.status == "NOT_COLLECTED" and self.images:
+            raise ValueError("not-collected container responses cannot include images")
+        if self.status == "AVAILABLE" and any(image.scan_status != "AVAILABLE" for image in self.images):
+            raise ValueError("available container responses cannot include partial images")
+        return self
+
+
+class DeploymentAction(ContractModel):
+    verb: str = Field(min_length=1)
+    target: str = Field(min_length=1)
+    target_kind: str | None = None
+
+
+class DeploymentProfile(ContractModel):
+    deployment: EntitySummary
+    provider: str | None = None
+    workload_kind: str | None = None
+    environment: str | None = None
+    region: str | None = None
+    actions: list[DeploymentAction] = Field(default_factory=list)
+    status: ReadModelAvailability
+    confidence: float = Field(ge=0, le=1)
+    confidence_label: ConfidenceLabel
+    freshness: Freshness
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    limitations: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_available_profile(self) -> "DeploymentProfile":
+        if self.status == "AVAILABLE" and (self.provider is None or not self.actions):
+            raise ValueError("available deployment profiles require a provider and actions")
+        return self
+
+
+class DeploymentProfileList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    repository: EntitySummary
+    profiles: list[DeploymentProfile]
+    as_of: datetime
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class EstateStratumLayer(ContractModel):
+    key: Literal["BUSINESS", "ENTERPRISE", "TECHNOLOGY", "OSS", "DEPLOYMENT", "AI"]
+    label: str = Field(min_length=1)
+    status: ReadModelAvailability
+    population_count: int | None = Field(default=None, ge=0)
+    observed_count: int | None = Field(default=None, ge=0)
+    coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+    corroboration_ratio: float | None = Field(default=None, ge=0, le=1)
+    as_of: datetime | None = None
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class EstateStrata(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    method_version: Literal["estate-strata/1.0.0"] = "estate-strata/1.0.0"
+    layers: list[EstateStratumLayer] = Field(min_length=6, max_length=6)
+
+    @model_validator(mode="after")
+    def validate_layer_order(self) -> "EstateStrata":
+        expected = ["BUSINESS", "ENTERPRISE", "TECHNOLOGY", "OSS", "DEPLOYMENT", "AI"]
+        if [layer.key for layer in self.layers] != expected:
+            raise ValueError("estate strata require all six layers in canonical order")
+        return self
+
+
+class ContradictionClaim(ContractModel):
+    claim_key: str = Field(min_length=1)
+    display_value: str = Field(min_length=1)
+    source_key: str = Field(min_length=1)
+    assertion_class: Literal["DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED"]
+    confidence: float = Field(ge=0, le=1)
+    observed_at: datetime
+    evidence_fact_ids: list[UUID] = Field(min_length=1)
+
+
+class ContradictionLedgerItem(ContractModel):
+    id: str = Field(min_length=1)
+    subject: EntitySummary
+    predicate: str = Field(min_length=1)
+    status: Literal["OPEN"] = "OPEN"
+    claims: list[ContradictionClaim] = Field(min_length=2)
+    affected_entity_count: int = Field(ge=0)
+    last_verified_at: datetime
+    limitations: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_disagreement(self) -> "ContradictionLedgerItem":
+        if len({claim.claim_key for claim in self.claims}) < 2:
+            raise ValueError("contradictions require at least two distinct claims")
+        return self
+
+
+class ContradictionLedger(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    method_version: Literal[
+        "current-fact-disagreement/1.0.0", "assumption-registry/1.0.0",
+    ] = "current-fact-disagreement/1.0.0"
+    contradictions: list[ContradictionLedgerItem]
+    page_info: PageInfo
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+# --- E1 governed estate fidelity -------------------------------------------
+
+AssumptionStatus = Literal["OPEN", "ACCEPTED", "REJECTED", "SUPERSEDED"]
+ContradictionStatus = Literal["OPEN", "RESOLVED", "DISMISSED"]
+
+
+class AssumptionClaimCreateRequest(ContractModel):
+    claim_key: str = Field(min_length=1, max_length=255)
+    display_value: str = Field(min_length=1, max_length=2000)
+    source_key: str = Field(min_length=1, max_length=255)
+    assertion_class: Literal["DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED"]
+    confidence: float = Field(ge=0, le=1)
+    observed_at: datetime
+    supporting_fact_ids: list[UUID] = Field(default_factory=list)
+    opposing_fact_ids: list[UUID] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> "AssumptionClaimCreateRequest":
+        if not self.supporting_fact_ids and not self.opposing_fact_ids:
+            raise ValueError("assumption claims require supporting or opposing evidence")
+        if set(self.supporting_fact_ids) & set(self.opposing_fact_ids):
+            raise ValueError("a fact cannot both support and oppose the same claim")
+        return self
+
+
+class AssumptionCreateRequest(ContractModel):
+    subject_entity_id: UUID
+    dimension: str = Field(min_length=1, max_length=255)
+    statement: str = Field(min_length=1, max_length=4000)
+    authority: str = Field(min_length=1, max_length=255)
+    confidence: float = Field(ge=0, le=1)
+    last_verified_at: datetime
+    dependent_entity_ids: list[UUID] = Field(default_factory=list)
+    claims: list[AssumptionClaimCreateRequest] = Field(default_factory=list)
+
+
+class AssumptionClaimModel(ContractModel):
+    id: UUID
+    claim_key: str
+    display_value: str
+    source_key: str
+    assertion_class: Literal["DECLARED", "OBSERVED", "INFERRED", "CURATED", "EXTERNAL_MEASURED"]
+    confidence: float = Field(ge=0, le=1)
+    observed_at: datetime
+    supporting_fact_ids: list[UUID] = Field(default_factory=list)
+    opposing_fact_ids: list[UUID] = Field(default_factory=list)
+
+
+class AssumptionModel(ContractModel):
+    id: UUID
+    subject: EntitySummary
+    dimension: str
+    statement: str
+    status: AssumptionStatus
+    authority: str
+    confidence: float = Field(ge=0, le=1)
+    last_verified_at: datetime
+    version: int = Field(ge=1)
+    claims: list[AssumptionClaimModel] = Field(default_factory=list)
+    dependent_entity_ids: list[UUID] = Field(default_factory=list)
+    contradiction_ids: list[UUID] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssumptionList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    assumptions: list[AssumptionModel]
+    page_info: PageInfo
+
+
+class ContradictionResolveRequest(ContractModel):
+    status: Literal["RESOLVED", "DISMISSED"]
+    rationale: str = Field(min_length=1, max_length=4000)
+    expected_version: int = Field(ge=1)
+
+
+class EstateLineageEdgeModel(ContractModel):
+    id: UUID
+    upstream: EntitySummary
+    downstream: EntitySummary
+    lineage_kind: Literal[
+        "COLUMN_TO_TABLE", "TABLE_TO_PIPELINE", "PIPELINE_TO_FEATURE", "FEATURE_TO_MODEL",
+        "MODEL_TO_AGENT", "AGENT_TO_API", "API_TO_PROCESS", "DATASET_TO_CAPABILITY", "OTHER",
+    ]
+    confidence: float = Field(ge=0, le=1)
+    evidence_fact_id: UUID
+    observed_at: datetime
+
+
+class EstateLineageList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    edges: list[EstateLineageEdgeModel]
+    page_info: PageInfo
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+class AISupplyChainLink(ContractModel):
+    predicate: str = Field(min_length=1)
+    subject: EntitySummary
+    object: EntitySummary
+    confidence: float = Field(ge=0, le=1)
+    evidence_fact_ids: list[UUID] = Field(min_length=1)
+
+
+class AISupplyChain(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    as_of: datetime
+    status: ReadModelAvailability
+    entities: list[EntitySummary] = Field(default_factory=list)
+    links: list[AISupplyChainLink] = Field(default_factory=list)
+    coverage_ratio: float | None = Field(default=None, ge=0, le=1)
+    limitations: list[GateReason] = Field(default_factory=list)
+
+
+# --- R16 governed agent control plane --------------------------------------
+
+CapabilityBand = Literal["READ", "EXECUTE", "CONDITIONAL", "PROHIBITED", "ESCALATE"]
+AgentDecision = Literal["ALLOW", "CONSTRAIN", "ESCALATE", "DENY"]
+AgentRiskTier = Literal["TIER_0", "TIER_1", "TIER_2", "TIER_3"]
+
+
+class AgentOperationRequest(ContractModel):
+    operation_key: str = Field(pattern=r"^[a-z][a-z0-9._:-]{2,127}$")
+    requested_band: CapabilityBand
+    destructive: bool = False
+    constraints: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityEnvelopeCompileRequest(ContractModel):
+    objective: str = Field(min_length=1, max_length=4000)
+    environment: str = Field(min_length=1, max_length=255)
+    estate_watermark: str = Field(min_length=1, max_length=255)
+    risk_tier: AgentRiskTier
+    context_confidence: float = Field(ge=0, le=1)
+    operations: list[AgentOperationRequest] = Field(min_length=1, max_length=100)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    subject_entity_ids: list[UUID] = Field(default_factory=list)
+    ttl_seconds: int | None = Field(default=None, ge=30, le=3600)
+
+    @model_validator(mode="after")
+    def validate_unique_operations(self) -> "CapabilityEnvelopeCompileRequest":
+        keys = [item.operation_key for item in self.operations]
+        if len(keys) != len(set(keys)):
+            raise ValueError("capability envelope operation keys must be unique")
+        return self
+
+
+class CapabilityEnvelopeOperation(ContractModel):
+    operation_key: str
+    band: CapabilityBand
+    constraints: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityBandModel(ContractModel):
+    band: CapabilityBand
+    operations: list[CapabilityEnvelopeOperation] = Field(default_factory=list)
+
+
+class CapabilityEnvelopeModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    actor_key: str
+    objective: str
+    environment: str
+    estate_watermark: str
+    risk_tier: AgentRiskTier
+    context_confidence: float = Field(ge=0, le=1)
+    decision: AgentDecision
+    decision_reasons: list[GateReason] = Field(default_factory=list)
+    constraints: dict[str, Any] = Field(default_factory=dict)
+    evidence_fact_ids: list[UUID] = Field(default_factory=list)
+    contradiction_ids: list[UUID] = Field(default_factory=list)
+    bands: list[CapabilityBandModel] = Field(min_length=5, max_length=5)
+    status: Literal["ACTIVE", "EXPIRED", "REVOKED", "CONSUMED"]
+    valid_until: datetime
+    compiled_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_canonical_bands(self) -> "CapabilityEnvelopeModel":
+        expected = ["READ", "EXECUTE", "CONDITIONAL", "PROHIBITED", "ESCALATE"]
+        if [item.band for item in self.bands] != expected:
+            raise ValueError("capability envelopes require all five bands in canonical order")
+        return self
+
+
+class AgentAuthorizeRequest(ContractModel):
+    operation_key: str = Field(pattern=r"^[a-z][a-z0-9._:-]{2,127}$")
+    request_payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentAuthorizationDecisionModel(ContractModel):
+    id: UUID
+    envelope_id: UUID
+    operation_key: str
+    decision: AgentDecision
+    reason_codes: list[str]
+    approval_id: UUID | None = None
+    request_fingerprint: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    decided_at: datetime
+
+
+class AgentApprovalDecisionRequest(ContractModel):
+    decision: Literal["APPROVED", "REJECTED"]
+    rationale: str = Field(min_length=1, max_length=4000)
+    expected_version: int = Field(ge=1)
+
+
+class AgentApprovalModel(ContractModel):
+    id: UUID
+    envelope_id: UUID
+    operation_key: str
+    reason_code: str
+    status: Literal["PENDING", "APPROVED", "REJECTED", "EXPIRED"]
+    requested_by: str
+    decided_by: str | None = None
+    rationale: str | None = None
+    version: int = Field(ge=1)
+    expires_at: datetime
+    created_at: datetime
+    decided_at: datetime | None = None
+
+
+class AgentKillSwitchUpdateRequest(ContractModel):
+    engaged: bool
+    reason: str = Field(min_length=1, max_length=2000)
+    expected_version: int = Field(ge=0)
+
+
+class AgentKillSwitchModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    engaged: bool
+    reason: str
+    version: int = Field(ge=0)
+    updated_by: str
+    updated_at: datetime
+
+
+FlightEventType = Literal[
+    "OBJECTIVE", "CONTEXT", "TOOL", "CALL", "DECISION", "ACTION", "ASSET",
+    "VERIFICATION", "OUTCOME",
+]
+
+
+class FlightRecordCreateRequest(ContractModel):
+    envelope_id: UUID
+    objective: str = Field(min_length=1, max_length=4000)
+
+
+class FlightEventCreateRequest(ContractModel):
+    event_type: FlightEventType
+    system_boundary: str = Field(min_length=1, max_length=255)
+    payload: dict[str, Any]
+    occurred_at: datetime
+
+
+class FlightEventModel(ContractModel):
+    id: UUID
+    sequence: int = Field(ge=1)
+    event_type: FlightEventType
+    system_boundary: str
+    payload: dict[str, Any]
+    previous_hash: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+    event_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    occurred_at: datetime
+    recorded_at: datetime
+
+
+class FlightRecordFinalizeRequest(ContractModel):
+    status: Literal["SUCCEEDED", "FAILED", "ABORTED"]
+    outcome: dict[str, Any]
+
+
+class FlightRecordModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    envelope_id: UUID
+    objective: str
+    status: Literal["ACTIVE", "SUCCEEDED", "FAILED", "ABORTED"]
+    event_count: int = Field(ge=0)
+    chain_head: str | None = Field(default=None, pattern=r"^sha256:[a-f0-9]{64}$")
+    outcome: dict[str, Any] | None = None
+    started_by: str
+    started_at: datetime
+    completed_at: datetime | None = None
+    events: list[FlightEventModel] = Field(default_factory=list)
+
+
+class AgentControlDrillRequest(ContractModel):
+    drill_kind: Literal["KILL_SWITCH", "ROLLBACK", "AUDIT_RECONSTRUCTION"]
+    envelope_id: UUID | None = None
+    flight_record_id: UUID | None = None
+
+
+class AgentControlDrillResult(ContractModel):
+    id: UUID
+    drill_kind: Literal["KILL_SWITCH", "ROLLBACK", "AUDIT_RECONSTRUCTION"]
+    status: Literal["PASSED", "FAILED"]
+    checks: list[dict[str, Any]]
+    performed_by: str
+    performed_at: datetime

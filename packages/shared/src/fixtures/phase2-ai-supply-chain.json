@@ -1,0 +1,15 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T18:00:00Z",
+  "status": "NOT_COLLECTED",
+  "entities": [],
+  "links": [],
+  "coverage_ratio": 0,
+  "limitations": [
+    {
+      "code": "AI_SUPPLY_CHAIN_INCOMPLETE",
+      "message": "AI supply-chain coverage is incomplete; missing nodes are not inferred.",
+      "evidence_fact_ids": []
+    }
+  ]
+}

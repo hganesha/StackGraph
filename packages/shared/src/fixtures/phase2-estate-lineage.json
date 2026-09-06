@@ -1,0 +1,12 @@
+{
+  "contract_version": "1.0.0",
+  "edges": [],
+  "page_info": { "has_next_page": false },
+  "limitations": [
+    {
+      "code": "LINEAGE_NOT_COLLECTED",
+      "message": "No normalized data-lineage evidence has been collected for this scope.",
+      "evidence_fact_ids": []
+    }
+  ]
+}

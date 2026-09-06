@@ -1,0 +1,71 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T15:00:00Z",
+  "method_version": "current-fact-disagreement/1.0.0",
+  "contradictions": [
+    {
+      "id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "subject": {
+        "id": "26000000-0000-4000-8000-000000000001",
+        "kind": "Component",
+        "name": "Billing API",
+        "canonical_key": "github:acme/billing#services/api"
+      },
+      "predicate": "HAS_PROPERTY:node_runtime",
+      "status": "OPEN",
+      "claims": [
+        {
+          "claim_key": "18",
+          "display_value": "Node 18",
+          "source_key": "source-code",
+          "assertion_class": "OBSERVED",
+          "confidence": 0.98,
+          "observed_at": "2026-09-05T15:00:00Z",
+          "evidence_fact_ids": ["70000000-0000-4000-8000-000000000061"]
+        },
+        {
+          "claim_key": "20",
+          "display_value": "Node 20",
+          "source_key": "dockerfile",
+          "assertion_class": "DECLARED",
+          "confidence": 0.97,
+          "observed_at": "2026-09-05T14:58:00Z",
+          "evidence_fact_ids": ["70000000-0000-4000-8000-000000000062"]
+        },
+        {
+          "claim_key": "16",
+          "display_value": "Node 16",
+          "source_key": "documentation",
+          "assertion_class": "DECLARED",
+          "confidence": 0.72,
+          "observed_at": "2025-07-01T09:00:00Z",
+          "evidence_fact_ids": ["70000000-0000-4000-8000-000000000063"]
+        }
+      ],
+      "affected_entity_count": 8,
+      "last_verified_at": "2026-09-05T15:00:00Z",
+      "limitations": [
+        {
+          "code": "NO_AUTHORITATIVE_CLAIM_SELECTED",
+          "message": "The ledger presents source disagreement and does not select a true claim.",
+          "evidence_fact_ids": [
+            "70000000-0000-4000-8000-000000000061",
+            "70000000-0000-4000-8000-000000000062",
+            "70000000-0000-4000-8000-000000000063"
+          ]
+        }
+      ]
+    }
+  ],
+  "page_info": {
+    "has_next_page": false,
+    "next_cursor": null
+  },
+  "limitations": [
+    {
+      "code": "ASSUMPTION_REGISTRY_NOT_AVAILABLE",
+      "message": "This ledger covers observed fact disagreement; governed assumptions and resolution history require E1 persistence.",
+      "evidence_fact_ids": []
+    }
+  ]
+}

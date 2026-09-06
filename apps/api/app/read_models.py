@@ -31,6 +31,7 @@ from stackgraph_ai.governance import (
 
 from app.age_graph import AgeGraphReader, AgeTopology
 from app.architecture_catalog import load_architecture_catalog, sha256_fingerprint
+from app.agent_control import AgentControlMixin
 from app.database import Database
 from app.deterministic_insights import invalidate_deterministic_insight_cache
 from app.deterministic_insights import list_deterministic_insights
@@ -43,6 +44,8 @@ from app.enterprise_posture_insights import (
     posture_report_readiness,
 )
 from app.errors import APIError
+from app.estate_fidelity import EstateFidelityMixin
+from app.estate_governance import EstateGovernanceMixin
 from app.neo4j_graph import Neo4jGraphReader, Neo4jTopology
 from app.read_models_admin import AdminReadModelsMixin
 from app.phase2_changes import Phase2ChangeMixin
@@ -1179,7 +1182,10 @@ class AgeParityError(RuntimeError):
     pass
 
 
-class ReadModelStore(Phase2ChangeMixin, AdminReadModelsMixin):
+class ReadModelStore(
+    AgentControlMixin, EstateGovernanceMixin, EstateFidelityMixin,
+    Phase2ChangeMixin, AdminReadModelsMixin,
+):
     def __init__(
         self,
         database: Database,

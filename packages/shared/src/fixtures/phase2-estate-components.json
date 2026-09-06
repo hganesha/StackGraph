@@ -1,0 +1,70 @@
+{
+  "contract_version": "1.0.0",
+  "as_of": "2026-09-05T15:00:00Z",
+  "components": [
+    {
+      "component": {
+        "id": "26000000-0000-4000-8000-000000000001",
+        "kind": "Component",
+        "name": "Billing API",
+        "canonical_key": "github:acme/billing#services/api",
+        "summary": "Public billing and invoice API component."
+      },
+      "repository": {
+        "id": "00000000-0000-4000-8000-000000000701",
+        "kind": "Repository",
+        "name": "billing-api",
+        "canonical_key": "github:repo:billing-api"
+      },
+      "profile": {
+        "component_path": "services/api",
+        "classifications": ["SERVICE", "API"],
+        "independently_deployable": true,
+        "runtime": "Node.js 20",
+        "status": "AVAILABLE",
+        "confidence": 0.96,
+        "confidence_label": "HIGH",
+        "freshness": {
+          "observed_at": "2026-09-05T15:00:00Z",
+          "status": "FRESH"
+        },
+        "evidence_fact_ids": ["70000000-0000-4000-8000-000000000031"],
+        "limitations": []
+      }
+    },
+    {
+      "component": {
+        "id": "26000000-0000-4000-8000-000000000002",
+        "kind": "Component",
+        "name": "Billing contracts",
+        "canonical_key": "github:acme/billing#packages/contracts",
+        "summary": "Shared request and event contracts."
+      },
+      "repository": {
+        "id": "00000000-0000-4000-8000-000000000701",
+        "kind": "Repository",
+        "name": "billing-api",
+        "canonical_key": "github:repo:billing-api"
+      },
+      "profile": {
+        "component_path": "packages/contracts",
+        "classifications": ["LIBRARY"],
+        "independently_deployable": false,
+        "status": "AVAILABLE",
+        "confidence": 0.88,
+        "confidence_label": "HIGH",
+        "freshness": {
+          "observed_at": "2026-09-04T19:30:00Z",
+          "status": "FRESH"
+        },
+        "evidence_fact_ids": ["70000000-0000-4000-8000-000000000032"],
+        "limitations": []
+      }
+    }
+  ],
+  "page_info": {
+    "has_next_page": false,
+    "next_cursor": null
+  },
+  "limitations": []
+}

@@ -30,6 +30,18 @@ from app.models import (
     ArchitectureReferenceModel,
     ArchitectureReferenceModelList,
     ArchitectureTaxonomyResponse,
+    AISupplyChain,
+    AgentApprovalDecisionRequest,
+    AgentApprovalModel,
+    AgentAuthorizationDecisionModel,
+    AgentAuthorizeRequest,
+    AgentControlDrillRequest,
+    AgentControlDrillResult,
+    AgentKillSwitchModel,
+    AgentKillSwitchUpdateRequest,
+    AssumptionCreateRequest,
+    AssumptionList,
+    AssumptionModel,
     BusinessMapCreateRequest,
     BusinessMapDetail,
     BusinessMapList,
@@ -40,6 +52,8 @@ from app.models import (
     CapabilityInferenceReviewResult,
     CapabilityTaxonomyResponse,
     CapabilityFootprintList,
+    CapabilityEnvelopeCompileRequest,
+    CapabilityEnvelopeModel,
     CanvasComparison,
     CanvasComparisonRequest,
     CanvasProjection,
@@ -73,6 +87,13 @@ from app.models import (
     EmbeddingBackfillResult,
     EmbeddingSpacePromotionRequest,
     EmbeddingSpacePromotionResult,
+    ContainerCompositionList,
+    ContradictionLedger,
+    DeploymentProfileList,
+    EstateComponentDetail,
+    EstateComponentList,
+    EstateStrata,
+    EstateLineageList,
     IdentityReviewRequest,
     IdentityReviewResult,
     ModernizationList,
@@ -143,6 +164,11 @@ from app.models import (
     RepositoryFingerprintList,
     SimulationCreateRequest,
     SimulationRunModel,
+    ContradictionResolveRequest,
+    FlightEventCreateRequest,
+    FlightRecordCreateRequest,
+    FlightRecordFinalizeRequest,
+    FlightRecordModel,
 )
 
 
@@ -190,6 +216,73 @@ class ReadModelsProtocol(Protocol):
         self, *, tenant_id: UUID | None, cursor: str | None, limit: int,
         namespaces: list[str] | None = None, sort: str = "priority",
     ) -> EstateSummary: ...
+    async def estate_strata(self, *, tenant_id: UUID | None) -> EstateStrata: ...
+    async def contradiction_ledger(
+        self, *, tenant_id: UUID | None, subject_id: UUID | None, limit: int,
+    ) -> ContradictionLedger: ...
+    async def create_assumption(
+        self, request: AssumptionCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AssumptionModel: ...
+    async def assumption(
+        self, assumption_id: UUID, *, tenant_id: UUID | None,
+    ) -> AssumptionModel: ...
+    async def assumptions(
+        self, *, tenant_id: UUID | None, subject_id: UUID | None, status: str | None, limit: int,
+    ) -> AssumptionList: ...
+    async def resolve_contradiction(
+        self, contradiction_id: UUID, request: ContradictionResolveRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> None: ...
+    async def estate_lineage(
+        self, *, tenant_id: UUID | None, entity_id: UUID | None, limit: int,
+    ) -> EstateLineageList: ...
+    async def ai_supply_chain(self, *, tenant_id: UUID | None) -> AISupplyChain: ...
+    async def compile_capability_envelope(
+        self, request: CapabilityEnvelopeCompileRequest, *, tenant_id: UUID | None,
+        actor_key: str,
+    ) -> CapabilityEnvelopeModel: ...
+    async def capability_envelope(
+        self, envelope_id: UUID, *, tenant_id: UUID | None,
+    ) -> CapabilityEnvelopeModel: ...
+    async def authorize_agent_operation(
+        self, envelope_id: UUID, request: AgentAuthorizeRequest, *, tenant_id: UUID | None,
+        actor_key: str,
+    ) -> AgentAuthorizationDecisionModel: ...
+    async def decide_agent_approval(
+        self, approval_id: UUID, request: AgentApprovalDecisionRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> AgentApprovalModel: ...
+    async def agent_kill_switch(self, *, tenant_id: UUID | None) -> AgentKillSwitchModel: ...
+    async def update_agent_kill_switch(
+        self, request: AgentKillSwitchUpdateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AgentKillSwitchModel: ...
+    async def create_flight_record(
+        self, request: FlightRecordCreateRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> FlightRecordModel: ...
+    async def append_flight_event(
+        self, record_id: UUID, request: FlightEventCreateRequest, *, tenant_id: UUID | None,
+    ) -> FlightRecordModel: ...
+    async def finalize_flight_record(
+        self, record_id: UUID, request: FlightRecordFinalizeRequest, *, tenant_id: UUID | None,
+    ) -> FlightRecordModel: ...
+    async def flight_record(
+        self, record_id: UUID, *, tenant_id: UUID | None,
+    ) -> FlightRecordModel: ...
+    async def run_agent_control_drill(
+        self, request: AgentControlDrillRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> AgentControlDrillResult: ...
+    async def estate_components(
+        self, *, tenant_id: UUID | None, cursor: UUID | None, limit: int,
+    ) -> EstateComponentList: ...
+    async def component_detail(
+        self, component_id: UUID, *, tenant_id: UUID | None,
+    ) -> EstateComponentDetail: ...
+    async def repository_container_compositions(
+        self, repository_id: UUID, *, tenant_id: UUID | None,
+    ) -> ContainerCompositionList: ...
+    async def repository_deployment_profiles(
+        self, repository_id: UUID, *, tenant_id: UUID | None,
+    ) -> DeploymentProfileList: ...
     async def application_detail(self, application_id: UUID, *, tenant_id: UUID | None) -> ApplicationDetail: ...
     async def architecture_taxonomy(self) -> ArchitectureTaxonomyResponse: ...
     async def architecture_reference_models(self) -> ArchitectureReferenceModelList: ...
@@ -694,6 +787,153 @@ async def cancel_simulation(id: UUID, request: Request) -> SimulationRunModel:
     )
 
 
+@router.post(
+    "/agent-control/envelopes", response_model=CapabilityEnvelopeModel, status_code=201,
+    response_model_exclude_none=True, operation_id="compileCapabilityEnvelope",
+    tags=["agent-control"],
+)
+async def compile_capability_envelope(
+    body: CapabilityEnvelopeCompileRequest, request: Request,
+) -> CapabilityEnvelopeModel:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).compile_capability_envelope(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/agent-control/envelopes/{id}", response_model=CapabilityEnvelopeModel,
+    response_model_exclude_none=True, operation_id="getCapabilityEnvelope",
+    tags=["agent-control"],
+)
+async def get_capability_envelope(id: UUID, request: Request) -> CapabilityEnvelopeModel:
+    principal = await _principal(request)
+    return await _store(request).capability_envelope(id, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/agent-control/envelopes/{id}/authorize",
+    response_model=AgentAuthorizationDecisionModel,
+    response_model_exclude_none=True, operation_id="authorizeAgentOperation",
+    tags=["agent-control"],
+)
+async def authorize_agent_operation(
+    id: UUID, body: AgentAuthorizeRequest, request: Request,
+) -> AgentAuthorizationDecisionModel:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).authorize_agent_operation(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/agent-control/approvals/{id}/decision", response_model=AgentApprovalModel,
+    response_model_exclude_none=True, operation_id="decideAgentApproval",
+    tags=["agent-control"],
+)
+async def decide_agent_approval(
+    id: UUID, body: AgentApprovalDecisionRequest, request: Request,
+) -> AgentApprovalModel:
+    principal = await _principal(request)
+    _require(principal, "review")
+    return await _store(request).decide_agent_approval(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/agent-control/kill-switch", response_model=AgentKillSwitchModel,
+    response_model_exclude_none=True, operation_id="getAgentKillSwitch",
+    tags=["agent-control"],
+)
+async def get_agent_kill_switch(request: Request) -> AgentKillSwitchModel:
+    principal = await _principal(request)
+    return await _store(request).agent_kill_switch(tenant_id=principal.tenant_id)
+
+
+@router.put(
+    "/agent-control/kill-switch", response_model=AgentKillSwitchModel,
+    response_model_exclude_none=True, operation_id="updateAgentKillSwitch",
+    tags=["agent-control"],
+)
+async def update_agent_kill_switch(
+    body: AgentKillSwitchUpdateRequest, request: Request,
+) -> AgentKillSwitchModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).update_agent_kill_switch(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/agent-control/flight-records", response_model=FlightRecordModel, status_code=201,
+    response_model_exclude_none=True, operation_id="createFlightRecord",
+    tags=["agent-control"],
+)
+async def create_flight_record(
+    body: FlightRecordCreateRequest, request: Request,
+) -> FlightRecordModel:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).create_flight_record(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/agent-control/flight-records/{id}", response_model=FlightRecordModel,
+    response_model_exclude_none=True, operation_id="getFlightRecord",
+    tags=["agent-control"],
+)
+async def get_flight_record(id: UUID, request: Request) -> FlightRecordModel:
+    principal = await _principal(request)
+    return await _store(request).flight_record(id, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/agent-control/flight-records/{id}/events", response_model=FlightRecordModel,
+    response_model_exclude_none=True, operation_id="appendFlightEvent",
+    tags=["agent-control"],
+)
+async def append_flight_event(
+    id: UUID, body: FlightEventCreateRequest, request: Request,
+) -> FlightRecordModel:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).append_flight_event(id, body, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/agent-control/flight-records/{id}/finalize", response_model=FlightRecordModel,
+    response_model_exclude_none=True, operation_id="finalizeFlightRecord",
+    tags=["agent-control"],
+)
+async def finalize_flight_record(
+    id: UUID, body: FlightRecordFinalizeRequest, request: Request,
+) -> FlightRecordModel:
+    principal = await _principal(request)
+    _require(principal, "execute")
+    return await _store(request).finalize_flight_record(id, body, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/agent-control/drills", response_model=AgentControlDrillResult,
+    response_model_exclude_none=True, operation_id="runAgentControlDrill",
+    tags=["agent-control"],
+)
+async def run_agent_control_drill(
+    body: AgentControlDrillRequest, request: Request,
+) -> AgentControlDrillResult:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).run_agent_control_drill(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
 @router.get(
     "/estate/summary", response_model=EstateSummary,
     response_model_exclude_none=True, operation_id="getEstateSummary", tags=["estate"],
@@ -711,6 +951,133 @@ async def get_estate_summary(
         namespaces=domain,
         sort=sort,
     )
+
+
+@router.get(
+    "/estate/strata", response_model=EstateStrata,
+    response_model_exclude_none=True, operation_id="getEstateStrata", tags=["estate"],
+)
+async def get_estate_strata(request: Request) -> EstateStrata:
+    principal = await _principal(request)
+    return await _store(request).estate_strata(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/contradictions", response_model=ContradictionLedger,
+    response_model_exclude_none=True, operation_id="listContradictions",
+    tags=["intelligence", "changes"],
+)
+async def list_contradictions(
+    request: Request,
+    subject_id: UUID | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> ContradictionLedger:
+    principal = await _principal(request)
+    return await _store(request).contradiction_ledger(
+        tenant_id=principal.tenant_id, subject_id=subject_id, limit=limit,
+    )
+
+
+@router.post(
+    "/assumptions", response_model=AssumptionModel, status_code=201,
+    response_model_exclude_none=True, operation_id="createAssumption",
+    tags=["intelligence", "changes"],
+)
+async def create_assumption(body: AssumptionCreateRequest, request: Request) -> AssumptionModel:
+    principal = await _principal(request)
+    _require(principal, "review")
+    return await _store(request).create_assumption(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/assumptions", response_model=AssumptionList,
+    response_model_exclude_none=True, operation_id="listAssumptions",
+    tags=["intelligence", "changes"],
+)
+async def list_assumptions(
+    request: Request,
+    subject_id: UUID | None = None,
+    status: Literal["OPEN", "ACCEPTED", "REJECTED", "SUPERSEDED"] | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> AssumptionList:
+    principal = await _principal(request)
+    return await _store(request).assumptions(
+        tenant_id=principal.tenant_id, subject_id=subject_id, status=status, limit=limit,
+    )
+
+
+@router.get(
+    "/assumptions/{id}", response_model=AssumptionModel,
+    response_model_exclude_none=True, operation_id="getAssumption",
+    tags=["intelligence", "changes"],
+)
+async def get_assumption(id: UUID, request: Request) -> AssumptionModel:
+    principal = await _principal(request)
+    return await _store(request).assumption(id, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/contradictions/{id}/resolve", status_code=204,
+    operation_id="resolveContradiction", tags=["intelligence", "changes"],
+)
+async def resolve_contradiction(
+    id: UUID, body: ContradictionResolveRequest, request: Request,
+) -> Response:
+    principal = await _principal(request)
+    _require(principal, "review")
+    await _store(request).resolve_contradiction(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+    return Response(status_code=204)
+
+
+@router.get(
+    "/estate/lineage", response_model=EstateLineageList,
+    response_model_exclude_none=True, operation_id="listEstateLineage", tags=["estate"],
+)
+async def list_estate_lineage(
+    request: Request, entity_id: UUID | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> EstateLineageList:
+    principal = await _principal(request)
+    return await _store(request).estate_lineage(
+        tenant_id=principal.tenant_id, entity_id=entity_id, limit=limit,
+    )
+
+
+@router.get(
+    "/estate/ai-supply-chain", response_model=AISupplyChain,
+    response_model_exclude_none=True, operation_id="getAISupplyChain", tags=["estate"],
+)
+async def get_ai_supply_chain(request: Request) -> AISupplyChain:
+    principal = await _principal(request)
+    return await _store(request).ai_supply_chain(tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/components", response_model=EstateComponentList,
+    response_model_exclude_none=True, operation_id="listComponents", tags=["components"],
+)
+async def list_components(
+    request: Request,
+    cursor: UUID | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> EstateComponentList:
+    principal = await _principal(request)
+    return await _store(request).estate_components(
+        tenant_id=principal.tenant_id, cursor=cursor, limit=limit,
+    )
+
+
+@router.get(
+    "/components/{id}", response_model=EstateComponentDetail,
+    response_model_exclude_none=True, operation_id="getComponent", tags=["components"],
+)
+async def get_component(id: UUID, request: Request) -> EstateComponentDetail:
+    principal = await _principal(request)
+    return await _store(request).component_detail(id, tenant_id=principal.tenant_id)
 
 
 @router.get(
@@ -748,6 +1115,34 @@ async def get_technology_estate_hierarchy(request: Request) -> TechnologyEstateH
 async def get_repository(id: UUID, request: Request) -> RepositoryDetail:
     principal = await _principal(request)
     return await _store(request).repository_detail(id, tenant_id=principal.tenant_id)
+
+
+@router.get(
+    "/repositories/{id}/container-compositions", response_model=ContainerCompositionList,
+    response_model_exclude_none=True, operation_id="listRepositoryContainerCompositions",
+    tags=["repositories", "components"],
+)
+async def list_repository_container_compositions(
+    id: UUID, request: Request,
+) -> ContainerCompositionList:
+    principal = await _principal(request)
+    return await _store(request).repository_container_compositions(
+        id, tenant_id=principal.tenant_id,
+    )
+
+
+@router.get(
+    "/repositories/{id}/deployment-profiles", response_model=DeploymentProfileList,
+    response_model_exclude_none=True, operation_id="listRepositoryDeploymentProfiles",
+    tags=["repositories", "components"],
+)
+async def list_repository_deployment_profiles(
+    id: UUID, request: Request,
+) -> DeploymentProfileList:
+    principal = await _principal(request)
+    return await _store(request).repository_deployment_profiles(
+        id, tenant_id=principal.tenant_id,
+    )
 
 
 @router.put(
