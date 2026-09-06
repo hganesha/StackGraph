@@ -387,10 +387,24 @@ class EstateGovernanceMixin:
         expected_types = {"Application", *_AI_TYPES, "BusinessCapability"}
         coverage = len(observed_types & expected_types) / len(expected_types)
         status = "AVAILABLE" if coverage == 1 else "PARTIAL" if links else "NOT_COLLECTED"
-        limitations = [] if status == "AVAILABLE" else [GateReason(
-            code="AI_SUPPLY_CHAIN_INCOMPLETE",
-            message="AI supply-chain coverage is incomplete; missing nodes are not inferred.",
-        )]
+        if status == "AVAILABLE":
+            limitations = []
+        elif links:
+            limitations = [GateReason(
+                code="AI_SUPPLY_CHAIN_INCOMPLETE",
+                message="AI supply-chain coverage is incomplete; missing nodes are not inferred.",
+            )]
+        else:
+            # An empty result here means nothing has been collected, not that the estate runs no
+            # AI. The vocabulary is registered in the ontology; no connector emits it yet, and
+            # saying which of those two is true is the whole difference for a reader.
+            limitations = [GateReason(
+                code="AI_SUPPLY_CHAIN_NOT_COLLECTED",
+                message=(
+                    "No connector currently emits agent, model, prompt, tool, or dataset "
+                    "evidence. The AI supply chain is uncollected rather than empty."
+                ),
+            )]
         return AISupplyChain(
             as_of=datetime.now(UTC), status=status, entities=list(entities.values()), links=links,
             coverage_ratio=coverage, limitations=limitations,
