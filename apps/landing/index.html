@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StackGraph — Read the estate back</title>
-<meta name="description" content="Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. StackGraph reads the estate back from source, with evidence under every conclusion.">
+<meta name="description" content="Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. StackGraph reads the estate back from source, simulates a change before it lands, and keeps evidence under every conclusion.">
 <meta property="og:title" content="StackGraph — Read the estate back">
-<meta property="og:description" content="Software estate intelligence: what you run, why it exists, what it depends on, where it runs, whether it is still viable, and what should change.">
+<meta property="og:description" content="Software estate intelligence: what you run, why it exists, what it depends on, where it runs, whether it is still viable, what a change would break, and what an agent is allowed to do about it.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -224,11 +224,12 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
 .plane.is-cur .lbl{fill:#F6F4EE}
 .plane.is-cur .cnt{fill:var(--snow-2)}
 #estate{transition:transform .85s var(--ease)}
-#discovery[data-step="1"] #estate{transform:translateY(225px)}
-#discovery[data-step="2"] #estate{transform:translateY(172px)}
-#discovery[data-step="3"] #estate{transform:translateY(120px)}
-#discovery[data-step="4"] #estate{transform:translateY(67px)}
-#discovery[data-step="5"] #estate{transform:translateY(15px)}
+#discovery[data-step="1"] #estate{transform:translateY(277px)}
+#discovery[data-step="2"] #estate{transform:translateY(225px)}
+#discovery[data-step="3"] #estate{transform:translateY(172px)}
+#discovery[data-step="4"] #estate{transform:translateY(120px)}
+#discovery[data-step="5"] #estate{transform:translateY(67px)}
+#discovery[data-step="6"] #estate{transform:translateY(15px)}
 .riser{opacity:0; transition:opacity .8s var(--ease) .15s}
 .riser.is-on{opacity:.55}
 
@@ -254,14 +255,32 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
 .ev-cls[data-c="OBSERVED"]{color:var(--oss)}
 .ev-cls[data-c="INFERRED"]{color:var(--int)}
 .ev-cls[data-c="EXTERNAL_MEASURED"]{color:var(--biz-lo)}
+.ev-cls[data-c="COHORT"],.ev-cls[data-c="ESCALATE"]{color:var(--int)}
+.ev-cls[data-c="MOTIF"],.ev-cls[data-c="CONDITIONAL"]{color:var(--biz-lo)}
+.ev-cls[data-c="OUTLIER"],.ev-cls[data-c="STOP"],.ev-cls[data-c="PROHIBITED"]{color:var(--danger)}
+.ev-cls[data-c="DIRECT"],.ev-cls[data-c="READ"]{color:var(--ent)}
+.ev-cls[data-c="TRANSITIVE"],.ev-cls[data-c="EXECUTE"]{color:var(--oss)}
+.ev-cls[data-c="CONTEXT"]{color:var(--ink-3)}
 .night .ev-cls[data-c="DECLARED"]{color:var(--ent-hi)}
 .night .ev-cls[data-c="OBSERVED"]{color:var(--oss-hi)}
 .night .ev-cls[data-c="INFERRED"]{color:var(--int-hi)}
 .night .ev-cls[data-c="EXTERNAL_MEASURED"]{color:var(--biz)}
+.night .ev-cls[data-c="COHORT"],.night .ev-cls[data-c="ESCALATE"]{color:var(--int-hi)}
+.night .ev-cls[data-c="MOTIF"],.night .ev-cls[data-c="CONDITIONAL"]{color:var(--biz)}
+.night .ev-cls[data-c="OUTLIER"],.night .ev-cls[data-c="STOP"],.night .ev-cls[data-c="PROHIBITED"]{color:var(--danger-hi)}
+.night .ev-cls[data-c="DIRECT"],.night .ev-cls[data-c="READ"]{color:var(--ent-hi)}
+.night .ev-cls[data-c="TRANSITIVE"],.night .ev-cls[data-c="EXECUTE"]{color:var(--oss-hi)}
+.night .ev-cls[data-c="CONTEXT"]{color:var(--snow-3)}
 .ev-src{color:var(--ink-3); overflow-wrap:anywhere}
 .night .ev-src{color:var(--snow-2)}
 .ev-val{color:var(--ink); white-space:nowrap; font-weight:500}
 .night .ev-val{color:var(--snow)}
+.ev-foot{
+  display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; padding:.7rem .95rem;
+  border-top:1px solid var(--rule); background:var(--sunken);
+  font-size:.6875rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);
+}
+.night .ev-foot{background:var(--night-2); border-top-color:var(--night-rule); color:var(--snow-3)}
 .conf{display:inline-flex; gap:2px; vertical-align:baseline; margin-right:.4rem}
 .conf i{width:5px; height:9px; background:currentColor; opacity:.22; display:inline-block; border-radius:1px}
 .conf i.f{opacity:1}
@@ -373,6 +392,77 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
 .migr-foot{display:flex; flex-wrap:wrap; gap:1.5rem; padding:.8rem 1rem; background:var(--night-2); border-top:1px solid var(--night-rule); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; color:var(--snow-3)}
 .migr-foot b{color:var(--snow); font-weight:500; letter-spacing:.04em}
 
+/* ---------- actor mix ---------- */
+.mix{
+  font-family:var(--mono); background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  margin:2.5rem 0; overflow:hidden;
+  box-shadow:0 1px 0 rgba(20,21,26,.04), 0 12px 30px -22px rgba(20,21,26,.5);
+}
+.mix-head{
+  display:flex; justify-content:space-between; gap:1rem; flex-wrap:wrap; align-items:center;
+  padding:.7rem .95rem; border-bottom:1px solid var(--rule); background:var(--sunken);
+  font-size:.6875rem; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3);
+}
+.mix-bar{display:flex; height:.85rem; margin:1rem .95rem .9rem; border-radius:3px; overflow:hidden; background:var(--sunken)}
+.mix-bar i{display:block; width:0; background:var(--tone); transition:width .9s var(--ease)}
+.mix.on .mix-bar i{width:var(--w)}
+.mix-key{display:flex; flex-wrap:wrap; gap:.5rem 1.35rem; padding:0 .95rem 1.05rem; font-size:.6875rem; letter-spacing:.06em; color:var(--ink-3)}
+.mix-key b{display:inline-block; width:.6rem; height:.6rem; border-radius:2px; margin-right:.45rem; vertical-align:0}
+
+/* ---------- graph metric grid ---------- */
+.metrics{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); gap:1px;
+  background:var(--night-rule); border:1px solid var(--night-rule); border-radius:10px;
+  overflow:hidden; margin:2.5rem 0; font-family:var(--mono);
+}
+.metrics div{background:var(--night-3); padding:1rem .95rem 1.05rem; display:flex; flex-direction:column; gap:.35rem}
+.metrics span{font-size:.6875rem; letter-spacing:.06em; color:var(--snow-3); line-height:1.35}
+.metrics strong{font-size:1.25rem; font-weight:500; color:#F6F4EE; letter-spacing:-.015em}
+.metrics small{font-size:.625rem; letter-spacing:.11em; text-transform:uppercase; color:var(--snow-3)}
+
+/* ---------- ask card ---------- */
+.ask{
+  font-family:var(--mono); background:var(--card); border:1px solid var(--rule); border-radius:10px;
+  overflow:hidden; margin:2.5rem 0;
+  box-shadow:0 1px 0 rgba(20,21,26,.04), 0 12px 30px -22px rgba(20,21,26,.5);
+}
+.ask-q{
+  font-family:var(--sans); font-size:1rem; font-weight:500; letter-spacing:-.012em; color:var(--ink);
+  padding:1.05rem .95rem .8rem; line-height:1.4;
+}
+.ask-meta{
+  display:flex; flex-wrap:wrap; gap:.45rem .6rem; padding:0 .95rem 1rem;
+  font-size:.625rem; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);
+}
+.ask-meta span{border:1px solid var(--rule); border-radius:999px; padding:.24rem .6rem}
+.ask-rows{border-top:1px solid var(--rule)}
+.ask-row{display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:.75rem; align-items:baseline; padding:.55rem .95rem; border-bottom:1px solid var(--rule); font-size:.78125rem}
+.ask-row:last-child{border-bottom:0}
+.ask-row .k{color:var(--ink); font-weight:500; overflow-wrap:anywhere}
+.ask-row .v{color:var(--ink-3); font-variant-numeric:tabular-nums; white-space:nowrap}
+.ask-row .c{font-size:.625rem; letter-spacing:.1em; color:var(--ent-lo); border:1px solid var(--ent-hi); border-radius:999px; padding:.16rem .45rem; white-space:nowrap; background:#F1F4F8}
+.ask-foot{
+  display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; padding:.7rem .95rem; border-top:1px solid var(--rule);
+  background:var(--sunken); font-size:.6875rem; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3);
+}
+@media (max-width:560px){ .ask-row{grid-template-columns:1fr auto; row-gap:.2rem} .ask-row .c{grid-column:1/-1; justify-self:start} }
+
+/* ---------- interpretation panel ---------- */
+.interp{
+  border:1px dashed var(--night-rule); border-radius:10px; background:transparent;
+  padding:1.1rem 1.2rem 1.2rem; margin:1.5rem 0 2.5rem;
+}
+.interp-head{
+  display:flex; flex-wrap:wrap; gap:.5rem 1.25rem; align-items:baseline;
+  font-family:var(--mono); font-size:.625rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--int-hi); margin-bottom:.7rem;
+}
+.interp-head em{font-style:normal; color:var(--snow-3)}
+.interp p{font-family:var(--serif); font-size:.9375rem; line-height:1.6; color:var(--snow-2); margin:0}
+
+/* ---------- night vocabulary strip ---------- */
+.night .vocab span{color:var(--snow-2); border-color:var(--night-rule)}
+
 /* ---------- closing ---------- */
 .close{padding:clamp(5rem,12vh,9rem) 0 clamp(3.5rem,8vh,6rem); text-align:left}
 .close h2{font-size:clamp(2.1rem,5vw,3.6rem); letter-spacing:-.032em; max-width:16ch; margin-bottom:1.6rem}
@@ -435,9 +525,10 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
   <nav>
     <a href="#discovery">Discovery</a>
     <a href="#evidence">Evidence</a>
-    <a href="#ecosystem">Ecosystem</a>
+    <a href="#shape">Shape</a>
     <a href="#impact">Impact</a>
     <a href="#portfolio">Portfolio</a>
+    <a href="#simulation">Simulation</a>
   </nav>
   <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
 </header>
@@ -450,7 +541,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
   <div class="wrap">
     <p class="kicker">Software estate intelligence</p>
     <h1>The code is writing itself.<span class="dim">Nobody is drawing the map.</span></h1>
-    <p class="dek">Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. <b>StackGraph reads the estate back from source</b> and keeps a live model of what you run, why it exists, what it depends on, where it runs, and what is worth changing.</p>
+    <p class="dek">Coding agents dropped the cost of producing software. The cost of understanding what got produced did not move. <b>StackGraph reads the estate back from source</b> and keeps a live model of what you run, why it exists, what it depends on, where it runs, what is worth changing, and what a proposed change would reach before anybody makes it.</p>
     <div class="hero-cta">
       <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
       <a class="btn" href="#discovery">Read the story</a>
@@ -459,6 +550,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
       <div>Read-only repository access<span>Minimal permissions</span></div>
       <div>Evidence class on every fact<span>Declared · Observed · Inferred</span></div>
       <div>Tenant-isolated<span>Shared OSS reference graph</span></div>
+      <div>Deterministic under the model<span>Findings stand without interpretation</span></div>
     </div>
   </div>
 </section>
@@ -469,7 +561,28 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
     <p class="lede dropcap rv">At 11:40 on a Tuesday night, an agent working on a payments service needed to debounce a form handler. It reached for the utility library it had seen most often, added the dependency, and moved on. The pull request was four lines long. The tests passed. A reviewer approved it the next morning without opening the lockfile.</p>
     <p class="rv" data-d="1">Every party behaved reasonably. The agent solved the problem it was given. The reviewer read the diff it was shown. And the estate changed shape without anyone recording that it had.</p>
     <p class="rv" data-d="2">Now multiply that by the number of agents currently committing to your repositories, running at a cadence no architecture review board was designed to sample.</p>
-    <p class="note rv" data-d="3">The enterprise problem is no longer that organizations have vulnerabilities. It is that they can no longer answer plain questions about their own software: what exists, what business function it serves, what it is built from, where it runs, whether the technology is still a sound bet, and what should change.</p>
+    <p class="rv" data-d="3">How many is that, exactly? Most organizations answer with a shrug. StackGraph classifies every change event by the kind of actor behind it and reports the mix.</p>
+
+    <div class="mix rv" data-d="3">
+      <div class="mix-head"><span>repo / payments-api</span><span>1,204 attributed events · 90 days</span></div>
+      <div class="mix-bar">
+        <i style="--w:38%; --tone:var(--ent)"></i>
+        <i style="--w:27%; --tone:var(--int)"></i>
+        <i style="--w:19%; --tone:var(--biz)"></i>
+        <i style="--w:11%; --tone:var(--oss)"></i>
+        <i style="--w:5%; --tone:#B8B5AB"></i>
+      </div>
+      <div class="mix-key">
+        <span><b style="background:var(--ent)"></b>By hand 38%</span>
+        <span><b style="background:var(--int)"></b>AI-assisted 27%</span>
+        <span><b style="background:var(--biz)"></b>Agent 19%</span>
+        <span><b style="background:var(--oss)"></b>Dependency bot 11%</span>
+        <span><b style="background:#B8B5AB"></b>Unattributed 5%</span>
+      </div>
+    </div>
+
+    <p class="rv">Each classification carries the basis it was made on. A commit trailer written by an agent platform is a scanned fact. Commit style read as probably-assisted is StackGraph's own inference, and the two never print as the same claim. The reading is per repository and per class. It is deliberately not a leaderboard of named individuals, because the question the product exists to answer is about the estate rather than about people.</p>
+    <p class="note rv">The enterprise problem is no longer that organizations have vulnerabilities. It is that they can no longer answer plain questions about their own software: what exists, what business function it serves, what it is built from, where it runs, whether the technology is still a sound bet, and what should change.</p>
   </div>
 </section>
 
@@ -484,7 +597,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
 <section class="stage night" id="discovery">
   <div class="stage-inner">
     <div class="viz">
-      <svg viewBox="0 0 760 640" role="img" aria-label="Five stacked planes of an enterprise software estate: repositories, code and technology, dependencies, deployment, and applications and business.">
+      <svg viewBox="0 0 760 745" role="img" aria-label="Six stacked planes of an enterprise software estate: repositories, code and technology, dependencies, deployment, applications and business, and the AI supply chain.">
         <defs>
           <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="7"/>
@@ -518,6 +631,13 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
             <line x1="237" y1="397" x2="220" y2="535"/>
             <line x1="330" y1="389" x2="379" y2="526"/>
             <line x1="243" y1="416" x2="251" y2="499"/>
+          </g>
+          <g class="riser" data-layer="6" stroke="#B09CCA" stroke-width="1.1">
+            <line x1="211" y1="508" x2="178" y2="624"/>
+            <line x1="297" y1="487" x2="232" y2="613"/>
+            <line x1="310" y1="521" x2="296" y2="600"/>
+            <line x1="220" y1="535" x2="259" y2="641"/>
+            <line x1="379" y1="526" x2="330" y2="631"/>
           </g>
           <g class="plane" data-layer="1" style="--tone:#92A9C9">
             <path class="face" d="M270 43 L470 95 L270 147 L70 95 Z" fill="#4A6FA5" fill-opacity=".085" stroke="#4A6FA5" stroke-opacity=".55" stroke-width="1"/>
@@ -650,6 +770,24 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
             <text class="lbl" x="492" y="512">APPLICATIONS &amp; BUSINESS</text>
             <text class="cnt" x="492" y="528">96 capabilities mapped</text>
           </g>
+          <g class="plane" data-layer="6" style="--tone:#B09CCA">
+            <path class="face" d="M270 568 L470 620 L270 672 L70 620 Z" fill="#7B5AA6" fill-opacity=".085" stroke="#7B5AA6" stroke-opacity=".55" stroke-width="1"/>
+            <g stroke="#7B5AA6" stroke-opacity=".45" stroke-width="1">
+              <line x1="232" y1="613" x2="296" y2="600"/>
+              <line x1="232" y1="613" x2="178" y2="624"/>
+              <line x1="296" y1="600" x2="330" y2="631"/>
+              <line x1="178" y1="624" x2="259" y2="641"/>
+              <line x1="259" y1="641" x2="232" y2="613"/>
+            </g>
+              <circle cx="232" cy="613" r="5.2" fill="#B09CCA"/>
+              <circle cx="296" cy="600" r="3.4" fill="#B09CCA"/>
+              <circle cx="178" cy="624" r="3.4" fill="#B09CCA"/>
+              <circle cx="330" cy="631" r="3.4" fill="none" stroke="#B09CCA" stroke-dasharray="2 2"/>
+              <circle cx="259" cy="641" r="3.4" fill="none" stroke="#B09CCA" stroke-dasharray="2 2"/>
+            <line x1="478" y1="620" x2="478" y2="620" stroke="#7B5AA6" stroke-opacity=".5" stroke-width="1"/>
+            <text class="lbl" x="492" y="617">AI SUPPLY CHAIN</text>
+            <text class="cnt" x="492" y="633">coverage 0.42 · partial</text>
+          </g>
         </g>
       </svg>
     </div>
@@ -657,7 +795,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
       <div class="step" data-index="1" style="--tone:#92A9C9">
         <p class="idx">01 / Sensor</p>
         <h3>Connect read-only and start at the repository</h3>
-        <p>A read-only connection to your repository host is the first sensor. StackGraph reads languages and their proportions, build systems, monorepo boundaries, service boundaries, ownership metadata, manifests, lockfiles, and infrastructure files. A repository is where the reading starts. It is not the answer.</p>
+        <p>A read-only connection to your repository host is the first sensor. StackGraph reads languages and their proportions, build systems, monorepo boundaries, service boundaries, ownership metadata, manifests, lockfiles, and infrastructure files. Every pass leaves a dated fingerprint of what the repository was at that revision, so the estate keeps a before as well as a now. A repository is where the reading starts. It is not the answer.</p>
       </div>
       <div class="step" data-index="2" style="--tone:#92A9C9">
         <p class="idx">02 / Technology</p>
@@ -672,12 +810,17 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
       <div class="step" data-index="4" style="--tone:#92A9C9">
         <p class="idx">04 / Deployment</p>
         <h3>Read the intended runtime out of the repository</h3>
-        <p>Dockerfiles, Compose, Kubernetes, Helm, Terraform, CloudFormation, Pulumi, and CI pipelines are normalized into compute type, environment, and provider. Declared intent now, observed runtime later, with the drift between them reported rather than averaged away.</p>
+        <p>Dockerfiles, Compose, Kubernetes, Helm, Terraform, CloudFormation, Pulumi, and CI pipelines are normalized into compute type, environment, and provider. Container images resolve only against an immutable digest. A mutable tag is recorded as inferred, <span style="font-family:var(--mono);font-size:.9em">latest</span> resolves to nothing at all and says so, and the drift between declared intent and observed runtime is reported rather than averaged away.</p>
       </div>
       <div class="step" data-index="5" style="--tone:#E5CB8E">
         <p class="idx">05 / Business</p>
         <h3>Attach the technology to something worth money</h3>
         <p>Applications map upward to capability, process, function, and value chain stage, from curated business maps, service catalogs, imported architecture data, and inference that carries its own confidence. This is the layer that turns a finding into a decision somebody owns.</p>
+      </div>
+      <div class="step" data-index="6" style="--tone:#B09CCA">
+        <p class="idx">06 / AI</p>
+        <h3>Read the AI supply chain as its own layer</h3>
+        <p>Datasets, features, models, agents, and the APIs and business processes they reach form a sixth layer, traced edge by edge from a column in a table to a capability on the business map. It arrives with a coverage ratio attached rather than as a finished picture, because on most estates today it is not one. This is the customer's AI supply chain. StackGraph's own intelligence is never counted in its place.</p>
       </div>
     </div>
   </div>
@@ -702,6 +845,17 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
     </div>
 
     <p class="rv">Raw observation and StackGraph's reading of it are stored apart. <span style="font-family:var(--mono);font-size:.88em">FACT: last release 4.2 years ago</span> is a different record from <span style="font-family:var(--mono);font-size:.88em">ASSESSMENT: maintenance health LOW</span>. An architect can argue with the second without anyone re-litigating the first, which is the only way this kind of conclusion survives contact with the team that owns the code.</p>
+    <p class="rv">Sources also disagree, and the honest answer is to say so. A Terraform file, a deploy pipeline, and a service catalog import will each name a different platform for the same service. Two of them are stale. Nothing in the data says which two.</p>
+
+    <div class="evidence rv">
+      <div class="ev-head"><span>contradiction / deployment platform</span><span>subject: invoice-render</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="DECLARED">DECLARED</span><span class="ev-src">terraform/prod/main.tf · 2026-08-02</span><span class="ev-val">ECS</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OBSERVED">OBSERVED</span><span class="ev-src">deploy pipeline run · 2026-08-27</span><span class="ev-val">EKS</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="INFERRED">INFERRED</span><span class="ev-src">service catalog import · 2025-11-14</span><span class="ev-val">EC2</span></div>
+      <div class="ev-foot"><span>Status open</span><span>3 current claims</span><span>14 entities affected</span><span>No winner declared</span></div>
+    </div>
+
+    <p class="rv">The ledger holds all three with their source, recency, confidence, and evidence, and picks none of them. A contradiction closes when a person resolves it with a written rationale, and while it stays open it is visible to everything downstream that would otherwise quote one of those claims as settled.</p>
     <p class="note rv">No material conclusion without evidence. A number on a screen that cannot open into the file, line, registry response, advisory, or curated record behind it does not belong on the screen.</p>
   </div>
 </section>
@@ -795,14 +949,79 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
       <div class="ev-row"><span class="ev-cls" data-c="INFERRED">INFERRED</span><span class="ev-src">candidate consolidation · 3 of 4</span><span class="ev-val"><span class="conf"><i class="f"></i><i class="f"></i><i></i></span>review</span></div>
     </div>
     <p class="rv">Candidates come from structural fingerprints, dependency and symbol usage, embeddings over the implementations themselves, and covering tests where they exist. Similarity is offered as a candidate for review and never as proof of equivalence, because the fourth implementation usually exists for a reason somebody in the building still remembers.</p>
+    <p class="rv">Sixteen deterministic rules run alongside the similarity work and need no model at all: cross-repository clones, vendored source sitting outside dependency management, version fragmentation, dependency-confusion exposure, license obligations, unused direct dependencies, and the plain hygiene gaps of no lockfile, no owners file, no tests. Each one carries the repositories it affects, how much of the relevant estate it could actually see, and a hash of the inputs that produced it, so the same estate produces the same list twice.</p>
     <p class="rv">Counted across the estate, the same signal produces a measure of technology entropy: how much variation exists per capability, which teams are introducing it, and whether it is growing. Variation is not automatically waste. It just has to be visible before anyone can argue about it.</p>
+  </div>
+</section>
+
+<!-- ============ GRAPH INTELLIGENCE ============ -->
+<section class="passage night" id="shape">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter five &middot; Shape</p>
+    <h2 class="rv">Some edges hold more than they look.</h2>
+    <p class="lede rv" data-d="1" style="color:var(--snow-2)">Every fact lands in PostgreSQL first. From there the estate is projected into a graph and put through a fixed set of algorithms on a schedule, so a structural question gets a structural answer instead of a summary of a summary.</p>
+  </div>
+
+  <div class="wrap fan rv" data-d="2" style="max-width:52rem">
+    <svg viewBox="0 0 760 300" role="img" aria-label="Two clusters of applications joined through a single shared library. Removing that one node separates the clusters.">
+      <g stroke="#4A6FA5" stroke-opacity=".5" stroke-width="1.1" fill="none">
+        <path d="M70 110 140 70M140 70 205 135M205 135 110 195M110 195 58 168M58 168 70 110M110 195 175 225M175 225 205 135M70 110 110 195"/>
+        <path d="M560 95 645 120M645 120 692 185M692 185 612 215M612 215 548 180M548 180 560 95M645 120 612 215M668 62 560 95M668 62 645 120"/>
+      </g>
+      <g stroke="#E08B84" stroke-opacity=".75" stroke-width="1.3" fill="none">
+        <path d="M205 135 380 150M175 225 380 150M140 70 380 150M380 150 560 95M380 150 548 180M380 150 612 215"/>
+      </g>
+      <g stroke="#B3261E" stroke-opacity=".45" stroke-width="1.2" stroke-dasharray="5 6" fill="none">
+        <path d="M380 26 380 104M380 214 380 268"/>
+      </g>
+      <g fill="#92A9C9">
+        <circle cx="70" cy="110" r="4.6"/><circle cx="140" cy="70" r="4.6"/><circle cx="205" cy="135" r="4.6"/>
+        <circle cx="110" cy="195" r="4.6"/><circle cx="175" cy="225" r="4.6"/><circle cx="58" cy="168" r="4.6"/>
+        <circle cx="560" cy="95" r="4.6"/><circle cx="645" cy="120" r="4.6"/><circle cx="692" cy="185" r="4.6"/>
+        <circle cx="612" cy="215" r="4.6"/><circle cx="548" cy="180" r="4.6"/><circle cx="668" cy="62" r="4.6"/>
+      </g>
+      <circle cx="380" cy="150" r="14" fill="none" stroke="#E08B84" stroke-opacity=".45" stroke-width="1"/>
+      <circle cx="380" cy="150" r="7.5" fill="#E08B84"/>
+      <g font-family="IBM Plex Mono, monospace" text-anchor="middle">
+        <text x="380" y="120" font-size="12" fill="#F6F4EE">shared-auth-client</text>
+        <text x="380" y="200" font-size="10" letter-spacing="1.3" fill="#E08B84">ARTICULATION POINT</text>
+        <text x="150" y="286" font-size="10.5" fill="#75736B">17 applications</text>
+        <text x="612" y="286" font-size="10.5" fill="#75736B">34 applications</text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="col">
+    <p class="rv">That is one internal library. Take it out and the estate falls into two halves that can no longer reach each other. Nothing in its dependency count says so, its maintenance is fine, and no vulnerability feed will ever mention it.</p>
+
+    <div class="metrics rv">
+      <div><span>Splits the estate if removed</span><strong>Yes</strong><small>99th estate percentile</small></div>
+      <div><span>How often on the path between others</span><strong>0.41</strong><small>96th estate percentile</small></div>
+      <div><span>How central</span><strong>0.018</strong><small>93rd estate percentile</small></div>
+      <div><span>Upstream impact</span><strong>43</strong><small>entities, maximum depth 6</small></div>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">The vocabulary stays plain on purpose. Betweenness centrality reads as how often this sits on the path between other things. An articulation point reads as splits the estate if removed. Every number carries the snapshot it was computed from and where it sits against the rest of your estate, and a metric taken from a projection that has fallen behind says so rather than passing quietly for current.</p>
+    <p class="rv" style="color:var(--snow-2)">Run the same analysis across everything and the estate stops being a list. Applications settle into cohorts that share a shape, a few sit far outside the cohort they belong to, and certain arrangements recur often enough to deserve names.</p>
+
+    <div class="evidence rv">
+      <div class="ev-head"><span>estate shape &middot; 214 applications</span><span>analysis 2026-09-02</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="COHORT">COHORT</span><span class="ev-src">thin service over a single datastore</span><span class="ev-val">68 apps</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="COHORT">COHORT</span><span class="ev-src">batch pipeline with no service surface</span><span class="ev-val">41 apps</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="COHORT">COHORT</span><span class="ev-src">fan-in integration hub</span><span class="ev-val">22 apps</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="OUTLIER">OUTLIER</span><span class="ev-src">partner-feed-gateway &middot; 61 dependencies, cohort median 9</span><span class="ev-val">99th</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="MOTIF">MOTIF</span><span class="ev-src">circular dependency, 4 members</span><span class="ev-val">3 found</span></div>
+      <div class="ev-foot"><span>Scored within cohort</span><span>Every row opens on its facts</span></div>
+    </div>
+
+    <p class="note rv">An outlier is a question rather than a verdict. Being the only application in its cohort carrying sixty-one dependencies might be an integration layer doing exactly what integration layers do. The measure says where to look. The evidence under it says what you are looking at.</p>
   </div>
 </section>
 
 <!-- ============ OSS ECOSYSTEM ============ -->
 <section class="passage night" id="ecosystem">
   <div class="col">
-    <p class="kicker rule-kicker rv">Chapter five · The outside world</p>
+    <p class="kicker rule-kicker rv">Chapter six · The outside world</p>
     <h2 class="rv">The ecosystem already ran the experiment.</h2>
     <p class="lede rv" data-d="1" style="color:var(--snow-2)">Millions of public repositories record which technologies were adopted, which were abandoned, what replaced them, and roughly what the swap cost. StackGraph maintains a reference graph around the technologies your estate actually contains rather than crawling everything, then keeps release recency, release cadence, maintainer activity and concentration, archive state, license, runtime compatibility, adoption trend, and co-occurrence against each one.</p>
     <p class="rv" data-d="2" style="color:var(--snow-2)">The most useful part of it is the migration graph. Watch a public repository where one technology leaves and another arrives while the behavior around it stays put. Aggregate thousands of those and a migration stops being folklore.</p>
@@ -833,7 +1052,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
 <!-- ============ VIABILITY ============ -->
 <section class="passage night" style="padding-top:0">
   <div class="col">
-    <p class="kicker rule-kicker rv">Chapter six · Viability</p>
+    <p class="kicker rule-kicker rv">Chapter seven · Viability</p>
     <h2 class="rv">A package can be secure and still be a bad bet.</h2>
     <p class="lede rv" data-d="1" style="color:var(--snow-2)">Vulnerability management asks one question and answers it well. It has nothing to say about a dependency with no known CVEs, no maintainer, no release since 2022, and no compatibility story for the runtime you are moving to. That package passes every scanner in the building.</p>
 
@@ -904,10 +1123,33 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
   </div>
 </section>
 
+<!-- ============ ASK ============ -->
+<section class="passage" style="background:var(--sunken); border-block:1px solid var(--rule)" id="ask">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter eight &middot; Questions</p>
+    <h2 class="rv">Ask in English. Get the query, not a paragraph.</h2>
+    <p class="lede rv" data-d="1">A question is routed rather than improvised. Semantic search narrows it to the entities you probably meant, the answer itself is computed in SQL or in the graph, and the language model is allowed to describe what came back and nothing else.</p>
+
+    <div class="ask rv" data-d="2">
+      <div class="ask-q">Which vulnerabilities are actually reachable in production Tier-1 applications?</div>
+      <div class="ask-meta"><span>Resolved 3 entities</span><span>Answered from the graph</span><span>Table</span></div>
+      <div class="ask-rows">
+        <div class="ask-row"><span class="k">Billing Platform &middot; xml-parse@1.4.2</span><span class="v">depth 3</span><span class="c">6 facts</span></div>
+        <div class="ask-row"><span class="k">Customer Profile &middot; img-resize@0.9.1</span><span class="v">depth 1</span><span class="c">4 facts</span></div>
+        <div class="ask-row"><span class="k">Partner Feed Gateway &middot; xml-parse@1.4.2</span><span class="v">depth 2</span><span class="c">5 facts</span></div>
+      </div>
+      <div class="ask-foot"><span>Snapshot 2026-09-02</span><span>Reachability limited to scanned ecosystems</span><span>2 repositories excluded</span></div>
+    </div>
+
+    <p class="rv">Every row opens onto the facts behind it, and the limitations travel with the answer rather than sitting in a footnote somewhere else. A question the estate cannot answer comes back marked unsupported. It does not come back as a confident paragraph with nothing underneath it.</p>
+    <p class="note rv">The same reading is available to your own agents over a machine interface, under the same tenant boundary and the same evidence rules. An agent that can consult the estate before it commits is a smaller problem than one that cannot.</p>
+  </div>
+</section>
+
 <!-- ============ PORTFOLIO ============ -->
 <section class="passage" id="portfolio">
   <div class="col">
-    <p class="kicker rule-kicker rv">Chapter seven · Allocation</p>
+    <p class="kicker rule-kicker rv">Chapter nine · Allocation</p>
     <h2 class="rv">Where the next ten million goes.</h2>
     <p class="lede rv" data-d="1">Findings without ranking are a backlog, and backlogs get funded last. Modernization is an allocation problem: business importance weighed against the viability gap and the opportunity, discounted by confidence, divided by what the migration will actually cost.</p>
   </div>
@@ -943,10 +1185,68 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
   </div>
 </section>
 
+<!-- ============ SIMULATION ============ -->
+<section class="passage night" id="simulation">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter ten &middot; Consequence</p>
+    <h2 class="rv">Find out what a change reaches before it lands.</h2>
+    <p class="lede rv" data-d="1" style="color:var(--snow-2)">Intent is compiled, not obeyed. A request names one predicate against a subject the estate actually contains, and if either half fails to ground, nothing runs. There is no simulation of a change that could not be expressed in the first place.</p>
+
+    <div class="vocab rv" data-d="2">
+      <span>UPGRADE</span><span>REPLACE</span><span>REMOVE</span><span>DEPRECATE</span><span>MIGRATE</span><span>MOVE</span>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2); margin-top:2rem">Six verbs, against packages, runtimes, frameworks, APIs, databases, and services. The vocabulary stays small on purpose: broad verbs like change or improve have no deterministic meaning, so they are not offered. Which versions a package can move to comes from that ecosystem's own registry rather than from a list somebody maintains by hand.</p>
+
+    <div class="evidence rv">
+      <div class="ev-head"><span>UPGRADE package &middot; xml-parse &rarr; 2.4.0</span><span>scope: estate</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="DIRECT">DIRECT</span><span class="ev-src">billing/invoice-pdf &middot; declared range ^1.4</span><span class="ev-val">HIGH</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="TRANSITIVE">TRANSITIVE</span><span class="ev-src">partner-feed-gateway &rarr; doc-kit &rarr; xml-parse</span><span class="ev-val">MEDIUM</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="CONTEXT">CONTEXT</span><span class="ev-src">Billing Platform &middot; criticality 5 &middot; 2 prod environments</span><span class="ev-val">INFO</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="STOP">STOP</span><span class="ev-src">legacy-reporting &middot; lockfile ecosystem not parsed</span><span class="ev-val">LIMITED</span></div>
+      <div class="ev-foot"><span>Rule set v7, pinned</span><span>Result sha256:9f3c&hellip;</span><span>Watermark 2026-09-02T04:11Z</span></div>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">Findings are typed. A direct hit is where the change lands. A transitive one is where it arrives without anybody asking for it. Context is what the change happens to be standing next to. A stop is where the walk ran out of evidence and declined to guess, which is the row most tools leave out entirely.</p>
+
+    <div class="interp rv">
+      <div class="interp-head"><span>Interpretation</span><em>cites findings 1, 2, 4 &middot; provider v3 &middot; status available</em></div>
+      <p>The upgrade is contained to two applications with a third unverified. Roll billing/invoice-pdf first, since it carries the declared range and the only direct call sites. Verify XML entity handling in the invoice renderer before promoting past staging. Coverage for legacy-reporting is unavailable, so treat its absence from this plan as unknown rather than clear.</p>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">Interpretation is a separate object with its own status. It may cite only findings that exist, it is stamped with the versions that produced it, and it can be absent, unavailable, or quarantined without taking the findings down with it. The plan stands without the prose.</p>
+    <p class="note rv">Simulation does not execute anything. It produces a pinned, hashed, replayable record of what a change would reach, computed against a known watermark of the estate. Run it again on the same inputs and it returns the same answer, or it tells you the estate moved underneath it.</p>
+  </div>
+</section>
+
+<!-- ============ AGENT AUTHORITY ============ -->
+<section class="passage night" id="authority" style="padding-top:0">
+  <div class="col">
+    <p class="kicker rule-kicker rv">Chapter eleven &middot; Authority</p>
+    <h2 class="rv">The agent from the first page has to ask now.</h2>
+    <p class="lede rv" data-d="1" style="color:var(--snow-2)">An actor that wants to change something compiles a capability envelope before it acts: what it is trying to do, the entities it names, the environment, the risk tier, and the evidence it is relying on. StackGraph answers with allow, constrain, escalate, or deny, and the answer carries reasons and an expiry.</p>
+
+    <div class="evidence rv" data-d="2">
+      <div class="ev-head"><span>envelope / release-agent</span><span>tier 1 &middot; staging &middot; expires in 42 min</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="READ">READ</span><span class="ev-src">read entities, dependencies, and findings in scope</span><span class="ev-val">allowed</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="EXECUTE">EXECUTE</span><span class="ev-src">open a pull request against billing/invoice-pdf</span><span class="ev-val">allowed</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="CONDITIONAL">CONDITIONAL</span><span class="ev-src">move a direct dependency, simulation required first</span><span class="ev-val">conditional</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="ESCALATE">ESCALATE</span><span class="ev-src">anything reaching a Tier-1 production deployment</span><span class="ev-val">human</span></div>
+      <div class="ev-row"><span class="ev-cls" data-c="PROHIBITED">PROHIBITED</span><span class="ev-src">act on invoice-render while its platform is contradicted</span><span class="ev-val">denied</span></div>
+      <div class="ev-foot"><span>Decision CONSTRAIN</span><span>2 open contradictions cited</span><span>Compiled sha256:41ba&hellip;</span></div>
+    </div>
+
+    <p class="rv" style="color:var(--snow-2)">The last row is the ledger from chapter two doing work. An unresolved contradiction about where a service runs is a reason to withhold authority over that service, not a footnote to file. The envelope names the contradictions it is reacting to, so the way to widen the permission is to go and resolve them.</p>
+    <p class="rv" style="color:var(--snow-2)">One control revokes every active envelope at once, and that path is drilled on a schedule rather than assumed to work. Authorized activity is recorded as it happens rather than reconstructed afterwards from logs.</p>
+    <p class="rv" style="color:var(--snow-2)">Then the loop closes. When a change does land, StackGraph records what actually happened beside what it predicted: whether it held, whether it was rolled back, whether a person had to intervene, and what it touched that no finding mentioned. A platform that predicts consequences should be scored against them.</p>
+    <p class="note rv">None of this slows down writing code. It gives the estate the ability to say no with a reason attached, which is the thing that was missing on the Tuesday night at the top of this page.</p>
+  </div>
+</section>
+
 <!-- ============ NEGATIVE SPACE / CANVAS ============ -->
 <section class="passage" style="background:var(--sunken); border-block:1px solid var(--rule)">
   <div class="col">
-    <p class="kicker rule-kicker rv">Chapter eight · Absence</p>
+    <p class="kicker rule-kicker rv">Chapter twelve · Absence</p>
     <h2 class="rv">An empty result is not a clean bill of health.</h2>
     <p class="lede rv" data-d="1">Every scanner in this category enumerates things that exist. Ask one what your estate is missing and it returns nothing, which the reader takes as reassurance when it usually means unobserved. The Architecture Canvas holds a fixed frame of architectural concerns and fills it from evidence, so absence has somewhere to appear.</p>
   </div>
@@ -989,7 +1289,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
   <div class="col">
     <p class="kicker rule-kicker rv">Begin</p>
     <h2 class="rv">Point it at one repository.</h2>
-    <p class="dek rv" data-d="1">Grant read-only access, point StackGraph at a single repository, and watch it resolve into technologies, dependencies, deployment targets, and the capabilities it serves. The estate view is the same reading, repeated.</p>
+    <p class="dek rv" data-d="1">Grant read-only access, point StackGraph at a single repository, and watch it resolve into technologies, dependencies, deployment targets, and the capabilities it serves. The estate view is the same reading, repeated. Simulation and agent authority arrive with the second repository, once a change has somewhere to travel.</p>
     <div class="close-cta rv" data-d="2">
       <button class="btn btn-solid" type="button" disabled>Connect a repository</button>
       <a class="btn" href="#">Read the specification</a>
@@ -1001,7 +1301,7 @@ button.btn{appearance:none; -webkit-appearance:none; margin:0; line-height:1.2}
     <div class="col foot-in">
       <span>StackGraph · Software estate intelligence</span>
       <span class="foot-links">
-        <a href="#discovery">Discovery</a><a href="#evidence">Evidence</a><a href="#ecosystem">Ecosystem</a><a href="#impact">Impact</a><a href="#portfolio">Portfolio</a>
+        <a href="#discovery">Discovery</a><a href="#evidence">Evidence</a><a href="#shape">Shape</a><a href="#ecosystem">Ecosystem</a><a href="#impact">Impact</a><a href="#portfolio">Portfolio</a><a href="#simulation">Simulation</a><a href="#authority">Authority</a>
       </span>
     </div>
     <div class="col foot-by">
