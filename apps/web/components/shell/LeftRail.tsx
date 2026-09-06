@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   IconActivityHeartbeat,
   IconApps,
+  IconGitBranch,
   IconChecklist,
   IconHierarchy3,
   IconInfoCircle,
@@ -46,6 +47,7 @@ const GROUPS: RailGroup[] = [
       { href: "/estate", label: "Estate", icon: IconLayoutDashboard },
       { href: "/business-map", label: "Business Map", icon: IconHierarchy3 },
       { href: "/applications", label: "Applications", icon: IconApps },
+      { href: "/repositories", label: "Repositories", icon: IconGitBranch },
       { href: "/technologies", label: "Technologies", icon: IconStack2 },
       { href: "/architecture", label: "Architecture", icon: IconLayoutGrid },
       { href: "/ask", label: "Ask", icon: IconMessageQuestion },

@@ -11,6 +11,7 @@ import { DeterministicInsightsPanel } from "@/components/insights/DeterministicI
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
 import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
 import { ChangeHistory } from "@/features/intelligence/ChangeHistory";
+import { RepositoryFingerprint } from "@/features/intelligence/RepositoryFingerprint";
 import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
 import { RecommendationFocus } from "./RecommendationFocus";
 import { RepositoryActivityPanel } from "./RepositoryActivityPanel";
@@ -168,6 +169,8 @@ export default function RepositoryPage({
         graphHref={`/repositories/${id}/graph`}
         compact
       />
+
+      <RepositoryFingerprint repositoryId={id} repositoryName={data.repository.name} />
 
       <CriticalEdges entityId={id} />
 
