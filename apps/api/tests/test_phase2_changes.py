@@ -80,17 +80,20 @@ class CompilerDatabase:
                 "canonical_key": "pkg:npm/demo-package", "package_name": "demo-package",
                 "evidence_fact_ids": [FACT_ID],
             }]
+        if "count(DISTINCT f.subject_entity_id)::int repositories" in query:
+            # The estate's own version spread, which decides the consolidation target.
+            return [{"version": self.observed_version, "repositories": 3}]
         if "SELECT e.id,e.canonical_key,pri.package_version" in query:
             return [
                 {
                     "id": TARGET_ID, "canonical_key": "pkg:npm/demo-package@2.0.0",
                     "package_version": "2.0.0", "observed_at": NOW,
-                    "registry_key": "npm-public",
+                    "registry_key": "npm-public", "support_status": "SUPPORTED",
                 },
                 {
                     "id": SECOND_TARGET_ID, "canonical_key": "pkg:npm/demo-package@3.0.0",
                     "package_version": "3.0.0", "observed_at": NOW,
-                    "registry_key": "npm-public",
+                    "registry_key": "npm-public", "support_status": "UNKNOWN",
                 },
             ]
         if "SELECT f.id fact_id,consumer.id" in query:
@@ -376,3 +379,62 @@ def test_a_predicate_with_no_registered_capability_refuses_compilation() -> None
 
     assert result.gate.state == "BLOCKED"
     assert "ACTION_NOT_ENABLED" in [reason.code for reason in result.gate.reasons]
+
+
+def test_target_list_labels_the_consolidation_target_from_the_estate_spread() -> None:
+    database = CompilerDatabase(observed_version="2.0.0")
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["2.0.0"].recommendation == "CONSOLIDATE"
+    assert by_version["2.0.0"].observed_repository_count == 3
+    assert "3 repositories already run this version" in by_version["2.0.0"].recommendation_detail
+    # 3.0.0 is higher and nothing runs it, so it is the candidate rather than the safe target.
+    assert by_version["3.0.0"].observed_repository_count == 0
+
+
+def test_support_status_is_read_rather_than_assumed() -> None:
+    database = CompilerDatabase(observed_version="2.0.0")
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["2.0.0"].support == "SUPPORTED"
+    # Unknown support is not supported. Silence is not a clearance.
+    assert by_version["3.0.0"].support == "UNKNOWN"
+
+
+def test_coverage_says_when_a_target_list_is_only_what_the_estate_runs() -> None:
+    class EstateOnlyDatabase(CompilerDatabase):
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            rows = await super().fetch_all(query, params, tenant_id=tenant_id)
+            if "count(DISTINCT f.subject_entity_id)::int repositories" in query:
+                # Every collected version is one the estate runs.
+                return [
+                    {"version": "2.0.0", "repositories": 3},
+                    {"version": "3.0.0", "repositories": 1},
+                ]
+            return rows
+
+    result = asyncio.run(ReadModelStore(EstateOnlyDatabase()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    assert result.coverage is not None
+    assert result.coverage.source == "ESTATE_OBSERVED"
+    assert result.coverage.registry_enumeration == "NOT_COLLECTED"
+    # A short list must not read as a short registry.
+    assert "TARGET_PROVIDER_ESTATE_ONLY" in [item.code for item in result.limitations]
+
+
+def test_coverage_reports_registry_enrichment_when_a_target_exceeds_the_estate() -> None:
+    result = asyncio.run(ReadModelStore(CompilerDatabase(observed_version="2.0.0")).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    assert result.coverage is not None
+    assert result.coverage.registry_enumeration == "AVAILABLE"
+    assert "TARGET_PROVIDER_ESTATE_ONLY" not in [item.code for item in result.limitations]

@@ -16536,6 +16536,40 @@
         "title": "SimulationRunModel",
         "type": "object"
       },
+      "TargetCoverage": {
+        "additionalProperties": false,
+        "description": "What the target list was drawn from, so a short list is not read as a short registry.\n\n\u00a79.1 forbids partial input from asserting absence. The estate is not a registry, and a\nversion nobody in the estate runs is missing from this list because it was never collected,\nnot because it does not exist.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "registry_enumeration": {
+            "default": "NOT_COLLECTED",
+            "enum": [
+              "AVAILABLE",
+              "NOT_COLLECTED"
+            ],
+            "title": "Registry Enumeration",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "ESTATE_OBSERVED",
+              "REGISTRY_ENUMERATED",
+              "MIXED"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "detail"
+        ],
+        "title": "TargetCoverage",
+        "type": "object"
+      },
       "TaxonomySummary": {
         "additionalProperties": false,
         "properties": {
@@ -17604,6 +17638,34 @@
             "title": "Observed At",
             "type": "string"
           },
+          "observed_repository_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Observed Repository Count",
+            "type": "integer"
+          },
+          "recommendation": {
+            "default": "NONE",
+            "enum": [
+              "CONSOLIDATE",
+              "CANDIDATE",
+              "LATEST_KNOWN",
+              "NONE"
+            ],
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "recommendation_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation Detail"
+          },
           "source": {
             "minLength": 1,
             "title": "Source",
@@ -17614,7 +17676,8 @@
             "enum": [
               "SUPPORTED",
               "UNKNOWN",
-              "UNSUPPORTED"
+              "UNSUPPORTED",
+              "END_OF_LIFE"
             ],
             "title": "Support",
             "type": "string"
@@ -17644,6 +17707,16 @@
             "default": "1.0.0",
             "title": "Contract Version",
             "type": "string"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TargetCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "limitations": {
             "items": {

@@ -32,6 +32,13 @@ import styles from "./ChangeCommandPalette.module.css";
 
 type LocalState = "EMPTY" | "RESOLVING" | "TOKENISED" | "COMPILED";
 
+/** Sentence case, never a lower-cased enum. */
+const TARGET_RECOMMENDATION: Record<string, string> = {
+  CONSOLIDATE: "Consolidate the estate",
+  CANDIDATE: "Candidate upgrade",
+  LATEST_KNOWN: "Latest collected",
+};
+
 export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -301,6 +308,13 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                           <span>
                             <strong className="sg-mono">{target.version}</strong>
                             <small>{target.source} · observed {new Date(target.observed_at).toLocaleDateString()}</small>
+                            {/* §6: say why a version is worth choosing, not just that it exists. */}
+                            {target.recommendation && target.recommendation !== "NONE" ? (
+                              <small className={styles.targetReason}>
+                                {TARGET_RECOMMENDATION[target.recommendation]}
+                                {target.recommendation_detail ? ` · ${target.recommendation_detail}` : ""}
+                              </small>
+                            ) : null}
                           </span>
                           <span className={styles.axes}>
                             <span data-support={target.support ?? "UNKNOWN"}>{target.support ?? "UNKNOWN"}</span>
@@ -310,6 +324,10 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                       ))}
                     </div>
                   )}
+                  {/* A short list must not read as a short registry. */}
+                  {targets.data?.coverage?.registry_enumeration === "NOT_COLLECTED" ? (
+                    <p className={styles.coverageNote} role="note">{targets.data.coverage.detail}</p>
+                  ) : null}
                 </section>
 
                 <section className={`${styles.section} ${validationFields.has("scope_id") ? styles.fieldError : ""}`} aria-labelledby="scope-heading">

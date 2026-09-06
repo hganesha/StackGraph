@@ -2585,7 +2585,25 @@ class ValidTarget(ContractModel):
     source: str = Field(min_length=1)
     observed_at: datetime
     freshness: FreshnessStatus
-    support: Literal["SUPPORTED", "UNKNOWN", "UNSUPPORTED"] = "UNKNOWN"
+    support: Literal["SUPPORTED", "UNKNOWN", "UNSUPPORTED", "END_OF_LIFE"] = "UNKNOWN"
+    # §6 asks the target list to say why each candidate is worth choosing rather than
+    # presenting an undifferentiated list of version strings.
+    recommendation: Literal["CONSOLIDATE", "CANDIDATE", "LATEST_KNOWN", "NONE"] = "NONE"
+    recommendation_detail: str | None = None
+    observed_repository_count: int = Field(default=0, ge=0)
+
+
+class TargetCoverage(ContractModel):
+    """What the target list was drawn from, so a short list is not read as a short registry.
+
+    §9.1 forbids partial input from asserting absence. The estate is not a registry, and a
+    version nobody in the estate runs is missing from this list because it was never collected,
+    not because it does not exist.
+    """
+
+    source: Literal["ESTATE_OBSERVED", "REGISTRY_ENUMERATED", "MIXED"]
+    registry_enumeration: Literal["AVAILABLE", "NOT_COLLECTED"] = "NOT_COLLECTED"
+    detail: str
 
 
 class ValidTargetList(ContractModel):
@@ -2594,6 +2612,7 @@ class ValidTargetList(ContractModel):
     targets: list[ValidTarget]
     policy_version: str = Field(min_length=1)
     page_info: PageInfo
+    coverage: TargetCoverage | None = None
     limitations: list[GateReason] = Field(default_factory=list)
 
 

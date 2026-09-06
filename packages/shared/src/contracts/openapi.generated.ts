@@ -2705,6 +2705,12 @@ export interface SimulationRunModel {
   status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "LIMITED" | "NOT_SIMULATABLE" | "FAILED" | "CANCELLED";
 }
 
+export interface TargetCoverage {
+  detail: string;
+  registry_enumeration?: "AVAILABLE" | "NOT_COLLECTED";
+  source: "ESTATE_OBSERVED" | "REGISTRY_ENUMERATED" | "MIXED";
+}
+
 export interface TaxonomySummary {
   key: string;
   name: string;
@@ -2873,13 +2879,17 @@ export interface ValidTarget {
   entity_id: string;
   freshness: "FRESH" | "STALE" | "UNKNOWN";
   observed_at: string;
+  observed_repository_count?: number;
+  recommendation?: "CONSOLIDATE" | "CANDIDATE" | "LATEST_KNOWN" | "NONE";
+  recommendation_detail?: string | null;
   source: string;
-  support?: "SUPPORTED" | "UNKNOWN" | "UNSUPPORTED";
+  support?: "SUPPORTED" | "UNKNOWN" | "UNSUPPORTED" | "END_OF_LIFE";
   version: string;
 }
 
 export interface ValidTargetList {
   contract_version?: "1.0.0";
+  coverage?: TargetCoverage | null;
   limitations?: Array<GateReason>;
   page_info: PageInfo;
   policy_version: string;

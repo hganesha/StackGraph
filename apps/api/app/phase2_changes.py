@@ -51,6 +51,7 @@ from app.models import (
     QuarantinedClaim,
     SimulationInterpretation,
     SimulationRunModel,
+    TargetCoverage,
     ValidTarget,
     ValidTargetList,
     VersionDistribution,
@@ -67,6 +68,12 @@ _CLASSIFICATION_ORDER = ("DIRECT", "TRANSITIVE", "CONTEXT", "STOP", "INFORMATION
 _IMPACT_SEVERITY = {"DIRECT": "MEDIUM", "TRANSITIVE": "MEDIUM", "CONTEXT": "LOW"}
 # An interpretation outage must not hold a completed deterministic result hostage.
 _INTERPRETATION_TIMEOUT_SECONDS = 30
+# Registries and assessments spell end-of-life several ways; the contract has one word for it.
+_SUPPORT_STATUS = {
+    "SUPPORTED": "SUPPORTED", "ACTIVE": "SUPPORTED", "CURRENT": "SUPPORTED",
+    "UNSUPPORTED": "UNSUPPORTED", "DEPRECATED": "UNSUPPORTED",
+    "END_OF_LIFE": "END_OF_LIFE", "EOL": "END_OF_LIFE",
+}
 _INTENT = re.compile(
     r"^\s*upgrade\s+(?P<subject>.+?)\s+to\s+(?P<target>[^\s]+)(?:\s+(?:in|within)\s+(?P<scope>.+))?\s*$",
     re.IGNORECASE,
@@ -577,6 +584,14 @@ class Phase2ChangeMixin:
     async def valid_targets(
         self, entity_id: UUID, *, tenant_id: UUID | None, limit: int,
     ) -> ValidTargetList:
+        """Enumerate the exact versions this package may be moved to, and say why each matters.
+
+        §6 wants more than a list of version strings: the estate's own spread, a consolidation
+        target, a candidate upgrade, and an explicit statement of what the list was drawn from.
+        Support status is read from the governed assessment rather than assumed, because
+        "unknown support" and "supported" are different answers and only one of them is safe to
+        infer from silence.
+        """
         resolution, package_name = await self._package_resolution(
             tenant_id=tenant_id, subject_id=entity_id, query=None,
         )
@@ -586,20 +601,97 @@ class Phase2ChangeMixin:
             """
             SELECT e.id,e.canonical_key,pri.package_version,
                    coalesce(pri.last_seen_at,pri.first_seen_at,e.updated_at) observed_at,
-                   registry.registry_key
+                   registry.registry_key,
+                   upper(coalesce(
+                     support.categorical_value, e.properties->>'support_status', 'UNKNOWN'
+                   )) support_status
             FROM package_registry_identity pri
             JOIN package_registry registry ON registry.id=pri.package_registry_id
             JOIN entity e ON e.id=pri.entity_id
+            LEFT JOIN LATERAL (
+              SELECT categorical_value FROM assessment
+              WHERE subject_entity_id=e.id AND status='CURRENT' AND valid_to IS NULL
+                AND lower(dimension) IN ('support','support_status','lifecycle')
+                AND categorical_value IS NOT NULL
+              ORDER BY valid_from DESC LIMIT 1
+            ) support ON true
             WHERE lower(pri.package_name)=lower(%s) AND pri.package_version IS NOT NULL
             """,
             (package_name,), tenant_id=tenant_id,
         )
         rows.sort(key=lambda row: _version_key(row["package_version"]), reverse=True)
-        targets = [ValidTarget(
-            entity_id=row["id"], version=row["package_version"], canonical_key=row["canonical_key"],
-            source=row["registry_key"], observed_at=row["observed_at"],
-            freshness=_freshness(row["observed_at"]), support="UNKNOWN",
-        ) for row in rows[:limit]]
+        observed = await self.database.fetch_all(
+            """
+            SELECT coalesce(dr.resolved_version,pri.package_version,
+                     f.properties->>'resolved_version') version,
+                   count(DISTINCT f.subject_entity_id)::int repositories
+            FROM fact_assertion f
+            JOIN entity consumer ON consumer.id=f.subject_entity_id
+                                AND consumer.entity_type='Repository'
+            JOIN package_registry_identity pri ON pri.entity_id=f.object_entity_id
+            LEFT JOIN dependency_resolution dr ON dr.fact_assertion_id=f.id
+            WHERE f.tenant_id=%s AND f.predicate='DEPENDS_ON' AND f.system_to IS NULL
+              AND lower(pri.package_name)=lower(%s)
+            GROUP BY 1
+            """,
+            (tenant_id, package_name), tenant_id=tenant_id,
+        )
+        counts = {
+            str(row["version"]): int(row["repositories"])
+            for row in observed if row["version"]
+        }
+        # The version the most repositories already run is the one an upgrade can converge on
+        # without introducing a version nothing in the estate has exercised.
+        consolidate = max(counts, key=lambda value: (counts[value], _version_key(value))) if counts else None
+        candidates = [
+            row["package_version"] for row in rows
+            if row["support_status"] not in {"UNSUPPORTED", "END_OF_LIFE", "EOL"}
+        ]
+        latest = candidates[0] if candidates else None
+
+        targets: list[ValidTarget] = []
+        for row in rows[:limit]:
+            version = row["package_version"]
+            support = _SUPPORT_STATUS.get(row["support_status"], "UNKNOWN")
+            if version == latest and version != consolidate:
+                recommendation = "LATEST_KNOWN"
+                detail = "The highest version StackGraph has collected for this package."
+            elif version == consolidate:
+                recommendation = "CONSOLIDATE"
+                detail = (
+                    f"{counts[version]} repositories already run this version, so converging "
+                    "here introduces no version the estate has not exercised."
+                )
+            elif counts and version not in counts:
+                recommendation = "CANDIDATE"
+                detail = "No repository runs this version yet."
+            else:
+                recommendation = "NONE"
+                detail = None
+            targets.append(ValidTarget(
+                entity_id=row["id"], version=version, canonical_key=row["canonical_key"],
+                source=row["registry_key"], observed_at=row["observed_at"],
+                freshness=_freshness(row["observed_at"]), support=support,
+                recommendation=recommendation, recommendation_detail=detail,
+                observed_repository_count=counts.get(version, 0),
+            ))
+
+        # Being explicit about where the list came from is the difference between "there are no
+        # newer versions" and "no newer version has been collected". Only the second is true.
+        enumerated = any(target.observed_repository_count == 0 for target in targets)
+        coverage = TargetCoverage(
+            source="MIXED" if enumerated and counts else (
+                "REGISTRY_ENUMERATED" if enumerated else "ESTATE_OBSERVED"
+            ),
+            registry_enumeration="AVAILABLE" if enumerated else "NOT_COLLECTED",
+            detail=(
+                "Targets include versions no repository runs, so registry enrichment has "
+                "reached this package."
+                if enumerated else
+                "Every target is a version the estate already runs. A newer release may exist "
+                "that registry enrichment has not collected."
+            ),
+        )
         limitations = []
         if not targets:
             limitations.append(GateReason(
@@ -611,9 +703,18 @@ class Phase2ChangeMixin:
                 code="TARGET_PROVIDER_STALE",
                 message="Target metadata is older than the active freshness policy.",
             ))
+        if targets and not enumerated:
+            limitations.append(GateReason(
+                code="TARGET_PROVIDER_ESTATE_ONLY",
+                message=(
+                    "Targets are limited to versions already observed in the estate; a newer "
+                    "release may exist that has not been collected."
+                ),
+            ))
         return ValidTargetList(
             subject=resolution.entity, targets=targets, policy_version=PROVIDER_VERSION,
-            page_info=PageInfo(has_next_page=len(rows) > limit), limitations=limitations,
+            page_info=PageInfo(has_next_page=len(rows) > limit), coverage=coverage,
+            limitations=limitations,
         )
 
     async def scopes(self, entity_id: UUID, *, tenant_id: UUID | None) -> ChangeScopeList:

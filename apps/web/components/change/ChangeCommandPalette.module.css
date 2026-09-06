@@ -275,3 +275,7 @@
   .compiled .primary { grid-column: 1 / -1; }
   .tokenised > :global(figure) { margin-inline: var(--sg-space-4); }
 }
+
+/* A target's reason for being offered, and the honest statement of what the list covers. */
+.targetReason { color: var(--sg-text-secondary); }
+.coverageNote { margin-block-start: var(--sg-space-3); padding: var(--sg-space-3); border-inline-start: 3px solid var(--sg-surface-border); background: var(--sg-surface-sunken); color: var(--sg-text-secondary); }
