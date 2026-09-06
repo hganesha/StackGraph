@@ -8,6 +8,7 @@ import { DomainBadge, ConfidenceChip, CitationChip, Skeleton } from "@stackgraph
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
+import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
 import { useEntityGraphMetrics } from "@/lib/queries";
 import styles from "./technology.module.css";
 
@@ -77,6 +78,8 @@ export default function TechnologyPage({ params }: { params: Promise<{ id: strin
         graphHref={`/technologies/${id}/graph`}
         compact
       />
+
+      <CriticalEdges entityId={id} />
 
       {data.catalog_profile ? (
         <section className={styles.catalog} aria-label="OSS catalog intelligence">

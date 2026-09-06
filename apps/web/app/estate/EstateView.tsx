@@ -22,6 +22,7 @@ import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
 import { CapabilityHeatGrid } from "@/features/estate/CapabilityHeatGrid";
+import { Archetypes } from "@/features/intelligence/Archetypes";
 import styles from "./estate.module.css";
 
 const DOMAIN_ORDER: Namespace[] = [
@@ -230,7 +231,14 @@ export function EstateView() {
   // The canvas is a peer view of the same estate, not a filter on the ranked list, so
   // it reads its own URL param and leaves the filter query untouched.
   const viewParam = searchParams?.get("view");
-  const estateView = viewParam === "canvas" ? "canvas" : viewParam === "heat" ? "heat" : "ranked";
+  const estateView =
+    viewParam === "canvas"
+      ? "canvas"
+      : viewParam === "heat"
+        ? "heat"
+        : viewParam === "archetypes"
+          ? "archetypes"
+          : "ranked";
 
   return (
     <div className={styles.page}>
@@ -243,6 +251,7 @@ export function EstateView() {
           {([
             ["ranked", "Ranked list", "/estate"],
             ["heat", "Heat grid", "/estate?view=heat"],
+            ["archetypes", "Archetypes", "/estate?view=archetypes"],
             ["canvas", "Architecture canvas", "/estate?view=canvas"],
           ] as const).map(([id, label, href]) =>
             estateView === id ? (
@@ -262,6 +271,8 @@ export function EstateView() {
         <ArchitectureWorkspace scope="ESTATE" variant="embedded" initialDensity="compact" />
       ) : estateView === "heat" ? (
         <CapabilityHeatGrid />
+      ) : estateView === "archetypes" ? (
+        <Archetypes />
       ) : (
         <>
 
