@@ -6,6 +6,16 @@ import { useQuery } from "@tanstack/react-query";
 import { RankedTable, Skeleton } from "@stackgraph/design-system";
 import { stackGraphClient } from "@stackgraph/shared";
 import { useModernization } from "@/lib/queries";
+import { SimulateRecommendation } from "@/features/change/SimulateRecommendation";
+
+/** Sentence case, never a lower-cased enum (§4). */
+const ACTION_LABEL: Record<string, string> = {
+  CONSOLIDATE: "Consolidate",
+  REPLACE: "Replace",
+  UPGRADE: "Upgrade",
+  REFACTOR: "Refactor",
+  INVESTIGATE: "Investigate",
+};
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { presentRecommendationSummary, presentRecommendationTitle } from "@/lib/modernizationPresentation";
 import styles from "./modernization.module.css";
@@ -129,13 +139,16 @@ export default function ModernizationPage() {
                     <span className={styles.selectionRank} aria-hidden="true">{index + 1}</span>
                     <span className={styles.selectionDetails}>
                       <strong>{presentRecommendationTitle(item.title)}</strong>
-                      <small>{item.repository.name} · {item.action.toLowerCase()}</small>
+                      <small>{item.repository.name} · {ACTION_LABEL[item.action] ?? item.action}</small>
                     </span>
                     <span className={styles.selectionMeta}>
                       <strong>{item.effort_points} pts</strong>
                       <small>Value {item.score.toFixed(1)}</small>
                     </span>
                   </button>
+                  {/* The recommendation already knows what it is proposing; nobody
+                      should have to retype it into the command bar (§16). */}
+                  <SimulateRecommendation recommendationId={item.recommendation_id} compact />
                 </li>
               ))}
             </ol>

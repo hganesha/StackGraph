@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,8 +22,19 @@ import { SemanticMatches } from "@/components/estate/SemanticMatches";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
-import { CapabilityHeatGrid } from "@/features/estate/CapabilityHeatGrid";
-import { Archetypes } from "@/features/intelligence/Archetypes";
+
+// Both are peer views behind the switch, so neither belongs in the bundle a reader gets
+// for the default ranked list. The estate route is the heaviest in the app and this
+// keeps the picture surfaces off its critical path.
+const CapabilityHeatGrid = dynamic(
+  () => import("@/features/estate/CapabilityHeatGrid").then((m) => m.CapabilityHeatGrid),
+  { loading: () => <Skeleton height={520} /> },
+);
+const Archetypes = dynamic(
+  () => import("@/features/intelligence/Archetypes").then((m) => m.Archetypes),
+  { loading: () => <Skeleton height={420} /> },
+);
+import { SuggestedChanges } from "@/features/change/SuggestedChanges";
 import styles from "./estate.module.css";
 
 const DOMAIN_ORDER: Namespace[] = [
@@ -282,6 +294,10 @@ export function EstateView() {
           <span>Couldn’t load the estate. Try again, or check the API connection.</span>
         </div>
       ) : null}
+
+      {/* Above the counts: four counts are inventory, three simulatable changes are
+          intelligence (R15, revising §5.1). */}
+      <SuggestedChanges />
 
       <section className={styles.tiles} aria-label="Estate counts">
         {isLoading || !counts ? (

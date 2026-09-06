@@ -8,6 +8,8 @@ import {
   ResolutionLabel,
   Skeleton,
   type GateVerdict,
+  formatScopeCount,
+  type EstateLevel,
 } from "@stackgraph/design-system";
 import {
   config,
@@ -402,7 +404,11 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                 <div>
                   <h3 id="compiled-heading">Mutation ready</h3>
                   <p>
-                    {compileResult.draft.scope?.affected_count ?? 0} dependencies in the {compileResult.draft.scope?.kind.toLowerCase()} scope.
+                    {formatScopeCount(
+                      (compileResult.draft.scope?.kind ?? "ESTATE") as EstateLevel,
+                      compileResult.draft.scope?.affected_count ?? 0,
+                    )}{" "}
+                    in scope.
                     {compileResult.replayed ? " This existing ChangeSet was reused." : " A validated ChangeSet was created."}
                   </p>
                   <code>{compileResult.change_set.id}</code>

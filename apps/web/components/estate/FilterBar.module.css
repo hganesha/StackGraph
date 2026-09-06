@@ -164,7 +164,7 @@
 }
 .clear {
   font-size: var(--sg-type-small-size);
-  color: var(--sg-color-domain-enterprise-600);
+  color: var(--sg-link);
   text-decoration: underline;
   white-space: nowrap;
 }
@@ -261,7 +261,7 @@
 .saveConfirm,
 .saveCancel {
   font-size: var(--sg-type-small-size);
-  color: var(--sg-color-domain-enterprise-600);
+  color: var(--sg-link);
 }
 .saveConfirm:disabled {
   color: var(--sg-text-muted);
