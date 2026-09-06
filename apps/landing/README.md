@@ -13,17 +13,26 @@ as you read**, which is the same layering metaphor the product uses (see
 | Section | Visual |
 | --- | --- |
 | Hero | Node field that grows outward as it loads |
-| Cold open, thesis quote | Type only |
-| `#discovery` | Sticky isometric stack; each scroll step adds one plane (repositories → code → dependencies → deployment → business), with a camera pan that keeps the revealed stack centred |
-| `#evidence` | Evidence card with `DECLARED` / `OBSERVED` / `INFERRED` / `EXTERNAL_MEASURED` rows and a confidence indicator |
+| Cold open | Type, then the actor-mix bar that answers the story's own question |
+| Thesis quote | Type only |
+| `#discovery` | Sticky isometric stack; each scroll step adds one plane (repositories → code → dependencies → deployment → business → AI supply chain), with a camera pan that keeps the revealed stack centred. Hollow nodes on the sixth plane read as not-yet-collected |
+| `#evidence` | Evidence card with `DECLARED` / `OBSERVED` / `INFERRED` / `EXTERNAL_MEASURED` rows, then a contradiction ledger holding three current claims with no winner declared |
 | Function before package | SVG fan: observed symbols → inferred capability → scored candidates |
 | Duplication | Evidence card for four implementations of one capability |
+| `#shape` | Articulation-point diagram (two clusters joined through one node), metric grid, and a cohort/outlier/motif card |
 | `#ecosystem` | Migration-pattern card (`axios → native fetch`) with aggregate counts |
 | Viability | Multi-dimension scorecard, bars animate on reveal |
 | `#impact` | Sticky ladder; a CVE walks up to a value chain stage, rung by rung |
+| `#ask` | Question card: resolved entities, table rows, citation chips, limitations in the footer |
 | `#portfolio` | Ranked modernization table plus the controlled action vocabulary |
+| `#simulation` | Predicate vocabulary strip, a simulation plan with `DIRECT` / `TRANSITIVE` / `CONTEXT` / `STOP` findings, and the interpretation panel kept visibly separate |
+| `#authority` | Capability envelope card with `READ` / `EXECUTE` / `CONDITIONAL` / `ESCALATE` / `PROHIBITED` bands and a constrained decision |
 | Negative space | Architecture Canvas coverage grid with four cell states |
 | `#start` | Close, CTAs, data-handling note, author byline |
+
+Card row labels reuse one visual idiom: a typed label in the left column, the subject in the
+middle, the value on the right, with an optional `.ev-foot` strip underneath. Adding a new
+kind of row means adding a colour for its `data-c` value, not a new card.
 
 ## Design notes
 
@@ -45,7 +54,14 @@ data describing what the fictional customer runs, not a claim about connector su
 ## Content accuracy
 
 Copy is drawn from `docs/stackgraph-specs.md`, `docs/product-ai-addendum-for-ingestion.md`,
-`docs/stackgraph-architecture-canvas-spec.md`, and `docs/stackgraph-insight-catalog-expansion.md`.
+`docs/stackgraph-architecture-canvas-spec.md`, `docs/stackgraph-insight-catalog-expansion.md`,
+`docs/phase-2-plan.md`, `docs/estate-fidelity-contracts.md`, and
+`docs/graph-and-embeddings-features.md`.
+
+Every capability the page claims is backed by an operation in
+`stackgraph-foundation/contracts/v1/openapi.json`. The vocabularies shown are the real ones:
+the six change predicates, the five simulation finding classifications, the five capability
+bands, the four envelope decisions, the six estate strata, and the ten modernization actions.
 Numbers in the visuals are illustrative sample data, not measured results.
 
 ## Local preview
