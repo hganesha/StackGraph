@@ -78,6 +78,36 @@ EXACT_MANIFEST_NAMES = {
     "item.metadata.json": "DEPLOYMENT_CONFIG",
     "platform.json": "DEPLOYMENT_CONFIG",
     "Makefile": "BUILD_CONFIG",
+    "dbt_project.yml": "DATA_TRANSFORM_MANIFEST",
+    "dbt_project.yaml": "DATA_TRANSFORM_MANIFEST",
+    # Version-pin files are the plainest statement a repository makes about which runtime it
+    # expects. §33's canonical contradiction — code says one version, Docker another, docs a
+    # third — cannot be detected without reading them.
+    ".nvmrc": "RUNTIME_VERSION_DECLARATION",
+    ".node-version": "RUNTIME_VERSION_DECLARATION",
+    ".python-version": "RUNTIME_VERSION_DECLARATION",
+    ".ruby-version": "RUNTIME_VERSION_DECLARATION",
+    ".tool-versions": "RUNTIME_VERSION_DECLARATION",
+    # §31's AI supply chain is declared in configuration, not inferred from prose. These are the
+    # files that actually name an agent's harness, its tools, and its model.
+    ".mcp.json": "AI_CONFIGURATION",
+    "mcp.json": "AI_CONFIGURATION",
+    "claude_desktop_config.json": "AI_CONFIGURATION",
+    "agents.yaml": "AI_CONFIGURATION",
+    "agents.yml": "AI_CONFIGURATION",
+    "agent.yaml": "AI_CONFIGURATION",
+    "agent.yml": "AI_CONFIGURATION",
+    "llm.yaml": "AI_CONFIGURATION",
+    "llm.yml": "AI_CONFIGURATION",
+}
+
+# Analytics estates are carried in files the dependency scanner has no parser for. They are
+# admitted anyway because repository classification reads their presence and location, and
+# without them the DBT, NOTEBOOKS, DATA_ANALYTICS, and SQL_SCHEMA_MIGRATION rules can never
+# fire. Volume stays bounded by the existing max_files and max_bytes limits.
+ANALYTICS_SUFFIXES = {
+    ".sql": "SQL_SCRIPT",
+    ".ipynb": "NOTEBOOK",
 }
 
 SOURCE_SUFFIXES = {
@@ -93,6 +123,29 @@ SOURCE_SUFFIXES = {
 }
 
 README_SUFFIXES = {"", ".md", ".markdown", ".mdown", ".rst", ".txt"}
+
+# Installed, vendored, and build-output trees hold third-party code the repository does not own.
+# Their files stay readable — a vendored copy still tells us which upstream package it came from —
+# but a manifest inside one must never become a Component of this repository or contribute
+# DECLARED dependencies to it, because that invents estate the repository does not have.
+VENDORED_TREE_DIRECTORIES = frozenset({
+    ".bundle", ".cargo", ".gradle", ".next", ".nuxt", ".pnpm-store", ".terraform", ".tox",
+    ".venv", ".yarn", "bower_components", "eggs", "node_modules", "site-packages",
+    "third-party", "third_party", "vendor", "vendored", "venv",
+})
+
+
+def is_vendored_path(path: str) -> bool:
+    """Report whether a repository-relative path sits inside a vendored or installed tree.
+
+    Only directory segments are matched, and the final segment is the file itself, so it never
+    participates: a component at `packages/vendor-adapters` stays owned, while
+    `packages/vendor/adapters/index.js` does not.
+    """
+    return bool(
+        VENDORED_TREE_DIRECTORIES
+        & {part.lower() for part in PurePosixPath(path).parts[:-1]}
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -607,6 +660,8 @@ def manifest_kind(path: str) -> str | None:
             return "PYTHON_REQUIREMENTS"
     if pure_path.suffix.lower() in SOURCE_SUFFIXES:
         return SOURCE_SUFFIXES[pure_path.suffix.lower()]
+    if pure_path.suffix.lower() in ANALYTICS_SUFFIXES:
+        return ANALYTICS_SUFFIXES[pure_path.suffix.lower()]
     if pure_path.suffix.lower() == ".tf":
         return "INFRASTRUCTURE_CONFIG"
     if pure_path.suffix.lower() in {".yaml", ".yml", ".toml", ".json", ".properties"} and any(
@@ -781,6 +836,7 @@ def manifest_kind_or_none(path: str) -> str | None:
                 "appsettings.json", "config.yml", "config.yaml", "config.json", "config.toml",
             }
             or PurePosixPath(name).suffix.lower() in SOURCE_SUFFIXES
+            or PurePosixPath(name).suffix.lower() in ANALYTICS_SUFFIXES
         ):
             return "UNSAFE_TARGET"
         return None

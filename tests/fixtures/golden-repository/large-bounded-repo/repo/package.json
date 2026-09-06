@@ -1,0 +1,1 @@
+{ "name": "atlas", "version": "9.0.0", "private": true, "dependencies": { "rxjs": "7.8.1" } }

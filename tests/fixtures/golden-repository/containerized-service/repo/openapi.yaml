@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Shipping
+  version: 2.0.1
+paths:
+  /shipments/{id}:
+    get:
+      operationId: getShipment
+      responses:
+        "200":
+          description: A shipment

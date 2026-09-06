@@ -1,4 +1,4 @@
-.PHONY: app-up app-down app-logs backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark phase2-api-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify database-graph-intelligence-verify neo4j-register neo4j-project neo4j-verify neo4j-rebuild graph-intelligence-test graph-embeddings-benchmark oss-catalog-import depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 pilot-live operations-snapshot recovery-drill fresh-integration production-config production-up production-down production-alert-test
+.PHONY: app-up app-down app-logs backend-up backend-down backend-logs backend-test backend-integration-test backend-verify backend-graph-benchmark phase2-api-benchmark database-migrate database-seed database-seed-test database-seed-verify database-project database-project-verify database-graph-intelligence-verify neo4j-register neo4j-project neo4j-verify neo4j-rebuild graph-intelligence-test graph-embeddings-benchmark oss-catalog-import depsdev-enqueue depsdev-work depsdev-run depsdev-verify npm-registry-fetch osv-enqueue osv-sync osv-work osv-run osv-verify ai-test ai-prompts-sync capabilities-sync capabilities-analyze intelligence-run intelligence-requeue intelligence-work github-installation-register github-installation-reconcile github-installation-revoke github-webhook-up github-webhook-down github-pipeline-work pipeline-up pipeline-down pipeline-logs repository-acquire repository-scan scanner-enqueue scanner-persist api-surface-extract api-surface-persist pilot-100 pilot-live operations-snapshot recovery-drill fresh-integration production-config production-up production-down production-alert-test golden-corpus golden-corpus-compare scanner-benchmark change-memory-derive contradiction-detect registry-catalog container-enrichment
 
 app-up:
 	./scripts/start_docker.sh
@@ -52,6 +52,31 @@ backend-graph-benchmark:
 phase2-api-benchmark:
 	@test -n "$(PACKAGE_ID)" || (echo "PACKAGE_ID is required" >&2; exit 2)
 	python3 scripts/benchmark_phase2_api.py "$(PACKAGE_ID)" --requests "$${PHASE2_BENCHMARK_REQUESTS:-10000}" --concurrency "$${PHASE2_BENCHMARK_CONCURRENCY:-20}" $${PHASE2_BENCHMARK_ARGS:-}
+
+golden-corpus:
+	python3 scripts/golden_corpus_report.py --output artifacts/golden-corpus.json $${GOLDEN_CORPUS_ARGS:-}
+
+golden-corpus-compare:
+	python3 scripts/golden_corpus_report.py --compare artifacts/golden-corpus.json
+
+registry-catalog:
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	docker compose run --rm registry-catalog --tenant-id "$(TENANT_ID)" --limit "$${CATALOG_LIMIT:-50}"
+
+container-enrichment:
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	docker compose run --rm container-enrichment --tenant-id "$(TENANT_ID)" --limit "$${CONTAINER_LIMIT:-50}"
+
+contradiction-detect:
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	docker compose run --rm contradiction-detection --tenant-id "$(TENANT_ID)" --limit "$${CONTRADICTION_LIMIT:-500}"
+
+change-memory-derive:
+	@test -n "$(TENANT_ID)" || (echo "TENANT_ID is required" >&2; exit 2)
+	docker compose run --rm change-memory --tenant-id "$(TENANT_ID)" --limit "$${CHANGE_MEMORY_LIMIT:-500}"
+
+scanner-benchmark:
+	python3 scripts/benchmark_scanner.py --iterations "$${SCANNER_BENCHMARK_ITERATIONS:-5}" --output artifacts/scanner-benchmark.json $${SCANNER_BENCHMARK_ARGS:-}
 
 database-migrate:
 	docker compose run --rm migrate

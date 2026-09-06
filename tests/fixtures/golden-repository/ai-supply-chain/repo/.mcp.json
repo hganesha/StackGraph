@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "ticketing": { "command": "node", "args": ["./tools/ticketing.js"] },
+    "knowledge-base": { "command": "node", "args": ["./tools/kb.js"] }
+  }
+}

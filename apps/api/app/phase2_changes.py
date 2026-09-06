@@ -6,6 +6,7 @@ import json
 import re
 import socket
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4, uuid5
@@ -13,13 +14,21 @@ from uuid import UUID, uuid4, uuid5
 from psycopg.types.json import Jsonb
 
 from app.errors import APIError
+from app.impact_traversal import (
+    ImpactPolicyConfiguration,
+    ImpactTraversal,
+    TraversedNode,
+    eligibility,
+)
 from app.models import (
     ActionSubject,
+    ActionSubjectCapability,
     ActionSubjectList,
     ActionTypeList,
     ActionTypeSummary,
     ChangeGate,
     ChangeScope,
+    ChangeSetCompileRequest,
     ChangeScopeList,
     ChangeSetModel,
     EntityResolution,
@@ -40,8 +49,10 @@ from app.models import (
     ResolutionCandidate,
     SimulationCreateRequest,
     SimulationFinding,
+    QuarantinedClaim,
     SimulationInterpretation,
     SimulationRunModel,
+    TargetCoverage,
     ValidTarget,
     ValidTargetList,
     VersionDistribution,
@@ -53,6 +64,17 @@ RESOLUTION_VERSION = "identity-resolution/1.0.0"
 PROVIDER_VERSION = "package-registry/1.0.0"
 POLICY_KEY = "upgrade-package"
 _SIMULATION_NAMESPACE = UUID("fd4ecf06-230c-4d15-a65a-04a967c6487f")
+# Findings are ordered most-actionable first so a truncated read still shows what matters.
+_CLASSIFICATION_ORDER = ("DIRECT", "TRANSITIVE", "CONTEXT", "STOP", "INFORMATIONAL")
+_IMPACT_SEVERITY = {"DIRECT": "MEDIUM", "TRANSITIVE": "MEDIUM", "CONTEXT": "LOW"}
+# An interpretation outage must not hold a completed deterministic result hostage.
+_INTERPRETATION_TIMEOUT_SECONDS = 30
+# Registries and assessments spell end-of-life several ways; the contract has one word for it.
+_SUPPORT_STATUS = {
+    "SUPPORTED": "SUPPORTED", "ACTIVE": "SUPPORTED", "CURRENT": "SUPPORTED",
+    "UNSUPPORTED": "UNSUPPORTED", "DEPRECATED": "UNSUPPORTED",
+    "END_OF_LIFE": "END_OF_LIFE", "EOL": "END_OF_LIFE",
+}
 _INTENT = re.compile(
     r"^\s*upgrade\s+(?P<subject>.+?)\s+to\s+(?P<target>[^\s]+)(?:\s+(?:in|within)\s+(?P<scope>.+))?\s*$",
     re.IGNORECASE,
@@ -101,6 +123,57 @@ def _clear_gate() -> ChangeGate:
     return ChangeGate(state="CLEAR", reasons=[])
 
 
+@dataclass
+class MutationDraft:
+    """One compiled-but-unpersisted mutation and everything the gate decided about it."""
+
+    mutation: MutationIR
+    predicate: str
+    resolution: Any
+    target: ValidTarget | None
+    scope: ChangeScope | None
+    errors: list[MutationValidationError]
+    reasons: list[GateReason]
+    fingerprint: str
+
+
+def _change_set_conflicts(drafts: list["MutationDraft"]) -> list[GateReason]:
+    """Reject a ChangeSet whose mutations disagree with each other.
+
+    C2 requires conflict detection, and the cases that matter are the ones a per-mutation gate
+    cannot see: two mutations moving the same subject in the same scope to different targets,
+    and the same mutation listed twice. Either would make the set's stated effect depend on the
+    order it happened to be applied in.
+    """
+    reasons: list[GateReason] = []
+    by_subject: dict[tuple[str, str], set[str]] = {}
+    seen_fingerprints: set[str] = set()
+    duplicated = False
+    for draft in drafts:
+        if draft.fingerprint in seen_fingerprints:
+            duplicated = True
+        seen_fingerprints.add(draft.fingerprint)
+        if draft.resolution.entity is None or draft.scope is None or draft.target is None:
+            continue
+        key = (str(draft.resolution.entity.id), draft.scope.id)
+        by_subject.setdefault(key, set()).add(draft.target.version)
+    if duplicated:
+        reasons.append(GateReason(
+            code="DUPLICATE_MUTATION",
+            message="The ChangeSet lists the same mutation more than once.",
+        ))
+    conflicting = sorted(key for key, versions in by_subject.items() if len(versions) > 1)
+    if conflicting:
+        reasons.append(GateReason(
+            code="CONFLICTING_MUTATIONS",
+            message=(
+                "Two mutations move the same subject in the same scope to different targets, so "
+                "the ChangeSet's effect would depend on application order."
+            ),
+        ))
+    return reasons
+
+
 class Phase2ChangeMixin:
     """Tenant-safe compiler and deterministic simulation read/write model.
 
@@ -109,6 +182,9 @@ class Phase2ChangeMixin:
     """
 
     database: Any
+    # Set by the composing store when a provider is configured. Left None everywhere else so
+    # the interpretation partition degrades explicitly instead of raising.
+    ai: Any = None
 
     async def phase2_feature_enabled(
         self, flag_key: str, *, tenant_id: UUID | None,
@@ -160,11 +236,19 @@ class Phase2ChangeMixin:
             item = grouped.setdefault(row["predicate"], {
                 "predicate": row["predicate"], "label": row["predicate"].title(),
                 "description": descriptions[row["predicate"]], "subject_types": [],
-                "enabled": row["lifecycle"] == "ACTIVE", "lifecycle": row["lifecycle"],
+                "subjects": [], "enabled": False, "lifecycle": row["lifecycle"],
                 "ontology_version": row["ontology_version"],
             })
+            active = row["lifecycle"] == "ACTIVE"
             item["subject_types"].append(row["subject_type"])
-            item["enabled"] = item["enabled"] and row["lifecycle"] == "ACTIVE"
+            item["subjects"].append(ActionSubjectCapability(
+                subject_type=row["subject_type"], lifecycle=row["lifecycle"], enabled=active,
+            ))
+            # Offerable when *any* subject type can compile. ANDing across subjects would mean
+            # publishing the planned half of the grammar disables the half that works.
+            item["enabled"] = item["enabled"] or active
+            if active:
+                item["lifecycle"] = "ACTIVE"
         return ActionTypeList(
             action_types=[ActionTypeSummary(**item) for item in grouped.values()],
             policy_version=ONTOLOGY_VERSION,
@@ -509,6 +593,14 @@ class Phase2ChangeMixin:
     async def valid_targets(
         self, entity_id: UUID, *, tenant_id: UUID | None, limit: int,
     ) -> ValidTargetList:
+        """Enumerate the exact versions this package may be moved to, and say why each matters.
+
+        §6 wants more than a list of version strings: the estate's own spread, a consolidation
+        target, a candidate upgrade, and an explicit statement of what the list was drawn from.
+        Support status is read from the governed assessment rather than assumed, because
+        "unknown support" and "supported" are different answers and only one of them is safe to
+        infer from silence.
+        """
         resolution, package_name = await self._package_resolution(
             tenant_id=tenant_id, subject_id=entity_id, query=None,
         )
@@ -518,20 +610,157 @@ class Phase2ChangeMixin:
             """
             SELECT e.id,e.canonical_key,pri.package_version,
                    coalesce(pri.last_seen_at,pri.first_seen_at,e.updated_at) observed_at,
-                   registry.registry_key
+                   registry.registry_key,
+                   upper(coalesce(
+                     support.categorical_value, e.properties->>'support_status', 'UNKNOWN'
+                   )) support_status
             FROM package_registry_identity pri
             JOIN package_registry registry ON registry.id=pri.package_registry_id
             JOIN entity e ON e.id=pri.entity_id
+            LEFT JOIN LATERAL (
+              SELECT categorical_value FROM assessment
+              WHERE subject_entity_id=e.id AND status='CURRENT' AND valid_to IS NULL
+                AND lower(dimension) IN ('support','support_status','lifecycle')
+                AND categorical_value IS NOT NULL
+              ORDER BY valid_from DESC LIMIT 1
+            ) support ON true
             WHERE lower(pri.package_name)=lower(%s) AND pri.package_version IS NOT NULL
             """,
             (package_name,), tenant_id=tenant_id,
         )
+        # The registry's catalogue, which is a different claim from the estate's identity: it
+        # says a version can be chosen, not that anything runs it. Joined here so an upgrade
+        # target need not already exist somewhere in the estate.
+        catalog = await self.database.fetch_all(
+            """
+            SELECT catalog.version, catalog.is_prerelease, catalog.is_yanked,
+                   catalog.is_deprecated, catalog.published_at, catalog.collected_at,
+                   catalog.registry_key, catalog.support_status
+            FROM package_version_catalog catalog
+            WHERE lower(catalog.package_name)=lower(%s) AND NOT catalog.is_yanked
+            ORDER BY catalog.version
+            """,
+            (package_name,), tenant_id=tenant_id,
+        )
+        collection = await self.database.fetch_one(
+            """
+            SELECT status, version_count, limitations, collected_at
+            FROM package_catalog_collection
+            WHERE lower(package_name)=lower(%s)
+            ORDER BY collected_at DESC LIMIT 1
+            """,
+            (package_name,), tenant_id=tenant_id,
+        )
+        known = {row["package_version"] for row in rows}
+        for entry in catalog:
+            if entry["version"] in known:
+                continue
+            # A catalogue version has no entity, because the estate does not run it. The
+            # compiler resolves it to one only if the change is actually submitted.
+            rows.append({
+                "id": None, "canonical_key": f"pkg:{package_name}@{entry['version']}",
+                "package_version": entry["version"], "observed_at": entry["collected_at"],
+                "registry_key": entry["registry_key"],
+                "support_status": (
+                    "UNSUPPORTED" if entry["is_deprecated"]
+                    else str(entry["support_status"] or "UNKNOWN")
+                ),
+                "from_catalog": True, "is_prerelease": entry["is_prerelease"],
+            })
         rows.sort(key=lambda row: _version_key(row["package_version"]), reverse=True)
-        targets = [ValidTarget(
-            entity_id=row["id"], version=row["package_version"], canonical_key=row["canonical_key"],
-            source=row["registry_key"], observed_at=row["observed_at"],
-            freshness=_freshness(row["observed_at"]), support="UNKNOWN",
-        ) for row in rows[:limit]]
+        observed = await self.database.fetch_all(
+            """
+            SELECT coalesce(dr.resolved_version,pri.package_version,
+                     f.properties->>'resolved_version') version,
+                   count(DISTINCT f.subject_entity_id)::int repositories
+            FROM fact_assertion f
+            JOIN entity consumer ON consumer.id=f.subject_entity_id
+                                AND consumer.entity_type='Repository'
+            JOIN package_registry_identity pri ON pri.entity_id=f.object_entity_id
+            LEFT JOIN dependency_resolution dr ON dr.fact_assertion_id=f.id
+            WHERE f.tenant_id=%s AND f.predicate='DEPENDS_ON' AND f.system_to IS NULL
+              AND lower(pri.package_name)=lower(%s)
+            GROUP BY 1
+            """,
+            (tenant_id, package_name), tenant_id=tenant_id,
+        )
+        counts = {
+            str(row["version"]): int(row["repositories"])
+            for row in observed if row["version"]
+        }
+        # The version the most repositories already run is the one an upgrade can converge on
+        # without introducing a version nothing in the estate has exercised.
+        consolidate = max(counts, key=lambda value: (counts[value], _version_key(value))) if counts else None
+        candidates = [
+            row["package_version"] for row in rows
+            if row["support_status"] not in {"UNSUPPORTED", "END_OF_LIFE", "EOL"}
+            # A prerelease is not the latest thing to upgrade *to*. Offering one as the headline
+            # target would push an estate onto a release its own publisher has not finished.
+            and not row.get("is_prerelease")
+        ]
+        latest = candidates[0] if candidates else None
+
+        targets: list[ValidTarget] = []
+        for row in rows[:limit]:
+            version = row["package_version"]
+            support = _SUPPORT_STATUS.get(row["support_status"], "UNKNOWN")
+            from_catalog = bool(row.get("from_catalog"))
+            if version == consolidate:
+                recommendation = "CONSOLIDATE"
+                detail = (
+                    f"{counts[version]} repositories already run this version, so converging "
+                    "here introduces no version the estate has not exercised."
+                )
+            elif version == latest:
+                recommendation = "LATEST_KNOWN"
+                detail = (
+                    "The highest release the registry currently offers."
+                    if from_catalog else
+                    "The highest version StackGraph has collected for this package."
+                )
+            elif counts and version not in counts:
+                recommendation = "CANDIDATE"
+                detail = (
+                    "The registry offers this release; no repository runs it yet."
+                    if from_catalog else "No repository runs this version yet."
+                )
+            else:
+                recommendation = "NONE"
+                detail = None
+            targets.append(ValidTarget(
+                entity_id=row["id"], version=version, canonical_key=row["canonical_key"],
+                source=row["registry_key"], observed_at=row["observed_at"],
+                freshness=_freshness(row["observed_at"]), support=support,
+                recommendation=recommendation, recommendation_detail=detail,
+                observed_repository_count=counts.get(version, 0),
+                origin="REGISTRY_CATALOG" if from_catalog else "ESTATE",
+                is_prerelease=bool(row.get("is_prerelease")),
+            ))
+
+        # Being explicit about where the list came from is the difference between "there are no
+        # newer versions" and "no newer version has been collected". A collection record is the
+        # only thing that distinguishes them, so it is read rather than inferred from the shape
+        # of the result.
+        enumerated = collection is not None and collection["status"] in {"AVAILABLE", "PARTIAL"}
+        estate_only = not any(target.origin == "REGISTRY_CATALOG" for target in targets)
+        coverage = TargetCoverage(
+            source=(
+                "ESTATE_OBSERVED" if not enumerated
+                else "MIXED" if counts and not estate_only
+                else "REGISTRY_ENUMERATED"
+            ),
+            registry_enumeration="AVAILABLE" if enumerated else "NOT_COLLECTED",
+            detail=(
+                (
+                    f"The registry catalogue was collected "
+                    f"{_freshness(collection['collected_at']).lower()} and offers "
+                    f"{collection['version_count']} versions."
+                )
+                if enumerated else
+                "Every target is a version the estate already runs. A newer release may exist "
+                "that registry enumeration has not collected."
+            ),
+        )
         limitations = []
         if not targets:
             limitations.append(GateReason(
@@ -543,9 +772,20 @@ class Phase2ChangeMixin:
                 code="TARGET_PROVIDER_STALE",
                 message="Target metadata is older than the active freshness policy.",
             ))
+        if targets and not enumerated:
+            limitations.append(GateReason(
+                code="TARGET_PROVIDER_ESTATE_ONLY",
+                message=(
+                    "Targets are limited to versions already observed in the estate; a newer "
+                    "release may exist that has not been collected."
+                ),
+            ))
+        for item in collection["limitations"] if collection else []:
+            limitations.append(GateReason(code="TARGET_CATALOG_BOUNDED", message=str(item)))
         return ValidTargetList(
             subject=resolution.entity, targets=targets, policy_version=PROVIDER_VERSION,
-            page_info=PageInfo(has_next_page=len(rows) > limit), limitations=limitations,
+            page_info=PageInfo(has_next_page=len(rows) > limit), coverage=coverage,
+            limitations=limitations,
         )
 
     async def scopes(self, entity_id: UUID, *, tenant_id: UUID | None) -> ChangeScopeList:
@@ -608,12 +848,17 @@ class Phase2ChangeMixin:
             ))
         return ChangeScopeList(subject=resolution.entity, scopes=scopes, policy_version=POLICY_KEY + "/1")
 
-    async def compile_mutation(
-        self, request: MutationCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+    async def _compile_draft(
+        self, request: MutationCompileRequest, *, tenant_id: UUID, actor_key: str,
         provenance: dict[str, Any] | None = None,
-    ) -> MutationCompileResult:
-        if tenant_id is None:
-            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+    ) -> "MutationDraft":
+        """Resolve, validate, and gate one mutation without persisting anything.
+
+        Split out so a ChangeSet carrying several mutations compiles each through exactly the
+        same grammar, resolution order, and gates as a single one. C2 requires ordered,
+        atomicity-aware ChangeSets; letting the multi-mutation path validate differently from
+        the single-mutation path would be a second compiler with a second set of rules.
+        """
         predicate = request.predicate
         subject_query = request.subject_query
         target_version = request.target_version
@@ -641,10 +886,15 @@ class Phase2ChangeMixin:
         reasons: list[GateReason] = []
         target: ValidTarget | None = None
         selected_scope: ChangeScope | None = None
-        if predicate != "UPGRADE":
+        capability = await self._action_capability(predicate, "Package", tenant_id=tenant_id)
+        if capability is None or capability["lifecycle"] != "ACTIVE":
             errors.append(MutationValidationError(
                 code="ACTION_NOT_ENABLED", field="predicate",
-                message=f"{predicate} is in the ontology but is not enabled for deterministic compilation.",
+                message=(
+                    f"{predicate} is in the ontology but is not enabled for deterministic compilation."
+                    if capability is not None else
+                    f"{predicate} has no registered capability for a Package subject."
+                ),
             ))
         if resolution.state != "RESOLVED" or resolution.entity is None:
             errors.append(MutationValidationError(
@@ -746,7 +996,13 @@ class Phase2ChangeMixin:
             "versions": [item.model_dump(mode="json") for item in selected_scope.version_distribution]
             if selected_scope else [],
         }
-        after = {"version": target.version, "target_entity_id": str(target.entity_id)} if target else {}
+        after = {
+            "version": target.version,
+            # A catalogue target has no entity because the estate does not run it. Recording
+            # None honestly is better than minting an entity for something nobody has.
+            "target_entity_id": str(target.entity_id) if target.entity_id else None,
+            "target_origin": target.origin,
+        } if target else {}
         canonical_input = {
             "schema_version": "mutation/1.0.0", "predicate": predicate,
             "subject_entity_id": str(resolution.entity.id) if resolution.entity else None,
@@ -770,28 +1026,133 @@ class Phase2ChangeMixin:
             input_fingerprint=mutation_fingerprint, lifecycle=lifecycle,
             validation_errors=[error for error in errors if error is not None],
         )
-        if errors:
-            for error in errors:
-                if error and not any(reason.code == error.code for reason in reasons):
-                    reasons.append(GateReason(
-                        code=error.code, message=error.message,
-                        evidence_fact_ids=error.evidence_fact_ids,
-                    ))
+        for error in errors:
+            if error and not any(reason.code == error.code for reason in reasons):
+                reasons.append(GateReason(
+                    code=error.code, message=error.message,
+                    evidence_fact_ids=error.evidence_fact_ids,
+                ))
+        return MutationDraft(
+            mutation=mutation, predicate=predicate, resolution=resolution, target=target,
+            scope=selected_scope, errors=[error for error in errors if error is not None],
+            reasons=reasons, fingerprint=mutation_fingerprint,
+        )
+
+    async def _action_capability(
+        self, predicate: str, subject_type: str, *, tenant_id: UUID | None,
+    ) -> dict[str, Any] | None:
+        """Return the registered ActionCapability governing a predicate and subject type.
+
+        C1 says the ontology and its capability rows decide what may compile. Until now this
+        table was read only to list action types while validation was hardcoded to UPGRADE, so
+        enabling a predicate meant editing Python rather than seeding a row.
+        """
+        return await self.database.fetch_one(
+            """
+            SELECT * FROM action_capability
+            WHERE predicate=%s AND subject_type=%s
+            ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
+            """,
+            (predicate, subject_type), tenant_id=tenant_id,
+        )
+
+    async def compile_mutation(
+        self, request: MutationCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+        provenance: dict[str, Any] | None = None,
+    ) -> MutationCompileResult:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+        return await self._compile_change_set(
+            [request], tenant_id=tenant_id, actor_key=actor_key,
+            idempotency_key=request.idempotency_key, provenance=provenance,
+        )
+
+    async def compile_change_set(
+        self, request: ChangeSetCompileRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult:
+        """Compile a ChangeSet from a pull request, ticket, architecture change, or agent.
+
+        Every one of these entry points reaches the deterministic engine through the same
+        Mutation IR as the command bar, which is what §7 asks for. The source states what it
+        proposes; StackGraph decides whether that grounds in the estate.
+        """
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile a change.")
+        provenance: dict[str, Any] = {"entry_point": request.entry_point}
+        if request.external_reference:
+            provenance["external_reference"] = request.external_reference
+        return await self._compile_change_set(
+            [
+                MutationCompileRequest(
+                    predicate=item.predicate, subject_id=item.subject_id,
+                    subject_query=item.subject_query, target_version=item.target_version,
+                    scope_id=item.scope_id, idempotency_key=request.idempotency_key,
+                )
+                for item in request.mutations
+            ],
+            tenant_id=tenant_id, actor_key=actor_key,
+            idempotency_key=request.idempotency_key, provenance=provenance,
+            atomic=request.atomic,
+        )
+
+    async def _compile_change_set(
+        self, requests: list[MutationCompileRequest], *, tenant_id: UUID, actor_key: str,
+        idempotency_key: str, provenance: dict[str, Any] | None = None, atomic: bool = True,
+    ) -> MutationCompileResult:
+        """Compile an ordered ChangeSet of one or more mutations.
+
+        Every mutation must pass its own gates *and* the set must be internally consistent
+        before anything is persisted. A ChangeSet is atomic by default, so one blocked mutation
+        blocks the set: persisting a partially valid set would offer the user a plan whose
+        stated scope is not the plan that would run.
+        """
+        if not requests:
+            raise APIError(400, "EMPTY_CHANGE_SET", "A ChangeSet must contain at least one mutation.")
+        capability = await self._action_capability("UPGRADE", "Package", tenant_id=tenant_id)
+        max_mutations = int(
+            ((capability or {}).get("validation_rules") or {}).get("max_mutations") or 20
+        )
+        if len(requests) > max_mutations:
+            raise APIError(
+                422, "CHANGE_SET_TOO_LARGE",
+                f"A ChangeSet may carry at most {max_mutations} mutations.",
+                {"requested": len(requests), "limit": max_mutations},
+            )
+        drafts = [
+            await self._compile_draft(
+                item, tenant_id=tenant_id, actor_key=actor_key, provenance=provenance,
+            )
+            for item in requests
+        ]
+        reasons: list[GateReason] = []
+        for reason in (item for draft in drafts for item in draft.reasons):
+            if not any(existing.code == reason.code for existing in reasons):
+                reasons.append(reason)
+        reasons.extend(_change_set_conflicts(drafts))
+
+        if reasons or any(draft.errors for draft in drafts):
+            first = drafts[0]
             result = MutationCompileResult(
-                command_state="TOKENISED" if resolution.state != "UNRESOLVED" else "RESOLVING",
-                draft=mutation, gate=ChangeGate(state="BLOCKED", reasons=reasons),
+                command_state=(
+                    "TOKENISED" if first.resolution.state != "UNRESOLVED" else "RESOLVING"
+                ),
+                draft=first.mutation, gate=ChangeGate(state="BLOCKED", reasons=reasons),
             )
             await self._audit_change(
                 tenant_id=tenant_id, actor_key=actor_key, action="change_set.compile_blocked",
-                target_kind="mutation_draft", target_id=mutation.input_fingerprint,
+                target_kind="mutation_draft", target_id=first.fingerprint,
                 detail={
-                    "predicate": predicate,
+                    "predicate": first.predicate,
+                    "mutations": len(drafts),
                     "reason_codes": [reason.code for reason in reasons],
-                    "entry_point": mutation.provenance["entry_point"],
+                    "entry_point": first.mutation.provenance["entry_point"],
                 },
             )
             return result
-        change_fingerprint = _fingerprint({"atomic": True, "mutations": [mutation_fingerprint]})
+
+        change_fingerprint = _fingerprint({
+            "atomic": atomic, "mutations": [draft.fingerprint for draft in drafts],
+        })
         async with self.database.session(tenant_id) as connection:
             existing_cursor = await connection.execute(
                 """
@@ -801,12 +1162,12 @@ class Phase2ChangeMixin:
                 ORDER BY (idempotency_key=%s) DESC
                 LIMIT 1
                 """,
-                (tenant_id, request.idempotency_key, change_fingerprint, request.idempotency_key),
+                (tenant_id, idempotency_key, change_fingerprint, idempotency_key),
             )
             existing = await existing_cursor.fetchone()
             if (
                 existing
-                and existing["idempotency_key"] == request.idempotency_key
+                and existing["idempotency_key"] == idempotency_key
                 and existing["input_fingerprint"] != change_fingerprint
             ):
                 raise APIError(
@@ -818,55 +1179,151 @@ class Phase2ChangeMixin:
                 change_set_id = existing["id"]
                 created_at = existing["created_at"]
                 mutation_cursor = await connection.execute(
-                    "SELECT id FROM mutation WHERE change_set_id=%s ORDER BY ordinal LIMIT 1",
+                    "SELECT id FROM mutation WHERE change_set_id=%s ORDER BY ordinal",
                     (change_set_id,),
                 )
-                mutation_row = await mutation_cursor.fetchone()
-                assert mutation_row is not None
-                mutation.id = mutation_row["id"]
+                for draft, row in zip(drafts, await mutation_cursor.fetchall()):
+                    draft.mutation.id = row["id"]
             else:
                 change_set_id = uuid4()
                 created_at = datetime.now(UTC)
-                mutation.id = uuid4()
                 await connection.execute(
                     """
                     INSERT INTO change_set(
-                      id,tenant_id,lifecycle,input_fingerprint,idempotency_key,provenance,created_by,created_at
-                    ) VALUES (%s,%s,'VALIDATED',%s,%s,%s,%s,%s)
+                      id,tenant_id,atomic,lifecycle,input_fingerprint,idempotency_key,
+                      provenance,created_by,created_at
+                    ) VALUES (%s,%s,%s,'VALIDATED',%s,%s,%s,%s,%s)
                     """,
                     (
-                        change_set_id, tenant_id, change_fingerprint, request.idempotency_key,
-                        Jsonb(mutation.provenance), actor_key, created_at,
+                        change_set_id, tenant_id, atomic, change_fingerprint, idempotency_key,
+                        Jsonb(drafts[0].mutation.provenance), actor_key, created_at,
                     ),
                 )
-                await connection.execute(
-                    """
-                    INSERT INTO mutation(
-                      id,tenant_id,change_set_id,ordinal,predicate,subject_entity_id,subject_resolution,
-                      before_state,after_state,scope,constraints,provenance,input_fingerprint,lifecycle
-                    ) VALUES (%s,%s,%s,0,%s,%s,'RESOLVED',%s,%s,%s,%s,%s,%s,'VALIDATED')
-                    """,
-                    (
-                        mutation.id, tenant_id, change_set_id, predicate, resolution.entity.id,
-                        Jsonb(before), Jsonb(after), Jsonb(selected_scope.model_dump(mode="json")),
-                        Jsonb(mutation.constraints), Jsonb(mutation.provenance), mutation_fingerprint,
-                    ),
-                )
+                for ordinal, draft in enumerate(drafts):
+                    draft.mutation.id = uuid4()
+                    assert draft.resolution.entity is not None and draft.scope is not None
+                    await connection.execute(
+                        """
+                        INSERT INTO mutation(
+                          id,tenant_id,change_set_id,ordinal,predicate,subject_entity_id,
+                          subject_resolution,before_state,after_state,scope,constraints,
+                          provenance,input_fingerprint,lifecycle
+                        ) VALUES (%s,%s,%s,%s,%s,%s,'RESOLVED',%s,%s,%s,%s,%s,%s,'VALIDATED')
+                        """,
+                        (
+                            draft.mutation.id, tenant_id, change_set_id, ordinal, draft.predicate,
+                            draft.resolution.entity.id, Jsonb(draft.mutation.before),
+                            Jsonb(draft.mutation.after),
+                            Jsonb(draft.scope.model_dump(mode="json")),
+                            Jsonb(draft.mutation.constraints),
+                            Jsonb(draft.mutation.provenance), draft.fingerprint,
+                        ),
+                    )
         change_set = ChangeSetModel(
-            id=change_set_id, mutations=[mutation], lifecycle="VALIDATED",
-            input_fingerprint=change_fingerprint, created_at=created_at,
+            id=change_set_id, mutations=[draft.mutation for draft in drafts],
+            lifecycle="VALIDATED", input_fingerprint=change_fingerprint, created_at=created_at,
         )
         result = MutationCompileResult(
-            command_state="COMPILED", change_set=change_set, draft=mutation,
+            command_state="COMPILED", change_set=change_set, draft=drafts[0].mutation,
             gate=_clear_gate(), replayed=replayed,
         )
         await self._audit_change(
             tenant_id=tenant_id, actor_key=actor_key, action="change_set.compile",
             target_kind="change_set", target_id=str(change_set_id),
-            detail={"predicate": predicate, "replayed": replayed,
-                    "entry_point": mutation.provenance["entry_point"]},
+            detail={
+                "predicate": drafts[0].predicate, "replayed": replayed,
+                "mutations": len(drafts),
+                "entry_point": drafts[0].mutation.provenance["entry_point"],
+            },
         )
         return result
+
+    async def compile_deterministic_insight(
+        self, insight_id: UUID, request: RecommendationCompileRequest,
+        *, tenant_id: UUID | None, actor_key: str,
+    ) -> MutationCompileResult:
+        """Compile a deterministic insight into a ChangeSet without re-entering it by hand.
+
+        §8 names version fragmentation and unsupported runtimes among the changes worth
+        surfacing, and R1 requires reaching a simulation from an estate finding without manual
+        re-entry. Insights carry a subject and a recommended action but no target version, so
+        the target is derived the same way the command bar derives it: the version the most
+        repositories already run, which converges the estate without introducing anything it has
+        not exercised.
+
+        Anything that cannot produce a valid proposal is refused with a precise reason rather
+        than a generic failure, because "this cannot be simulated" is only useful if it says why.
+        """
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to compile an insight.")
+        insights = await self.deterministic_insights(
+            tenant_id=tenant_id, scope_entity_id=None, rule_key=None, limit=500,
+        )
+        insight = next(
+            (item for item in insights.insights if item.id == insight_id), None,
+        )
+        if insight is None:
+            raise APIError(404, "INSIGHT_NOT_FOUND", "The deterministic insight was not found.")
+
+        reason: dict[str, Any] | None = None
+        if insight.recommendation is None:
+            reason = {
+                "code": "NO_RECOMMENDED_ACTION",
+                "message": "The insight reports a condition but recommends no action.",
+            }
+        elif insight.recommendation.action not in {"UPGRADE", "CONSOLIDATE"}:
+            reason = {
+                "code": "ACTION_NOT_ENABLED",
+                "message": (
+                    f"{insight.recommendation.action} insights are not yet compilable; only "
+                    "upgrade and consolidation are."
+                ),
+            }
+        elif insight.subject.kind not in {"Package", "PackageVersion"}:
+            reason = {
+                "code": "SUBJECT_NOT_RESOLVED",
+                "message": (
+                    f"The insight subject is a {insight.subject.kind}; only a canonical package "
+                    "can currently compile."
+                ),
+            }
+        if reason is None:
+            targets = await self.valid_targets(insight.subject.id, tenant_id=tenant_id, limit=200)
+            consolidation = next(
+                (item for item in targets.targets if item.recommendation == "CONSOLIDATE"), None,
+            )
+            if consolidation is None:
+                reason = {
+                    "code": "TARGET_NOT_RESOLVED",
+                    "message": (
+                        "No estate-backed consolidation target exists for this package, so the "
+                        "insight cannot propose an exact version."
+                    ),
+                }
+        if reason is not None:
+            raise APIError(
+                409, "INSIGHT_NOT_SIMULATABLE", reason["message"],
+                {"insight_id": str(insight_id), "reason": reason},
+            )
+
+        idempotency_key = request.idempotency_key or (
+            f"insight:{insight_id}:{insight.input_fingerprint}"
+        )
+        return await self._compile_change_set(
+            [MutationCompileRequest(
+                predicate="UPGRADE", subject_id=insight.subject.id,
+                target_version=consolidation.version, scope_id="estate",
+                idempotency_key=idempotency_key,
+            )],
+            tenant_id=tenant_id, actor_key=actor_key, idempotency_key=idempotency_key,
+            provenance={
+                "entry_point": "DETERMINISTIC_INSIGHT",
+                "insight_id": str(insight_id),
+                "rule_key": insight.rule_key,
+                "rule_version": insight.rule_version,
+                "insight_fingerprint": insight.input_fingerprint,
+            },
+        )
 
     async def compile_modernization_recommendation(
         self, recommendation_id: UUID, request: RecommendationCompileRequest,
@@ -1146,8 +1603,13 @@ class Phase2ChangeMixin:
         interpretation = SimulationInterpretation(
             status=interpretation_row["status"], risk=interpretation_row["risk"],
             explanation=interpretation_row["explanation"], rollout=interpretation_row["rollout"],
+            remediation=interpretation_row.get("remediation") or [],
             verification=interpretation_row["verification"],
             cited_finding_ids=interpretation_row["cited_finding_ids"],
+            quarantined_claims=[
+                QuarantinedClaim(**item)
+                for item in interpretation_row.get("quarantined_claims") or []
+            ],
             limitation=interpretation_row["limitation"],
         ) if interpretation_row else SimulationInterpretation(
             status="UNAVAILABLE", limitation=(
@@ -1252,21 +1714,347 @@ class Phase2ChangeMixin:
                     )
         return True
 
+
     async def _execute_simulation(
         self, run: dict[str, Any], *, max_nodes: int, max_edges: int,
     ) -> None:
+        """Simulate every mutation in the ChangeSet and persist one merged result.
+
+        A ChangeSet is the unit a user submits, so it is the unit that gets a status, a result
+        hash, and a set of findings. Each mutation is walked separately under the same pinned
+        policy and its findings are namespaced by ordinal, so two mutations touching the same
+        dependency fact produce two distinct findings rather than silently colliding.
+        """
         tenant_id = run["tenant_id"]
         change_set = await self._load_change_set(run["change_set_id"], tenant_id=tenant_id)
-        mutation = change_set.mutations[0]
+        if not change_set.mutations:
+            raise RuntimeError("persisted ChangeSet carries no mutations")
+        policy_row = await self.database.fetch_one(
+            "SELECT * FROM impact_policy WHERE id=%s", (run["policy_id"],), tenant_id=tenant_id,
+        )
+        if policy_row is None:
+            raise RuntimeError("the simulation's pinned impact policy no longer exists")
+        # A policy that cannot be read is a refusal. Falling back to a default walk would
+        # produce a result stamped with a policy version that does not describe how it was made.
+        policy = ImpactPolicyConfiguration.from_row(policy_row)
+        node_budget = min(max_nodes, policy.max_nodes) if policy.max_nodes else max_nodes
+        edge_budget = min(max_edges, policy.max_edges) if policy.max_edges else max_edges
+        # Budgets are the ChangeSet's, not each mutation's, so a large set cannot multiply the
+        # traversal cost by its own length.
+        per_mutation_nodes = max(1, node_budget // len(change_set.mutations))
+        per_mutation_edges = max(1, edge_budget // len(change_set.mutations))
+
+        findings: list[dict[str, Any]] = []
+        limitations: list[dict[str, Any]] = []
+        scanner_versions: set[str] = set()
+        limited = False
+        simulatable = 0
+        for ordinal, mutation in enumerate(change_set.mutations):
+            outcome = await self._simulate_mutation(
+                run=run, mutation=mutation, ordinal=ordinal, policy=policy,
+                node_budget=per_mutation_nodes, edge_budget=per_mutation_edges,
+            )
+            findings.extend(outcome["findings"])
+            scanner_versions |= outcome["scanner_versions"]
+            limited = limited or outcome["limited"]
+            simulatable += int(outcome["eligible"] > 0)
+            for limitation in outcome["limitations"]:
+                if not any(item["code"] == limitation["code"] for item in limitations):
+                    limitations.append(limitation)
+
+        if simulatable == 0:
+            status = "NOT_SIMULATABLE"
+        elif limited or simulatable < len(change_set.mutations):
+            # A set where some mutations found no eligible path is constrained, not complete.
+            status = "LIMITED"
+        else:
+            status = "SUCCEEDED"
+
+        findings.sort(key=lambda item: (
+            _CLASSIFICATION_ORDER.index(item["classification"]), item["deterministic_key"],
+        ))
+        canonical_result = [{
+            key: (str(value) if isinstance(value, UUID) else value)
+            for key, value in finding.items() if key not in {"id"}
+        } for finding in findings]
+        result_hash = _fingerprint({
+            "change_set": change_set.input_fingerprint,
+            "estate_watermark": run["estate_watermark"], "policy": run["policy_version"],
+            "policy_schema": policy.schema_version,
+            "findings": canonical_result, "limitations": limitations,
+        })
+        async with self.database.session(tenant_id) as connection:
+            for finding in findings:
+                await connection.execute(
+                    """
+                    INSERT INTO simulation_finding(
+                      id,tenant_id,simulation_run_id,rule_key,rule_version,classification,severity,
+                      title,detail,affected_entity_id,confidence,evidence_fact_ids,path_entity_ids,
+                      fact_payload,curated_evidence,deterministic_key
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(simulation_run_id,deterministic_key) DO NOTHING
+                    """,
+                    (
+                        finding["id"], tenant_id, run["id"], finding["rule_key"],
+                        finding["rule_version"], finding["classification"], finding["severity"],
+                        finding["title"], finding["detail"], finding["affected_entity_id"],
+                        finding["confidence"], finding["evidence_fact_ids"], finding["path_entity_ids"],
+                        Jsonb(finding["fact_payload"]), Jsonb(finding["curated_evidence"]),
+                        finding["deterministic_key"],
+                    ),
+                )
+            await connection.execute(
+                """
+                UPDATE simulation_run SET status=%s,result_hash=%s,limitations=%s,
+                  scanner_versions=%s,completed_at=now(),leased_by=NULL,leased_until=NULL,updated_at=now()
+                WHERE id=%s
+                """,
+                (status, result_hash, Jsonb(limitations), sorted(scanner_versions), run["id"]),
+            )
+        await self._interpret_simulation(run_id=run["id"], tenant_id=tenant_id, findings=findings)
+
+    async def _simulate_mutation(
+        self, *, run: dict[str, Any], mutation: Any, ordinal: int,
+        policy: ImpactPolicyConfiguration, node_budget: int, edge_budget: int,
+    ) -> dict[str, Any]:
+        """Walk the estate for one mutation and return its findings, unpersisted."""
+        tenant_id = run["tenant_id"]
         if mutation.subject.entity is None or mutation.scope is None:
             raise RuntimeError("persisted mutation is missing canonical identity or scope")
+
         _, package_name = await self._package_resolution(
             tenant_id=tenant_id, subject_id=mutation.subject.entity.id, query=None,
         )
         if package_name is None:
             raise RuntimeError("persisted package identity no longer resolves")
+        subject_id = mutation.subject.entity.id
         scope = mutation.scope
-        params: list[Any] = [tenant_id, package_name]
+
+        seed_rows = await self._seed_dependents(
+            tenant_id=tenant_id, package_name=package_name, scope=scope,
+            subject_types=policy.seed_subject_types, limit=edge_budget + 1,
+        )
+        limitations: list[dict[str, Any]] = []
+        limited = len(seed_rows) > edge_budget
+        seed_rows = seed_rows[:edge_budget]
+        if limited:
+            limitations.append({
+                "code": "TRAVERSAL_BUDGET",
+                "message": "The edge budget truncated the direct dependency set.",
+                "evidence_fact_ids": [],
+            })
+
+        scanner_versions = {
+            f"{row['extractor_key']}/{row['extractor_version']}" for row in seed_rows
+        }
+        findings: list[dict[str, Any]] = []
+        seeds: list[TraversedNode] = []
+        eligible_rows: list[dict[str, Any]] = []
+
+        def add_finding(
+            *, key: str, rule_key: str, classification: str, severity: str, title: str,
+            detail: str, affected_entity_id: UUID, confidence: float,
+            evidence_fact_ids: list[UUID], path_entity_ids: list[UUID],
+            fact_payload: dict[str, Any], curated_evidence: list[dict[str, Any]] | None = None,
+        ) -> None:
+            # Namespaced by ordinal so two mutations touching the same dependency fact
+            # produce two findings rather than one silently overwriting the other.
+            key = f"m{ordinal}:{key}"
+            findings.append({
+                "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{key}"),
+                "rule_key": rule_key, "rule_version": "2.0.0",
+                "classification": classification, "severity": severity,
+                "title": title, "detail": detail,
+                "affected_entity_id": affected_entity_id, "confidence": confidence,
+                "evidence_fact_ids": evidence_fact_ids,
+                "path_entity_ids": path_entity_ids,
+                "fact_payload": fact_payload,
+                "curated_evidence": curated_evidence or [],
+                "deterministic_key": key,
+            })
+
+        for row in seed_rows:
+            reason = eligibility(
+                has_evidence=row["has_evidence"], confidence=float(row["confidence"]),
+                minimum_confidence=policy.minimum_confidence,
+            )
+            if reason is not None:
+                key = f"stop:{row['fact_id']}"
+                add_finding(
+                    key=key, rule_key="policy.stop-ineligible-edge", classification="STOP",
+                    severity="INFO", title=f"Stopped before {row['name']}",
+                    detail=(
+                        f"The impact policy stopped this branch because the dependency has {reason}."
+                    ),
+                    affected_entity_id=row["id"], confidence=float(row["confidence"]),
+                    evidence_fact_ids=[row["fact_id"]] if row["has_evidence"] else [],
+                    path_entity_ids=[subject_id, row["id"]],
+                    fact_payload={"stop_reason": reason, "policy_stage": "SEED"},
+                )
+                continue
+            if len(eligible_rows) >= node_budget:
+                limited = True
+                if not any(item["code"] == "TRAVERSAL_BUDGET" for item in limitations):
+                    limitations.append({
+                        "code": "TRAVERSAL_BUDGET",
+                        "message": "The node budget truncated the direct dependency set.",
+                        "evidence_fact_ids": [],
+                    })
+                break
+            eligible_rows.append(row)
+            component = row["properties"].get("component_path")
+            location = f" in {component}" if component else ""
+            key = f"direct:{row['fact_id']}"
+            add_finding(
+                key=key, rule_key="package.direct-dependent",
+                classification=policy.seed_classification, severity="MEDIUM",
+                title=f"{row['name']} directly depends on {package_name}",
+                detail=(
+                    f"{row['name']}{location} moves from {row['current_version']} to "
+                    f"{mutation.after['version']}. Validate its declared version constraint and tests."
+                ),
+                affected_entity_id=row["id"], confidence=float(row["confidence"]),
+                evidence_fact_ids=[row["fact_id"]],
+                path_entity_ids=[subject_id, row["id"]],
+                fact_payload={
+                    "before": row["current_version"], "after": mutation.after["version"],
+                    "component_path": component, "source_revision": row["source_revision"],
+                },
+            )
+            seeds.append(TraversedNode(
+                entity_id=row["id"], entity_type=row["entity_type"], name=row["name"],
+                canonical_key=row["canonical_key"], depth=1,
+                classification=policy.seed_classification, weight=1.0,
+                predicate="DEPENDS_ON", origin_id=subject_id, fact_id=row["fact_id"],
+                confidence=float(row["confidence"]), path=(subject_id, row["id"]),
+            ))
+
+        traversal = ImpactTraversal(self.database, tenant_id=tenant_id, policy=policy)
+        # The seeds are already counted inside the traversal's node budget, and the seed query
+        # has already spent its share of the edge budget.
+        walk = await traversal.expand(
+            seeds,
+            node_budget=node_budget,
+            edge_budget=max(0, edge_budget - len(seed_rows)),
+        )
+        limited = limited or walk.truncated
+        for limitation in walk.limitations:
+            if not any(item["code"] == limitation["code"] for item in limitations):
+                limitations.append(limitation)
+        scanner_versions |= walk.scanner_versions
+
+        for node in walk.nodes:
+            if node.depth <= 1:
+                continue  # the seed set already produced its own findings
+            severity = _IMPACT_SEVERITY.get(node.classification, "LOW")
+            key = f"{node.classification.lower()}:{node.predicate}:{node.fact_id}:{node.entity_id}"
+            if node.classification == "TRANSITIVE":
+                title = f"{node.name} is reached through {node.depth} evidence-backed hops"
+                detail = (
+                    f"The policy walked {node.predicate} to this {node.entity_type} at depth "
+                    f"{node.depth}. It is affected through a dependent, not directly, so verify "
+                    "it after the direct dependents are validated."
+                )
+                rule_key = "package.transitive-impact"
+            else:
+                title = f"{node.name} is in the affected estate context"
+                detail = (
+                    f"The {node.predicate} relationship connects this {node.entity_type} to an "
+                    "evidence-backed impacted entity. It is contextual, not asserted as broken."
+                )
+                rule_key = "package.estate-context"
+            add_finding(
+                key=key, rule_key=rule_key, classification=node.classification,
+                severity=severity, title=title, detail=detail,
+                affected_entity_id=node.entity_id, confidence=node.confidence,
+                evidence_fact_ids=[node.fact_id] if node.fact_id else [],
+                path_entity_ids=list(node.path),
+                fact_payload={
+                    "relationship": node.predicate, "depth": node.depth,
+                    "policy_weight": node.weight,
+                    "overlay": {
+                        "changed_subject_id": str(subject_id),
+                        "target_version": mutation.after["version"],
+                    },
+                },
+            )
+
+        for branch in walk.stopped:
+            key = f"stop:{branch.predicate}:{branch.fact_id}:{branch.entity_id}"
+            add_finding(
+                key=key, rule_key="policy.stop-ineligible-edge", classification="STOP",
+                severity="INFO", title=f"Stopped before {branch.name}",
+                detail=(
+                    f"The impact policy stopped this branch at depth {branch.depth} because the "
+                    f"{branch.predicate} relationship has {branch.reason}."
+                ),
+                affected_entity_id=branch.entity_id, confidence=branch.confidence,
+                evidence_fact_ids=[branch.fact_id] if branch.fact_id else [],
+                path_entity_ids=list(branch.path),
+                fact_payload={
+                    "relationship": branch.predicate, "stop_reason": branch.reason,
+                    "depth": branch.depth, "policy_stage": "TRAVERSAL",
+                },
+            )
+
+        capability_limitations, capability_summary = await self._capability_findings(
+            traversal=traversal, walk=walk, policy=policy,
+            subject_id=subject_id, add_finding=add_finding, limit=node_budget,
+        )
+        limitations.extend(capability_limitations)
+
+        await self._change_memory_finding(
+            tenant_id=tenant_id, mutation=mutation, scope=scope,
+            subject_id=subject_id, add_finding=add_finding,
+        )
+
+        distribution_key = "informational:version-spread"
+        add_finding(
+            key=distribution_key, rule_key="package.version-spread",
+            classification="INFORMATIONAL", severity="INFO",
+            title="Version spread after the proposed change",
+            detail=(
+                f"The selected scope converges {len(eligible_rows)} evidence-backed dependencies "
+                f"to {mutation.after['version']}; stopped branches remain unchanged."
+            ),
+            affected_entity_id=subject_id, confidence=1,
+            evidence_fact_ids=sorted({row["fact_id"] for row in eligible_rows}, key=str),
+            path_entity_ids=[subject_id],
+            fact_payload={
+                "now": mutation.before["versions"],
+                "simulated": [{"version": mutation.after["version"], "count": len(eligible_rows)}],
+                "unchanged": len(seed_rows) - len(eligible_rows),
+                "transitive": len(walk.by_classification("TRANSITIVE")),
+                "context": len(walk.by_classification("CONTEXT")),
+                "capabilities": capability_summary,
+            },
+        )
+
+        if not eligible_rows:
+            limitations.append({
+                "code": "NO_ELIGIBLE_IMPACT_PATH",
+                "message": "No current dependency path met the policy's evidence and confidence thresholds.",
+                "evidence_fact_ids": [row["fact_id"] for row in seed_rows if row["has_evidence"]],
+            })
+        return {
+            "findings": findings,
+            "limitations": limitations,
+            "scanner_versions": scanner_versions,
+            "limited": limited,
+            "eligible": len(eligible_rows),
+        }
+
+    async def _seed_dependents(
+        self, *, tenant_id: UUID, package_name: str, scope: Any,
+        subject_types: frozenset[str], limit: int,
+    ) -> list[dict[str, Any]]:
+        """Resolve the mutation subject to the estate entities that declare it.
+
+        This is the one predicate-specific step. Everything after it is decided by the policy,
+        which is what lets a second predicate arrive as a new seed plus a policy row rather
+        than as a second traversal implementation.
+        """
+        params: list[Any] = [tenant_id, package_name, sorted(subject_types)]
         scope_sql = ""
         if scope.kind in {"REPOSITORY", "COMPONENT"}:
             scope_sql += " AND f.subject_entity_id=%s"
@@ -1274,7 +2062,8 @@ class Phase2ChangeMixin:
         if scope.kind == "COMPONENT":
             scope_sql += " AND coalesce(f.properties->>'component_path','')=%s"
             params.append(scope.component_path)
-        rows = await self.database.fetch_all(
+        params.append(limit)
+        return await self.database.fetch_all(
             f"""
             SELECT f.id fact_id,f.confidence,f.assertion_class,f.source_revision,f.extractor_key,
                    f.extractor_version,f.properties,consumer.id,consumer.entity_type,consumer.name,
@@ -1287,157 +2076,99 @@ class Phase2ChangeMixin:
             LEFT JOIN dependency_resolution dr ON dr.fact_assertion_id=f.id
             WHERE f.tenant_id=%s AND lower(pri.package_name)=lower(%s)
               AND f.predicate='DEPENDS_ON' AND f.system_to IS NULL
-              AND consumer.entity_type='Repository' {scope_sql}
+              AND consumer.entity_type=ANY(%s::text[]) {scope_sql}
             ORDER BY consumer.canonical_key,f.properties->>'component_path',f.id
             LIMIT %s
             """,
-            (*params, max_edges + 1), tenant_id=tenant_id,
+            tuple(params), tenant_id=tenant_id,
         )
-        limitations: list[dict[str, Any]] = []
-        limited = len(rows) > max_edges
-        rows = rows[:max_edges]
-        if limited:
-            limitations.append({
-                "code": "TRAVERSAL_BUDGET", "message": "The edge budget truncated the simulation.",
-                "evidence_fact_ids": [],
-            })
-        findings: list[dict[str, Any]] = []
-        scanner_versions = sorted({f"{row['extractor_key']}/{row['extractor_version']}" for row in rows})
-        eligible = [row for row in rows if row["has_evidence"] and float(row["confidence"]) >= 0.8]
-        excluded = [row for row in rows if row not in eligible]
-        for row in eligible[:max_nodes]:
-            component = row["properties"].get("component_path")
-            location = f" in {component}" if component else ""
-            key = f"direct:{row['fact_id']}"
-            findings.append({
-                "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{key}"),
-                "rule_key": "package.direct-dependent", "rule_version": "1.0.0",
-                "classification": "DIRECT", "severity": "MEDIUM",
-                "title": f"{row['name']} directly depends on {package_name}",
-                "detail": (
-                    f"{row['name']}{location} moves from {row['current_version']} to "
-                    f"{mutation.after['version']}. Validate its declared version constraint and tests."
+
+    async def _capability_findings(
+        self, *, traversal: ImpactTraversal, walk: Any, policy: ImpactPolicyConfiguration,
+        subject_id: UUID, add_finding: Any, limit: int,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Join reached applications to the curated business capability map.
+
+        §22 and the §44 demo both insist the headline is business impact, not a repository
+        count. The relationship is curated rather than observed, so it is cited as curated
+        provenance and every finding says so in its own detail text.
+        """
+        summary = {"count": 0, "tier_zero": 0, "collected": False}
+        if policy.capability_rule is None:
+            return [], summary
+        rule = policy.capability_rule
+        application_ids = [
+            node.entity_id for node in walk.nodes
+            if node.entity_type in rule.from_types and node.depth <= rule.max_depth
+        ]
+        if not application_ids:
+            return [{
+                "code": "NO_BUSINESS_CAPABILITY_PATH",
+                "message": (
+                    "No application was reached within the policy's depth bound, so business "
+                    "capability impact could not be evaluated."
                 ),
-                "affected_entity_id": row["id"], "confidence": float(row["confidence"]),
-                "evidence_fact_ids": [row["fact_id"]],
-                "path_entity_ids": [mutation.subject.entity.id, row["id"]],
-                "fact_payload": {
-                    "before": row["current_version"], "after": mutation.after["version"],
-                    "component_path": component, "source_revision": row["source_revision"],
-                },
-                "deterministic_key": key,
-            })
-        if len(eligible) > max_nodes:
-            limited = True
-            limitations.append({
-                "code": "TRAVERSAL_BUDGET", "message": "The node budget truncated the simulation.",
                 "evidence_fact_ids": [],
-            })
-        for row in excluded:
-            key = f"stop:{row['fact_id']}"
-            reason = "missing evidence" if not row["has_evidence"] else "confidence below 0.80"
-            findings.append({
-                "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{key}"),
-                "rule_key": "policy.stop-ineligible-edge", "rule_version": "1.0.0",
-                "classification": "STOP", "severity": "INFO",
-                "title": f"Stopped before {row['name']}",
-                "detail": f"The impact policy stopped this branch because the dependency has {reason}.",
-                "affected_entity_id": row["id"], "confidence": float(row["confidence"]),
-                "evidence_fact_ids": [row["fact_id"]] if row["has_evidence"] else [],
-                "path_entity_ids": [mutation.subject.entity.id, row["id"]],
-                "fact_payload": {"stop_reason": reason}, "deterministic_key": key,
-            })
-        impacted_repository_ids = sorted({row["id"] for row in eligible}, key=str)
-        context_rows: list[dict[str, Any]] = []
-        if impacted_repository_ids and len(findings) < max_nodes:
-            context_rows = await self.database.fetch_all(
-                """
-                SELECT relationship.id fact_id,relationship.predicate,relationship.confidence,
-                       relationship.extractor_key,relationship.extractor_version,
-                       related.id,related.entity_type,related.name,related.canonical_key,
-                       EXISTS(SELECT 1 FROM evidence WHERE fact_assertion_id=relationship.id) has_evidence,
-                       repository.id repository_id
-                FROM fact_assertion relationship
-                JOIN entity repository ON repository.id=ANY(%s::uuid[])
-                JOIN entity related ON related.id=CASE
-                  WHEN relationship.object_entity_id=repository.id THEN relationship.subject_entity_id
-                  ELSE relationship.object_entity_id END
-                WHERE relationship.tenant_id=%s AND relationship.system_to IS NULL
-                  AND (
-                    (relationship.object_entity_id=repository.id
-                     AND relationship.predicate IN ('IMPLEMENTED_BY'))
-                    OR
-                    (relationship.subject_entity_id=repository.id
-                     AND relationship.predicate IN ('CONTAINS','DEPLOYED_AS','USES'))
-                  )
-                ORDER BY repository.canonical_key,relationship.predicate,related.canonical_key,
-                         relationship.id
-                LIMIT %s
-                """,
-                (impacted_repository_ids, tenant_id, max_edges + 1), tenant_id=tenant_id,
+            }], summary
+        rows = await traversal.capabilities(application_ids, limit=limit)
+        if not rows:
+            return [{
+                "code": "BUSINESS_CAPABILITY_NOT_MAPPED",
+                "message": (
+                    "The reached applications are not assigned to any capability on the current "
+                    "business map, so business impact is unknown rather than absent."
+                ),
+                "evidence_fact_ids": [],
+            }], summary
+        by_capability: dict[UUID, list[dict[str, Any]]] = {}
+        for row in rows:
+            by_capability.setdefault(row["capability_entity_id"], []).append(row)
+        tier_zero = 0
+        for capability_id in sorted(by_capability, key=str):
+            group = by_capability[capability_id]
+            first = group[0]
+            criticality = int(first["criticality"])
+            is_tier_zero = criticality <= rule.tier_zero_criticality
+            tier_zero += 1 if is_tier_zero else 0
+            key = f"capability:{capability_id}"
+            add_finding(
+                key=key, rule_key="capability.business-impact",
+                classification=rule.classification,
+                severity="HIGH" if is_tier_zero else "MEDIUM",
+                title=(
+                    f"{first['name']} is affected"
+                    + (" (Tier-0 capability)" if is_tier_zero else f" (criticality {criticality})")
+                ),
+                detail=(
+                    f"{len(group)} affected application(s) deliver this capability. The "
+                    "capability-to-application assignment is curated on the business map, not "
+                    "observed from code, so it carries the map revision as its provenance."
+                ),
+                affected_entity_id=capability_id, confidence=float(first["confidence"]),
+                evidence_fact_ids=[],
+                path_entity_ids=[subject_id, first["application_entity_id"], capability_id],
+                fact_payload={
+                    "criticality": criticality,
+                    "tier_zero": is_tier_zero,
+                    "affected_application_ids": sorted(
+                        {str(item["application_entity_id"]) for item in group}
+                    ),
+                    "provenance_kind": "CURATED_BUSINESS_MAP",
+                },
+                curated_evidence=[{
+                    "kind": "BUSINESS_MAP_REVISION",
+                    "business_map_id": str(first["business_map_id"]),
+                    "revision_id": str(first["evidence_revision_id"]),
+                    "analysis_fingerprint": first["analysis_fingerprint"],
+                }],
             )
-            if len(context_rows) > max_edges:
-                context_rows = context_rows[:max_edges]
-                limited = True
-                limitations.append({
-                    "code": "TRAVERSAL_BUDGET",
-                    "message": "The context-edge budget truncated the simulation.",
-                    "evidence_fact_ids": [],
-                })
-        scanner_versions = sorted({
-            *scanner_versions,
-            *(f"{row['extractor_key']}/{row['extractor_version']}" for row in context_rows),
-        })
-        context_seen: set[tuple[UUID, str]] = set()
-        remaining_nodes = max(0, max_nodes - len(eligible))
-        for row in context_rows:
-            dedupe_key = (row["id"], row["predicate"])
-            if dedupe_key in context_seen:
-                continue
-            context_seen.add(dedupe_key)
-            if len(context_seen) > remaining_nodes:
-                limited = True
-                limitations.append({
-                    "code": "TRAVERSAL_BUDGET",
-                    "message": "The context-node budget truncated the simulation.",
-                    "evidence_fact_ids": [],
-                })
-                break
-            confidence = float(row["confidence"])
-            eligible_context = row["has_evidence"] and confidence >= 0.8
-            classification = "CONTEXT" if eligible_context else "STOP"
-            key = f"{classification.lower()}:context:{row['fact_id']}:{row['id']}"
-            if eligible_context:
-                title = f"{row['name']} is in the affected repository context"
-                detail = (
-                    f"The {row['predicate']} relationship connects this {row['entity_type']} to an "
-                    "evidence-backed direct dependent. It is contextual, not asserted as directly broken."
-                )
-                rule_key = "package.repository-context"
-                fact_payload = {
-                    "relationship": row["predicate"],
-                    "overlay": {
-                        "changed_subject_id": str(mutation.subject.entity.id),
-                        "target_version": mutation.after["version"],
-                        "authoritative_facts_unchanged": True,
-                    },
-                }
-            else:
-                reason = "missing evidence" if not row["has_evidence"] else "confidence below 0.80"
-                title = f"Stopped before contextual {row['name']}"
-                detail = f"The impact policy stopped this branch because the relationship has {reason}."
-                rule_key = "policy.stop-ineligible-edge"
-                fact_payload = {"relationship": row["predicate"], "stop_reason": reason}
-            findings.append({
-                "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{key}"),
-                "rule_key": rule_key, "rule_version": "1.0.0",
-                "classification": classification, "severity": "LOW" if eligible_context else "INFO",
-                "title": title, "detail": detail, "affected_entity_id": row["id"],
-                "confidence": confidence,
-                "evidence_fact_ids": [row["fact_id"]] if row["has_evidence"] else [],
-                "path_entity_ids": [mutation.subject.entity.id, row["repository_id"], row["id"]],
-                "fact_payload": fact_payload, "deterministic_key": key,
-            })
+        summary = {"count": len(by_capability), "tier_zero": tier_zero, "collected": True}
+        return [], summary
+
+    async def _change_memory_finding(
+        self, *, tenant_id: UUID, mutation: Any, scope: Any,
+        subject_id: UUID, add_finding: Any,
+    ) -> None:
         history_rows = await self.database.fetch_all(
             """
             SELECT id,success,intervention_required,rolled_back,confidence,
@@ -1448,116 +2179,189 @@ class Phase2ChangeMixin:
               AND scope->>'kind'=%s
             ORDER BY observed_at DESC,id DESC LIMIT 50
             """,
-            (tenant_id, mutation.predicate, mutation.subject.entity.id, scope.kind),
+            (tenant_id, mutation.predicate, subject_id, scope.kind),
             tenant_id=tenant_id,
         )
-        if len(history_rows) >= 3:
-            historical_key = "informational:qualified-change-memory"
-            successes = sum(bool(row["success"]) for row in history_rows)
-            rollbacks = sum(bool(row["rolled_back"]) for row in history_rows)
-            interventions = sum(bool(row["intervention_required"]) for row in history_rows)
-            findings.append({
-                "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{historical_key}"),
-                "rule_key": "change-memory.qualified-outcomes", "rule_version": "1.0.0",
-                "classification": "INFORMATIONAL", "severity": "INFO",
-                "title": f"{len(history_rows)} comparable observed changes",
-                "detail": (
-                    "Organization-specific history is reported as a bounded sample, not as a "
-                    "guarantee. Review cited outcomes and coverage before using it as a predictor."
-                ),
-                "affected_entity_id": mutation.subject.entity.id,
-                "confidence": min(float(row["confidence"]) for row in history_rows),
-                "evidence_fact_ids": sorted({
-                    fact_id for row in history_rows for fact_id in row["evidence_fact_ids"]
-                }, key=str),
-                "path_entity_ids": [mutation.subject.entity.id],
-                "fact_payload": {
-                    "sample_size": len(history_rows), "successes": successes,
-                    "rollbacks": rollbacks, "interventions": interventions,
-                    "success_rate": round(successes / len(history_rows), 4),
-                    "rollback_rate": round(rollbacks / len(history_rows), 4),
-                    "bias_and_coverage_limitations": [
-                        "only explicitly correlated outcomes with confidence at least 0.80 are included",
-                        "historical association is not causal and may not transfer to the current estate",
-                    ],
-                    "outcome_ids": [str(row["id"]) for row in history_rows],
-                },
-                "deterministic_key": historical_key,
-            })
-        distribution_key = "informational:version-spread"
-        findings.append({
-            "id": uuid5(_SIMULATION_NAMESPACE, f"{run['id']}:{distribution_key}"),
-            "rule_key": "package.version-spread", "rule_version": "1.0.0",
-            "classification": "INFORMATIONAL", "severity": "INFO",
-            "title": "Version spread after the proposed change",
-            "detail": (
-                f"The selected scope converges {len(eligible)} evidence-backed dependencies to "
-                f"{mutation.after['version']}; stopped branches remain unchanged."
+        if len(history_rows) < 3:
+            return
+        successes = sum(bool(row["success"]) for row in history_rows)
+        rollbacks = sum(bool(row["rolled_back"]) for row in history_rows)
+        interventions = sum(bool(row["intervention_required"]) for row in history_rows)
+        add_finding(
+            key="informational:qualified-change-memory",
+            rule_key="change-memory.qualified-outcomes", classification="INFORMATIONAL",
+            severity="INFO", title=f"{len(history_rows)} comparable observed changes",
+            detail=(
+                "Organization-specific history is reported as a bounded sample, not as a "
+                "guarantee. Review cited outcomes and coverage before using it as a predictor."
             ),
-            "affected_entity_id": mutation.subject.entity.id, "confidence": 1,
-            "evidence_fact_ids": sorted({value for row in eligible for value in [row["fact_id"]]}, key=str),
-            "path_entity_ids": [mutation.subject.entity.id],
-            "fact_payload": {
-                "now": mutation.before["versions"],
-                "simulated": [{"version": mutation.after["version"], "count": len(eligible)}],
-                "unchanged": len(excluded),
+            affected_entity_id=subject_id,
+            confidence=min(float(row["confidence"]) for row in history_rows),
+            evidence_fact_ids=sorted({
+                fact_id for row in history_rows for fact_id in row["evidence_fact_ids"]
+            }, key=str),
+            path_entity_ids=[subject_id],
+            fact_payload={
+                "sample_size": len(history_rows), "successes": successes,
+                "rollbacks": rollbacks, "interventions": interventions,
+                "success_rate": round(successes / len(history_rows), 4),
+                "rollback_rate": round(rollbacks / len(history_rows), 4),
+                "bias_and_coverage_limitations": [
+                    "only explicitly correlated outcomes with confidence at least 0.80 are included",
+                    "historical association is not causal and may not transfer to the current estate",
+                ],
+                "outcome_ids": [str(row["id"]) for row in history_rows],
             },
-            "deterministic_key": distribution_key,
-        })
-        if not eligible:
-            limitations.append({
-                "code": "NO_ELIGIBLE_IMPACT_PATH",
-                "message": "No current dependency path met the policy's evidence and confidence thresholds.",
-                "evidence_fact_ids": [row["fact_id"] for row in rows if row["has_evidence"]],
-            })
-            status = "NOT_SIMULATABLE"
-        else:
-            status = "LIMITED" if limited else "SUCCEEDED"
-        canonical_result = [{
-            key: (str(value) if isinstance(value, UUID) else value)
-            for key, value in finding.items() if key not in {"id"}
+        )
+
+    async def _interpret_simulation(
+        self, *, run_id: UUID, tenant_id: UUID, findings: list[dict[str, Any]],
+    ) -> None:
+        """Produce the AI interpretation partition, or record why there is none.
+
+        §14 puts a hard line between deterministic findings and interpretation: the engine
+        establishes the facts, AI explains them, and AI may not manufacture the impact graph.
+        That line is enforced here rather than trusted to the prompt — every claim must cite a
+        finding this run actually produced, and output that cites nothing is quarantined into
+        its own column where it stays visible but cannot influence risk or the gate.
+
+        Deterministic findings are already committed when this runs, so every failure path
+        below leaves them complete and unchanged. That is M2's exit gate.
+        """
+        enabled = await self.phase2_feature_enabled("AI_INTERPRETATION", tenant_id=tenant_id)
+        if not enabled or self.ai is None:
+            await self._record_interpretation(
+                run_id=run_id, tenant_id=tenant_id, status="UNAVAILABLE",
+                limitation=(
+                    "AI interpretation is disabled; deterministic findings are complete and unchanged."
+                    if not enabled else
+                    "No AI provider is configured; deterministic findings are complete and unchanged."
+                ),
+            )
+            return
+
+        finding_ids = {str(finding["id"]) for finding in findings}
+        payload = [{
+            "id": str(finding["id"]),
+            "classification": finding["classification"],
+            "severity": finding["severity"],
+            "rule_key": finding["rule_key"],
+            "title": finding["title"],
+            "detail": finding["detail"],
+            "confidence": float(finding["confidence"]),
+            "provenance_kind": finding["fact_payload"].get("provenance_kind", "OBSERVED_FACT"),
         } for finding in findings]
-        result_hash = _fingerprint({
-            "change_set": change_set.input_fingerprint,
-            "estate_watermark": run["estate_watermark"], "policy": run["policy_version"],
-            "findings": canonical_result, "limitations": limitations,
-        })
-        async with self.database.session(tenant_id) as connection:
-            for finding in findings:
-                await connection.execute(
-                    """
-                    INSERT INTO simulation_finding(
-                      id,tenant_id,simulation_run_id,rule_key,rule_version,classification,severity,
-                      title,detail,affected_entity_id,confidence,evidence_fact_ids,path_entity_ids,
-                      fact_payload,deterministic_key
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    ON CONFLICT(simulation_run_id,deterministic_key) DO NOTHING
-                    """,
-                    (
-                        finding["id"], tenant_id, run["id"], finding["rule_key"],
-                        finding["rule_version"], finding["classification"], finding["severity"],
-                        finding["title"], finding["detail"], finding["affected_entity_id"],
-                        finding["confidence"], finding["evidence_fact_ids"], finding["path_entity_ids"],
-                        Jsonb(finding["fact_payload"]), finding["deterministic_key"],
-                    ),
+        try:
+            async with asyncio.timeout(_INTERPRETATION_TIMEOUT_SECONDS):
+                invocation = await self.ai.invoke(
+                    "simulation.interpret",
+                    {
+                        "mutation": json.dumps(
+                            {"run_id": str(run_id)}, sort_keys=True,
+                        ),
+                        "findings": json.dumps(payload, sort_keys=True),
+                    },
+                    tenant_id=tenant_id,
+                    metadata={"simulation_run_id": str(run_id)},
                 )
+        except Exception as error:
+            # An interpretation outage is not a simulation failure. §9.3 requires the
+            # deterministic result to stay available and say that interpretation did not.
+            await self._record_interpretation(
+                run_id=run_id, tenant_id=tenant_id, status="UNAVAILABLE",
+                limitation=(
+                    f"AI interpretation did not complete ({type(error).__name__}); "
+                    "deterministic findings are complete and unchanged."
+                ),
+            )
+            return
+
+        output = getattr(invocation, "output", None)
+        if not isinstance(output, dict):
+            await self._record_interpretation(
+                run_id=run_id, tenant_id=tenant_id, status="UNAVAILABLE",
+                limitation=(
+                    "AI interpretation returned no structured output; deterministic findings "
+                    "are complete and unchanged."
+                ),
+            )
+            return
+
+        cited = [
+            value for value in output.get("cited_finding_ids") or []
+            if str(value) in finding_ids
+        ]
+        invented = sorted(
+            str(value) for value in output.get("cited_finding_ids") or []
+            if str(value) not in finding_ids
+        )
+        quarantined: list[dict[str, Any]] = []
+        if invented:
+            quarantined.append({
+                "reason": "CITED_UNKNOWN_FINDING",
+                "detail": "The interpretation cited finding IDs this run did not produce.",
+                "values": invented,
+            })
+        if not cited:
+            quarantined.append({
+                "reason": "UNCITED_OUTPUT",
+                "detail": "The interpretation cited no finding from this run.",
+                "values": [str(output.get("explanation") or "")[:2000]],
+            })
+
+        if quarantined:
+            await self._record_interpretation(
+                run_id=run_id, tenant_id=tenant_id, status="QUARANTINED",
+                limitation=(
+                    "Interpretation output could not be grounded in this run's findings and is "
+                    "quarantined. It does not affect risk, the gate, or any deterministic result."
+                ),
+                quarantined_claims=quarantined,
+                provider=getattr(invocation, "provider", None),
+                model=getattr(invocation, "model", None),
+                prompt_version=getattr(invocation, "prompt_version", None),
+            )
+            return
+
+        await self._record_interpretation(
+            run_id=run_id, tenant_id=tenant_id, status="AVAILABLE",
+            risk=str(output.get("risk") or "") or None,
+            explanation=str(output.get("explanation") or "") or None,
+            rollout=[str(item) for item in output.get("rollout") or []],
+            remediation=[str(item) for item in output.get("remediation") or []],
+            verification=[str(item) for item in output.get("verification") or []],
+            cited_finding_ids=[UUID(str(value)) for value in cited],
+            provider=getattr(invocation, "provider", None),
+            model=getattr(invocation, "model", None),
+            prompt_version=getattr(invocation, "prompt_version", None),
+            limitation=(
+                None if len(cited) == len(findings)
+                else "Interpretation does not cite every finding. Uncited findings remain visible and authoritative."
+            ),
+        )
+
+    async def _record_interpretation(
+        self, *, run_id: UUID, tenant_id: UUID, status: str,
+        risk: str | None = None, explanation: str | None = None,
+        rollout: list[str] | None = None, remediation: list[str] | None = None,
+        verification: list[str] | None = None, cited_finding_ids: list[UUID] | None = None,
+        limitation: str | None = None, quarantined_claims: list[dict[str, Any]] | None = None,
+        provider: str | None = None, model: str | None = None, prompt_version: str | None = None,
+    ) -> None:
+        async with self.database.session(tenant_id) as connection:
             await connection.execute(
                 """
                 INSERT INTO simulation_interpretation(
-                  tenant_id,simulation_run_id,status,limitation
-                ) VALUES (%s,%s,'UNAVAILABLE',%s)
+                  tenant_id,simulation_run_id,status,provider,model,prompt_version,risk,
+                  explanation,rollout,remediation,verification,cited_finding_ids,limitation,
+                  quarantined_claims
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT(simulation_run_id) DO NOTHING
                 """,
                 (
-                    tenant_id, run["id"],
-                    "AI interpretation is disabled; deterministic findings are complete and unchanged.",
+                    tenant_id, run_id, status, provider, model, prompt_version, risk,
+                    explanation, Jsonb(rollout or []), Jsonb(remediation or []),
+                    Jsonb(verification or []), cited_finding_ids or [], limitation,
+                    Jsonb(quarantined_claims or []),
                 ),
-            )
-            await connection.execute(
-                """
-                UPDATE simulation_run SET status=%s,result_hash=%s,limitations=%s,
-                  scanner_versions=%s,completed_at=now(),leased_by=NULL,leased_until=NULL,updated_at=now()
-                WHERE id=%s
-                """,
-                (status, result_hash, Jsonb(limitations), scanner_versions, run["id"]),
             )

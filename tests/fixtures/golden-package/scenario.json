@@ -1,0 +1,43 @@
+{
+  "id": "upgrade-package/left-pad",
+  "title": "UPGRADE Package across a three-repository estate on two versions",
+  "why": "B0 asks for stable fixture identifiers and expected facts for the first vertical slice. This scenario pins what `UPGRADE Package` must compile to and what its simulation must find, so the deterministic slice has a fixture to regress against rather than only unit assertions.",
+  "subject": {
+    "canonical_key": "pkg:npm/left-pad",
+    "entity_type": "Package",
+    "ecosystem": "npm",
+    "package_name": "left-pad"
+  },
+  "estate": {
+    "repositories": [
+      { "key": "github:repo:golden-checkout-api", "path": "repositories/checkout-api", "declared_version": "1.2.0", "uses_subject": true },
+      { "key": "github:repo:golden-ledger-worker", "path": "repositories/ledger-worker", "declared_version": "1.2.0", "uses_subject": true },
+      { "key": "github:repo:golden-reporting-ui", "path": "repositories/reporting-ui", "declared_version": "1.3.0", "uses_subject": true }
+    ],
+    "version_distribution": [
+      { "version": "1.2.0", "count": 2 },
+      { "version": "1.3.0", "count": 1 }
+    ]
+  },
+  "compile": {
+    "intent": "Upgrade left-pad to 1.3.0 in the estate",
+    "expected_predicate": "UPGRADE",
+    "expected_command_state": "COMPILED",
+    "expected_subject_resolution": "RESOLVED",
+    "expected_scope_kind": "ESTATE",
+    "expected_after": { "version": "1.3.0" }
+  },
+  "refusals": [
+    { "intent": "Plant a tree in my garden", "expected_error_code": "UNSUPPORTED_INTENT", "why": "§3 requires a request whose predicate and subject are outside the grammar to fail grounding before any simulation" },
+    { "intent": "Upgrade left-pad to 9.9.9 in the estate", "expected_error_code": "TARGET_NOT_RESOLVED", "why": "a version no registry provider offers is not an immutable target" },
+    { "intent": "Upgrade lef to 1.3.0 in the estate", "expected_error_code": "SUBJECT_NOT_RESOLVED", "why": "an inferred subject must never compile silently" }
+  ],
+  "simulate": {
+    "expected_status": "SUCCEEDED",
+    "expected_findings": [
+      { "classification": "DIRECT", "rule_key": "package.direct-dependent", "minimum_count": 2, "why": "the two repositories still on 1.2.0 move" },
+      { "classification": "INFORMATIONAL", "rule_key": "package.version-spread", "minimum_count": 1, "why": "the estate's before and after spread is a fact, not an interpretation" }
+    ],
+    "determinism": "an identical tenant, estate watermark, ChangeSet, and policy version must produce an identical result hash"
+  }
+}

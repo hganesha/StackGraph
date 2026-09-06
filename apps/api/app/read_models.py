@@ -32,6 +32,7 @@ from stackgraph_ai.governance import (
 from app.age_graph import AgeGraphReader, AgeTopology
 from app.architecture_catalog import load_architecture_catalog, sha256_fingerprint
 from app.agent_control import AgentControlMixin
+from app.immune_system import ImmuneSystemMixin
 from app.database import Database
 from app.deterministic_insights import invalidate_deterministic_insight_cache
 from app.deterministic_insights import list_deterministic_insights
@@ -1183,7 +1184,7 @@ class AgeParityError(RuntimeError):
 
 
 class ReadModelStore(
-    AgentControlMixin, EstateGovernanceMixin, EstateFidelityMixin,
+    AgentControlMixin, ImmuneSystemMixin, EstateGovernanceMixin, EstateFidelityMixin,
     Phase2ChangeMixin, AdminReadModelsMixin,
 ):
     def __init__(
@@ -1194,8 +1195,12 @@ class ReadModelStore(
         graph_discovery_limit: int = 5000,
         graph_age_timeout_seconds: float = 3.0,
         credential_encryption_key: str = "stackgraph-local-development-credential-key",
+        ai: Any = None,
     ) -> None:
         self.database = database
+        # Optional. Simulation interpretation is the only consumer, and it degrades to an
+        # explicit UNAVAILABLE partition rather than failing when no provider is wired.
+        self.ai = ai
         self.graph_read_mode = graph_read_mode
         self.age_graph = AgeGraphReader(database, discovery_limit=graph_discovery_limit)
         self.neo4j_graph = Neo4jGraphReader(

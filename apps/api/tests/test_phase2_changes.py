@@ -5,7 +5,12 @@ from uuid import UUID
 import pytest
 
 from app.errors import APIError
-from app.models import MutationCompileRequest, ObservedMutationCreateRequest
+from app.models import (
+    ChangeSetCompileRequest,
+    ChangeSetMutationRequest,
+    MutationCompileRequest,
+    ObservedMutationCreateRequest,
+)
 from app.read_models import ReadModelStore
 
 
@@ -19,12 +24,16 @@ NOW = datetime(2026, 9, 5, 12, tzinfo=UTC)
 
 
 class Cursor:
-    def __init__(self, row=None):
+    def __init__(self, row=None, rows=None):
         self.row = row
+        self.rows = rows or ([] if row is None else [row])
 
     async def fetchone(self):
         row, self.row = self.row, None
         return row
+
+    async def fetchall(self):
+        return list(self.rows)
 
 
 class Session:
@@ -39,11 +48,19 @@ class Session:
 
 
 class CompilerDatabase:
-    def __init__(self, *, observed_version="1.0.0", contradictions=None):
+    def __init__(
+        self, *, observed_version="1.0.0", contradictions=None,
+        catalog_versions=None, catalog_collection=None,
+    ):
         self.observed_version = observed_version
         self.contradictions = contradictions or []
+        # A registry catalogue is absent unless a case supplies one, so the default fixture
+        # still describes an estate nobody has enumerated.
+        self.catalog_versions = catalog_versions or []
+        self.catalog_collection = catalog_collection
         self.change_set = None
-        self.mutation_id = None
+        self.mutation_ids = []
+        self.mutation_ordinals = []
         self.audit_actions = []
 
     def session(self, tenant_id):
@@ -53,6 +70,16 @@ class CompilerDatabase:
     async def fetch_one(self, query, params=None, *, tenant_id=None):
         if "FROM phase2_feature_flag" in query:
             return {"enabled": True}
+        if "FROM action_capability" in query:
+            # Compilation is now governed by the registered capability rather than a hardcoded
+            # predicate check, so the double has to serve the row the compiler reads.
+            return {
+                "predicate": "UPGRADE", "subject_type": "Package", "lifecycle": "ACTIVE",
+                "validation_rules": {"max_mutations": 20},
+            }
+        if "FROM package_catalog_collection" in query:
+            # No enumeration has run by default, which is what an estate-only target list means.
+            return self.catalog_collection
         raise AssertionError(f"unexpected fetch_one: {query}")
 
     async def fetch_all(self, query, params=None, *, tenant_id=None):
@@ -63,17 +90,22 @@ class CompilerDatabase:
                 "canonical_key": "pkg:npm/demo-package", "package_name": "demo-package",
                 "evidence_fact_ids": [FACT_ID],
             }]
+        if "FROM package_version_catalog" in query:
+            return self.catalog_versions
+        if "count(DISTINCT f.subject_entity_id)::int repositories" in query:
+            # The estate's own version spread, which decides the consolidation target.
+            return [{"version": self.observed_version, "repositories": 3}]
         if "SELECT e.id,e.canonical_key,pri.package_version" in query:
             return [
                 {
                     "id": TARGET_ID, "canonical_key": "pkg:npm/demo-package@2.0.0",
                     "package_version": "2.0.0", "observed_at": NOW,
-                    "registry_key": "npm-public",
+                    "registry_key": "npm-public", "support_status": "SUPPORTED",
                 },
                 {
                     "id": SECOND_TARGET_ID, "canonical_key": "pkg:npm/demo-package@3.0.0",
                     "package_version": "3.0.0", "observed_at": NOW,
-                    "registry_key": "npm-public",
+                    "registry_key": "npm-public", "support_status": "UNKNOWN",
                 },
             ]
         if "SELECT f.id fact_id,consumer.id" in query:
@@ -95,16 +127,19 @@ class CompilerDatabase:
                 return Cursor(dict(self.change_set))
             return Cursor()
         if "INSERT INTO change_set" in query:
+            # A ChangeSet now records whether it is atomic, so the fingerprint and key sit one
+            # position later than they did when every set held exactly one mutation.
             self.change_set = {
-                "id": params[0], "input_fingerprint": params[2],
-                "idempotency_key": params[3], "created_at": params[6],
+                "id": params[0], "atomic": params[2], "input_fingerprint": params[3],
+                "idempotency_key": params[4], "created_at": params[7],
             }
             return Cursor()
         if "INSERT INTO mutation" in query:
-            self.mutation_id = params[0]
+            self.mutation_ids.append(params[0])
+            self.mutation_ordinals.append(params[3])
             return Cursor()
         if "SELECT id FROM mutation" in query:
-            return Cursor({"id": self.mutation_id})
+            return Cursor(rows=[{"id": value} for value in self.mutation_ids])
         if "INSERT INTO admin_audit_log" in query:
             self.audit_actions.append(params[2])
             return Cursor()
@@ -218,3 +253,311 @@ def test_observed_outcome_rejects_missing_tenant_evidence() -> None:
         ))
 
     assert raised.value.code == "OUTCOME_EVIDENCE_NOT_FOUND"
+
+
+def change_set_request(mutations, *, key="pr-1", entry_point="PULL_REQUEST", reference="#42"):
+    return ChangeSetCompileRequest(
+        entry_point=entry_point, external_reference=reference,
+        idempotency_key=key,
+        mutations=[
+            ChangeSetMutationRequest(
+                predicate="UPGRADE", subject_id=PACKAGE_ID, target_version=target,
+                scope_id=scope,
+            )
+            for target, scope in mutations
+        ],
+    )
+
+
+COMPONENT_SCOPE = f"component:{REPOSITORY_ID}:apps/api"
+
+
+def test_a_pull_request_compiles_into_a_change_set_through_the_same_mutation_ir() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.command_state == "COMPILED"
+    assert result.change_set is not None
+    # §7's point: the source differs, the intermediate representation does not.
+    assert result.draft.provenance["entry_point"] == "PULL_REQUEST"
+    assert result.draft.provenance["external_reference"] == "#42"
+    assert result.draft.predicate == "UPGRADE"
+
+
+def test_a_change_set_persists_every_mutation_in_order() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", "estate")]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.change_set is not None
+    assert len(result.change_set.mutations) == 2
+    assert database.mutation_ordinals == [0, 1]
+    # Distinct identities, so a finding can point at the mutation that produced it.
+    assert len(set(database.mutation_ids)) == 2
+
+
+def test_two_mutations_on_one_subject_and_scope_with_different_targets_are_refused() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    # The set's effect would otherwise depend on the order it happened to be applied in.
+    assert result.gate.state == "BLOCKED"
+    assert "CONFLICTING_MUTATIONS" in [reason.code for reason in result.gate.reasons]
+    assert result.change_set is None
+    assert database.change_set is None
+
+
+def test_the_same_mutation_listed_twice_is_refused() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("2.0.0", COMPONENT_SCOPE)]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "DUPLICATE_MUTATION" in [reason.code for reason in result.gate.reasons]
+
+
+def test_one_blocked_mutation_blocks_the_whole_atomic_set() -> None:
+    database = CompilerDatabase()
+    result = asyncio.run(ReadModelStore(database).compile_change_set(
+        change_set_request([("2.0.0", COMPONENT_SCOPE), ("9.9.9", "estate")]),
+        tenant_id=TENANT_ID, actor_key="ci",
+    ))
+
+    # Persisting the valid half would offer a plan whose stated scope is not the plan that runs.
+    assert result.gate.state == "BLOCKED"
+    assert "TARGET_NOT_RESOLVED" in [reason.code for reason in result.gate.reasons]
+    assert database.change_set is None
+    assert database.mutation_ids == []
+
+
+def test_a_change_set_larger_than_the_capability_allows_is_refused() -> None:
+    class SmallLimitDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return {
+                    "predicate": "UPGRADE", "subject_type": "Package", "lifecycle": "ACTIVE",
+                    "validation_rules": {"max_mutations": 1},
+                }
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    with pytest.raises(APIError) as raised:
+        asyncio.run(ReadModelStore(SmallLimitDatabase()).compile_change_set(
+            change_set_request([("2.0.0", COMPONENT_SCOPE), ("3.0.0", "estate")]),
+            tenant_id=TENANT_ID, actor_key="ci",
+        ))
+
+    # The bound comes from the registered capability, not from a constant in the compiler.
+    assert raised.value.code == "CHANGE_SET_TOO_LARGE"
+
+
+def test_a_disabled_capability_refuses_compilation() -> None:
+    class DisabledDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return {
+                    "predicate": "REPLACE", "subject_type": "Package", "lifecycle": "DISABLED",
+                    "validation_rules": {},
+                }
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(DisabledDatabase()).compile_mutation(
+        compile_request(), tenant_id=TENANT_ID, actor_key="reviewer",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "ACTION_NOT_ENABLED" in [reason.code for reason in result.gate.reasons]
+
+
+def test_a_predicate_with_no_registered_capability_refuses_compilation() -> None:
+    class UnregisteredDatabase(CompilerDatabase):
+        async def fetch_one(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return None
+            return await super().fetch_one(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(UnregisteredDatabase()).compile_mutation(
+        compile_request(), tenant_id=TENANT_ID, actor_key="reviewer",
+    ))
+
+    assert result.gate.state == "BLOCKED"
+    assert "ACTION_NOT_ENABLED" in [reason.code for reason in result.gate.reasons]
+
+
+def test_target_list_labels_the_consolidation_target_from_the_estate_spread() -> None:
+    database = CompilerDatabase(observed_version="2.0.0")
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["2.0.0"].recommendation == "CONSOLIDATE"
+    assert by_version["2.0.0"].observed_repository_count == 3
+    assert "3 repositories already run this version" in by_version["2.0.0"].recommendation_detail
+    # 3.0.0 is higher and nothing runs it, so it is the candidate rather than the safe target.
+    assert by_version["3.0.0"].observed_repository_count == 0
+
+
+def test_support_status_is_read_rather_than_assumed() -> None:
+    database = CompilerDatabase(observed_version="2.0.0")
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["2.0.0"].support == "SUPPORTED"
+    # Unknown support is not supported. Silence is not a clearance.
+    assert by_version["3.0.0"].support == "UNKNOWN"
+
+
+def test_coverage_says_when_a_target_list_is_only_what_the_estate_runs() -> None:
+    class EstateOnlyDatabase(CompilerDatabase):
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            rows = await super().fetch_all(query, params, tenant_id=tenant_id)
+            if "count(DISTINCT f.subject_entity_id)::int repositories" in query:
+                # Every collected version is one the estate runs.
+                return [
+                    {"version": "2.0.0", "repositories": 3},
+                    {"version": "3.0.0", "repositories": 1},
+                ]
+            return rows
+
+    result = asyncio.run(ReadModelStore(EstateOnlyDatabase()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    assert result.coverage is not None
+    assert result.coverage.source == "ESTATE_OBSERVED"
+    assert result.coverage.registry_enumeration == "NOT_COLLECTED"
+    # A short list must not read as a short registry.
+    assert "TARGET_PROVIDER_ESTATE_ONLY" in [item.code for item in result.limitations]
+
+
+def catalog_database(**overrides):
+    """A tenant whose registry catalogue has been enumerated."""
+    return CompilerDatabase(
+        observed_version="2.0.0",
+        catalog_versions=[
+            {"version": "4.0.0", "is_prerelease": False, "is_yanked": False,
+             "is_deprecated": False, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "SUPPORTED"},
+            {"version": "5.0.0-rc1", "is_prerelease": True, "is_yanked": False,
+             "is_deprecated": False, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "UNKNOWN"},
+            {"version": "1.0.0", "is_prerelease": False, "is_yanked": False,
+             "is_deprecated": True, "published_at": NOW, "collected_at": NOW,
+             "registry_key": "npm-public", "support_status": "UNKNOWN"},
+        ],
+        catalog_collection={
+            "status": "AVAILABLE", "version_count": 3, "limitations": [],
+            "collected_at": NOW,
+        },
+        **overrides,
+    )
+
+
+def test_coverage_reports_enumeration_from_the_collection_record_not_the_result_shape() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    assert result.coverage is not None
+    # Enumeration is a fact about whether the enumerator ran, so it is read from the collection
+    # record. Inferring it from "a target exists that nobody runs" would call a package
+    # enumerated purely because the estate happened to be fragmented.
+    assert result.coverage.registry_enumeration == "AVAILABLE"
+    assert result.coverage.source == "MIXED"
+    assert "TARGET_PROVIDER_ESTATE_ONLY" not in [item.code for item in result.limitations]
+
+
+def test_the_registry_offers_upgrade_targets_the_estate_has_never_run() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    # The whole point: 4.0.0 is offerable although no repository has ever run it.
+    assert "4.0.0" in by_version
+    assert by_version["4.0.0"].origin == "REGISTRY_CATALOG"
+    assert by_version["4.0.0"].observed_repository_count == 0
+    # It has no entity, because the estate does not contain it.
+    assert by_version["4.0.0"].entity_id is None
+    assert by_version["2.0.0"].origin == "ESTATE"
+
+
+def test_a_prerelease_is_offered_but_never_as_the_latest_target() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["5.0.0-rc1"].is_prerelease is True
+    # Pushing an estate onto a release the publisher has not finished is not an upgrade.
+    assert by_version["5.0.0-rc1"].recommendation != "LATEST_KNOWN"
+    assert by_version["4.0.0"].recommendation == "LATEST_KNOWN"
+
+
+def test_a_deprecated_catalogue_release_is_marked_unsupported() -> None:
+    result = asyncio.run(ReadModelStore(catalog_database()).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    # 1.0.0 is only in the catalogue and npm marks it deprecated.
+    by_version = {target.version: target for target in result.targets}
+    assert by_version["1.0.0"].support == "UNSUPPORTED"
+
+
+def test_a_bounded_catalogue_says_so_rather_than_looking_complete() -> None:
+    database = catalog_database()
+    database.catalog_collection = {
+        "status": "PARTIAL", "version_count": 200,
+        "limitations": ["only the newest 200 of 4212 released versions were catalogued"],
+        "collected_at": NOW,
+    }
+    result = asyncio.run(ReadModelStore(database).valid_targets(
+        PACKAGE_ID, tenant_id=TENANT_ID, limit=10,
+    ))
+
+    codes = [item.code for item in result.limitations]
+    assert "TARGET_CATALOG_BOUNDED" in codes
+    assert any("4212" in item.message for item in result.limitations)
+
+
+def test_action_types_surface_the_whole_bounded_grammar_with_lifecycle() -> None:
+    class OntologyDatabase(CompilerDatabase):
+        async def fetch_all(self, query, params=None, *, tenant_id=None):
+            if "FROM action_capability" in query:
+                return [
+                    {"predicate": "UPGRADE", "subject_type": "Package",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "ACTIVE"},
+                    {"predicate": "UPGRADE", "subject_type": "Runtime",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "DISABLED"},
+                    {"predicate": "DEPRECATE", "subject_type": "API",
+                     "ontology_version": "actions/1.0.0", "lifecycle": "DISABLED"},
+                ]
+            return await super().fetch_all(query, params, tenant_id=tenant_id)
+
+    result = asyncio.run(ReadModelStore(OntologyDatabase()).action_types(tenant_id=TENANT_ID))
+
+    by_predicate = {item.predicate: item for item in result.action_types}
+    # §4 wants the bounded vocabulary visible, so a reader can tell a planned predicate from
+    # one that will never exist.
+    assert set(by_predicate) == {"UPGRADE", "DEPRECATE"}
+    assert by_predicate["DEPRECATE"].enabled is False
+    # UPGRADE stays offerable because one of its subject types compiles. Publishing the planned
+    # half of the grammar must not disable the half that works.
+    assert by_predicate["UPGRADE"].enabled is True
+    assert set(by_predicate["UPGRADE"].subject_types) == {"Package", "Runtime"}
+    by_subject = {item.subject_type: item for item in by_predicate["UPGRADE"].subjects}
+    assert by_subject["Package"].enabled is True
+    assert by_subject["Runtime"].enabled is False
+    assert by_subject["Runtime"].lifecycle == "DISABLED"

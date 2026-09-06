@@ -245,6 +245,27 @@ def persist_scanner_result_connection(
 
     fact_count = 0
     usage_count = 0
+    # Typed estate profiles are projected after the fact loop: the deployment table is keyed by
+    # workload, but the profile record that describes coverage and limitations is emitted once
+    # per repository, so both halves have to be in hand before either row can be written.
+    profiles_enabled = _phase2_flag_enabled(connection, tenant_id, "SCANNER_PROFILES")
+    # Resolved before the loop rather than as facts happen to arrive: a component profile is
+    # emitted on a Component subject, so relying on a Repository fact appearing first would
+    # attach components to no repository the moment the scanner reorders its output.
+    repository_subject = next(
+        (
+            fact["subject"] for fact in facts
+            if isinstance(fact.get("subject"), Mapping)
+            and fact["subject"].get("type") == "Repository"
+        ),
+        None,
+    )
+    repository_entity_id = (
+        _upsert_entity(connection, tenant_id, repository_subject)
+        if repository_subject is not None else None
+    )
+    deployment_facts: list[dict[str, Any]] = []
+    deployment_aggregate: Mapping[str, Any] | None = None
     for fact in facts:
         subject_id = _upsert_entity(connection, tenant_id, fact["subject"])
         object_entity = fact.get("object_entity")
@@ -346,6 +367,40 @@ def persist_scanner_result_connection(
                 completeness=str(result["completeness"]),
                 value=code_summary,
             )
+        record = fact.get("object_value")
+        record_kind = record.get("record_kind") if isinstance(record, Mapping) else None
+        if profiles_enabled and fact["predicate"] == "HAS_PROPERTY" and record_kind == "component_profile":
+            _persist_component_profile(
+                connection,
+                tenant_id=tenant_id,
+                component_id=subject_id,
+                repository_id=repository_entity_id,
+                fact_id=fact_id,
+                source_revision=str(result["source_revision"]),
+                observed_at=fact["observed_at"],
+                confidence=float(fact["confidence"]),
+                value=record,
+            )
+        if fact["predicate"] == "HAS_PROPERTY" and record_kind == "deployment_profile":
+            deployment_aggregate = record
+        if fact["predicate"] == "DEPLOYED_AS" and object_id is not None:
+            deployment_facts.append({
+                "entity_id": object_id,
+                "fact_id": fact_id,
+                "confidence": float(fact["confidence"]),
+                "observed_at": fact["observed_at"],
+                "properties": fact.get("properties") or {},
+            })
+
+    if profiles_enabled:
+        _persist_deployment_profiles(
+            connection,
+            tenant_id=tenant_id,
+            repository_id=repository_entity_id,
+            source_revision=str(result["source_revision"]),
+            deployments=deployment_facts,
+            aggregate=deployment_aggregate,
+        )
 
     connection.execute("SELECT publish_source_snapshot(%s)", (snapshot_id,))
     run_status = "SUCCEEDED" if result["completeness"] == "COMPLETE" else "PARTIAL"
@@ -1009,3 +1064,220 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# Deployment source kinds carry their own platform meaning. Terraform and the serverless
+# manifests are the exception: their provider is stated in the file, so the repository-level
+# profile resolves it and this map defers.
+_DEPLOYMENT_PROVIDER_BY_SOURCE = {
+    "COMPOSE": "DOCKER_COMPOSE",
+    "COMPOSE_BUILD": "DOCKER_COMPOSE",
+    "DOCKERFILE": "CONTAINER_BUILD",
+    "KUBERNETES": "KUBERNETES",
+}
+_DEPLOYMENT_WORKLOAD_BY_SOURCE = {
+    "COMPOSE": "COMPOSE_SERVICE",
+    "COMPOSE_BUILD": "COMPOSE_SERVICE",
+    "DOCKERFILE": "CONTAINER_BUILD",
+    "TERRAFORM": "TERRAFORM_RESOURCE",
+}
+
+
+def _phase2_flag_enabled(
+    connection: Connection[dict[str, Any]], tenant_id: UUID, flag_key: str,
+) -> bool:
+    """Read a Phase 2 feature flag, preferring a tenant override over the deployment default.
+
+    SCANNER_PROFILES was seeded in migration 047 and read by no code, so the kill switch the
+    plan asked for did not exist. Turning it off now stops typed profiles being written; the
+    read surfaces already degrade to related entities with an explicit coverage status, which
+    is what a kill switch should leave behind.
+    """
+    row = connection.execute(
+        """
+        SELECT enabled FROM phase2_feature_flag
+        WHERE flag_key=%s AND (tenant_id IS NULL OR tenant_id=%s)
+        ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
+        """,
+        (flag_key, tenant_id),
+    ).fetchone()
+    return bool(row and row["enabled"])
+
+
+def _persist_component_profile(
+    connection: Connection[dict[str, Any]],
+    *,
+    tenant_id: UUID,
+    component_id: UUID,
+    repository_id: UUID | None,
+    fact_id: UUID,
+    source_revision: str,
+    observed_at: str,
+    confidence: float,
+    value: Mapping[str, Any],
+) -> None:
+    """Project a scanner `component_profile` record into the typed estate table.
+
+    The scanner has emitted these records since 1.11.0 and the API has read the typed table
+    since E1, but nothing joined the two, so every component profile reported
+    COMPONENT_EVIDENCE_PARTIAL no matter how complete the scan was. S1's exit gate needs the
+    typed row, not just the Component entity.
+    """
+    path = value.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError("component profile has no path")
+    method_version = str(value.get("rule_version") or "component-decomposition/1.0.0")
+    # `classifications` is the component's own kind plus the build systems that produce it.
+    # Language and framework detail stays in attributes, where a reader can see it is derived.
+    classifications = sorted({
+        str(value["component_kind"]) if value.get("component_kind") else "",
+        *(str(item) for item in value.get("build_systems") or ()),
+    } - {""})
+    attributes = {
+        key: value[key]
+        for key in (
+            "languages", "frameworks", "ecosystems", "build_systems", "runtime",
+            "entry_points", "tests", "dependency_count", "limitations", "schema_version",
+        )
+        if key in value
+    }
+    independently_deployable = value.get("independently_deployable")
+    row = connection.execute(
+        """
+        INSERT INTO estate_component_profile(
+          tenant_id,component_entity_id,repository_entity_id,component_path,classifications,
+          independently_deployable,attributes,confidence,method_version,source_revision,
+          observed_at
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT(tenant_id,component_entity_id,source_revision,component_path)
+        DO UPDATE SET
+          repository_entity_id=EXCLUDED.repository_entity_id,
+          classifications=EXCLUDED.classifications,
+          independently_deployable=EXCLUDED.independently_deployable,
+          attributes=EXCLUDED.attributes,
+          confidence=EXCLUDED.confidence,
+          method_version=EXCLUDED.method_version,
+          observed_at=EXCLUDED.observed_at
+        RETURNING id
+        """,
+        (
+            tenant_id, component_id, repository_id, path, classifications,
+            bool(independently_deployable) if independently_deployable is not None else None,
+            Jsonb(attributes), confidence, method_version, source_revision, observed_at,
+        ),
+    ).fetchone()
+    profile_id = row["id"]
+    # A profile from a newer revision supersedes older ones rather than accumulating silently,
+    # so the API's `valid_to IS NULL` filter returns one current row per component.
+    connection.execute(
+        """
+        UPDATE estate_component_profile SET valid_to=now()
+        WHERE tenant_id=%s AND component_entity_id=%s AND id<>%s AND valid_to IS NULL
+        """,
+        (tenant_id, component_id, profile_id),
+    )
+    connection.execute(
+        """
+        INSERT INTO estate_profile_evidence(tenant_id,profile_kind,profile_id,fact_assertion_id)
+        VALUES (%s,'COMPONENT',%s,%s) ON CONFLICT DO NOTHING
+        """,
+        (tenant_id, profile_id, fact_id),
+    )
+
+
+def _persist_deployment_profiles(
+    connection: Connection[dict[str, Any]],
+    *,
+    tenant_id: UUID,
+    repository_id: UUID | None,
+    source_revision: str,
+    deployments: list[Mapping[str, Any]],
+    aggregate: Mapping[str, Any] | None,
+) -> None:
+    """Project each observed Deployment into the typed estate table.
+
+    The scanner emits one aggregate `deployment_profile` record per repository plus one
+    `DEPLOYED_AS` fact per workload. The typed table is per workload, so provider and workload
+    kind come from each fact's own source kind, and the aggregate contributes only what is
+    genuinely repository-wide: its coverage and its limitations — chiefly that declared
+    configuration does not prove anything is deployed.
+    """
+    if not deployments:
+        return
+    aggregate = aggregate or {}
+    providers = [str(item) for item in aggregate.get("providers") or ()]
+    environments = [str(item) for item in aggregate.get("environments") or ()]
+    limitations = list(aggregate.get("limitations") or ())
+    coverage = aggregate.get("coverage") if isinstance(aggregate.get("coverage"), Mapping) else {}
+    verification_level = str(aggregate.get("verification_level") or "DECLARED_CONFIGURATION")
+    method_version = str(aggregate.get("rule_version") or "deployment-profile/1.1.0")
+
+    for deployment in deployments:
+        properties = deployment["properties"] if isinstance(deployment["properties"], Mapping) else {}
+        source_kind = str(properties.get("source_kind") or "UNDECLARED")
+        provider = _DEPLOYMENT_PROVIDER_BY_SOURCE.get(source_kind)
+        if provider is None:
+            # Terraform and the serverless manifests state their provider in the file; the
+            # aggregate resolved it. Anything else falls back to naming the source honestly
+            # rather than guessing a cloud.
+            provider = providers[0] if len(providers) == 1 else source_kind
+        workload_kind = _DEPLOYMENT_WORKLOAD_BY_SOURCE.get(source_kind)
+        if workload_kind is None and source_kind == "KUBERNETES" and properties.get("kind"):
+            workload_kind = f"KUBERNETES_{str(properties['kind']).upper()}"
+        if workload_kind is None:
+            workload_kind = source_kind
+        environment = properties.get("namespace")
+        if environment is None and source_kind in {"COMPOSE", "COMPOSE_BUILD"}:
+            environment = "local-compose"
+        if environment is None and len(environments) == 1:
+            environment = environments[0]
+        row = connection.execute(
+            """
+            INSERT INTO estate_deployment_profile(
+              tenant_id,deployment_entity_id,repository_entity_id,provider,workload_kind,
+              environment,resources,actions,limitations,confidence,method_version,
+              source_revision,observed_at
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT(tenant_id,deployment_entity_id,source_revision) DO UPDATE SET
+              repository_entity_id=EXCLUDED.repository_entity_id,
+              provider=EXCLUDED.provider,
+              workload_kind=EXCLUDED.workload_kind,
+              environment=EXCLUDED.environment,
+              resources=EXCLUDED.resources,
+              limitations=EXCLUDED.limitations,
+              confidence=EXCLUDED.confidence,
+              method_version=EXCLUDED.method_version,
+              observed_at=EXCLUDED.observed_at
+            RETURNING id
+            """,
+            (
+                tenant_id, deployment["entity_id"], repository_id, provider, workload_kind,
+                str(environment) if environment is not None else None,
+                Jsonb([{
+                    "source_kind": source_kind,
+                    "verification_level": verification_level,
+                    "coverage": dict(coverage),
+                    "declaration": {
+                        key: properties[key] for key in sorted(properties)
+                        if key != "source_kind"
+                    },
+                }]),
+                Jsonb([]), Jsonb(limitations), deployment["confidence"], method_version,
+                source_revision, deployment["observed_at"],
+            ),
+        ).fetchone()
+        profile_id = row["id"]
+        connection.execute(
+            """
+            UPDATE estate_deployment_profile SET valid_to=now()
+            WHERE tenant_id=%s AND deployment_entity_id=%s AND id<>%s AND valid_to IS NULL
+            """,
+            (tenant_id, deployment["entity_id"], profile_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO estate_profile_evidence(tenant_id,profile_kind,profile_id,fact_assertion_id)
+            VALUES (%s,'DEPLOYMENT',%s,%s) ON CONFLICT DO NOTHING
+            """,
+            (tenant_id, profile_id, deployment["fact_id"]),
+        )

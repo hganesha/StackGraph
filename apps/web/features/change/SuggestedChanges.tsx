@@ -45,6 +45,14 @@ export function SuggestedChanges() {
       stackGraphClient.optimizeModernizationScenario({ budget_points: FOLD_BUDGET_POINTS }),
     staleTime: 300_000,
   });
+  // §8 lists deprecated dependencies, version fragmentation, unsupported runtimes, and
+  // security findings among the changes worth surfacing. Drawing only from the modernization
+  // optimiser left six of those sources out of the fold entirely.
+  const insights = useQuery({
+    queryKey: ["insights", "deterministic", "fold"],
+    queryFn: () => stackGraphClient.listDeterministicInsights({ limit: 20 }),
+    staleTime: 300_000,
+  });
 
   if (scenario.isLoading) {
     return (
@@ -59,9 +67,20 @@ export function SuggestedChanges() {
     .filter((item) => item.selected)
     .slice(0, 3);
 
-  // The fold is additive. If the optimiser has nothing to propose, the estate below is
+  // Only findings that can actually compile belong here. A row whose action cannot produce an
+  // exact target state would be a button that fails, which is worse than an absent row.
+  const simulatableInsights = (insights.data?.insights ?? [])
+    .filter(
+      (item) =>
+        item.recommendation?.action === "UPGRADE" ||
+        item.recommendation?.action === "CONSOLIDATE",
+    )
+    .sort((left, right) => right.priority_score - left.priority_score)
+    .slice(0, 3 - recommendations.length);
+
+  // The fold is additive. If neither source has anything to propose, the estate below is
   // unchanged rather than carrying an empty promise above it.
-  if (scenario.isError || !recommendations.length) {
+  if (!recommendations.length && !simulatableInsights.length) {
     return null;
   }
 
@@ -85,6 +104,25 @@ export function SuggestedChanges() {
               </small>
             </div>
             <SimulateRecommendation recommendationId={item.recommendation_id} compact />
+          </li>
+        ))}
+        {simulatableInsights.map((item) => (
+          <li key={item.id}>
+            <span className={styles.severity}>
+              {ACTION_LABEL[item.recommendation!.action] ?? item.recommendation!.action}
+            </span>
+            <div className={styles.body}>
+              <strong>{item.title}</strong>
+              <small>
+                {item.subject.name} · {item.affected_repository_count} repositor
+                {item.affected_repository_count === 1 ? "y" : "ies"} affected
+              </small>
+            </div>
+            <SimulateRecommendation
+              recommendationId={item.id}
+              source="DETERMINISTIC_INSIGHT"
+              compact
+            />
           </li>
         ))}
       </ul>

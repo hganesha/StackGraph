@@ -1,0 +1,12 @@
+service: notifications
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: eu-west-1
+functions:
+  dispatch:
+    handler: handlers/dispatch.handler
+    events:
+      - httpApi:
+          path: /notifications
+          method: post

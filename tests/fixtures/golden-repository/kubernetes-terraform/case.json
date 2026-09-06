@@ -1,0 +1,20 @@
+{
+  "id": "kubernetes-terraform",
+  "title": "Platform repository holding Kubernetes manifests and Terraform",
+  "why": "Protects S2 provider detection and the typed deployment edges the plan asks for instead of a single lossy hosted_on tag, plus the DEPLOYMENT_ONLY label for a repository with no application source.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["DEPLOYMENT_ONLY", "INFRASTRUCTURE_AS_CODE", "PLATFORM"],
+    "facts": [
+      {"predicate": "DEPLOYED_AS", "subject_type": "Service", "object_type": "Deployment"},
+      {"predicate": "LOCATED_IN", "subject_type": "Deployment", "object_type": "Environment"},
+      {"predicate": "RUNS_ON", "subject_type": "Deployment", "object_type": "ContainerImage", "object_key": "container-image:registry.internal/acme/ledger:5.2.0"},
+      {"predicate": "USES", "subject_type": "Repository", "object_type": "InfrastructureResource", "object_key": "terraform:github:repo:1:aws_db_instance:ledger"},
+      {"predicate": "USES", "subject_type": "Repository", "object_type": "InfrastructureResource", "object_key": "terraform:github:repo:1:aws_vpc:platform"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "deployment_profile", "properties": {"providers": ["AWS"], "workload_types": ["KUBERNETES_DEPLOYMENT", "TERRAFORM_RESOURCE"]}}
+    ],
+    "absent_facts": [
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "note": "no manifest or Dockerfile means no owned component; inventing one would give the platform repo application scope"}
+    ]
+  }
+}

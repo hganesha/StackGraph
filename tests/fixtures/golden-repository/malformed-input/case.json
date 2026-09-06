@@ -1,0 +1,19 @@
+{
+  "id": "malformed-input",
+  "title": "Repository whose manifests and deployment configuration do not parse",
+  "why": "§9.1 forbids partial or unknown input from asserting absence. A broken manifest must produce a diagnostic and PARTIAL completeness, never a confident empty dependency set.",
+  "expect": {
+    "completeness": "PARTIAL",
+    "classifications": [],
+    "diagnostic_codes": ["INVALID_JSON", "INVALID_TOML", "INVALID_DEPLOYMENT_YAML"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile"},
+      {"predicate": "IMPLEMENTED_BY", "subject_type": "Application", "object_type": "Repository"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:npm/express", "note": "the manifest naming express is unparseable, so the dependency is unknown rather than present"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "finding_type": "UNUSED_DECLARED_DEPENDENCY_CANDIDATE", "note": "nothing parsed, so nothing can be judged unused"},
+      {"predicate": "DEPLOYED_AS", "note": "the compose file did not parse; no workload may be claimed from it"}
+    ]
+  }
+}

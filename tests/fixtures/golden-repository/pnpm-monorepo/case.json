@@ -1,0 +1,27 @@
+{
+  "id": "pnpm-monorepo",
+  "title": "Workspace monorepo with two applications and a shared package",
+  "why": "The S1 exit gate. An impact touching apps/payment-api must not reach apps/customer-ui, so every component must carry only its own declared dependencies.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["FULL_STACK_APPLICATION", "MONOREPO"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile", "properties": {"components": ["Repository root", "apps/customer-ui", "apps/payment-api", "packages/money"]}},
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "object_key": "component:github:repo:1:apps/payment-api"},
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "object_key": "component:github:repo:1:apps/customer-ui"},
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "object_key": "component:github:repo:1:packages/money"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/payment-api", "record_kind": "component_profile", "properties": {"path": "apps/payment-api", "frameworks": ["express"]}},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/customer-ui", "record_kind": "component_profile", "properties": {"path": "apps/customer-ui", "frameworks": ["next", "react"]}},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/payment-api", "object_type": "Package", "object_key": "pkg:npm/stripe"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/customer-ui", "object_type": "Package", "object_key": "pkg:npm/react"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:packages/money", "object_type": "Package", "object_key": "pkg:npm/dinero.js"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/customer-ui", "object_key": "pkg:npm/stripe", "note": "customer-ui does not declare stripe; leaking it would put the wrong app in a payment blast radius"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/customer-ui", "object_key": "pkg:npm/express", "note": "express belongs to payment-api alone"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/payment-api", "object_key": "pkg:npm/react", "note": "react belongs to customer-ui alone"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:apps/payment-api", "object_key": "pkg:npm/next", "note": "next belongs to customer-ui alone"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:.", "object_key": "pkg:npm/stripe", "note": "the workspace root declares no runtime dependencies of its own"}
+    ]
+  }
+}

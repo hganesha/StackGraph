@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: ledger
+          image: registry.internal/acme/ledger:5.2.0
+          ports:
+            - containerPort: 8080

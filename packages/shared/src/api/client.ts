@@ -107,6 +107,13 @@ import type {
   AgentAuthorizeRequest,
   AgentControlDrillRequest,
   AgentControlDrillResult,
+  AdversarialScenarioGenerateRequest,
+  AdversarialScenarioList,
+  HarnessEvaluationCompleteRequest,
+  HarnessEvaluationModel,
+  HarnessEvaluationRecordRequest,
+  HarnessEvaluationStartRequest,
+  PromotionPosture,
   AgentKillSwitchModel,
   AgentKillSwitchUpdateRequest,
   AssumptionCreateRequest,
@@ -140,6 +147,7 @@ import type {
   ObservedMutationCreateRequest,
   ObservedMutationList,
   ObservedMutationModel,
+  ChangeSetCompileRequest,
   RecommendationCompileRequest,
   RepositoryFingerprintList,
   SimulationCreateRequest,
@@ -244,6 +252,20 @@ export interface StackGraphClient {
   appendFlightEvent(id: string, body: FlightEventCreateRequest): Promise<FlightRecordModel>;
   finalizeFlightRecord(id: string, body: FlightRecordFinalizeRequest): Promise<FlightRecordModel>;
   runAgentControlDrill(body: AgentControlDrillRequest): Promise<AgentControlDrillResult>;
+  listAdversarialScenarios(params?: {
+    scenarioClass?: string; limit?: number;
+  }): Promise<AdversarialScenarioList>;
+  generateAdversarialScenarios(
+    body: AdversarialScenarioGenerateRequest,
+  ): Promise<AdversarialScenarioList>;
+  startHarnessEvaluation(body: HarnessEvaluationStartRequest): Promise<HarnessEvaluationModel>;
+  getHarnessEvaluation(id: string): Promise<HarnessEvaluationModel>;
+  recordHarnessEvaluationResult(
+    id: string, body: HarnessEvaluationRecordRequest,
+  ): Promise<HarnessEvaluationModel>;
+  finishHarnessEvaluation(
+    id: string, body: HarnessEvaluationCompleteRequest,
+  ): Promise<HarnessEvaluationModel>;
   listComponents(cursor?: string, limit?: number): Promise<EstateComponentList>;
   getComponent(id: string): Promise<EstateComponentDetail>;
   getApplication(id: string): Promise<ApplicationDetail>;
@@ -348,6 +370,8 @@ export interface StackGraphClient {
   compileMutation(body: MutationCompileRequest): Promise<MutationCompileResult>;
   validateMutation(body: MutationValidateRequest): Promise<MutationCompileResult>;
   compileModernizationRecommendation(id: string, body: RecommendationCompileRequest): Promise<MutationCompileResult>;
+  compileDeterministicInsight(id: string, body: RecommendationCompileRequest): Promise<MutationCompileResult>;
+  compileChangeSet(body: ChangeSetCompileRequest): Promise<MutationCompileResult>;
   createSimulation(body: SimulationCreateRequest): Promise<SimulationRunModel>;
   getSimulation(id: string): Promise<SimulationRunModel>;
   cancelSimulation(id: string): Promise<SimulationRunModel>;
@@ -540,6 +564,14 @@ const fixtureSimulations = new Map<string, { run: SimulationRunModel; reads: num
 const fixtureSimulationByKey = new Map<string, string>();
 const fixtureEnvelopes = new Map<string, CapabilityEnvelopeModel>();
 const fixtureFlights = new Map<string, FlightRecordModel>();
+const fixtureEvaluations = new Map<string, HarnessEvaluationModel>();
+// The champion/challenger half of §36 has no implementation to demonstrate, so the fixture
+// states its absence in the same shape the API does rather than omitting the field.
+const FIXTURE_PROMOTION_POSTURE: PromotionPosture = {
+  state: "NOT_IMPLEMENTED",
+  reason: "Champion/challenger promotion is not implemented. The evaluation half of §36 runs offline; the promotion half stays unrepresentable until rollback and governance are proven, so no configuration change can enable it.",
+  blocked_by: ["OFFLINE_EVALUATION_UNPROVEN", "ROLLBACK_UNPROVEN", "PROMOTION_GOVERNANCE_ABSENT"],
+};
 const fixtureAssumptions = new Map<string, AssumptionModel>();
 let fixtureKillSwitch: AgentKillSwitchModel = {
   contract_version: "1.0.0", engaged: true,
@@ -1255,6 +1287,114 @@ const fixtureClient: StackGraphClient = {
     fixtureFlights.set(id, record);
     return clone(record);
   },
+  async listAdversarialScenarios(params) {
+    await delay();
+    const fixture = await import("../fixtures/immune-system-scenarios.json");
+    const list = clone(fixture.default as AdversarialScenarioList);
+    if (!params?.scenarioClass) return list;
+    return {
+      ...list,
+      scenarios: (list.scenarios ?? []).filter(
+        (item) => item.scenario_class === params.scenarioClass,
+      ),
+    };
+  },
+  async generateAdversarialScenarios(body) {
+    await delay();
+    const fixture = await import("../fixtures/immune-system-scenarios.json");
+    const list = clone(fixture.default as AdversarialScenarioList);
+    const requested = body.scenario_classes ?? [];
+    if (requested.length === 0) return list;
+    // A class the caller did not ask for is reported as NOT_ATTEMPTED rather than dropped, so
+    // the fixture surface makes the same distinction the API does.
+    return {
+      ...list,
+      scenarios: (list.scenarios ?? []).filter(
+        (item) => requested.includes(item.scenario_class),
+      ),
+      coverage: list.coverage.map((item) => (
+        requested.includes(item.scenario_class)
+          ? item
+          : {
+            ...item,
+            status: "NOT_ATTEMPTED" as const,
+            scenario_count: 0,
+            detail: "This generation run did not ask for this class.",
+          }
+      )),
+    };
+  },
+  async startHarnessEvaluation(body) {
+    await delay();
+    const id = globalThis.crypto?.randomUUID?.() ?? `fixture-evaluation-${fixtureEvaluations.size + 1}`;
+    const evaluation: HarnessEvaluationModel = {
+      contract_version: "1.0.0",
+      id,
+      harness_key: body.harness_key,
+      harness_version: body.harness_version,
+      execution_mode: "OFFLINE",
+      status: "RUNNING",
+      scenario_count: body.scenario_ids.length,
+      passed_count: 0,
+      failed_count: 0,
+      inconclusive_count: 0,
+      unevaluated_count: body.scenario_ids.length,
+      unevaluated_scenario_ids: [...body.scenario_ids],
+      estate_watermark: "facts:2026-09-04T21:14:08+00:00;projection:8812",
+      created_by: "fixture-admin",
+      started_at: new Date().toISOString(),
+      results: [],
+      promotion: FIXTURE_PROMOTION_POSTURE,
+    };
+    fixtureEvaluations.set(id, evaluation);
+    return clone(evaluation);
+  },
+  async getHarnessEvaluation(id) {
+    await delay();
+    const evaluation = fixtureEvaluations.get(id);
+    if (!evaluation) throw new FixtureApiError(404, { code: "HARNESS_EVALUATION_NOT_FOUND", message: "The evaluation was not found." });
+    return clone(evaluation);
+  },
+  async recordHarnessEvaluationResult(id, body) {
+    await delay();
+    const evaluation = fixtureEvaluations.get(id);
+    if (!evaluation) throw new FixtureApiError(404, { code: "HARNESS_EVALUATION_NOT_FOUND", message: "The evaluation was not found." });
+    if (evaluation.status !== "RUNNING") throw new FixtureApiError(409, { code: "HARNESS_EVALUATION_TERMINAL", message: "A finished evaluation is immutable; start a new one instead." });
+    if (!evaluation.unevaluated_scenario_ids?.includes(body.scenario_id)) {
+      throw new FixtureApiError(422, { code: "SCENARIO_NOT_SELECTED", message: "This scenario is not part of the evaluation." });
+    }
+    evaluation.results = [...(evaluation.results ?? []), {
+      id: globalThis.crypto?.randomUUID?.() ?? `fixture-result-${(evaluation.results ?? []).length + 1}`,
+      scenario_id: body.scenario_id,
+      scenario_key: `fixture-scenario:${body.scenario_id}`,
+      scenario_class: "STALE_CONTEXT",
+      outcome: body.outcome,
+      observed_behaviour: body.observed_behaviour ?? {},
+      diagnosis: body.diagnosis ?? null,
+      recorded_at: new Date().toISOString(),
+    }];
+    if (body.outcome === "PASSED") evaluation.passed_count += 1;
+    else if (body.outcome === "FAILED") evaluation.failed_count += 1;
+    else evaluation.inconclusive_count += 1;
+    evaluation.unevaluated_scenario_ids = (evaluation.unevaluated_scenario_ids ?? []).filter(
+      (item) => item !== body.scenario_id,
+    );
+    evaluation.unevaluated_count = evaluation.unevaluated_scenario_ids.length;
+    fixtureEvaluations.set(id, evaluation);
+    return clone(evaluation);
+  },
+  async finishHarnessEvaluation(id, body) {
+    await delay();
+    const evaluation = fixtureEvaluations.get(id);
+    if (!evaluation) throw new FixtureApiError(404, { code: "HARNESS_EVALUATION_NOT_FOUND", message: "The evaluation was not found." });
+    if (body.status === "COMPLETED" && evaluation.unevaluated_count > 0) {
+      throw new FixtureApiError(409, { code: "HARNESS_EVALUATION_INCOMPLETE", message: "Every scenario needs an outcome before an evaluation can complete; abandon it instead." });
+    }
+    evaluation.status = body.status;
+    evaluation.completed_at = new Date().toISOString();
+    fixtureEvaluations.set(id, evaluation);
+    return clone(evaluation);
+  },
   async runAgentControlDrill(body) {
     await delay();
     return {
@@ -1377,6 +1517,26 @@ const fixtureClient: StackGraphClient = {
     result.replayed = true;
     if (result.change_set) result.change_set.id = body.change_set_id;
     return result;
+  },
+  async compileDeterministicInsight(_id, body) {
+    await delay();
+    return fixtureCompile({
+      idempotency_key: body.idempotency_key ?? "fixture-insight",
+      predicate: "UPGRADE",
+      subject_id: "20000000-0000-4000-8000-000000000001",
+      target_version: "14.0.1",
+      scope_id: "estate",
+    });
+  },
+  async compileChangeSet(body) {
+    await delay();
+    return fixtureCompile({
+      idempotency_key: body.idempotency_key,
+      predicate: "UPGRADE",
+      subject_id: "20000000-0000-4000-8000-000000000001",
+      target_version: "14.0.1",
+      scope_id: "estate",
+    });
   },
   async compileModernizationRecommendation(_id, body) {
     await delay();
@@ -2739,6 +2899,21 @@ const liveClient: StackGraphClient = {
     req(`/agent-control/flight-records/${encodeURIComponent(id)}/finalize`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   runAgentControlDrill: (body) =>
     req("/agent-control/drills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  listAdversarialScenarios: (params) => {
+    const query = new URLSearchParams();
+    if (params?.scenarioClass) query.set("scenario_class", params.scenarioClass);
+    if (params?.limit != null) query.set("limit", String(params.limit));
+    return req(`/immune-system/scenarios${query.size ? `?${query.toString()}` : ""}`);
+  },
+  generateAdversarialScenarios: (body) =>
+    req("/immune-system/scenarios", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  startHarnessEvaluation: (body) =>
+    req("/immune-system/evaluations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getHarnessEvaluation: (id) => req(`/immune-system/evaluations/${encodeURIComponent(id)}`),
+  recordHarnessEvaluationResult: (id, body) =>
+    req(`/immune-system/evaluations/${encodeURIComponent(id)}/results`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  finishHarnessEvaluation: (id, body) =>
+    req(`/immune-system/evaluations/${encodeURIComponent(id)}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listContradictions: (subjectId, limit = 50) => {
     const query = new URLSearchParams({ limit: String(limit) });
     if (subjectId) query.set("subject_id", subjectId);
@@ -2943,6 +3118,14 @@ const liveClient: StackGraphClient = {
     }),
   compileModernizationRecommendation: (id, body) =>
     req(`/modernization-recommendations/${encodeURIComponent(id)}/compile`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  compileDeterministicInsight: (id, body) =>
+    req(`/insights/deterministic/${encodeURIComponent(id)}/compile`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }),
+  compileChangeSet: (body) =>
+    req("/change-sets/compile", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     }),
   createSimulation: (body) =>

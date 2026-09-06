@@ -32,6 +32,13 @@ import styles from "./ChangeCommandPalette.module.css";
 
 type LocalState = "EMPTY" | "RESOLVING" | "TOKENISED" | "COMPILED";
 
+/** Sentence case, never a lower-cased enum. */
+const TARGET_RECOMMENDATION: Record<string, string> = {
+  CONSOLIDATE: "Consolidate the estate",
+  CANDIDATE: "Candidate upgrade",
+  LATEST_KNOWN: "Latest collected",
+};
+
 export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -239,7 +246,22 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                         onClick={() => chooseAction(action.predicate)}
                       >
                         <strong>{action.label}</strong>
-                        <span>{action.subject_types.join(" · ")}</span>
+                        {/* §4: the bounded grammar is shown, and a subject type that cannot
+                            compile yet says so rather than looking available. */}
+                        <span>
+                          {(action.subjects?.length
+                            ? action.subjects
+                            : action.subject_types.map((subject_type) => ({
+                                subject_type,
+                                enabled: action.enabled,
+                                lifecycle: action.lifecycle,
+                              }))
+                          )
+                            .map((subject) =>
+                              subject.enabled ? subject.subject_type : `${subject.subject_type} (planned)`,
+                            )
+                            .join(" · ")}
+                        </span>
                         <IconArrowRight size={16} stroke={1.5} aria-hidden="true" />
                       </button>
                     ))}
@@ -301,6 +323,13 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                           <span>
                             <strong className="sg-mono">{target.version}</strong>
                             <small>{target.source} · observed {new Date(target.observed_at).toLocaleDateString()}</small>
+                            {/* §6: say why a version is worth choosing, not just that it exists. */}
+                            {target.recommendation && target.recommendation !== "NONE" ? (
+                              <small className={styles.targetReason}>
+                                {TARGET_RECOMMENDATION[target.recommendation]}
+                                {target.recommendation_detail ? ` · ${target.recommendation_detail}` : ""}
+                              </small>
+                            ) : null}
                           </span>
                           <span className={styles.axes}>
                             <span data-support={target.support ?? "UNKNOWN"}>{target.support ?? "UNKNOWN"}</span>
@@ -310,6 +339,10 @@ export function ChangeCommandPalette({ open, onClose }: { open: boolean; onClose
                       ))}
                     </div>
                   )}
+                  {/* A short list must not read as a short registry. */}
+                  {targets.data?.coverage?.registry_enumeration === "NOT_COLLECTED" ? (
+                    <p className={styles.coverageNote} role="note">{targets.data.coverage.detail}</p>
+                  ) : null}
                 </section>
 
                 <section className={`${styles.section} ${validationFields.has("scope_id") ? styles.fieldError : ""}`} aria-labelledby="scope-heading">

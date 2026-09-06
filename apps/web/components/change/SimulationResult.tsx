@@ -183,6 +183,7 @@ function FindingsPartition({ run }: { run: SimulationRunModel }) {
               {run.interpretation.risk ? <section><h3>Risk</h3><p>{run.interpretation.risk}</p></section> : null}
               {run.interpretation.explanation ? <section><h3>Reading</h3><p>{run.interpretation.explanation}</p></section> : null}
               {run.interpretation.rollout?.length ? <section><h3>Rollout</h3><ol>{run.interpretation.rollout.map((item) => <li key={item}>{item}</li>)}</ol></section> : null}
+              {run.interpretation.remediation?.length ? <section><h3>Remediation</h3><ol>{run.interpretation.remediation.map((item) => <li key={item}>{item}</li>)}</ol></section> : null}
               {run.interpretation.verification?.length ? <section><h3>Verification</h3><ol>{run.interpretation.verification.map((item) => <li key={item}>{item}</li>)}</ol></section> : null}
               <div className={styles.citations}>
                 <strong>Cites findings</strong>
@@ -198,6 +199,19 @@ function FindingsPartition({ run }: { run: SimulationRunModel }) {
           <div className={`${styles.interpretationState} ${run.interpretation.status === "QUARANTINED" ? styles.quarantined : ""}`} role="status">
             <strong>{run.interpretation.status === "QUARANTINED" ? "Interpretation quarantined" : "Interpretation unavailable"}</strong>
             <p>{run.interpretation.limitation ?? (run.interpretation.status === "QUARANTINED" ? "The generated claims did not cite deterministic findings." : "AI interpretation is off. Deterministic findings are unchanged.")}</p>
+            {/* Quarantined is not hidden. A reviewer has to be able to read what was rejected
+                and why, which is the whole difference between quarantine and suppression. */}
+            {run.interpretation.quarantined_claims?.length ? (
+              <ol className={styles.quarantinedClaims} aria-label="Quarantined interpretation claims">
+                {run.interpretation.quarantined_claims.map((claim, index) => (
+                  <li key={`${claim.reason}-${index}`}>
+                    <span className={styles.classification}>{claim.reason.replace(/_/g, " ").toLowerCase()}</span>
+                    <p>{claim.detail}</p>
+                    {claim.values?.length ? <blockquote>{claim.values.join(" · ")}</blockquote> : null}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </div>
         )}
       </section>

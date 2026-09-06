@@ -1,0 +1,10 @@
+services:
+  shipping:
+    build: .
+    image: registry.internal/acme/shipping:2.0.1
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://shipping@database:5432/shipping
+  database:
+    image: postgres:16.2

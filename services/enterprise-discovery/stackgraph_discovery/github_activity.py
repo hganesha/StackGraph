@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
@@ -12,12 +12,23 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .github_client import GitHubApiError, GitHubClient, GitHubTransportError
+from .github_snapshot import manifest_kind_or_none
 
 
 ACTIVITY_SOURCE_KEY = "github-activity"
 ACTIVITY_WINDOW_DAYS = 90
 ACTIVITY_MAX_PAGES = 10
 ACTIVITY_PAGE_SIZE = 100
+# Detecting a dependency change costs one file listing per merged pull request, so the
+# newest are inspected and the rest are reported as a bounded limitation rather than
+# silently skipped.
+ACTIVITY_MAX_DEPENDENCY_PULL_REQUESTS = 50
+# Manifests and lockfiles are the only files whose change moves a declared dependency.
+DEPENDENCY_MANIFEST_KINDS = frozenset({
+    "NPM_MANIFEST", "NPM_LOCK", "YARN_LOCK", "PNPM_LOCK", "PNPM_WORKSPACE",
+    "PYTHON_MANIFEST", "POETRY_LOCK", "UV_LOCK", "PIPENV_MANIFEST", "PIPENV_LOCK",
+    "PYTHON_REQUIREMENTS",
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +53,7 @@ class ActivityEvent:
     branch: str | None = None
     pull_request_number: int | None = None
     source_url: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +66,7 @@ class ActivityCollection:
     limitations: tuple[str, ...]
     releases_status: str = "NOT_COLLECTED"
     deployments_status: str = "NOT_COLLECTED"
+    dependency_changes_status: str = "NOT_COLLECTED"
 
 
 class GitHubRepositoryActivityCollector:
@@ -63,14 +76,18 @@ class GitHubRepositoryActivityCollector:
         *,
         max_pages: int = ACTIVITY_MAX_PAGES,
         page_size: int = ACTIVITY_PAGE_SIZE,
+        max_dependency_pull_requests: int = ACTIVITY_MAX_DEPENDENCY_PULL_REQUESTS,
     ) -> None:
         if max_pages < 1:
             raise ValueError("max_pages must be positive")
         if page_size < 1 or page_size > 100:
             raise ValueError("page_size must be between 1 and 100")
+        if max_dependency_pull_requests < 0:
+            raise ValueError("max_dependency_pull_requests must not be negative")
         self._client = client
         self._max_pages = max_pages
         self._page_size = page_size
+        self._max_dependency_pull_requests = max_dependency_pull_requests
 
     def collect(
         self,
@@ -80,6 +97,7 @@ class GitHubRepositoryActivityCollector:
         include_pull_requests: bool,
         include_releases: bool = False,
         include_deployments: bool = False,
+        include_dependency_changes: bool = False,
         now: datetime | None = None,
     ) -> ActivityCollection:
         if not default_branch.strip():
@@ -166,6 +184,33 @@ class GitHubRepositoryActivityCollector:
                 deployments_status = "PARTIAL" if truncated else "AVAILABLE"
                 events.extend(deployment_events)
 
+        dependency_changes_status = "NOT_COLLECTED"
+        if include_dependency_changes:
+            merged = [
+                event for event in events
+                if event.event_type == "PULL_REQUEST_MERGED"
+                and event.pull_request_number is not None
+            ]
+            try:
+                dependency_events, truncated = self._dependency_changes(repo_path, merged)
+            except (GitHubApiError, GitHubTransportError) as error:
+                dependency_changes_status = (
+                    "PERMISSION_REQUIRED"
+                    if isinstance(error, GitHubApiError) and error.status_code in {403, 404}
+                    else "ERROR"
+                )
+                limitations.append(
+                    f"Dependency-change activity could not be collected: {type(error).__name__}."
+                )
+            else:
+                dependency_changes_status = "PARTIAL" if truncated else "AVAILABLE"
+                events.extend(dependency_events)
+                if truncated:
+                    limitations.append(
+                        "Dependency-change detection inspected only the most recent merged pull "
+                        f"requests, bounded at {self._max_dependency_pull_requests}."
+                    )
+
         events.sort(key=lambda event: (event.occurred_at, event.provider_event_key), reverse=True)
         return ActivityCollection(
             window_started_at=window_started_at,
@@ -176,6 +221,7 @@ class GitHubRepositoryActivityCollector:
             limitations=tuple(dict.fromkeys(limitations)),
             releases_status=releases_status,
             deployments_status=deployments_status,
+            dependency_changes_status=dependency_changes_status,
         )
 
     def _releases(self, repo_path: str, since: datetime) -> tuple[list[ActivityEvent], bool]:
@@ -278,6 +324,63 @@ class GitHubRepositoryActivityCollector:
                 truncated = True
         return events, truncated
 
+    def _dependency_changes(
+        self,
+        repo_path: str,
+        merged_pull_requests: list[ActivityEvent],
+    ) -> tuple[list[ActivityEvent], bool]:
+        """Emit a DEPENDENCY_CHANGE event for each merged pull request that moved a manifest.
+
+        H1 needs to correlate dependency changes with outcomes, and the aggregate query has
+        counted `DEPENDENCY_CHANGE` since migration 050 — but nothing produced one, so the
+        column was structurally zero and change memory could never fill itself.
+
+        A merged pull request that touches a manifest or lockfile is the authoritative signal
+        that a declared dependency moved. The manifest paths travel in the event's metadata so
+        the correlation step can name what changed without re-fetching.
+        """
+        if not merged_pull_requests:
+            return [], False
+        ordered = sorted(
+            merged_pull_requests,
+            key=lambda event: (event.occurred_at, event.provider_event_key),
+            reverse=True,
+        )
+        truncated = len(ordered) > self._max_dependency_pull_requests
+        events: list[ActivityEvent] = []
+        for pull_request in ordered[: self._max_dependency_pull_requests]:
+            number = pull_request.pull_request_number
+            result = self._client.get_array(
+                f"{repo_path}/pulls/{number}/files",
+                query={"per_page": str(self._page_size), "page": "1"},
+            )
+            manifests = sorted({
+                path for item in result.data
+                if isinstance(item, dict) and isinstance((path := item.get("filename")), str)
+                and manifest_kind_or_none(path) in DEPENDENCY_MANIFEST_KINDS
+            })
+            if not manifests:
+                continue
+            # A pull request can list more files than one page holds. Saying so keeps a
+            # manifest that was changed beyond the page boundary from reading as absent.
+            complete = len(result.data) < self._page_size
+            events.append(ActivityEvent(
+                provider_event_key=f"pull:{number}:dependency-change",
+                event_type="DEPENDENCY_CHANGE",
+                occurred_at=pull_request.occurred_at,
+                title=pull_request.title,
+                actor=pull_request.actor,
+                branch=pull_request.branch,
+                pull_request_number=number,
+                source_url=pull_request.source_url,
+                metadata={
+                    "manifest_paths": manifests,
+                    "file_listing_complete": complete,
+                    "detected_from": "PULL_REQUEST_FILES",
+                },
+            ))
+        return events, truncated
+
     def _pull_requests(
         self,
         repo_path: str,
@@ -372,8 +475,8 @@ def persist_repository_activity_connection(
               tenant_id,repository_entity_id,provider,provider_event_key,event_type,
               occurred_at,title,actor_key,actor_login,actor_avatar_url,actor_is_bot,
               actor_classification,actor_classification_confidence,actor_classification_basis,
-              revision,branch,pull_request_number,source_url
-            ) VALUES (%s,%s,'GITHUB',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+              revision,branch,pull_request_number,source_url,metadata
+            ) VALUES (%s,%s,'GITHUB',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT(tenant_id,repository_entity_id,provider,provider_event_key)
             DO UPDATE SET event_type=EXCLUDED.event_type,occurred_at=EXCLUDED.occurred_at,
               title=EXCLUDED.title,actor_key=EXCLUDED.actor_key,
@@ -384,7 +487,7 @@ def persist_repository_activity_connection(
               actor_classification_basis=EXCLUDED.actor_classification_basis,
               revision=EXCLUDED.revision,
               branch=EXCLUDED.branch,pull_request_number=EXCLUDED.pull_request_number,
-              source_url=EXCLUDED.source_url,observed_at=now()
+              source_url=EXCLUDED.source_url,metadata=EXCLUDED.metadata,observed_at=now()
             """,
             (
                 tenant_id, repository_id, event.provider_event_key, event.event_type,
@@ -397,6 +500,7 @@ def persist_repository_activity_connection(
                 event.actor.classification_confidence if event.actor else 0,
                 event.actor.classification_basis if event.actor else "NO_LINKED_PROVIDER_IDENTITY",
                 event.revision, event.branch, event.pull_request_number, event.source_url,
+                Jsonb(dict(event.metadata)),
             ),
         )
     connection.execute(
@@ -404,8 +508,8 @@ def persist_repository_activity_connection(
         INSERT INTO repository_activity_collection(
           tenant_id,repository_entity_id,source_key,window_started_at,window_ended_at,
           commits_status,pull_requests_status,limitations,collected_at
-          ,releases_status,deployments_status
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s)
+          ,releases_status,deployments_status,dependency_changes_status
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s,%s)
         ON CONFLICT(tenant_id,repository_entity_id,source_key) DO UPDATE
           SET window_started_at=EXCLUDED.window_started_at,
               window_ended_at=EXCLUDED.window_ended_at,
@@ -413,6 +517,7 @@ def persist_repository_activity_connection(
               pull_requests_status=EXCLUDED.pull_requests_status,
               releases_status=EXCLUDED.releases_status,
               deployments_status=EXCLUDED.deployments_status,
+              dependency_changes_status=EXCLUDED.dependency_changes_status,
               limitations=EXCLUDED.limitations,collected_at=now()
         """,
         (
@@ -421,6 +526,7 @@ def persist_repository_activity_connection(
             collection.commits_status, collection.pull_requests_status,
             Jsonb(list(collection.limitations)),
             collection.releases_status, collection.deployments_status,
+            collection.dependency_changes_status,
         ),
     )
     _refresh_activity_aggregates(connection, tenant_id, repository_id, collection)

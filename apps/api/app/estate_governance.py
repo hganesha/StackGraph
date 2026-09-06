@@ -387,10 +387,26 @@ class EstateGovernanceMixin:
         expected_types = {"Application", *_AI_TYPES, "BusinessCapability"}
         coverage = len(observed_types & expected_types) / len(expected_types)
         status = "AVAILABLE" if coverage == 1 else "PARTIAL" if links else "NOT_COLLECTED"
-        limitations = [] if status == "AVAILABLE" else [GateReason(
-            code="AI_SUPPLY_CHAIN_INCOMPLETE",
-            message="AI supply-chain coverage is incomplete; missing nodes are not inferred.",
-        )]
+        if status == "AVAILABLE":
+            limitations = []
+        elif links:
+            limitations = [GateReason(
+                code="AI_SUPPLY_CHAIN_INCOMPLETE",
+                message="AI supply-chain coverage is incomplete; missing nodes are not inferred.",
+            )]
+        else:
+            # An empty result means the scanner found no declared AI dependency, which is a
+            # real answer rather than a missing one — but only for repositories it has scanned.
+            # Naming what detection reads is what stops a reader concluding the estate runs no
+            # AI when the truth may be that its AI is configured somewhere the scanner is not.
+            limitations = [GateReason(
+                code="AI_SUPPLY_CHAIN_NOT_DECLARED",
+                message=(
+                    "No scanned repository declares an AI SDK, agent framework, MCP "
+                    "configuration, or vector store. Detection reads declared dependencies and "
+                    "configuration only, so an agent assembled at runtime is not represented."
+                ),
+            )]
         return AISupplyChain(
             as_of=datetime.now(UTC), status=status, entities=list(entities.values()), links=links,
             coverage_ratio=coverage, limitations=limitations,

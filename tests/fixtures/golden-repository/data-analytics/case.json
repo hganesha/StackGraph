@@ -1,0 +1,16 @@
+{
+  "id": "data-analytics",
+  "title": "Analytics repository with dbt models, notebooks, and schema migrations",
+  "why": "S1 requires data, dbt, notebook, and SQL-migration classifications. These files carry no dependency manifest, so they must still be admitted or the rules that read them are unreachable.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["DATA_ANALYTICS", "DBT", "NOTEBOOKS", "SQL_SCHEMA_MIGRATION"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile", "properties": {"classifications": [{"classification": "DBT"}, {"classification": "DATA_ANALYTICS"}]}},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_fingerprint"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_type": "Package", "note": "no dependency manifest exists; the notebook's pandas import is not a declaration"}
+    ]
+  }
+}

@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 from urllib.parse import quote, urlsplit
 
-from .github_snapshot import manifest_kind
+from .github_snapshot import is_vendored_path, manifest_kind
 from .npm_resolution import (
     PUBLIC_NPM_ORIGIN,
     NpmConfig,
@@ -398,6 +398,13 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies: list[Dependency] = []
     dependencies.extend(_scan_npm(contents, diagnostics))
     dependencies.extend(_scan_python(contents, diagnostics))
+    # A manifest inside an installed or vendored tree declares that third-party package's own
+    # dependencies, not this repository's. Attributing them here would put packages the
+    # repository never chose into its blast radius as DECLARED facts.
+    dependencies = [
+        item for item in dependencies
+        if not _is_vendored(item.declaration.path) and not _is_vendored(item.component_path)
+    ]
     dependencies = _dedupe_dependencies(dependencies)
     runtime = _runtime_observations(contents, diagnostics)
     inventory_facts = _repository_profile_facts(scan_input, contents)
@@ -408,6 +415,8 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     inventory_facts.extend(_application_boundary_facts(scan_input, contents))
     inventory_facts.extend(_service_boundary_facts(scan_input, contents, diagnostics))
     inventory_facts.extend(_deployment_facts(scan_input, contents, diagnostics))
+    inventory_facts.extend(_runtime_contradiction_facts(scan_input, contents))
+    inventory_facts.extend(_ai_supply_chain_facts(scan_input, contents, dependencies))
     pass_a_completed = time.monotonic()
 
     references, local_edges, entrypoints = _scan_sources(contents, dependencies, diagnostics)
@@ -1675,7 +1684,7 @@ def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str,
 
 
 def _is_vendored(path: str) -> bool:
-    return bool({"vendor", "vendored", "third_party", "third-party"} & set(PurePosixPath(path.lower()).parts))
+    return is_vendored_path(path)
 
 
 def _vendored_identity(
@@ -2121,6 +2130,7 @@ def _repository_profile_facts(
         if PurePosixPath(path).name in {
             "package.json", "pyproject.toml", "requirements.txt", "Pipfile",
         }
+        and not _is_vendored(path)
     })
     operational_signals = _repository_operational_signals(contents)
     key_files = _repository_key_files(contents)
@@ -2255,8 +2265,13 @@ def _repository_description_sources(
 
 
 def _repository_classifications(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
-    """Return additive, multi-label classifications backed by visible repository files."""
-    paths = tuple(sorted(contents))
+    """Return additive, multi-label classifications backed by visible repository files.
+
+    Vendored and installed trees are excluded: a public `package.json` under `node_modules`
+    describes a dependency, and letting it vote would classify the repository as the library
+    it merely consumes.
+    """
+    paths = tuple(path for path in sorted(contents) if not _is_vendored(path))
     lowered = {path.lower() for path in paths}
     source_paths = [path for path in paths if _is_source(path) and not _is_test_file(path)]
     deployment_paths = [
@@ -2279,7 +2294,10 @@ def _repository_classifications(contents: Mapping[str, bytes]) -> list[dict[str,
         else:
             prior[1].update(evidence)
 
-    monorepo = _monorepo_signals(contents)
+    monorepo = [
+        signal for signal in _monorepo_signals(contents)
+        if not _is_vendored(signal.split("#", 1)[0])
+    ]
     for signal in monorepo:
         add("MONOREPO", 0.98, signal.split("#", 1)[0])
     terraform = [path for path in paths if PurePosixPath(path).suffix.lower() == ".tf"]
@@ -2415,11 +2433,13 @@ def _component_facts(
         name = PurePosixPath(path).name
         if name not in {"package.json", "pyproject.toml", "requirements.txt", "Pipfile"}:
             continue
+        if _is_vendored(path):
+            continue
         component_path = str(PurePosixPath(path).parent)
         descriptors.setdefault(component_path, {"manifests": [], "builds": []})["manifests"].append(path)
     for path in sorted(contents):
         name = PurePosixPath(path).name.lower()
-        if name == "dockerfile" or name.startswith("dockerfile."):
+        if (name == "dockerfile" or name.startswith("dockerfile.")) and not _is_vendored(path):
             component_path = str(PurePosixPath(path).parent)
             descriptors.setdefault(component_path, {"manifests": [], "builds": []})["builds"].append(path)
     facts: list[dict[str, Any]] = []
@@ -4423,3 +4443,426 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# §33's canonical contradiction is a runtime whose version is stated differently by code,
+# container, and documentation. Each source is named so a disagreement can say who claimed what
+# rather than only that a disagreement exists.
+_RUNTIME_ALIASES = {
+    "node": "NODE", "nodejs": "NODE", "node.js": "NODE",
+    "python": "PYTHON", "python3": "PYTHON",
+    "ruby": "RUBY",
+}
+_TOOL_VERSIONS_LINE = re.compile(r"^\s*([A-Za-z0-9_.+-]+)\s+([^\s#]+)")
+_DOCKER_FROM = re.compile(
+    r"^\s*FROM\s+(?:--platform=\S+\s+)?(?P<image>[^\s]+)", re.IGNORECASE | re.MULTILINE,
+)
+_README_RUNTIME = re.compile(
+    r"\b(node(?:\.js)?|python)\b[^\n]{0,40}?\bv?(\d+(?:\.\d+){0,2})\b", re.IGNORECASE,
+)
+
+
+def _major(version: str) -> str | None:
+    """Return the leading numeric segment of a version, or None when there isn't one.
+
+    Contradictions are judged on the major version alone. Node 20.11 and Node 20.12 are the
+    same decision; Node 18 and Node 20 are not.
+    """
+    match = re.match(r"\s*[^\d]*(\d+)", version or "")
+    return match.group(1) if match else None
+
+
+def _runtime_declarations(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
+    """Collect every declared runtime version, tagged with the source that declared it."""
+    declarations: list[dict[str, Any]] = []
+
+    def add(runtime: str, version: str, source_kind: str, path: str) -> None:
+        major = _major(version)
+        if runtime and major:
+            declarations.append({
+                "runtime": runtime, "declared_version": version.strip(),
+                "major_version": major, "source_kind": source_kind, "path": path,
+            })
+
+    for path in sorted(contents):
+        if _is_vendored_path_for_declarations(path):
+            continue
+        name = PurePosixPath(path).name.lower()
+        try:
+            text = contents[path].decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        if name == ".nvmrc" or name == ".node-version":
+            add("NODE", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".python-version":
+            add("PYTHON", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".ruby-version":
+            add("RUBY", text.strip().splitlines()[0] if text.strip() else "", "VERSION_PIN", path)
+        elif name == ".tool-versions":
+            for line in text.splitlines():
+                match = _TOOL_VERSIONS_LINE.match(line)
+                if match and (runtime := _RUNTIME_ALIASES.get(match.group(1).lower())):
+                    add(runtime, match.group(2), "VERSION_PIN", path)
+        elif name == "package.json":
+            document = _decode_json_quiet(contents[path])
+            engines = document.get("engines") if isinstance(document, Mapping) else None
+            if isinstance(engines, Mapping) and isinstance(engines.get("node"), str):
+                add("NODE", engines["node"], "MANIFEST_ENGINE", path)
+        elif name == "pyproject.toml":
+            document = _decode_toml_quiet(contents[path])
+            project = document.get("project") if isinstance(document, Mapping) else None
+            requires = project.get("requires-python") if isinstance(project, Mapping) else None
+            if isinstance(requires, str):
+                add("PYTHON", requires, "MANIFEST_ENGINE", path)
+        elif name == "dockerfile" or name.startswith("dockerfile."):
+            for image in _DOCKER_FROM.findall(text):
+                reference = str(image)
+                if "@" in reference or ":" not in reference:
+                    continue
+                repository, tag = reference.rsplit(":", 1)
+                runtime = _RUNTIME_ALIASES.get(repository.rsplit("/", 1)[-1].lower())
+                if runtime:
+                    add(runtime, tag, "CONTAINER_BASE_IMAGE", path)
+        elif _is_readme(path):
+            for runtime_name, version in _README_RUNTIME.findall(text):
+                runtime = _RUNTIME_ALIASES.get(runtime_name.lower())
+                if runtime:
+                    add(runtime, version, "DOCUMENTATION", path)
+    return declarations
+
+
+def _is_vendored_path_for_declarations(path: str) -> bool:
+    return _is_vendored(path)
+
+
+def _decode_json_quiet(content: bytes) -> Any:
+    try:
+        return json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _decode_toml_quiet(content: bytes) -> Any:
+    try:
+        return tomllib.loads(content.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return None
+
+
+def _runtime_contradiction_facts(
+    scan_input: ScanInput, contents: Mapping[str, bytes],
+) -> list[dict[str, Any]]:
+    """Emit a contradiction observation when sources disagree about a runtime version.
+
+    §33 is explicit that StackGraph does not have to decide which source is right. It surfaces
+    the conflict, who claimed what, and the evidence, and leaves the truth to a human. That is
+    why this records every claim rather than picking a winner, and why the fact is an
+    observation rather than a correction.
+    """
+    declarations = _runtime_declarations(contents)
+    if not declarations:
+        return []
+    by_runtime: dict[str, list[dict[str, Any]]] = {}
+    for declaration in declarations:
+        by_runtime.setdefault(declaration["runtime"], []).append(declaration)
+
+    facts: list[dict[str, Any]] = []
+    for runtime in sorted(by_runtime):
+        claims = sorted(
+            by_runtime[runtime], key=lambda item: (item["source_kind"], item["path"]),
+        )
+        majors = {claim["major_version"] for claim in claims}
+        if len(majors) < 2:
+            continue
+        value = {
+            "record_kind": "runtime_contradiction",
+            "schema_version": "1.0.0",
+            "runtime": runtime,
+            "dimension": f"runtime.{runtime.lower()}.major_version",
+            "disagreeing_major_versions": sorted(majors, key=lambda item: (len(item), item)),
+            "claims": [
+                {
+                    "source_kind": claim["source_kind"], "path": claim["path"],
+                    "declared_version": claim["declared_version"],
+                    "major_version": claim["major_version"],
+                }
+                for claim in claims
+            ],
+            "rule_version": "runtime-contradiction/1.0.0",
+            "limitations": [
+                "the scanner surfaces the disagreement and does not decide which source is authoritative",
+                "documentation claims are prose and may describe a historical version",
+                "a range such as >=18 is compared on its lowest stated major version",
+            ],
+        }
+        facts.append({
+            "fact_contract_version": "1.0.0",
+            "idempotency_key": sha256_key({
+                "tenant": scan_input.tenant_key,
+                "repository": scan_input.repository_key,
+                "record_kind": "runtime_contradiction",
+                "runtime": runtime,
+                "claims": value["claims"],
+                "source_revision": scan_input.source_revision,
+                "extractor": SCANNER_VERSION,
+            }),
+            "tenant_key": scan_input.tenant_key,
+            "subject": _repository_ref(scan_input),
+            "predicate": "HAS_PROPERTY",
+            "object_value": value,
+            "assertion_class": "OBSERVED",
+            "confidence": 0.95,
+            "observed_at": scan_input.observed_at,
+            "source_revision": scan_input.source_revision,
+            "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+            "properties": {"profile_schema_version": "1.0.0"},
+            "evidence": [
+                _evidence_dict(Evidence(
+                    path=claim["path"], evidence_type="RUNTIME_VERSION_DECLARATION",
+                    content_hash=content_hash(contents[claim["path"]]),
+                    locator={"path": claim["path"]},
+                ), scan_input)
+                for claim in claims[:12]
+            ],
+        })
+    return facts
+
+
+# §31's AI supply chain, detected only from declared evidence. A model identifier in a comment
+# or a prose mention of "our agent" is not a dependency; a manifest entry and a structured
+# configuration file are. Keeping to those is what lets this run at the corpus's zero-false-
+# positive bar.
+_AI_SDK_PACKAGES = {
+    "anthropic": ("ANTHROPIC", "SDK"),
+    "@anthropic-ai/sdk": ("ANTHROPIC", "SDK"),
+    "openai": ("OPENAI", "SDK"),
+    "@ai-sdk/anthropic": ("ANTHROPIC", "SDK"),
+    "@ai-sdk/openai": ("OPENAI", "SDK"),
+    "cohere-ai": ("COHERE", "SDK"),
+    "mistralai": ("MISTRAL", "SDK"),
+    "google-generativeai": ("GOOGLE", "SDK"),
+    "@google/generative-ai": ("GOOGLE", "SDK"),
+    "boto3-bedrock": ("AWS_BEDROCK", "SDK"),
+}
+_AI_HARNESS_PACKAGES = {
+    "langchain": "LANGCHAIN",
+    "langchain-core": "LANGCHAIN",
+    "langgraph": "LANGGRAPH",
+    "llama-index": "LLAMA_INDEX",
+    "llamaindex": "LLAMA_INDEX",
+    "crewai": "CREWAI",
+    "autogen": "AUTOGEN",
+    "pyautogen": "AUTOGEN",
+    "semantic-kernel": "SEMANTIC_KERNEL",
+    "@langchain/core": "LANGCHAIN",
+    "ai": "VERCEL_AI_SDK",
+    "@modelcontextprotocol/sdk": "MCP",
+    "mcp": "MCP",
+}
+_CONTEXT_SOURCE_PACKAGES = {
+    "pinecone-client": "PINECONE",
+    "@pinecone-database/pinecone": "PINECONE",
+    "chromadb": "CHROMA",
+    "weaviate-client": "WEAVIATE",
+    "qdrant-client": "QDRANT",
+    "pgvector": "PGVECTOR",
+    "faiss-cpu": "FAISS",
+    "@qdrant/js-client-rest": "QDRANT",
+}
+# Deliberately anchored: a bare "claude" or "gpt" in prose is not a model reference. A version
+# suffix is what distinguishes an identifier from a brand name.
+_MODEL_IDENTIFIER = re.compile(
+    r"\b(claude-[a-z0-9.\-]*\d[a-z0-9.\-]*"
+    r"|gpt-[0-9][a-z0-9.\-]*"
+    r"|o[1-9](?:-[a-z0-9.\-]+)?"
+    r"|gemini-[0-9][a-z0-9.\-]*"
+    r"|llama-?[0-9][a-z0-9.\-]*"
+    r"|mistral-[a-z0-9.\-]*\d[a-z0-9.\-]*)\b",
+    re.IGNORECASE,
+)
+
+
+def _ai_entity(namespace: str, entity_type: str, key: str, name: str) -> dict[str, str]:
+    return {"namespace": namespace, "type": entity_type, "key": key, "name": name}
+
+
+def _ai_fact(
+    scan_input: ScanInput, subject: Mapping[str, str], predicate: str,
+    object_entity: Mapping[str, str], *, confidence: float, assertion_class: str,
+    path: str, content: bytes, properties: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "fact_contract_version": "1.0.0",
+        "idempotency_key": sha256_key({
+            "tenant": scan_input.tenant_key,
+            "subject": subject["key"],
+            "predicate": predicate,
+            "object": object_entity["key"],
+            "source_revision": scan_input.source_revision,
+            "extractor": SCANNER_VERSION,
+        }),
+        "tenant_key": scan_input.tenant_key,
+        "subject": dict(subject),
+        "predicate": predicate,
+        "object_entity": dict(object_entity),
+        "assertion_class": assertion_class,
+        "confidence": confidence,
+        "observed_at": scan_input.observed_at,
+        "source_revision": scan_input.source_revision,
+        "extractor": {"key": SCANNER_KEY, "version": SCANNER_VERSION},
+        "properties": dict(properties),
+        "evidence": [
+            _evidence_dict(Evidence(
+                path=path, evidence_type="AI_DEPENDENCY_DECLARATION",
+                content_hash=content_hash(content), locator={"path": path},
+            ), scan_input)
+        ],
+    }
+
+
+def _ai_supply_chain_facts(
+    scan_input: ScanInput,
+    contents: Mapping[str, bytes],
+    dependencies: list[Dependency],
+) -> list[dict[str, Any]]:
+    """Emit the AI supply chain this repository declares.
+
+    §31 asks which business processes depend on a model, which agents can reach production, and
+    what happens when a model or tool is withdrawn. None of that is answerable while the
+    vocabulary is registered but nothing produces it.
+
+    Detection is restricted to declared evidence — dependency manifests and structured AI
+    configuration — because the alternative is regex over prose, and an AI inventory built from
+    prose is exactly the "AI inventory rather than a supply-chain graph" the section warns
+    against.
+    """
+    facts: list[dict[str, Any]] = []
+    application = _ai_entity(
+        "ENTERPRISE", "Application", f"application:{scan_input.repository_key}",
+        scan_input.repository_name,
+    )
+    seen: set[tuple[str, str, str]] = set()
+
+    def emit(
+        subject: Mapping[str, str], predicate: str, target: Mapping[str, str], *,
+        confidence: float, assertion_class: str, path: str, properties: Mapping[str, Any],
+    ) -> None:
+        key = (subject["key"], predicate, target["key"])
+        if key in seen:
+            return
+        seen.add(key)
+        facts.append(_ai_fact(
+            scan_input, subject, predicate, target, confidence=confidence,
+            assertion_class=assertion_class, path=path, content=contents[path],
+            properties=properties,
+        ))
+
+    declared = [
+        dependency for dependency in sorted(dependencies, key=lambda item: item.normalized_name)
+        if dependency.declaration.path in contents
+    ]
+    # The harness is resolved before anything is attached to it. Discovering it mid-loop would
+    # make a model or tool hang off the application or the harness depending only on where the
+    # package sorted alphabetically, so the same repository would produce two different graphs.
+    harness: dict[str, str] | None = None
+    for dependency in declared:
+        framework = _AI_HARNESS_PACKAGES.get(dependency.normalized_name)
+        if framework is None:
+            continue
+        harness = _ai_entity(
+            "INTELLIGENCE", "AgentHarness",
+            f"agent-harness:{scan_input.repository_key}:{framework.lower()}", framework,
+        )
+        emit(
+            application, "ORCHESTRATES", harness, confidence=0.9,
+            assertion_class="DECLARED", path=dependency.declaration.path,
+            properties={"framework": framework, "package": dependency.package_purl},
+        )
+        break
+
+    for dependency in declared:
+        name = dependency.normalized_name
+        path = dependency.declaration.path
+        if name in _AI_SDK_PACKAGES:
+            provider, _ = _AI_SDK_PACKAGES[name]
+            tool = _ai_entity(
+                "INTELLIGENCE", "Tool",
+                f"ai-tool:{scan_input.repository_key}:{provider.lower()}-sdk",
+                f"{provider} SDK",
+            )
+            emit(
+                harness or application, "ACCESSES", tool, confidence=0.9,
+                assertion_class="DECLARED", path=path,
+                properties={"provider": provider, "package": dependency.package_purl},
+            )
+        if name in _CONTEXT_SOURCE_PACKAGES:
+            store = _CONTEXT_SOURCE_PACKAGES[name]
+            context = _ai_entity(
+                "INTELLIGENCE", "ContextSource",
+                f"context-source:{scan_input.repository_key}:{store.lower()}", store,
+            )
+            emit(
+                harness or application, "GROUNDED_BY", context, confidence=0.85,
+                assertion_class="DECLARED", path=path,
+                properties={"store": store, "package": dependency.package_purl},
+            )
+
+    for path in sorted(contents):
+        if _is_vendored(path):
+            continue
+        name = PurePosixPath(path).name.lower()
+        if name in {".mcp.json", "mcp.json", "claude_desktop_config.json"}:
+            document = _decode_json_quiet(contents[path])
+            servers = document.get("mcpServers") if isinstance(document, Mapping) else None
+            if not isinstance(servers, Mapping):
+                continue
+            mcp_harness = harness or _ai_entity(
+                "INTELLIGENCE", "AgentHarness",
+                f"agent-harness:{scan_input.repository_key}:mcp", "MCP",
+            )
+            emit(
+                application, "ORCHESTRATES", mcp_harness, confidence=0.95,
+                assertion_class="DECLARED", path=path,
+                properties={"framework": "MCP", "configuration": path},
+            )
+            for server_name in sorted(servers):
+                if not isinstance(server_name, str) or not server_name:
+                    continue
+                emit(
+                    mcp_harness, "ACCESSES",
+                    _ai_entity(
+                        "INTELLIGENCE", "Tool",
+                        f"ai-tool:{scan_input.repository_key}:mcp:{server_name}", server_name,
+                    ),
+                    confidence=0.95, assertion_class="DECLARED", path=path,
+                    properties={"protocol": "MCP", "server": server_name},
+                )
+        elif name in {"agents.yaml", "agents.yml", "agent.yaml", "agent.yml", "llm.yaml", "llm.yml"}:
+            text = contents[path].decode("utf-8", errors="replace")
+            for identifier in sorted(set(_MODEL_IDENTIFIER.findall(text))):
+                emit(
+                    harness or application, "INVOKES",
+                    _ai_entity(
+                        "INTELLIGENCE", "AIModel", f"ai-model:{identifier.lower()}", identifier,
+                    ),
+                    confidence=0.9, assertion_class="DECLARED", path=path,
+                    properties={"declared_in": path},
+                )
+
+    # A model named in an admitted configuration file is a declaration; one named in source is
+    # weaker, so it is recorded as INFERRED rather than pretending the two are equivalent.
+    for path in sorted(contents):
+        if _is_vendored(path) or not _is_source(path) or _is_test_file(path):
+            continue
+        text = contents[path].decode("utf-8", errors="replace")
+        for identifier in sorted(set(_MODEL_IDENTIFIER.findall(text)))[:8]:
+            emit(
+                harness or application, "INVOKES",
+                _ai_entity(
+                    "INTELLIGENCE", "AIModel", f"ai-model:{identifier.lower()}", identifier,
+                ),
+                confidence=0.7, assertion_class="INFERRED", path=path,
+                properties={"declared_in": path, "detection": "SOURCE_IDENTIFIER"},
+            )
+    return facts

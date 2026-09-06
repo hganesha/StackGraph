@@ -1,0 +1,25 @@
+{
+  "id": "containerized-service",
+  "title": "Containerized service with a multi-stage build, compose, and an OpenAPI contract",
+  "why": "Protects S3 container composition and S2 deployment profiles: build and base-image edges, compose workload identity, and the rule that declared configuration is never presented as a verified live deployment.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["API_DEFINITION", "MICROSERVICE"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "record_kind": "component_profile", "properties": {"component_kind": "SERVICE", "independently_deployable": true, "frameworks": ["fastify"]}},
+      {"predicate": "IMPLEMENTED_BY", "subject_type": "Service", "object_type": "Repository"},
+      {"predicate": "EXPOSES", "subject_type": "Service", "object_type": "API"},
+      {"predicate": "BUILDS", "subject_type": "Component", "object_type": "ContainerImage"},
+      {"predicate": "BASED_ON", "subject_type": "ContainerImage", "object_type": "ContainerImage", "object_key": "container-image:node:20.11-alpine"},
+      {"predicate": "DEPLOYED_AS", "subject_type": "Service", "object_type": "Deployment"},
+      {"predicate": "RUNS_ON", "subject_type": "Deployment", "object_type": "ContainerImage", "object_key": "container-image:registry.internal/acme/shipping:2.0.1"},
+      {"predicate": "RUNS_ON", "subject_type": "Deployment", "object_type": "ContainerImage", "object_key": "container-image:postgres:16.2"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "deployment_profile", "properties": {"verification_level": "DECLARED_CONFIGURATION", "workload_types": ["COMPOSE_SERVICE", "CONTAINER_BUILD"], "coverage": {"live_state": "NOT_VERIFIED", "registry_metadata": "NOT_COLLECTED"}}},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Service", "record_kind": "openapi_service_profile"}
+    ],
+    "absent_facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "deployment_profile", "properties": {"verification_level": "VERIFIED_LIVE"}, "note": "no connector or telemetry corroborates this configuration"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "deployment_profile", "properties": {"coverage": {"registry_metadata": "AVAILABLE"}}, "note": "the mutable tag was never resolved to a digest"}
+    ]
+  }
+}

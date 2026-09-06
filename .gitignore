@@ -33,3 +33,7 @@ next-env.d.ts
 
 # Local materializations; durable evidence is held in the configured evidence store.
 services/enterprise-discovery/repository-snapshots/
+
+# Benchmark and corpus baselines are produced per run and uploaded as CI artifacts.
+artifacts/golden-corpus.json
+artifacts/scanner-benchmark.json
