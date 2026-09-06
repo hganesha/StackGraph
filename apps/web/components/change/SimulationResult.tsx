@@ -16,14 +16,16 @@ import {
   ConfidenceChip,
   CorroborationMark,
   GateNotice,
+  RunProvenance,
   Skeleton,
   confidenceLabel,
+  simulationRunProvenance,
   type GateVerdict,
 } from "@stackgraph/design-system";
 import type { SimulationFinding, SimulationRunModel } from "@stackgraph/shared";
 import { useCancelSimulation, useSimulation } from "@/lib/changeQueries";
 import { useEvidenceStore } from "@/lib/evidenceStore";
-import { RunProvenance, simulationProvenance } from "./RunProvenance";
+
 import styles from "./SimulationResult.module.css";
 
 const TERMINAL = new Set<SimulationRunModel["status"]>([
@@ -277,7 +279,7 @@ export function SimulationResult({ id }: { id: string }) {
           <FindingsPartition run={run} />
         </>
       ) : null}
-      <RunProvenance value={simulationProvenance(run)} />
+      <RunProvenance {...simulationRunProvenance(run)} variant="card" />
       <footer className={styles.pageFooter}>
         <Link href="/simulate"><IconRefresh size={15} stroke={1.5} aria-hidden="true" /> Plan another change</Link>
       </footer>

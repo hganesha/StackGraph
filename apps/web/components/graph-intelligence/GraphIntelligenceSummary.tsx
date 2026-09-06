@@ -8,7 +8,14 @@ import {
   type GraphMetric,
   type Namespace,
 } from "@stackgraph/shared";
-import { Drawer, Skeleton, Term, type GlossaryKey } from "@stackgraph/design-system";
+import {
+  Drawer,
+  RunProvenance,
+  Skeleton,
+  Term,
+  graphSnapshotProvenance,
+  type GlossaryKey,
+} from "@stackgraph/design-system";
 import {
   useEntityBlastRadius,
   useGraphIntelligenceCommunities,
@@ -18,7 +25,6 @@ import {
 import { ImpactPath, type ImpactHop } from "./ImpactPath";
 import { SimilarityDecision } from "@/components/reviews/SimilarityDecision";
 import { useEvidenceStore } from "@/lib/evidenceStore";
-import { RunProvenance, graphProvenance } from "@/components/change/RunProvenance";
 import styles from "./graph-intelligence-summary.module.css";
 
 /**
@@ -234,14 +240,13 @@ export function GraphIntelligenceSummary({
         </p>
       ) : null}
 
-      <Limitations limitations={limitations} fallback="This entity's structural coverage is limited." />
-
+      {/* Which policy version and which watermark produced the numbers above. A
+          determinism guarantee nobody can check on screen lives only in a test. */}
       {intelligence?.snapshots?.[0] ? (
-        <details className={styles.provenance}>
-          <summary>Run provenance</summary>
-          <RunProvenance value={graphProvenance(intelligence.snapshots[0])} />
-        </details>
+        <RunProvenance {...graphSnapshotProvenance(intelligence.snapshots[0])} />
       ) : null}
+
+      <Limitations limitations={limitations} fallback="This entity's structural coverage is limited." />
 
       <div className={styles.actions}>
         <button type="button" onClick={() => setShowBlastRadius(true)} disabled={waiting}>View blast radius</button>
@@ -267,6 +272,9 @@ export function GraphIntelligenceSummary({
                 <div><dt>Affected entities</dt><dd>{blastRadius.data.affected_entity_count}</dd></div>
                 <div><dt>Maximum depth</dt><dd>{blastRadius.data.maximum_depth}</dd></div>
               </dl>
+              {blastRadius.data.snapshot ? (
+                <RunProvenance {...graphSnapshotProvenance(blastRadius.data.snapshot)} />
+              ) : null}
               {blastRadius.data.impacts.length ? (
                 <ol className={styles.paths}>
                   {blastRadius.data.impacts.map((impact) => {

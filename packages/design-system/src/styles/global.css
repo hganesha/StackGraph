@@ -27,6 +27,13 @@
   --sg-ramp-spread-5: var(--sg-color-domain-intelligence-700);
   --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-900);
   --sg-ramp-spread-ink-high: var(--sg-on-accent);
+
+  /* Link ink, theme-aware.
+     The 600 stop of a domain ramp reads well on the light surfaces and fails 4.5:1
+     against the dark card, so a link coloured by a fixed ramp stop is only accessible
+     in one theme. This resolves per theme; anywhere link text is drawn should use it
+     rather than reaching into a ramp. */
+  --sg-link: var(--sg-color-domain-enterprise-600);
 }
 
 /* Dark keeps the same ordering; the low end has to darken rather than lighten, or the
@@ -40,6 +47,7 @@
   --sg-ramp-spread-5: var(--sg-color-domain-intelligence-300);
   --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-100);
   --sg-ramp-spread-ink-high: var(--sg-color-domain-intelligence-900);
+  --sg-link: var(--sg-color-domain-enterprise-300);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +60,7 @@
     --sg-ramp-spread-5: var(--sg-color-domain-intelligence-300);
     --sg-ramp-spread-ink-low: var(--sg-color-domain-intelligence-100);
     --sg-ramp-spread-ink-high: var(--sg-color-domain-intelligence-900);
+    --sg-link: var(--sg-color-domain-enterprise-300);
   }
 }
 

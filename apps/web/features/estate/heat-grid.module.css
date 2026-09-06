@@ -33,7 +33,7 @@
   max-inline-size: 62ch;
 }
 .empty a {
-  color: var(--sg-color-domain-enterprise-600);
+  color: var(--sg-link);
   text-decoration: underline;
   align-self: flex-start;
 }

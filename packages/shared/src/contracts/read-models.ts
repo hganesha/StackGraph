@@ -622,11 +622,34 @@ export type RepositoryActivityCoverageStatus =
   | "PERMISSION_REQUIRED"
   | "ERROR";
 
+/**
+ * The change-actor taxonomy from the scanner plan. `classification` is what the estate
+ * needs; `login` identifies the account it was read from.
+ *
+ * `classification_basis` and `classification_confidence` carry the evidence class, and
+ * the distinction is load-bearing: an `AI_ASSISTED_HUMAN` asserted from harness metadata
+ * is a different claim from one inferred from commit style, and the scanner plan is
+ * explicit that code-style detection alone is never authoritative. Surfaces render the
+ * two differently rather than flattening them.
+ */
+export type ChangeActorClassification =
+  | "HUMAN"
+  | "BOT"
+  | "DEPENDENCY_BOT"
+  | "CI_AUTOMATION"
+  | "AI_AGENT"
+  | "AI_ASSISTED_HUMAN"
+  | "UNKNOWN";
+
 export interface RepositoryActivityActor {
   actor_key: string;
   login: string;
   avatar_url?: string | null;
   is_bot: boolean;
+  classification: ChangeActorClassification;
+  /** How the classification was reached. Absent when nothing was recorded. */
+  classification_basis?: string | null;
+  classification_confidence: Confidence;
 }
 
 export interface RepositoryActivityEvent {

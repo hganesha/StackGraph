@@ -15,6 +15,7 @@ import {
   type RepositoryActivityWindow,
 } from "@stackgraph/shared";
 import { Skeleton } from "@stackgraph/design-system";
+import { ChangeActorMix } from "@/features/intelligence/ChangeActorMix";
 import styles from "./RepositoryActivityPanel.module.css";
 
 const WINDOWS: Array<{ value: RepositoryActivityWindow; label: string }> = [
@@ -158,31 +159,17 @@ export function RepositoryActivityPanel({
               )}
             </div>
 
-            <aside className={styles.contributors} aria-labelledby="repository-contributors-heading">
-              <div className={styles.subhead}>
-                <h3 id="repository-contributors-heading">Most active</h3>
-                <span>{window.replace("d", " days")}</span>
-              </div>
-              {data.top_contributors.length ? (
-                <ol>
-                  {data.top_contributors.map((contributor) => (
-                    <li key={contributor.actor.actor_key}>
-                      <span className={styles.avatar} aria-hidden="true">
-                        {contributor.actor.login.slice(0, 2).toUpperCase()}
-                      </span>
-                      <div>
-                        <strong>@{contributor.actor.login}</strong>
-                        <small>
-                          {contributor.commits} commits · {contributor.pull_requests_merged} merged PRs
-                        </small>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className={styles.empty}>No linked contributors are available for this window.</p>
-              )}
-            </aside>
+            {/* Was a ranked list of named individuals with per-person commit counts.
+                Replaced with the class-level mix per non-negotiable 16: the estate
+                question is how much of this changes by hand and how much by agent, and
+                the per-person answer is individual scoring by default. The taxonomy was
+                arriving on every response and rendered nowhere. */}
+            <div className={styles.contributors}>
+              <ChangeActorMix
+                contributors={data.top_contributors}
+                windowLabel={window.replace("d", " days")}
+              />
+            </div>
           </div>
 
           {data.limitations.length ? (

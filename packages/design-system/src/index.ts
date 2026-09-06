@@ -7,6 +7,12 @@ export { ConfidenceChip } from "./components/ConfidenceChip";
 export { StatTile } from "./components/StatTile";
 export { StatusStrip } from "./components/StatusStrip";
 export type { StatusStripProps } from "./components/StatusStrip";
+export {
+  RunProvenance,
+  graphSnapshotProvenance,
+  simulationRunProvenance,
+} from "./components/RunProvenance";
+export type { RunProvenanceFacts } from "./components/RunProvenance";
 export { StratumBar } from "./components/StratumBar";
 export type { StratumLayer, StratumLayerFact } from "./components/StratumBar";
 export { AttenuationBar } from "./components/AttenuationBar";
@@ -36,6 +42,39 @@ export {
   GATE_RENDERS,
 } from "./vocabulary/gates";
 export type { GateVerdict } from "./vocabulary/gates";
+export {
+  SIMULATION_STATUS_LABEL,
+  SIMULATION_STATUS_IS_TERMINAL,
+  INTERPRETATION_STATUS_LABEL,
+  INTERPRETATION_STATUS_DESCRIPTION,
+  CLASSIFICATION_LABEL,
+  CLASSIFICATION_DESCRIPTION,
+  PREDICATE_LABEL,
+  COMMAND_STATE_LABEL,
+  MUTATION_LIFECYCLE_LABEL,
+  TARGET_SUPPORT_LABEL,
+  TARGET_FRESHNESS_LABEL,
+} from "./vocabulary/change";
+export type {
+  SimulationRunStatus,
+  InterpretationStatus,
+  ImpactClassification,
+  ChangePredicate,
+  CommandState,
+  MutationLifecycle,
+  TargetSupport,
+  TargetFreshness,
+} from "./vocabulary/change";
+export {
+  ESTATE_LEVEL_LABEL,
+  ESTATE_LEVEL_DESCRIPTION,
+  ESTATE_LEVEL_UNIT,
+  formatScopeCount,
+  formatComponentImpact,
+  componentLabelParts,
+  componentLabelText,
+} from "./vocabulary/estate-level";
+export type { EstateLevel, ComponentLabelParts } from "./vocabulary/estate-level";
 export {
   RESOLUTION_LABEL,
   RESOLUTION_DESCRIPTION,

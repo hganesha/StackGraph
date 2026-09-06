@@ -44,8 +44,12 @@ test("guided compilation produces canonical tokens and a durable simulation", as
   await expect(page.getByRole("heading", { name: "Attenuation funnel" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Found" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Interpreted" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Run provenance" })).toBeVisible();
-  await expect(page.getByText("sha256:b4ab02f3ce73b09823d39f66fba267ba2c91887bb0daf0d276ed982d35344296")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How this result can be reproduced" })).toBeVisible();
+  // The hash is truncated on screen — 71 characters of machine output would dominate the
+  // card — and carried in full on the title, which is the stronger assertion of the two.
+  await expect(
+    page.getByTitle("sha256:b4ab02f3ce73b09823d39f66fba267ba2c91887bb0daf0d276ed982d35344296", { exact: true }),
+  ).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
 });
 
@@ -89,7 +93,9 @@ test("limited, not-simulatable, failed, cancelled, quarantined, AI-off, and repl
 
   await page.goto("/simulations/25000000-0000-4000-8000-000000000008");
   await expect(page.getByText(/Existing idempotent run/)).toBeVisible();
-  await expect(page.getByText("Replayed result")).toBeVisible();
+  // Stated once more in the provenance card, where a reader checking reproducibility
+  // needs to know the result was returned rather than recomputed.
+  await expect(page.getByText(/Returned from an earlier identical run/)).toBeVisible();
 });
 
 test("a queued simulation can be cancelled and remains readable", async ({ page }) => {
@@ -100,7 +106,7 @@ test("a queued simulation can be cancelled and remains readable", async ({ page 
   await expect(cancel).toBeVisible();
   await cancel.click();
   await expect(page.getByRole("heading", { level: 1, name: "Simulation cancelled" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Run provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How this result can be reproduced" })).toBeVisible();
 });
 
 test("command surface reflows at 200% equivalent width and closes with Escape", async ({ page }) => {

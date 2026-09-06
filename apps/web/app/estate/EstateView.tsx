@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -21,7 +22,19 @@ import { SemanticMatches } from "@/components/estate/SemanticMatches";
 import { applyEstateQuery } from "@/lib/estateFilters";
 import { FilterBar } from "@/components/estate/FilterBar";
 import { ArchitectureWorkspace } from "@/features/architecture/ArchitectureWorkspace";
-import { CapabilityHeatGrid } from "@/features/estate/CapabilityHeatGrid";
+
+// Both are peer views behind the switch, so neither belongs in the bundle a reader gets
+// for the default ranked list. The estate route is the heaviest in the app and this
+// keeps the picture surfaces off its critical path.
+const CapabilityHeatGrid = dynamic(
+  () => import("@/features/estate/CapabilityHeatGrid").then((m) => m.CapabilityHeatGrid),
+  { loading: () => <Skeleton height={520} /> },
+);
+const Archetypes = dynamic(
+  () => import("@/features/intelligence/Archetypes").then((m) => m.Archetypes),
+  { loading: () => <Skeleton height={420} /> },
+);
+import { SuggestedChanges } from "@/features/change/SuggestedChanges";
 import styles from "./estate.module.css";
 
 const DOMAIN_ORDER: Namespace[] = [
@@ -230,7 +243,14 @@ export function EstateView() {
   // The canvas is a peer view of the same estate, not a filter on the ranked list, so
   // it reads its own URL param and leaves the filter query untouched.
   const viewParam = searchParams?.get("view");
-  const estateView = viewParam === "canvas" ? "canvas" : viewParam === "heat" ? "heat" : "ranked";
+  const estateView =
+    viewParam === "canvas"
+      ? "canvas"
+      : viewParam === "heat"
+        ? "heat"
+        : viewParam === "archetypes"
+          ? "archetypes"
+          : "ranked";
 
   return (
     <div className={styles.page}>
@@ -243,6 +263,7 @@ export function EstateView() {
           {([
             ["ranked", "Ranked list", "/estate"],
             ["heat", "Heat grid", "/estate?view=heat"],
+            ["archetypes", "Archetypes", "/estate?view=archetypes"],
             ["canvas", "Architecture canvas", "/estate?view=canvas"],
           ] as const).map(([id, label, href]) =>
             estateView === id ? (
@@ -262,6 +283,8 @@ export function EstateView() {
         <ArchitectureWorkspace scope="ESTATE" variant="embedded" initialDensity="compact" />
       ) : estateView === "heat" ? (
         <CapabilityHeatGrid />
+      ) : estateView === "archetypes" ? (
+        <Archetypes />
       ) : (
         <>
 
@@ -271,6 +294,10 @@ export function EstateView() {
           <span>Couldn’t load the estate. Try again, or check the API connection.</span>
         </div>
       ) : null}
+
+      {/* Above the counts: four counts are inventory, three simulatable changes are
+          intelligence (R15, revising §5.1). */}
+      <SuggestedChanges />
 
       <section className={styles.tiles} aria-label="Estate counts">
         {isLoading || !counts ? (

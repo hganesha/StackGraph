@@ -100,7 +100,13 @@ function InsightCard({ insight }: { insight: DeterministicInsight }) {
           <p>{insight.summary}</p>
         </div>
         <dl className={styles.impactCounts} aria-label="Affected estate scope">
-          <div><dt>Repositories</dt><dd>{insight.affected_repository_count}</dd></div>
+          {/* Non-negotiable 14: a repository count is not a component count. This one
+              genuinely is repository-level — the rule is that a figure says which it
+              is, and the title says so where the label cannot. */}
+          <div>
+            <dt title="Whole repositories, not the components inside them.">Repositories</dt>
+            <dd>{insight.affected_repository_count}</dd>
+          </div>
           <div><dt>Applications</dt><dd>{insight.affected_application_count}</dd></div>
           <div><dt>Deploy definitions</dt><dd>{insight.affected_deployment_count}</dd></div>
           <div><dt>Evidence</dt><dd>{Math.round(insight.evidence_coverage * 100)}%</dd></div>

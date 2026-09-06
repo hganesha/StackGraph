@@ -87,16 +87,7 @@
   color: var(--sg-text-muted);
 }
 
-.provenance > summary {
-  cursor: pointer;
-  color: var(--sg-color-domain-intelligence-800);
-  font-size: var(--sg-type-small-size);
-  font-weight: 500;
-}
 
-.provenance > :global(section) {
-  margin-block-start: var(--sg-space-3);
-}
 
 .actions,
 .facts {

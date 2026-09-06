@@ -44,6 +44,7 @@ import {
   type ProcessInput,
   type SharedGroupInput,
 } from "./useBusinessMap";
+import { BusinessMapRevisionHistory } from "./RevisionHistory";
 import styles from "./BusinessMapWorkspace.module.css";
 
 const MATURITY = [
@@ -1332,7 +1333,13 @@ export function BusinessMapWorkspace() {
             />
           ) : controller.panel === "capability" ? (
             <CapabilityPanel controller={controller} onEdit={openCatalogEditor} editing={editing} />
-          ) : null}
+          ) : (
+            /* The saved history was being kept and never shown (defect §7.12). It sits
+               in the panel's resting state rather than behind a control, because a map
+               that feeds simulation needs "who changed this, and when" to be one look
+               away rather than one click. */
+            <BusinessMapRevisionHistory mapId={controller.serverMapId} />
+          )}
         </div>
       </DndContext>
     </div>

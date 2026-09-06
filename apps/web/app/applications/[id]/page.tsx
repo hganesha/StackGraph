@@ -9,6 +9,7 @@ import { ApplicationViewSwitch } from "./ApplicationViewSwitch";
 import { TechnologyWorkspace } from "./TechnologyWorkspace";
 import { DeterministicInsightsPanel } from "@/components/insights/DeterministicInsightsPanel";
 import { GraphIntelligenceSummary } from "@/components/graph-intelligence/GraphIntelligenceSummary";
+import { CriticalEdges } from "@/features/intelligence/CriticalEdges";
 import { DescriptionEditor } from "@/components/entity/DescriptionEditor";
 import styles from "./application.module.css";
 
@@ -145,6 +146,7 @@ export default function ApplicationPage({
                 graphHref={`/applications/${id}/graph`}
                 similarityAvailable
               />
+              <CriticalEdges entityId={id} />
             </div>
             <section className={styles.overviewSection} aria-labelledby="application-overview-heading">
               <h2 id="application-overview-heading">Application overview</h2>

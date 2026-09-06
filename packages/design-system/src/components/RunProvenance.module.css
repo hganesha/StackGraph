@@ -1,0 +1,66 @@
+.provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sg-space-1) var(--sg-space-3);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  color: var(--sg-text-muted);
+}
+.item {
+  white-space: nowrap;
+}
+/* Separators are drawn, not typed, so a wrapped line never starts with a stray dot. */
+.item + .item::before {
+  content: "·";
+  margin-inline-end: var(--sg-space-2);
+  color: var(--sg-surface-border-strong);
+}
+/* A lagging graph or a reduced-coverage run qualifies every number beside it. Louder
+   than the rest of the line, quieter than a tone — this is a caveat, not a finding. */
+.behind {
+  color: var(--sg-text-secondary);
+  font-weight: 500;
+}
+.replayed {
+  color: var(--sg-text-secondary);
+  font-weight: 500;
+}
+.hash {
+  color: var(--sg-text-muted);
+}
+
+/* Card variant: for the one surface where reproducibility is the subject rather than a
+   caveat on someone else's number. */
+.card {
+  border: var(--sg-border-hairline) solid var(--sg-surface-border);
+  border-radius: var(--sg-radius-card);
+  background: var(--sg-surface-card);
+  padding: var(--sg-space-4);
+}
+.cardHeading {
+  font-size: var(--sg-type-h3-size);
+  line-height: var(--sg-type-h3-line);
+  font-weight: 600;
+  margin-block-end: var(--sg-space-3);
+}
+.cardList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sg-space-3) var(--sg-space-4);
+}
+.cardList > div {
+  min-inline-size: 0;
+}
+.cardList dt {
+  color: var(--sg-text-muted);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  margin-block-end: 2px;
+}
+.cardList dd {
+  color: var(--sg-text-primary);
+  font-size: var(--sg-type-small-size);
+  line-height: var(--sg-type-small-line);
+  overflow-wrap: anywhere;
+}

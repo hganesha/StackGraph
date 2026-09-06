@@ -5,6 +5,7 @@ import Link from "next/link";
 import { IconFileDescription, IconGitBranch, IconSortDescending } from "@tabler/icons-react";
 import { StatTile, Skeleton } from "@stackgraph/design-system";
 import { formatRelative } from "@stackgraph/shared";
+import { RequestAnalysis } from "@/features/intelligence/RequestAnalysis";
 import {
   useEnterpriseInsightReports,
   useEmbeddingStatus,
@@ -171,6 +172,13 @@ export default function HealthPage() {
             </div>
             <p className={styles.cardNote}>
               Authoritative watermark {graphStatus.data.desired_change_watermark.toLocaleString()} · projected {graphStatus.data.neo4j_projection_watermark.toLocaleString()} · {graphStatus.data.snapshots.length} active policy snapshots.
+              {" "}
+              <RequestAnalysis
+                lag={
+                  graphStatus.data.desired_change_watermark -
+                  graphStatus.data.neo4j_projection_watermark
+                }
+              />
             </p>
           </>
         )}

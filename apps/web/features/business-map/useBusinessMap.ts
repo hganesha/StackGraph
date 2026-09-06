@@ -190,6 +190,9 @@ export function useBusinessMap() {
   const [hydrated, setHydrated] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
+  // Mirrored from mapIdRef so consumers can read revision history. The ref stays the
+  // source of truth for the debounced save, which must not re-subscribe on render.
+  const [serverMapId, setServerMapId] = useState<string | null>(null);
   const skipFirstSave = useRef(true);
   // Server identity/version for optimistic-concurrency saves; refs so the debounced
   // save reads the latest without re-subscribing.
@@ -253,6 +256,7 @@ export function useBusinessMap() {
           const detail = await stackGraphClient.getBusinessMap(existing.id);
           if (cancelled) return;
           mapIdRef.current = detail.id;
+          setServerMapId(detail.id);
           versionRef.current = detail.version;
           setMap(fromApiState(detail.state));
           setServerBacked(true);
@@ -261,6 +265,7 @@ export function useBusinessMap() {
           const detail = await stackGraphClient.createBusinessMap({ map_key: MAP_KEY, state: toApiState(seeded) });
           if (cancelled) return;
           mapIdRef.current = detail.id;
+          setServerMapId(detail.id);
           versionRef.current = detail.version;
           setServerBacked(true);
         }
@@ -860,6 +865,7 @@ export function useBusinessMap() {
     hydrated,
     savedAt,
     serverBacked,
+    serverMapId,
     placementsByStage,
     capabilityById,
     estateApplications,

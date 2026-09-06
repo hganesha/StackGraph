@@ -13,7 +13,7 @@ import {
   type EnterpriseInsightReportList,
   type GraphRiskList,
 } from "@stackgraph/shared";
-import { CitationChip } from "@stackgraph/design-system";
+import { CitationChip, RunProvenance, graphSnapshotProvenance } from "@stackgraph/design-system";
 import { useEvidenceStore } from "@/lib/evidenceStore";
 import { useEnterpriseInsightReports, useGraphIntelligenceRisks } from "@/lib/queries";
 import styles from "./ask.module.css";
@@ -422,6 +422,9 @@ function InsightOverview({
         ) : (
           <p className={styles.reportError}>No runtime-dependency risk ranking is available yet. Projection and analysis may still be catching up.</p>
         )}
+        {graphRisks?.snapshot ? (
+          <RunProvenance {...graphSnapshotProvenance(graphRisks.snapshot)} />
+        ) : null}
         {graphRisks?.limitations.map((limitation, index) => (
           <p className={styles.riskLimitation} key={`${String(limitation.code ?? "limitation")}:${index}`}>
             {String(limitation.message ?? limitation.code ?? "This ranking has a coverage limitation.")}

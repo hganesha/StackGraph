@@ -12,7 +12,11 @@ test("repository view summarizes intent, activity, context, and findings", async
   await expect(activity).toBeVisible();
   await expect(activity.getByText("47", { exact: true })).toBeVisible();
   await expect(activity.getByText("8", { exact: true })).toBeVisible();
-  await expect(activity.getByText("@dana-okafor", { exact: true })).toBeVisible();
+  // Was an assertion on a named contributor. The panel now reports what is changing
+  // the repository by class rather than by person (non-negotiable 16), so the
+  // assertion moves to the reading that replaced it.
+  await expect(activity.getByRole("heading", { name: "What is changing this" })).toBeVisible();
+  await expect(activity.getByText("StackGraph does not score individuals.")).toBeVisible();
   await expect(page.getByText("Default branch: main")).toBeVisible();
 
   await activity.getByRole("button", { name: "7 days" }).click();
