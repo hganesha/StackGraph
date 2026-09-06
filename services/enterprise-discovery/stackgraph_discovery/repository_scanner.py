@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 from urllib.parse import quote, urlsplit
 
-from .github_snapshot import manifest_kind
+from .github_snapshot import is_vendored_path, manifest_kind
 from .npm_resolution import (
     PUBLIC_NPM_ORIGIN,
     NpmConfig,
@@ -398,6 +398,13 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies: list[Dependency] = []
     dependencies.extend(_scan_npm(contents, diagnostics))
     dependencies.extend(_scan_python(contents, diagnostics))
+    # A manifest inside an installed or vendored tree declares that third-party package's own
+    # dependencies, not this repository's. Attributing them here would put packages the
+    # repository never chose into its blast radius as DECLARED facts.
+    dependencies = [
+        item for item in dependencies
+        if not _is_vendored(item.declaration.path) and not _is_vendored(item.component_path)
+    ]
     dependencies = _dedupe_dependencies(dependencies)
     runtime = _runtime_observations(contents, diagnostics)
     inventory_facts = _repository_profile_facts(scan_input, contents)
@@ -1675,7 +1682,7 @@ def _repository_touchpoints(contents: Mapping[str, bytes]) -> tuple[Mapping[str,
 
 
 def _is_vendored(path: str) -> bool:
-    return bool({"vendor", "vendored", "third_party", "third-party"} & set(PurePosixPath(path.lower()).parts))
+    return is_vendored_path(path)
 
 
 def _vendored_identity(
@@ -2121,6 +2128,7 @@ def _repository_profile_facts(
         if PurePosixPath(path).name in {
             "package.json", "pyproject.toml", "requirements.txt", "Pipfile",
         }
+        and not _is_vendored(path)
     })
     operational_signals = _repository_operational_signals(contents)
     key_files = _repository_key_files(contents)
@@ -2255,8 +2263,13 @@ def _repository_description_sources(
 
 
 def _repository_classifications(contents: Mapping[str, bytes]) -> list[dict[str, Any]]:
-    """Return additive, multi-label classifications backed by visible repository files."""
-    paths = tuple(sorted(contents))
+    """Return additive, multi-label classifications backed by visible repository files.
+
+    Vendored and installed trees are excluded: a public `package.json` under `node_modules`
+    describes a dependency, and letting it vote would classify the repository as the library
+    it merely consumes.
+    """
+    paths = tuple(path for path in sorted(contents) if not _is_vendored(path))
     lowered = {path.lower() for path in paths}
     source_paths = [path for path in paths if _is_source(path) and not _is_test_file(path)]
     deployment_paths = [
@@ -2279,7 +2292,10 @@ def _repository_classifications(contents: Mapping[str, bytes]) -> list[dict[str,
         else:
             prior[1].update(evidence)
 
-    monorepo = _monorepo_signals(contents)
+    monorepo = [
+        signal for signal in _monorepo_signals(contents)
+        if not _is_vendored(signal.split("#", 1)[0])
+    ]
     for signal in monorepo:
         add("MONOREPO", 0.98, signal.split("#", 1)[0])
     terraform = [path for path in paths if PurePosixPath(path).suffix.lower() == ".tf"]
@@ -2415,11 +2431,13 @@ def _component_facts(
         name = PurePosixPath(path).name
         if name not in {"package.json", "pyproject.toml", "requirements.txt", "Pipfile"}:
             continue
+        if _is_vendored(path):
+            continue
         component_path = str(PurePosixPath(path).parent)
         descriptors.setdefault(component_path, {"manifests": [], "builds": []})["manifests"].append(path)
     for path in sorted(contents):
         name = PurePosixPath(path).name.lower()
-        if name == "dockerfile" or name.startswith("dockerfile."):
+        if (name == "dockerfile" or name.startswith("dockerfile.")) and not _is_vendored(path):
             component_path = str(PurePosixPath(path).parent)
             descriptors.setdefault(component_path, {"manifests": [], "builds": []})["builds"].append(path)
     facts: list[dict[str, Any]] = []

@@ -1,0 +1,19 @@
+{
+  "id": "generated-vendor-tree",
+  "title": "Repository carrying an installed node_modules tree and vendored sources",
+  "why": "A manifest inside node_modules describes a dependency, not this repository. Promoting it to a Component or attributing its transitive dependencies would put estate the repository never chose into its blast radius.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": [],
+    "facts": [
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:npm/axios"},
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "object_key": "component:github:repo:1:."},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile", "properties": {"components": ["Repository root"]}}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:npm/malicious-transitive", "note": "declared by the vendored package, never by this repository"},
+      {"predicate": "CONTAINS", "object_key": "component:github:repo:1:node_modules/left-pad", "note": "an installed package is not a component this repository owns"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "subject_key": "component:github:repo:1:node_modules/left-pad", "note": "no profile should exist for a component that should not exist"}
+    ]
+  }
+}

@@ -94,6 +94,28 @@ jobs:
       - run: docker build -t stackgraph-mcp-test -f services/mcp-server/Dockerfile.test .
       - run: docker run --rm stackgraph-mcp-test
 
+  golden-corpus:
+    # §9.1 states correctness as a score against a labelled corpus. Without this job the
+    # objective is a sentence in a document; with it, a false positive fails the build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install --requirement services/enterprise-discovery/requirements.txt
+      - name: Scanner precision and recall
+        run: python3 scripts/golden_corpus_report.py --output "$RUNNER_TEMP/golden-corpus.json"
+      - name: Scanner latency, memory, and throughput
+        run: python3 scripts/benchmark_scanner.py --iterations 5 --output "$RUNNER_TEMP/scanner-benchmark.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scanner-baseline
+          path: |
+            ${{ runner.temp }}/golden-corpus.json
+            ${{ runner.temp }}/scanner-benchmark.json
+
   postgres-integration:
     runs-on: ubuntu-latest
     steps:

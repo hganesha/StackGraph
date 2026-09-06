@@ -1,0 +1,26 @@
+{
+  "id": "npm-single-app",
+  "title": "Single npm service with a declared database dependency",
+  "why": "The baseline shape most of the estate takes. Protects component promotion, declared dependency extraction, database inference from a driver, and unused-dependency findings.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": [],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile", "properties": {"languages": ["JavaScript"], "components": ["Repository root"]}},
+      {"predicate": "CONTAINS", "subject_type": "Repository", "object_type": "Component", "object_key": "component:github:repo:1:."},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "record_kind": "component_profile", "properties": {"path": ".", "component_kind": "PACKAGE", "ecosystems": ["npm"], "runtime": ["NODE"], "frameworks": ["express"]}},
+      {"predicate": "IMPLEMENTED_BY", "subject_type": "Application", "object_type": "Repository", "object_key": "github:repo:1"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:npm/express"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:npm/pg"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Component", "subject_key": "component:github:repo:1:.", "object_type": "Package", "object_key": "pkg:npm/express"},
+      {"predicate": "USES", "subject_type": "Repository", "object_type": "Database", "note": "the pg driver is the only evidence that a PostgreSQL database is in play"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "finding_type": "UNUSED_DECLARED_DEPENDENCY_CANDIDATE", "properties": {"package": "lodash"}, "note": "declared but never imported"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_fingerprint"}
+    ],
+    "absent_facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "finding_type": "UNUSED_DECLARED_DEPENDENCY_CANDIDATE", "properties": {"package": "express"}, "note": "express is imported in src/index.js; flagging it would be a false positive"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "finding_type": "UNUSED_DECLARED_DEPENDENCY_CANDIDATE", "properties": {"package": "pg"}, "note": "pg is imported and used for a query"},
+      {"predicate": "DEPLOYED_AS", "subject_type": "Repository", "note": "nothing in this repository declares a deployment; inventing one would assert a live workload"}
+    ]
+  }
+}

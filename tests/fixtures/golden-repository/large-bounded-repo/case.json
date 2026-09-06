@@ -1,0 +1,15 @@
+{
+  "id": "large-bounded-repo",
+  "title": "Repository whose file count exceeds the scanner's admitted bound",
+  "why": "§9.2 requires bounded scanning under a hard file limit. Truncation must be reported as PARTIAL with a named limitation, never presented as a complete picture of a large estate.",
+  "limits": { "max_files": 40, "max_bytes": 10000000, "deadline_seconds": 60 },
+  "generate": { "source_files": 400, "directory": "src/modules" },
+  "expect": {
+    "completeness": "PARTIAL",
+    "diagnostic_codes": ["SCAN_LIMIT"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile"}
+    ],
+    "absent_facts": []
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "python-library",
+  "title": "Published Python library with a pinned and an unpinned dependency",
+  "why": "Protects PyPI requirement parsing, the pinned-version PackageVersion identity split, and the LIBRARY_PACKAGE classification that must not fire when deployment configuration is present.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["LIBRARY_PACKAGE"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_profile", "properties": {"languages": ["Python"]}},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Component", "record_kind": "component_profile", "properties": {"path": ".", "ecosystems": ["pypi"], "runtime": ["PYTHON"]}},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:pypi/attrs", "note": "unpinned range resolves to package identity only"},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "PackageVersion", "object_key": "pkg:pypi/python-dateutil@2.8.2", "note": "an exact pin earns a PackageVersion identity"},
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "repository_fingerprint"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_type": "PackageVersion", "object_key": "pkg:pypi/attrs@23.1", "note": "a >= range is not an observed exact version and must not be recorded as one"}
+    ]
+  }
+}

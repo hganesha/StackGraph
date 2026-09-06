@@ -53,6 +53,15 @@ phase2-api-benchmark:
 	@test -n "$(PACKAGE_ID)" || (echo "PACKAGE_ID is required" >&2; exit 2)
 	python3 scripts/benchmark_phase2_api.py "$(PACKAGE_ID)" --requests "$${PHASE2_BENCHMARK_REQUESTS:-10000}" --concurrency "$${PHASE2_BENCHMARK_CONCURRENCY:-20}" $${PHASE2_BENCHMARK_ARGS:-}
 
+golden-corpus:
+	python3 scripts/golden_corpus_report.py --output artifacts/golden-corpus.json $${GOLDEN_CORPUS_ARGS:-}
+
+golden-corpus-compare:
+	python3 scripts/golden_corpus_report.py --compare artifacts/golden-corpus.json
+
+scanner-benchmark:
+	python3 scripts/benchmark_scanner.py --iterations "$${SCANNER_BENCHMARK_ITERATIONS:-5}" --output artifacts/scanner-benchmark.json $${SCANNER_BENCHMARK_ARGS:-}
+
 database-migrate:
 	docker compose run --rm migrate
 

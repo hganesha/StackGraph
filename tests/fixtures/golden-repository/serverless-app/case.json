@@ -1,0 +1,16 @@
+{
+  "id": "serverless-app",
+  "title": "Serverless application declaring an AWS function",
+  "why": "Protects the SERVERLESS classification and provider attribution from a serverless manifest, and the scoped-package purl encoding that entity identity depends on.",
+  "expect": {
+    "completeness": "COMPLETE",
+    "classifications": ["SERVERLESS"],
+    "facts": [
+      {"predicate": "HAS_PROPERTY", "subject_type": "Repository", "record_kind": "deployment_profile", "properties": {"providers": ["AWS"], "workload_types": ["SERVERLESS_FUNCTION"], "verification_level": "DECLARED_CONFIGURATION"}},
+      {"predicate": "DEPENDS_ON", "subject_type": "Repository", "object_type": "Package", "object_key": "pkg:npm/%40aws-sdk/client-sns", "note": "scoped names must stay percent-encoded or canonical identity splits"}
+    ],
+    "absent_facts": [
+      {"predicate": "DEPENDS_ON", "object_key": "pkg:npm/@aws-sdk/client-sns", "note": "an unencoded scope would create a second identity for one package"}
+    ]
+  }
+}
