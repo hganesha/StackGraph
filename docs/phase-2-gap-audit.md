@@ -155,8 +155,14 @@ This one is worth separating from the others: the scanner *does* produce the und
 (`:2257`), deployment facts and container identity, and `_repository_fingerprint_facts` (`:508`)
 consumes them. What is missing is the projection from those facts into the typed profile tables —
 so `GET /components` lists Component entities but every profile reports `COMPONENT_EVIDENCE_PARTIAL`
-(`apps/api/app/estate_fidelity.py:223`), and the deployment and container endpoints, which have no
-entity fallback (`:562`, `:450`), return nothing at all.
+(`apps/api/app/estate_fidelity.py:223`).
+
+Correcting an earlier reading of this section: the deployment and container endpoints do **not**
+return nothing. Both fall back to the repository's related entities
+(`apps/api/app/estate_fidelity.py:480`, `:569`) and report `PARTIAL` or `NOT_COLLECTED` with a
+per-image resolution limitation. The gap is narrower than first stated and entirely about the
+typed profile: provider, workload kind, environment, confidence, and method version are absent,
+so the surfaces degrade honestly but carry no S2 or S3 detail.
 
 `estate_lineage_edge` is different in kind: nothing anywhere produces lineage, and the endpoint
 returns `LINEAGE_NOT_COLLECTED` by design (`apps/api/app/estate_governance.py:344`). That is honest,
