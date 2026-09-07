@@ -16,13 +16,15 @@ from pathlib import Path
 import pytest
 
 from app.estate_governance import _AI_PREDICATES, _AI_TYPES
+from tests.repository_paths import repository_root
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+# The container sets STACKGRAPH_CONTRACTS_DIR and has no repository root, so the fallback is
+# computed only when it is actually needed.
+_ROOT = repository_root()
 CONTRACTS_DIR = Path(
-    os.environ.get(
-        "STACKGRAPH_CONTRACTS_DIR", REPOSITORY_ROOT / "stackgraph-foundation" / "contracts" / "v1",
-    )
+    os.environ.get("STACKGRAPH_CONTRACTS_DIR")
+    or (_ROOT / "stackgraph-foundation" / "contracts" / "v1")
 )
 REGISTRY_PATH = CONTRACTS_DIR / "ontology.registry.json"
 

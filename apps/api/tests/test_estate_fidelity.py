@@ -19,13 +19,14 @@ from app.models import (
     EstateStrata,
 )
 from tests.test_api import app_with_stubs, request
+from tests.repository_paths import fixtures_directory
 
 
 NOW = datetime(2026, 9, 5, 15, 0, tzinfo=UTC)
 REPOSITORY_ID = UUID("00000000-0000-4000-8000-000000000701")
 COMPONENT_ID = UUID("00000000-0000-4000-8000-000000000702")
 IMAGE_ID = UUID("00000000-0000-4000-8000-000000000703")
-FIXTURES = Path(__file__).parents[3] / "packages" / "shared" / "src" / "fixtures"
+FIXTURES = fixtures_directory()
 
 
 @pytest.mark.parametrize(

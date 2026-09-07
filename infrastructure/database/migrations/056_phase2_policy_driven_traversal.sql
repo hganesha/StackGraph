@@ -39,6 +39,19 @@ DECLARE
   bad_classification text;
   bad_direction text;
 BEGIN
+  -- Validate a configuration when it is written, not when a neighbouring column changes.
+  -- Without this, retiring a policy re-validates the configuration being retired, so a policy
+  -- with a bad predicate can never be superseded — which is exactly backwards, and deadlocked
+  -- this migration against the version-1 policy seeded in 047.
+  --
+  -- Reviving one is a different matter: a row moving into ACTIVE is validated however it got
+  -- there, so a status-only update cannot smuggle an unvalidated policy back into service.
+  IF TG_OP='UPDATE'
+     AND NEW.configuration IS NOT DISTINCT FROM OLD.configuration
+     AND NOT (NEW.status='ACTIVE' AND OLD.status IS DISTINCT FROM 'ACTIVE') THEN
+    RETURN NEW;
+  END IF;
+
   SELECT edge->>'predicate' INTO unknown_predicate
   FROM jsonb_array_elements(coalesce(NEW.configuration->'edges','[]'::jsonb)) edge
   WHERE NOT EXISTS(
@@ -79,7 +92,9 @@ CREATE TRIGGER trg_validate_impact_policy
 
 -- 3. Retire the inert version 1 and activate a policy the engine reads ---------------------
 
-UPDATE impact_policy SET status='SUPERSEDED'
+-- RETIRED, not SUPERSEDED: `impact_policy.status` admits DRAFT, ACTIVE, and RETIRED, and the
+-- fourth value would have failed the CHECK the moment the trigger above stopped masking it.
+UPDATE impact_policy SET status='RETIRED'
 WHERE tenant_id IS NULL AND policy_key='upgrade-package' AND version=1;
 
 WITH configuration AS (
