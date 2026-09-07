@@ -35,7 +35,7 @@ sign-off. Those are external executions of checked-in runbooks, not missing repo
 | **R10 — external evidence** | **Execution pending** | The automation and runbooks exist; IdP/GitHub provisioning, real-tenant pilot, cloud KMS recovery, and human acceptance require target accounts and people. |
 | **R11 — pilot bar** | **Complete** | Modernization recommendations are explicitly labelled investigative during the pilot, including application and technology detail surfaces. |
 | **R12 — strong scheduled gates** | **Complete** | Fresh-database integration and recovery drills run nightly; the synthetic 100-repository gate runs on pull requests. |
-| **R13 — repository security** | **Complete** | Gitleaks and Trivy high/critical filesystem scanning run on pull requests, `main`, and weekly; SARIF is uploaded to code scanning. |
+| **R13 — repository security** | **Scanning complete; publishing pending an admin decision** | Gitleaks and Trivy high/critical filesystem scanning run on pull requests, `main`, and weekly, and a finding fails the check. SARIF is *not* reaching the Security tab: code scanning is off for this private repository and needs GitHub Advanced Security. Findings are kept as the `trivy-sarif` workflow artifact meanwhile, and each run says which of the two happened. See [Enabling code scanning](#enabling-code-scanning). |
 | **R14 — conflict copies** | **Complete** | All exact Finder/iCloud conflict copies were removed; 117 source copies are archived at `/private/tmp/stackgraph-conflict-copies-20260820.tgz`. Canonical files were verified separately. |
 | **R15 — read-model split** | **Complete** | Review/admin persistence moved to `read_models_admin.py`; the core store fell from 4,242 to 3,093 lines while retaining its public class boundary. |
 | **R16 — stale branches** | **Complete** | The three squash-merged `claude/ui-*` remote refs for PRs #4, #13, and #15 were verified and deleted. |
@@ -105,6 +105,33 @@ tenant edge case found by the fresh-database matrix.
 | Workflow YAML and deployment shell syntax | **Pass** |
 | Backup/restore and AGE rebuild | **Pass — `artifacts/recovery/recovery-20260820155559.json`** |
 | Synthetic 100-repository gate | **Pass — 100 complete, 1,000 facts, 200 findings, 100% evidence, zero failures** |
+
+## Enabling code scanning
+
+The security workflow produces SARIF and tries to publish it to the Security tab. That upload has
+never succeeded: publishing requires code scanning to be enabled on the repository, and because
+this repository is private that means GitHub Advanced Security, which is a paid add-on rather than
+a switch. The upload returned `Code scanning is not enabled for this repository` and failed the
+whole job, which is why `repository-scan` has been red on `main` independently of any finding.
+
+The scans themselves never depended on it. Gitleaks and Trivy run locally in the job and a finding
+fails the check, so the gate works today. What was lost was the *publishing* — and a security check
+that goes red for a billing reason is one people learn to ignore, taking the next real finding with
+it. So publishing is now attempted, allowed to fail, and reported either way; the findings are kept
+as a workflow artifact regardless.
+
+To publish to the Security tab, a repository admin enables it:
+
+1. **Settings → Advanced Security** — enable GitHub Advanced Security for the repository. This is
+   billed per active committer; it is a spending decision, not a configuration one.
+2. **Settings → Code security → Code scanning** — leave default setup off. The workflow uploads its
+   own SARIF, and default setup would run a second, redundant analysis.
+3. Re-run the Security workflow. The job summary will then say the SARIF was published instead of
+   naming the artifact.
+
+Nothing else changes: the same findings gate the same check before and after. Making the repository
+public would also enable code scanning at no cost, which is a different decision with different
+consequences and is not recommended here.
 
 ## What is left for production acceptance
 

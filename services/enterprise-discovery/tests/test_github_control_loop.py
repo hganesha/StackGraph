@@ -695,13 +695,135 @@ class GitHubControlLoopPersistenceTests(unittest.TestCase):
         self.assertIs(promoted["refresh_policy"]["archived"], False)
         self.assertIsNotNone(promoted["last_success_at"])
 
+    def test_a_repository_renamed_while_stopped_is_folded_into_its_existing_target(self) -> None:
+        """The repository id settles an identity the name no longer can.
+
+        Stopping a repository, renaming it on GitHub, and re-adding it under the new name
+        creates a second target: the re-add request carries only the new owner/name, and the id
+        that would identify it is unknown until a scan runs. Promotion is where the id first
+        becomes known, so it is where the two rows are reconciled — into the older one, which
+        owns the snapshots and cursors this repository has accumulated.
+        """
+        tenant_key = f"github-rename-{uuid4()}"
+        repository_id = str(uuid4().int)[:12]
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            tenant = connection.execute(
+                "INSERT INTO tenant(tenant_key,name) VALUES (%s,'GitHub rename') RETURNING id",
+                (tenant_key,),
+            ).fetchone()
+            source = connection.execute(
+                """
+                INSERT INTO source_system(tenant_id,source_key,kind,base_uri)
+                VALUES (%s,'github-app','GITHUB','https://api.github.com') RETURNING id
+                """,
+                (tenant["id"],),
+            ).fetchone()
+            account = connection.execute(
+                """
+                INSERT INTO connector_account(
+                  tenant_id,source_system_id,external_account_key,credential_reference,permissions
+                ) VALUES (%s,%s,'github:repository:acme/billing','env://GITHUB_TOKEN',%s)
+                RETURNING id
+                """,
+                (tenant["id"], source["id"], Jsonb(["contents:read", "metadata:read"])),
+            ).fetchone()
+            original = connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,enabled,disabled_at,disabled_by,refresh_policy
+                ) VALUES (%s,%s,%s,'REPOSITORY',%s,'HOT',false,now(),'alice',%s)
+                RETURNING id
+                """,
+                (
+                    tenant["id"], source["id"], account["id"], f"github:repo:{repository_id}",
+                    Jsonb({
+                        "provider": "github", "direct_repository": True,
+                        "owner": "acme", "name": "billing", "full_name": "acme/billing",
+                        "repository_id": repository_id, "default_branch": "main",
+                        "cadence_seconds": 86400, "schedule_enabled": True,
+                    }),
+                ),
+            ).fetchone()
+            # The re-add under the new name cannot match the row above, so it creates its own.
+            renamed = connection.execute(
+                """
+                INSERT INTO ingest_target(
+                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                  priority,refresh_policy,next_due_at
+                ) VALUES (%s,%s,%s,'REPOSITORY','github:repo-name:acme/invoicing','HOT',%s,now())
+                RETURNING id
+                """,
+                (
+                    tenant["id"], source["id"], account["id"],
+                    Jsonb({
+                        "provider": "github", "direct_repository": True,
+                        "owner": "acme", "name": "invoicing", "full_name": "acme/invoicing",
+                        "cadence_seconds": 86400, "schedule_enabled": True,
+                    }),
+                ),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO ingest_run(tenant_id,ingest_target_id,trigger_kind)
+                VALUES (%s,%s,'MANUAL')
+                """,
+                (tenant["id"], renamed["id"]),
+            )
+
+        claimed = claim_run(
+            DATABASE_URL, worker_id="rename-test", lease_seconds=300, tenant_id=tenant["id"],
+        )
+        self.assertIsNotNone(claimed)
+        assert claimed is not None
+        self.assertEqual(claimed.target_id, renamed["id"])
+        with TemporaryDirectory() as snapshots, TemporaryDirectory() as evidence:
+            with patch(
+                "stackgraph_discovery.github_control_loop._client",
+                return_value=_RepositoryClient(repository_id, full_name="acme/invoicing"),
+            ), patch.dict(os.environ, {"GITHUB_TOKEN": "github-token-runtime"}):
+                result = _acquire_scan_publish(
+                    DATABASE_URL, claimed,
+                    snapshot_root=Path(snapshots), evidence_root=Path(evidence),
+                )
+
+        self.assertEqual(result.status, "PUBLISHED")
+        with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+            remaining = connection.execute(
+                """
+                SELECT id,target_key,enabled,disabled_at,disabled_by,refresh_policy
+                FROM ingest_target WHERE tenant_id=%s
+                """,
+                (tenant["id"],),
+            ).fetchall()
+            runs = connection.execute(
+                "SELECT ingest_target_id,status FROM ingest_run WHERE tenant_id=%s",
+                (tenant["id"],),
+            ).fetchall()
+
+        # One repository, one target — and it is the row that already held the identity.
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["id"], original["id"])
+        self.assertEqual(remaining[0]["target_key"], f"github:repo:{repository_id}")
+        # Re-adding resumes it, so the stop is over and recorded as over.
+        self.assertTrue(remaining[0]["enabled"])
+        self.assertIsNone(remaining[0]["disabled_at"])
+        self.assertIsNone(remaining[0]["disabled_by"])
+        # The new name is adopted; the identity that proved they are one repository is kept.
+        self.assertEqual(remaining[0]["refresh_policy"]["full_name"], "acme/invoicing")
+        self.assertEqual(remaining[0]["refresh_policy"]["repository_id"], repository_id)
+        # The in-flight run moved across rather than being stranded on a deleted target.
+        self.assertEqual([run["ingest_target_id"] for run in runs], [original["id"]])
+        self.assertEqual([run["status"] for run in runs], ["SUCCEEDED"])
+
 
 class _RepositoryClient:
     api_version = "2026-03-10"
     base_url = "https://api.github.test"
 
-    def __init__(self, repository_id: str) -> None:
+    def __init__(self, repository_id: str, full_name: str = "acme/billing") -> None:
         self.repository_id = repository_id
+        self.full_name = full_name
         self.revision = "a" * 40
         self.tree = "b" * 40
         self.package_content = b'{"name":"billing","dependencies":{"lodash":"4.17.21"}}'
@@ -710,28 +832,29 @@ class _RepositoryClient:
         self.source_blob = _git_blob_sha(self.source_content)
 
     def get_json(self, path: str, **_: object) -> ApiResult:
+        repo = self.full_name
         documents = {
-            "/repos/acme/billing": {
+            f"/repos/{repo}": {
                 "id": int(self.repository_id), "node_id": "R_pipeline",
-                "full_name": "acme/billing", "default_branch": "main",
+                "full_name": repo, "default_branch": "main",
                 "visibility": "private", "archived": False,
             },
-            "/repos/acme/billing/commits/main": {
+            f"/repos/{repo}/commits/main": {
                 "sha": self.revision,
                 "commit": {
                     "tree": {"sha": self.tree},
                     "committer": {"date": "2026-08-19T12:00:00Z"},
                 },
             },
-            f"/repos/acme/billing/git/trees/{self.tree}": {
+            f"/repos/{repo}/git/trees/{self.tree}": {
                 "truncated": False,
                 "tree": [
                     {"path": "package.json", "type": "blob", "sha": self.package_blob, "size": len(self.package_content)},
                     {"path": "index.js", "type": "blob", "sha": self.source_blob, "size": len(self.source_content)},
                 ],
             },
-            f"/repos/acme/billing/git/blobs/{self.package_blob}": _blob(self.package_content),
-            f"/repos/acme/billing/git/blobs/{self.source_blob}": _blob(self.source_content),
+            f"/repos/{repo}/git/blobs/{self.package_blob}": _blob(self.package_content),
+            f"/repos/{repo}/git/blobs/{self.source_blob}": _blob(self.source_content),
         }
         if path not in documents:
             raise AssertionError(f"unexpected GitHub path: {path}")

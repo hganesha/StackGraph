@@ -686,19 +686,105 @@ def _promote_direct_repository(
     # API must not trust client-supplied repository metadata. The repository API
     # response is authoritative and is available even when the commit is unchanged,
     # so lifecycle changes remain observable without a source-code revision.
-    with psycopg.connect(database_url) as connection:
-        updated = connection.execute(
-            """
-            UPDATE ingest_target
-            SET target_key=%s,refresh_policy=%s,updated_at=now()
-            WHERE id=%s AND target_key=%s
-            RETURNING id
-            """,
-            (result.canonical_key, Jsonb(policy), claimed.target_id, claimed.target_key),
-        ).fetchone()
-        if updated is None:
-            raise LeaseLostError("the direct repository target changed during acquisition")
+    with psycopg.connect(database_url, row_factory=dict_row) as connection:
+        with connection.transaction():
+            surviving = _absorb_conflicting_target(connection, claimed, result, policy)
+            if surviving is not None:
+                return replace(
+                    claimed, target_id=surviving, target_key=result.canonical_key,
+                    refresh_policy=policy,
+                )
+            updated = connection.execute(
+                """
+                UPDATE ingest_target
+                SET target_key=%s,refresh_policy=%s,updated_at=now()
+                WHERE id=%s AND target_key=%s
+                RETURNING id
+                """,
+                (result.canonical_key, Jsonb(policy), claimed.target_id, claimed.target_key),
+            ).fetchone()
+            if updated is None:
+                raise LeaseLostError("the direct repository target changed during acquisition")
     return replace(claimed, target_key=result.canonical_key, refresh_policy=policy)
+
+
+def _absorb_conflicting_target(
+    connection: Any,
+    claimed: ClaimedRun,
+    result: Any,
+    policy: dict[str, Any],
+) -> UUID | None:
+    """Fold this target into the one already holding the repository's canonical identity.
+
+    A repository renamed on GitHub while it was stopped comes back under a name nothing
+    recognises: the re-add request carries only the new owner/name, and the id that would
+    identify it is not known until a scan runs. So a second target is created, and promotion
+    then tries to give it a canonical key an older row already holds.
+
+    The repository id is what settles it. Two targets carrying the same one are the same
+    repository, and the unique constraint means only one row may say so. The older row wins
+    because it owns the snapshots, cursors and freshness this repository has accumulated; the
+    newly created row is absorbed into it, carrying its in-flight run across.
+
+    Returns the surviving target id, or None when there is nothing to absorb.
+    """
+    conflict = connection.execute(
+        """
+        SELECT existing.id
+        FROM ingest_target existing,ingest_target claimed
+        WHERE claimed.id=%s AND existing.id<>claimed.id
+          AND existing.tenant_id IS NOT DISTINCT FROM claimed.tenant_id
+          AND existing.source_system_id=claimed.source_system_id
+          AND existing.target_kind=claimed.target_kind
+          AND existing.target_key=%s
+        FOR UPDATE OF existing
+        """,
+        (claimed.target_id, result.canonical_key),
+    ).fetchone()
+    if conflict is None:
+        return None
+    surviving = conflict["id"]
+
+    # Promotion happens before any snapshot is persisted, so the row being absorbed should hold
+    # none. If it does, two targets have separately recorded observations of one repository and
+    # merging them would silently pick a winner. Refuse instead: a wrong answer about which
+    # observations belong to a repository is worse than a stalled run somebody has to look at.
+    stranded = connection.execute(
+        "SELECT count(*) count FROM source_snapshot WHERE ingest_target_id=%s",
+        (claimed.target_id,),
+    ).fetchone()
+    if stranded["count"]:
+        raise ValueError(
+            "a duplicate ingest target for this repository already carries source snapshots; "
+            "resolve them before the targets can be merged"
+        )
+
+    claimed_row = connection.execute(
+        "SELECT connector_account_id,priority FROM ingest_target WHERE id=%s FOR UPDATE",
+        (claimed.target_id,),
+    ).fetchone()
+    # The in-flight run moves first: `ingest_run.ingest_target_id` has no cascade, so the row
+    # cannot be deleted while it is referenced, and the run must survive to be completed.
+    connection.execute(
+        "UPDATE ingest_run SET ingest_target_id=%s WHERE ingest_target_id=%s",
+        (surviving, claimed.target_id),
+    )
+    connection.execute("DELETE FROM ingest_target WHERE id=%s", (claimed.target_id,))
+    connection.execute(
+        """
+        UPDATE ingest_target
+        SET refresh_policy=refresh_policy||%s,enabled=true,
+            disabled_at=NULL,disabled_by=NULL,
+            connector_account_id=coalesce(%s,connector_account_id),
+            priority=%s,updated_at=now()
+        WHERE id=%s
+        """,
+        (
+            Jsonb(policy), claimed_row["connector_account_id"], claimed_row["priority"],
+            surviving,
+        ),
+    )
+    return surviving
 
 
 def _complete_run(

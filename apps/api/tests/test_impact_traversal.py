@@ -9,9 +9,12 @@ respected, and repeated traversal over the same snapshot is byte-stable.
 from __future__ import annotations
 
 import asyncio
+import re
 from uuid import UUID
 
 import pytest
+
+from tests.repository_paths import migrations_directory
 
 from app.impact_traversal import (
     EdgeRule,
@@ -306,3 +309,57 @@ def test_edge_rule_weight_defaults_without_hiding_an_explicit_zero():
          "classification": "CONTEXT", "weight": 0},
         policy_key="k",
     ).weight == 0.0
+
+
+# -- the migration that seeds the policy ------------------------------------------------------
+#
+# Migration 056 shipped with two faults that only a real database could show, and that between
+# them aborted the whole migration chain: the validation trigger re-checked the configuration of
+# a row being retired, so a policy with a bad predicate could never be superseded, and the
+# retiring UPDATE used a status the CHECK constraint does not admit. These hold both closed.
+
+
+POLICY_MIGRATION = migrations_directory() / "056_phase2_policy_driven_traversal.sql"
+
+
+def _impact_policy_statuses() -> set[str]:
+    """Every status literal any migration assigns to impact_policy."""
+    found: set[str] = set()
+    for path in sorted(migrations_directory().glob("*.sql")):
+        sql = path.read_text()
+        for match in re.finditer(r"impact_policy\s+SET\s+status='([A-Z_]+)'", sql):
+            found.add(match.group(1))
+        if "CREATE TABLE impact_policy" in sql:
+            for match in re.finditer(
+                r"status text NOT NULL CHECK\(status IN \(([^)]*)\)\)", sql,
+            ):
+                found.update(re.findall(r"'([A-Z_]+)'", match.group(1)))
+    return found
+
+
+def test_no_migration_assigns_an_impact_policy_status_the_check_rejects() -> None:
+    allowed = {"DRAFT", "ACTIVE", "RETIRED"}
+
+    assigned = {
+        match.group(1)
+        for path in sorted(migrations_directory().glob("*.sql"))
+        for match in re.finditer(
+            r"impact_policy\s+SET\s+status='([A-Z_]+)'", path.read_text(),
+        )
+    }
+
+    # `SUPERSEDED` reads naturally and is not one of them. The CHECK would have caught it the
+    # moment the trigger stopped raising first.
+    assert assigned <= allowed, f"status values outside the CHECK: {sorted(assigned - allowed)}"
+    assert allowed == _impact_policy_statuses() & allowed
+
+
+def test_the_policy_validator_lets_a_bad_policy_be_retired_but_not_revived() -> None:
+    sql = POLICY_MIGRATION.read_text()
+
+    # Retiring re-validates nothing, so a policy with an unknown predicate can be taken out of
+    # service. Without this the seeded version-1 policy deadlocked the migration chain.
+    assert "NEW.configuration IS NOT DISTINCT FROM OLD.configuration" in sql
+    # Reviving one is still validated, whatever route it takes back to ACTIVE.
+    assert "NEW.status='ACTIVE' AND OLD.status IS DISTINCT FROM 'ACTIVE'" in sql
+

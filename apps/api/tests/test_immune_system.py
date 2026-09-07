@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.read_models import ReadModelStore
 from tests.test_api import app_with_stubs, request
+from tests.repository_paths import migrations_directory
 
 
 TENANT = UUID("00000000-0000-0000-0000-000000000001")
@@ -37,10 +38,8 @@ SCENARIO = UUID("00000000-0000-4000-8000-000000000c01")
 ENTITY = UUID("00000000-0000-4000-8000-000000000d01")
 FACT = UUID("00000000-0000-4000-8000-000000000e01")
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
-MIGRATION = Path(__file__).parents[3] / "infrastructure/database/migrations/059_adversarial_evaluation.sql"
-PROMOTION_MIGRATION = (
-    Path(__file__).parents[3] / "infrastructure/database/migrations/062_harness_promotion.sql"
-)
+MIGRATION = migrations_directory() / "059_adversarial_evaluation.sql"
+PROMOTION_MIGRATION = migrations_directory() / "062_harness_promotion.sql"
 
 
 class _Cursor:

@@ -18,11 +18,12 @@ from app.models import (
 )
 from app.read_models import ReadModelStore
 from tests.test_api import app_with_stubs, request
+from tests.repository_paths import migrations_directory
 
 
 NOW = datetime(2026, 9, 5, 18, 0, tzinfo=UTC)
 ENVELOPE_ID = UUID("00000000-0000-4000-8000-000000000a01")
-MIGRATION = Path(__file__).parents[3] / "infrastructure/database/migrations/055_e1_estate_fidelity_and_agent_control.sql"
+MIGRATION = migrations_directory() / "055_e1_estate_fidelity_and_agent_control.sql"
 
 
 class _Cursor:
