@@ -11,6 +11,8 @@ permissions:
   actions: read
   contents: read
   pull-requests: read
+  # Needed to publish SARIF to the Security tab. The permission is necessary but not
+  # sufficient: code scanning must also be enabled on the repository. See "Publishing" below.
   security-events: write
 
 jobs:
@@ -20,11 +22,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+
+      # --- The gate. These decide whether this check passes. -------------------------------
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@v0.36.0
+
+      - name: Scan dependencies and filesystem
         if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -32,8 +39,60 @@ jobs:
           ignore-unfixed: true
           format: sarif
           output: trivy-results.sarif
+          # A finding fails this job. That is the whole point of the check, and it holds
+          # whether or not the results can be published anywhere.
           exit-code: "1"
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
+
+      # --- Publishing. This must never decide whether the check passes. ---------------------
+      #
+      # Uploading SARIF requires code scanning to be enabled on the repository, and on a
+      # private repository that needs GitHub Advanced Security — a paid add-on, not a toggle.
+      # While it is off the upload returns "Code scanning is not enabled for this repository",
+      # which used to fail this job. A security check that goes red for a billing reason is a
+      # check people learn to ignore, and the next real finding goes with it.
+      #
+      # So the findings are kept as an artifact unconditionally, publishing is attempted and
+      # allowed to fail, and the summary says which of the two happened. Nothing is dropped
+      # quietly: a gap in publishing is reported as a gap in publishing.
+      - name: Keep the findings as an artifact
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          if-no-files-found: error
+
+      - name: Publish findings to code scanning
+        id: publish
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Report where the findings went
+        if: always()
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          {
+            echo "### Repository security scan"
+            echo
+            echo "Gitleaks and Trivy (HIGH/CRITICAL, fixable only) decide this check."
+            echo
+            case "$PUBLISH_OUTCOME" in
+              success)
+                echo "SARIF was published to the Security tab." ;;
+              skipped)
+                echo "No SARIF was produced, so there was nothing to publish." ;;
+              *)
+                echo "**SARIF was not published to the Security tab.** The findings are"
+                echo "attached to this run as the \`trivy-sarif\` artifact instead."
+                echo
+                echo "Code scanning is not enabled for this repository. On a private"
+                echo "repository it requires GitHub Advanced Security. To enable it:"
+                echo "Settings → Advanced Security → enable, then Code security →"
+                echo "Code scanning. Until then this step is expected to fail and does"
+                echo "not affect whether this check passes." ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
