@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping
 from urllib.parse import quote
+from xml.etree import ElementTree
 from uuid import UUID
 
 import psycopg
@@ -175,6 +176,163 @@ def pypi_catalog(document: Mapping[str, Any], *, registry_key: str, source_uri: 
     )
 
 
+
+def cargo_catalog(document: Mapping[str, Any], *, registry_key: str, source_uri: str) -> CatalogResult:
+    """Extract every offered version from a crates.io crate document.
+
+    crates.io is the one registry here that states yanks directly, so a yanked release is
+    recorded as yanked rather than dropped: a repository pinned to it needs to know the version
+    it depends on has been withdrawn, which is not the same as it never having existed.
+    """
+    crate = document.get("crate") if isinstance(document.get("crate"), Mapping) else {}
+    versions = document.get("versions")
+    name = crate.get("name") or (document.get("name") if isinstance(document.get("name"), str) else None)
+    if not isinstance(name, str) or not isinstance(versions, list):
+        return CatalogResult(
+            ecosystem="cargo", registry_key=registry_key, package_name=str(name or ""),
+            status="ERROR", versions=(),
+            limitations=("the registry document carried no version list",), source_uri=source_uri,
+        )
+    collected = []
+    for item in versions:
+        if not isinstance(item, Mapping) or not isinstance(item.get("num"), str):
+            continue
+        collected.append(CatalogVersion(
+            version=item["num"],
+            is_prerelease=is_prerelease(item["num"]),
+            is_yanked=item.get("yanked") is True,
+            published_at=item["created_at"] if isinstance(item.get("created_at"), str) else None,
+        ))
+    return _bounded(CatalogResult(
+        ecosystem="cargo", registry_key=registry_key, package_name=name,
+        status="AVAILABLE", versions=tuple(collected), limitations=(), source_uri=source_uri,
+    ))
+
+
+def nuget_catalog(
+    document: Mapping[str, Any], *, package_name: str, registry_key: str, source_uri: str,
+) -> CatalogResult:
+    """Extract every offered version from a NuGet flat-container index.
+
+    The flat container is the one NuGet endpoint that is a plain list rather than a paged,
+    gzip-encoded registration graph. It carries no publication dates, no deprecation, and no
+    listing state, so those are reported as uncollected rather than defaulted: a NuGet package
+    whose newest release is deprecated would otherwise be offered as a clean upgrade target.
+    """
+    versions = document.get("versions")
+    if not isinstance(versions, list):
+        return CatalogResult(
+            ecosystem="nuget", registry_key=registry_key, package_name=package_name,
+            status="ERROR", versions=(),
+            limitations=("the registry document carried no version list",), source_uri=source_uri,
+        )
+    collected = [
+        CatalogVersion(version=item, is_prerelease=is_prerelease(item))
+        for item in versions if isinstance(item, str) and item
+    ]
+    return _bounded(CatalogResult(
+        ecosystem="nuget", registry_key=registry_key, package_name=package_name,
+        status="AVAILABLE", versions=tuple(collected),
+        limitations=(
+            "the flat container publishes no release dates, so publication order is unknown",
+            "deprecation and unlisting are not published by this endpoint",
+        ),
+        source_uri=source_uri,
+    ))
+
+
+def maven_catalog(body: bytes, *, package_name: str, registry_key: str, source_uri: str) -> CatalogResult:
+    """Extract every offered version from a Maven `maven-metadata.xml`.
+
+    Maven Central publishes no yank, deprecation, or support signal at all — a released
+    artifact is immutable and stays forever — so every one of those is reported as
+    uncollected. `lastUpdated` describes the metadata, not any particular release, and is
+    deliberately not attached to a version as if it were that version's publication date.
+    """
+    if b"<!DOCTYPE" in body[:4096] or b"<!ENTITY" in body[:4096]:
+        return CatalogResult(
+            ecosystem="maven", registry_key=registry_key, package_name=package_name,
+            status="ERROR", versions=(),
+            limitations=("the registry returned metadata carrying a document type declaration",),
+            source_uri=source_uri,
+        )
+    try:
+        root = ElementTree.fromstring(body.decode("utf-8", errors="replace"))
+    except ElementTree.ParseError:
+        return CatalogResult(
+            ecosystem="maven", registry_key=registry_key, package_name=package_name,
+            status="ERROR", versions=(),
+            limitations=("the registry returned metadata that is not XML",), source_uri=source_uri,
+        )
+    collected = [
+        CatalogVersion(version=text, is_prerelease=is_prerelease(text))
+        for element in root.iter()
+        if element.tag.rsplit("}", 1)[-1] == "version" and (text := (element.text or "").strip())
+    ]
+    if not collected:
+        return CatalogResult(
+            ecosystem="maven", registry_key=registry_key, package_name=package_name,
+            status="ERROR", versions=(),
+            limitations=("the metadata names no versions",), source_uri=source_uri,
+        )
+    return _bounded(CatalogResult(
+        ecosystem="maven", registry_key=registry_key, package_name=package_name,
+        status="AVAILABLE", versions=tuple(collected),
+        limitations=(
+            "Maven Central publishes no release dates per version in this document",
+            "Maven has no yank or deprecation signal; a withdrawn artifact is indistinguishable "
+            "from a live one",
+        ),
+        source_uri=source_uri,
+    ))
+
+
+def go_catalog(body: bytes, *, package_name: str, registry_key: str, source_uri: str) -> CatalogResult:
+    """Extract every offered version from a Go module proxy's `@v/list`.
+
+    The proxy's list is newline-separated text and omits two things that matter: retracted
+    versions, which live in the module's own `go.mod`, and pseudo-versions, which the proxy
+    does not enumerate. Both are reported rather than left for a reader to discover by being
+    offered a retracted upgrade.
+    """
+    text = body.decode("utf-8", errors="replace")
+    collected = [
+        CatalogVersion(version=line, is_prerelease=is_prerelease(line))
+        for raw in text.splitlines() if (line := raw.strip()).startswith("v")
+    ]
+    if not collected:
+        # The proxy answers 200 with an empty body for a module that exists but has no tagged
+        # release. That is a real answer about a real module, not a failure.
+        return CatalogResult(
+            ecosystem="go", registry_key=registry_key, package_name=package_name,
+            status="PARTIAL", versions=(),
+            limitations=(
+                "the module proxy lists no tagged versions; the module may be used at a "
+                "pseudo-version derived from a commit",
+            ),
+            source_uri=source_uri,
+        )
+    return _bounded(CatalogResult(
+        ecosystem="go", registry_key=registry_key, package_name=package_name,
+        status="AVAILABLE", versions=tuple(collected),
+        limitations=(
+            "retractions are declared in the module's own go.mod and are not visible here",
+            "pseudo-versions derived from untagged commits are not enumerated",
+        ),
+        source_uri=source_uri,
+    ))
+
+
+def go_module_path(module: str) -> str:
+    """Escape a module path for the proxy, which lower-cases with a `!` prefix.
+
+    The proxy's paths are case-folded because module caches live on case-insensitive
+    filesystems. `github.com/Azure/azure-sdk-for-go` is requested as `!azure`, and requesting
+    the unescaped path returns 404 — which would be recorded as "the registry does not publish
+    this module" about a module the registry certainly publishes.
+    """
+    return "".join(f"!{character.lower()}" if character.isupper() else character for character in module)
+
 def _bounded(result: CatalogResult) -> CatalogResult:
     if len(result.versions) <= MAX_VERSIONS_PER_PACKAGE:
         return result
@@ -247,10 +405,19 @@ def packages_needing_enumeration(
     """
     return connection.execute(
         """
-        SELECT DISTINCT lower(identity.package_name) package_name,
+        SELECT DISTINCT
+               -- Maven coordinates and Go module paths are case-sensitive; folding them would
+               -- request a package the registry has never published.
+               CASE WHEN identity.purl LIKE 'pkg:maven/%%' OR identity.purl LIKE 'pkg:golang/%%'
+                    THEN identity.package_name ELSE lower(identity.package_name) END package_name,
                registry.registry_key,
                CASE WHEN identity.purl LIKE 'pkg:npm/%%' THEN 'npm'
                     WHEN identity.purl LIKE 'pkg:pypi/%%' THEN 'pypi'
+                    WHEN identity.purl LIKE 'pkg:maven/%%' THEN 'maven'
+                    WHEN identity.purl LIKE 'pkg:cargo/%%' THEN 'cargo'
+                    WHEN identity.purl LIKE 'pkg:nuget/%%' THEN 'nuget'
+                    -- The purl type is `golang`; the catalogue's ecosystem column says `go`.
+                    WHEN identity.purl LIKE 'pkg:golang/%%' THEN 'go'
                END ecosystem
         FROM fact_assertion fact
         JOIN package_registry_identity identity ON identity.entity_id=fact.object_entity_id
@@ -262,7 +429,9 @@ def packages_needing_enumeration(
         WHERE fact.tenant_id=%s AND fact.predicate='DEPENDS_ON' AND fact.system_to IS NULL
           AND registry.visibility='PUBLIC'
           AND collection.id IS NULL
-          AND (identity.purl LIKE 'pkg:npm/%%' OR identity.purl LIKE 'pkg:pypi/%%')
+          AND (identity.purl LIKE 'pkg:npm/%%' OR identity.purl LIKE 'pkg:pypi/%%'
+               OR identity.purl LIKE 'pkg:maven/%%' OR identity.purl LIKE 'pkg:cargo/%%'
+               OR identity.purl LIKE 'pkg:nuget/%%' OR identity.purl LIKE 'pkg:golang/%%')
         ORDER BY 1
         LIMIT %s
         """,
@@ -274,6 +443,10 @@ def enumerate_package(
     package_name: str, ecosystem: str, *, registry_key: str, transport: Any,
     npm_origin: str = "https://registry.npmjs.org/",
     pypi_origin: str = "https://pypi.org/",
+    cargo_origin: str = "https://crates.io/",
+    nuget_origin: str = "https://api.nuget.org/",
+    maven_origin: str = "https://repo1.maven.org/maven2/",
+    go_origin: str = "https://proxy.golang.org/",
     timeout_seconds: float = 20.0,
 ) -> CatalogResult:
     """Fetch and normalise one package's catalogue.
@@ -281,10 +454,32 @@ def enumerate_package(
     `transport` is the same protocol the npm and PyPI clients already use, so allowlisting,
     timeouts, and response bounds are enforced by the caller's transport rather than reinvented.
     """
+    accept = "application/json"
     if ecosystem == "npm":
         uri = f"{npm_origin}{quote(package_name, safe='')}"
     elif ecosystem == "pypi":
         uri = f"{pypi_origin}pypi/{quote(package_name, safe='')}/json"
+    elif ecosystem == "cargo":
+        uri = f"{cargo_origin}api/v1/crates/{quote(package_name, safe='')}"
+    elif ecosystem == "nuget":
+        # The flat container keys on the lower-cased id; any other casing 404s.
+        uri = f"{nuget_origin}v3-flatcontainer/{quote(package_name.lower(), safe='')}/index.json"
+    elif ecosystem == "maven":
+        group, _, artifact = package_name.partition("/")
+        if not artifact:
+            return CatalogResult(
+                ecosystem=ecosystem, registry_key=registry_key, package_name=package_name,
+                status="ERROR", versions=(),
+                limitations=("a Maven package name must be group/artifact",),
+            )
+        uri = (
+            f"{maven_origin}{quote(group.replace('.', '/'), safe='/')}/"
+            f"{quote(artifact, safe='')}/maven-metadata.xml"
+        )
+        accept = "application/xml"
+    elif ecosystem == "go":
+        uri = f"{go_origin}{go_module_path(package_name)}/@v/list"
+        accept = "text/plain"
     else:
         return CatalogResult(
             ecosystem=ecosystem, registry_key=registry_key, package_name=package_name,
@@ -292,7 +487,7 @@ def enumerate_package(
             limitations=(f"no catalogue adapter exists for the {ecosystem} ecosystem",),
         )
     response = transport.request(
-        uri, {"Accept": "application/json", "User-Agent": "StackGraph-registry-catalog/1.0"},
+        uri, {"Accept": accept, "User-Agent": "StackGraph-registry-catalog/1.0"},
         timeout_seconds,
     )
     if response.status == 404:
@@ -306,6 +501,15 @@ def enumerate_package(
             ecosystem=ecosystem, registry_key=registry_key, package_name=package_name,
             status="ERROR", versions=(),
             limitations=(f"the registry answered with status {response.status}",), source_uri=uri,
+        )
+    # Maven and Go answer with XML and plain text; only the JSON registries are parsed as JSON.
+    if ecosystem == "maven":
+        return maven_catalog(
+            response.body, package_name=package_name, registry_key=registry_key, source_uri=uri,
+        )
+    if ecosystem == "go":
+        return go_catalog(
+            response.body, package_name=package_name, registry_key=registry_key, source_uri=uri,
         )
     try:
         document = json.loads(response.body)
@@ -323,6 +527,12 @@ def enumerate_package(
         )
     if ecosystem == "npm":
         return npm_catalog(document, registry_key=registry_key, source_uri=uri)
+    if ecosystem == "cargo":
+        return cargo_catalog(document, registry_key=registry_key, source_uri=uri)
+    if ecosystem == "nuget":
+        return nuget_catalog(
+            document, package_name=package_name, registry_key=registry_key, source_uri=uri,
+        )
     return pypi_catalog(document, registry_key=registry_key, source_uri=uri)
 
 

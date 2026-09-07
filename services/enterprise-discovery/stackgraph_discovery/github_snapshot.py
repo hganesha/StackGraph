@@ -46,6 +46,21 @@ EXACT_MANIFEST_NAMES = {
     "pnpm-lock.yaml": "PNPM_LOCK",
     "pnpm-workspace.yaml": "PNPM_WORKSPACE",
     "pyproject.toml": "PYTHON_MANIFEST",
+    # JVM, .NET, Rust, and Go manifests. Without these the scanner sees a Java service as a
+    # repository with no dependencies at all, which reads as "depends on nothing" rather than
+    # "was never parsed" everywhere downstream.
+    "pom.xml": "MAVEN_MANIFEST",
+    "build.gradle": "GRADLE_MANIFEST",
+    "build.gradle.kts": "GRADLE_MANIFEST",
+    "libs.versions.toml": "GRADLE_VERSION_CATALOG",
+    "packages.config": "NUGET_MANIFEST",
+    "Directory.Packages.props": "NUGET_MANIFEST",
+    "Directory.Build.props": "NUGET_MANIFEST",
+    "packages.lock.json": "NUGET_LOCK",
+    "Cargo.toml": "CARGO_MANIFEST",
+    "Cargo.lock": "CARGO_LOCK",
+    "go.mod": "GO_MANIFEST",
+    "go.sum": "GO_LOCK",
     "poetry.lock": "POETRY_LOCK",
     "uv.lock": "UV_LOCK",
     "Pipfile": "PIPENV_MANIFEST",
@@ -108,6 +123,13 @@ EXACT_MANIFEST_NAMES = {
 ANALYTICS_SUFFIXES = {
     ".sql": "SQL_SCRIPT",
     ".ipynb": "NOTEBOOK",
+}
+
+# .NET names its project file after the project, so the kind has to come from the suffix.
+PROJECT_SUFFIXES = {
+    ".csproj": "NUGET_MANIFEST",
+    ".fsproj": "NUGET_MANIFEST",
+    ".vbproj": "NUGET_MANIFEST",
 }
 
 SOURCE_SUFFIXES = {
@@ -662,6 +684,8 @@ def manifest_kind(path: str) -> str | None:
         return SOURCE_SUFFIXES[pure_path.suffix.lower()]
     if pure_path.suffix.lower() in ANALYTICS_SUFFIXES:
         return ANALYTICS_SUFFIXES[pure_path.suffix.lower()]
+    if pure_path.suffix.lower() in PROJECT_SUFFIXES:
+        return PROJECT_SUFFIXES[pure_path.suffix.lower()]
     if pure_path.suffix.lower() == ".tf":
         return "INFRASTRUCTURE_CONFIG"
     if pure_path.suffix.lower() in {".yaml", ".yml", ".toml", ".json", ".properties"} and any(

@@ -11217,6 +11217,94 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HarnessChampionList": {
+        "additionalProperties": false,
+        "properties": {
+          "champions": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessChampionModel"
+            },
+            "title": "Champions",
+            "type": "array"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "promotion_enabled": {
+            "title": "Promotion Enabled",
+            "type": "boolean"
+          },
+          "recent_promotions": {
+            "items": {
+              "$ref": "#/components/schemas/HarnessPromotionModel"
+            },
+            "title": "Recent Promotions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "promotion_enabled"
+        ],
+        "title": "HarnessChampionList",
+        "type": "object"
+      },
+      "HarnessChampionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "harness_key": {
+            "title": "Harness Key",
+            "type": "string"
+          },
+          "harness_version": {
+            "title": "Harness Version",
+            "type": "string"
+          },
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "promoted_at": {
+            "format": "date-time",
+            "title": "Promoted At",
+            "type": "string"
+          },
+          "promoted_by": {
+            "title": "Promoted By",
+            "type": "string"
+          },
+          "promotion_id": {
+            "format": "uuid",
+            "title": "Promotion Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness_key",
+          "harness_version",
+          "promotion_id",
+          "promoted_by",
+          "promoted_at"
+        ],
+        "title": "HarnessChampionModel",
+        "type": "object"
+      },
       "HarnessEvaluationCompleteRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11518,6 +11606,243 @@
           "scenario_ids"
         ],
         "title": "HarnessEvaluationStartRequest",
+        "type": "object"
+      },
+      "HarnessPromotionDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "PROMOTE",
+              "REJECT"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "rationale"
+        ],
+        "title": "HarnessPromotionDecisionRequest",
+        "type": "object"
+      },
+      "HarnessPromotionModel": {
+        "additionalProperties": false,
+        "properties": {
+          "challenger_version": {
+            "title": "Challenger Version",
+            "type": "string"
+          },
+          "contract_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "decision_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Rationale"
+          },
+          "evaluation_id": {
+            "format": "uuid",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/PromotionGate"
+          },
+          "harness_key": {
+            "title": "Harness Key",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incumbent_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incumbent Version"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "rollback_drill_id": {
+            "format": "uuid",
+            "title": "Rollback Drill Id",
+            "type": "string"
+          },
+          "rollback_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Rationale"
+          },
+          "rolled_back_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolled Back At"
+          },
+          "rolled_back_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolled Back By"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "PROMOTED",
+              "REJECTED",
+              "ROLLED_BACK",
+              "REFUSED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "harness_key",
+          "challenger_version",
+          "evaluation_id",
+          "rollback_drill_id",
+          "status",
+          "gate",
+          "requested_by",
+          "rationale",
+          "created_at"
+        ],
+        "title": "HarnessPromotionModel",
+        "type": "object"
+      },
+      "HarnessPromotionProposeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "challenger_version": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Challenger Version",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "format": "uuid",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "harness_key": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Harness Key",
+            "type": "string"
+          },
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "rollback_drill_id": {
+            "format": "uuid",
+            "title": "Rollback Drill Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness_key",
+          "challenger_version",
+          "evaluation_id",
+          "rollback_drill_id",
+          "rationale"
+        ],
+        "title": "HarnessPromotionProposeRequest",
+        "type": "object"
+      },
+      "HarnessPromotionRollbackRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "rationale": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rationale"
+        ],
+        "title": "HarnessPromotionRollbackRequest",
         "type": "object"
       },
       "IdentityReviewRequest": {
@@ -14478,15 +14803,42 @@
         "title": "Phase3IntelligenceMetrics",
         "type": "object"
       },
+      "PromotionGate": {
+        "additionalProperties": false,
+        "description": "Whether the evidence A1 requires exists, and what is missing when it does not.\n\nThe three preconditions are computed, never configured: a clean completed evaluation that\ncovers what the incumbent covered, a passed rollback drill recorded no earlier than that\nevaluation, and an approver who is not the proposer.",
+        "properties": {
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/GateReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "BLOCKED",
+              "ESCALATE",
+              "CONSTRAIN",
+              "CLEAR"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "PromotionGate",
+        "type": "object"
+      },
       "PromotionPosture": {
         "additionalProperties": false,
-        "description": "The champion/challenger half of \u00a736, stated instead of silently missing.\n\nA1 requires promotion to stay disabled until offline evaluation, rollback, and governance\nare proven. `NOT_IMPLEMENTED` is the honest description: there is no promotion table and no\nchampion column, so this is not a switch somebody can flip by accident.",
+        "description": "Whether this evaluation could back a promotion, and what stands in the way if not.\n\nA1 requires offline evaluation, rollback, and governance to be proven before the\nchampion/challenger loop runs. Those are computed from evidence rather than configured, so\nan evaluation carries its own answer: `DISABLED` when the loop is switched off for the\ntenant, `BLOCKED` when it is on and this evaluation does not meet the preconditions, and\n`ELIGIBLE` when it does. A missing reason would leave a reader unable to tell which.",
         "properties": {
           "blocked_by": {
             "items": {
               "type": "string"
             },
-            "minItems": 1,
             "title": "Blocked By",
             "type": "array"
           },
@@ -14496,15 +14848,18 @@
             "type": "string"
           },
           "state": {
-            "const": "NOT_IMPLEMENTED",
-            "default": "NOT_IMPLEMENTED",
+            "enum": [
+              "ELIGIBLE",
+              "BLOCKED",
+              "DISABLED"
+            ],
             "title": "State",
             "type": "string"
           }
         },
         "required": [
-          "reason",
-          "blocked_by"
+          "state",
+          "reason"
         ],
         "title": "PromotionPosture",
         "type": "object"
@@ -23430,6 +23785,27 @@
         ]
       }
     },
+    "/immune-system/champions": {
+      "get": {
+        "operationId": "listHarnessChampions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessChampionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Harness Champions",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
     "/immune-system/evaluations": {
       "post": {
         "operationId": "startHarnessEvaluation",
@@ -23615,6 +23991,196 @@
           }
         },
         "summary": "Record Harness Evaluation Result",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/promotions": {
+      "post": {
+        "operationId": "proposeHarnessPromotion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessPromotionProposeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPromotionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Propose Harness Promotion",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/promotions/{id}": {
+      "get": {
+        "operationId": "getHarnessPromotion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPromotionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Harness Promotion",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/promotions/{id}/decision": {
+      "post": {
+        "operationId": "decideHarnessPromotion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessPromotionDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPromotionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Harness Promotion",
+        "tags": [
+          "immune-system"
+        ]
+      }
+    },
+    "/immune-system/promotions/{id}/rollback": {
+      "post": {
+        "operationId": "rollBackHarnessPromotion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HarnessPromotionRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarnessPromotionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Roll Back Harness Promotion",
         "tags": [
           "immune-system"
         ]

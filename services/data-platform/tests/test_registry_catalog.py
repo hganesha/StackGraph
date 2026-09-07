@@ -17,7 +17,12 @@ from stackgraph_data.registry_catalog import (
     CatalogResult,
     enumerate_package,
     is_prerelease,
+    cargo_catalog,
+    go_catalog,
+    go_module_path,
+    maven_catalog,
     npm_catalog,
+    nuget_catalog,
     persist_catalog,
     pypi_catalog,
 )
@@ -194,12 +199,112 @@ class EnumerationTests(unittest.TestCase):
         self.assertEqual("ERROR", result.status)
 
     def test_an_unsupported_ecosystem_is_refused_without_a_request(self) -> None:
-        transport = Transport(Response(200, {}))
+        transport = Transport(Response(200, b"{}"))
         result = enumerate_package(
-            "Newtonsoft.Json", "nuget", registry_key="nuget-public", transport=transport,
+            "openssl", "conan", registry_key="conan-public", transport=transport,
         )
         self.assertEqual("ERROR", result.status)
         self.assertEqual([], transport.requests)
+
+    def test_each_ecosystem_is_asked_the_endpoint_its_own_tooling_uses(self) -> None:
+        for name, ecosystem, expected in (
+            ("serde", "cargo", "https://crates.io/api/v1/crates/serde"),
+            ("Newtonsoft.Json", "nuget",
+             "https://api.nuget.org/v3-flatcontainer/newtonsoft.json/index.json"),
+            ("org.springframework/spring-core", "maven",
+             "https://repo1.maven.org/maven2/org/springframework/spring-core/maven-metadata.xml"),
+            ("github.com/gin-gonic/gin", "go",
+             "https://proxy.golang.org/github.com/gin-gonic/gin/@v/list"),
+        ):
+            transport = Transport(Response(200, b"{}"))
+            enumerate_package(name, ecosystem, registry_key="k", transport=transport)
+            self.assertEqual(expected, transport.requests[0][0], ecosystem)
+
+    def test_a_maven_name_without_an_artifact_is_refused_before_a_request(self) -> None:
+        transport = Transport(Response(200, b"<metadata/>"))
+        result = enumerate_package(
+            "org.springframework", "maven", registry_key="maven-central", transport=transport,
+        )
+        self.assertEqual("ERROR", result.status)
+        self.assertEqual([], transport.requests)
+
+
+class OtherEcosystemCatalogTests(unittest.TestCase):
+    def test_crates_io_yanks_are_recorded_rather_than_dropped(self) -> None:
+        result = cargo_catalog(
+            {
+                "crate": {"name": "serde"},
+                "versions": [
+                    {"num": "1.0.197", "yanked": False, "created_at": "2024-02-16T00:00:00Z"},
+                    {"num": "1.0.196", "yanked": True, "created_at": "2024-02-01T00:00:00Z"},
+                    {"num": "2.0.0-rc1", "yanked": False},
+                ],
+            },
+            registry_key="cargo-public", source_uri="u",
+        )
+        versions = {item.version: item for item in result.versions}
+        self.assertEqual("AVAILABLE", result.status)
+        self.assertTrue(versions["1.0.196"].is_yanked)
+        self.assertFalse(versions["1.0.197"].is_yanked)
+        self.assertTrue(versions["2.0.0-rc1"].is_prerelease)
+
+    def test_nuget_states_what_the_flat_container_cannot_tell_it(self) -> None:
+        result = nuget_catalog(
+            {"versions": ["13.0.1", "13.0.3", "14.0.0-beta1"]},
+            package_name="Newtonsoft.Json", registry_key="nuget-public", source_uri="u",
+        )
+        self.assertEqual("AVAILABLE", result.status)
+        self.assertEqual(3, len(result.versions))
+        self.assertTrue(any("deprecation" in item for item in result.limitations))
+        self.assertTrue(any("no release dates" in item for item in result.limitations))
+        # A missing signal must never arrive as a value: nothing here may claim a release date.
+        self.assertTrue(all(item.published_at is None for item in result.versions))
+
+    def test_maven_metadata_yields_versions_and_names_its_blind_spots(self) -> None:
+        body = b"""<?xml version="1.0"?>
+        <metadata><groupId>org.springframework</groupId><artifactId>spring-core</artifactId>
+        <versioning><latest>6.1.5</latest>
+        <versions><version>5.3.30</version><version>6.1.5</version>
+        <version>6.2.0-M1</version></versions>
+        <lastUpdated>20240301120000</lastUpdated></versioning></metadata>"""
+        result = maven_catalog(
+            body, package_name="org.springframework/spring-core",
+            registry_key="maven-central", source_uri="u",
+        )
+        self.assertEqual("AVAILABLE", result.status)
+        self.assertEqual({"5.3.30", "6.1.5", "6.2.0-M1"}, {item.version for item in result.versions})
+        self.assertTrue(any("yank or deprecation" in item for item in result.limitations))
+
+    def test_maven_metadata_with_a_doctype_is_refused(self) -> None:
+        result = maven_catalog(
+            b'<?xml version="1.0"?><!DOCTYPE m [<!ENTITY x "y">]><metadata/>',
+            package_name="a/b", registry_key="maven-central", source_uri="u",
+        )
+        self.assertEqual("ERROR", result.status)
+
+    def test_the_go_proxy_list_is_read_as_text_and_names_what_it_hides(self) -> None:
+        result = go_catalog(
+            b"v1.9.0\nv1.9.1\nv2.0.0-beta.1\n", package_name="github.com/gin-gonic/gin",
+            registry_key="go-proxy", source_uri="u",
+        )
+        self.assertEqual("AVAILABLE", result.status)
+        self.assertEqual(3, len(result.versions))
+        self.assertTrue(any("retractions" in item for item in result.limitations))
+
+    def test_a_go_module_with_no_tagged_release_is_partial_not_absent(self) -> None:
+        result = go_catalog(
+            b"", package_name="github.com/acme/internal", registry_key="go-proxy", source_uri="u",
+        )
+        self.assertEqual("PARTIAL", result.status)
+        self.assertEqual((), result.versions)
+        self.assertTrue(any("pseudo-version" in item for item in result.limitations))
+
+    def test_go_module_paths_are_case_escaped_the_way_the_proxy_expects(self) -> None:
+        self.assertEqual(
+            "github.com/!azure/azure-sdk-for-go",
+            go_module_path("github.com/Azure/azure-sdk-for-go"),
+        )
+        self.assertEqual("github.com/gin-gonic/gin", go_module_path("github.com/gin-gonic/gin"))
 
 
 class PersistenceTests(unittest.TestCase):

@@ -32,6 +32,14 @@ from psycopg.types.json import Jsonb
 from app.errors import APIError
 from app.models import (
     ADVERSARIAL_SCENARIO_CLASSES,
+    GateReason,
+    HarnessChampionList,
+    HarnessChampionModel,
+    HarnessPromotionDecisionRequest,
+    HarnessPromotionModel,
+    HarnessPromotionProposeRequest,
+    HarnessPromotionRollbackRequest,
+    PromotionGate,
     AdversarialScenarioGenerateRequest,
     AdversarialScenarioList,
     AdversarialScenarioModel,
@@ -47,16 +55,12 @@ from app.models import (
 
 GENERATOR_VERSION = "adversarial-scenarios/1.0.0"
 FEATURE_FLAG = "ADVERSARIAL_EVALUATION"
+PROMOTION_FLAG = "HARNESS_PROMOTION"
 
-_PROMOTION_REASON = (
-    "Champion/challenger promotion is not implemented. The evaluation half of §36 runs "
-    "offline; the promotion half stays unrepresentable until rollback and governance are "
-    "proven, so no configuration change can enable it."
-)
-_PROMOTION_BLOCKERS = (
-    "OFFLINE_EVALUATION_UNPROVEN",
-    "ROLLBACK_UNPROVEN",
-    "PROMOTION_GOVERNANCE_ABSENT",
+_PROMOTION_LIMITATIONS = (
+    "a champion is the version this estate has decided to run, not a claim that it is safe",
+    "promotion rests on offline evaluation; no scenario is replayed against a running system",
+    "rollback restores the previous version and does not undo what the promoted version did",
 )
 
 _LIMITATIONS = (
@@ -952,10 +956,452 @@ class ImmuneSystemMixin:
                 outcome=item["outcome"], observed_behaviour=item["observed_behaviour"],
                 diagnosis=item["diagnosis"], recorded_at=item["recorded_at"],
             ) for item in results],
-            promotion=PromotionPosture(
-                reason=_PROMOTION_REASON, blocked_by=list(_PROMOTION_BLOCKERS),
+            promotion=await self.promotion_posture(tenant_id, row),
+        )
+
+    # -- champion/challenger ------------------------------------------------------------------
+    #
+    # A1 requires offline evaluation, rollback, and governance to be proven before this loop
+    # runs. Each is computed from a row that exists rather than asserted by configuration, and
+    # a proposal that fails is written down with its reasons: a refusal nobody can read is
+    # indistinguishable from a promotion nobody attempted.
+
+    async def _promotion_enabled(self, tenant_id: UUID) -> bool:
+        return await self._adversarial_enabled(tenant_id) and await self._flag(
+            tenant_id, PROMOTION_FLAG,
+        )
+
+    async def _flag(self, tenant_id: UUID, flag_key: str) -> bool:
+        row = await self.database.fetch_one(
+            """
+            SELECT enabled FROM phase2_feature_flag
+            WHERE flag_key=%s AND (tenant_id IS NULL OR tenant_id=%s)
+            ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
+            """,
+            (flag_key, tenant_id), tenant_id=tenant_id,
+        )
+        return bool(row and row["enabled"])
+
+    async def _evaluation_gate(
+        self, tenant_id: UUID, evaluation: Mapping[str, Any], *, harness_key: str,
+        challenger_version: str, rollback_drill_id: UUID | None,
+    ) -> list[GateReason]:
+        """Every reason this evaluation cannot back a promotion, computed from the estate.
+
+        Returned as a list rather than short-circuiting on the first failure, because a proposer
+        who fixes one blocker and rediscovers the next has learnt the gate one round at a time.
+        """
+        reasons: list[GateReason] = []
+        if evaluation["harness_key"] != harness_key:
+            reasons.append(_reason(
+                "EVALUATION_HARNESS_MISMATCH",
+                "The evaluation was run against a different harness.",
+            ))
+        if evaluation["harness_version"] != challenger_version:
+            reasons.append(_reason(
+                "EVALUATION_VERSION_MISMATCH",
+                f"The evaluation covers {evaluation['harness_version']}, not "
+                f"{challenger_version}.",
+            ))
+        if evaluation["status"] != "COMPLETED":
+            reasons.append(_reason(
+                "EVALUATION_NOT_COMPLETED",
+                "Only a completed evaluation can support a promotion; this one is "
+                f"{str(evaluation['status']).lower()}.",
+            ))
+        recorded = (
+            evaluation["passed_count"] + evaluation["failed_count"]
+            + evaluation["inconclusive_count"]
+        )
+        if recorded != evaluation["scenario_count"]:
+            reasons.append(_reason(
+                "EVALUATION_INCOMPLETE",
+                f"{evaluation['scenario_count'] - recorded} scenarios have no recorded outcome.",
+            ))
+        if evaluation["failed_count"]:
+            reasons.append(_reason(
+                "EVALUATION_HAS_FAILURES",
+                f"{evaluation['failed_count']} scenarios failed. A failure is what §36 exists "
+                "to find; promoting past one would make the evaluation decorative.",
+            ))
+        if evaluation["inconclusive_count"]:
+            reasons.append(_reason(
+                "EVALUATION_HAS_INCONCLUSIVE_OUTCOMES",
+                f"{evaluation['inconclusive_count']} scenarios were inconclusive. A harness "
+                "that did not answer has not demonstrated anything.",
+            ))
+
+        selected = set(evaluation["selected_scenario_ids"] or [])
+        derived = await self.database.fetch_all(
+            """
+            SELECT scenario_class,count(*) total,
+                   count(*) FILTER (WHERE id=ANY(%s)) evaluated
+            FROM adversarial_scenario WHERE tenant_id=%s
+            GROUP BY scenario_class ORDER BY scenario_class
+            """,
+            (list(selected), tenant_id), tenant_id=tenant_id,
+        )
+        uncovered = sorted(row["scenario_class"] for row in derived if not row["evaluated"])
+        if uncovered:
+            # A class this estate can derive but the harness was never shown is a gap the pass
+            # rate cannot see. Promoting on it would report 100% over a chosen subset.
+            reasons.append(_reason(
+                "SCENARIO_CLASS_NOT_EVALUATED",
+                "The evaluation covers no scenario of these derived classes: "
+                + ", ".join(uncovered) + ".",
+            ))
+        if not derived:
+            reasons.append(_reason(
+                "NO_SCENARIOS_DERIVED",
+                "This estate has derived no adversarial scenarios, so there is nothing the "
+                "challenger has been tested against.",
+            ))
+
+        champion = await self.database.fetch_one(
+            """
+            SELECT champion.harness_version,promotion.evaluation_id
+            FROM harness_champion champion
+            JOIN harness_promotion promotion ON promotion.id=champion.promotion_id
+            WHERE champion.tenant_id=%s AND champion.harness_key=%s
+            """,
+            (tenant_id, harness_key), tenant_id=tenant_id,
+        )
+        if champion is not None:
+            if champion["harness_version"] == challenger_version:
+                reasons.append(_reason(
+                    "CHALLENGER_IS_CHAMPION",
+                    f"{challenger_version} is already the champion.",
+                ))
+            incumbent = await self.database.fetch_one(
+                "SELECT selected_scenario_ids FROM harness_evaluation WHERE id=%s",
+                (champion["evaluation_id"],), tenant_id=tenant_id,
+            )
+            missing = set(incumbent["selected_scenario_ids"] or []) - selected if incumbent else set()
+            if missing:
+                # Regression by omission: a challenger evaluated against fewer scenarios than
+                # the incumbent can score better while being tested less.
+                reasons.append(_reason(
+                    "INCUMBENT_COVERAGE_NOT_MATCHED",
+                    f"{len(missing)} scenarios the champion was evaluated against are absent "
+                    "from the challenger's evaluation.",
+                ))
+
+        if rollback_drill_id is None:
+            reasons.append(_reason(
+                "ROLLBACK_NOT_PROVEN", "No rollback drill was cited.",
+            ))
+        else:
+            drill = await self.database.fetch_one(
+                "SELECT drill_kind,status,performed_at FROM agent_control_drill WHERE id=%s",
+                (rollback_drill_id,), tenant_id=tenant_id,
+            )
+            if drill is None:
+                reasons.append(_reason(
+                    "ROLLBACK_DRILL_NOT_FOUND", "The cited rollback drill was not found.",
+                ))
+            else:
+                if drill["drill_kind"] != "ROLLBACK":
+                    reasons.append(_reason(
+                        "ROLLBACK_DRILL_WRONG_KIND",
+                        f"The cited drill is a {drill['drill_kind']} drill, not a rollback one.",
+                    ))
+                if drill["status"] != "PASSED":
+                    reasons.append(_reason(
+                        "ROLLBACK_DRILL_FAILED", "The cited rollback drill did not pass.",
+                    ))
+                if drill["performed_at"] < evaluation["started_at"]:
+                    # A drill older than the evaluation proves rollback of something else.
+                    reasons.append(_reason(
+                        "ROLLBACK_DRILL_PREDATES_EVALUATION",
+                        "The rollback drill was performed before this evaluation began, so it "
+                        "does not vouch for rolling this promotion back.",
+                    ))
+        return reasons
+
+    async def promotion_posture(
+        self, tenant_id: UUID, evaluation: Mapping[str, Any],
+    ) -> PromotionPosture:
+        if not await self._promotion_enabled(tenant_id):
+            return PromotionPosture(
+                state="DISABLED",
+                reason=(
+                    "Champion/challenger promotion is switched off for this tenant. Nothing "
+                    "about this evaluation is being asserted either way."
+                ),
+                blocked_by=["HARNESS_PROMOTION_DISABLED"],
+            )
+        reasons = await self._evaluation_gate(
+            tenant_id, evaluation, harness_key=evaluation["harness_key"],
+            challenger_version=evaluation["harness_version"], rollback_drill_id=None,
+        )
+        # The absence of a cited drill is not a property of the evaluation, so it is dropped
+        # here: a proposal names its drill, and a posture cannot.
+        reasons = [item for item in reasons if item.code != "ROLLBACK_NOT_PROVEN"]
+        if reasons:
+            return PromotionPosture(
+                state="BLOCKED",
+                reason="This evaluation cannot support a promotion as it stands.",
+                blocked_by=[item.code for item in reasons],
+            )
+        return PromotionPosture(
+            state="ELIGIBLE",
+            reason=(
+                "This evaluation meets the offline-evaluation precondition. A proposal still "
+                "needs a passed rollback drill and a second person to approve it."
             ),
         )
+
+    async def propose_harness_promotion(
+        self, request: HarnessPromotionProposeRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required to propose a promotion.")
+        if not await self._promotion_enabled(tenant_id):
+            raise APIError(
+                409, "HARNESS_PROMOTION_DISABLED",
+                "Champion/challenger promotion is disabled for this tenant.",
+            )
+        evaluation = await self.database.fetch_one(
+            "SELECT * FROM harness_evaluation WHERE id=%s", (request.evaluation_id,),
+            tenant_id=tenant_id,
+        )
+        if evaluation is None:
+            raise APIError(404, "HARNESS_EVALUATION_NOT_FOUND", "The evaluation was not found.")
+        reasons = await self._evaluation_gate(
+            tenant_id, evaluation, harness_key=request.harness_key,
+            challenger_version=request.challenger_version,
+            rollback_drill_id=request.rollback_drill_id,
+        )
+        champion = await self.database.fetch_one(
+            "SELECT harness_version FROM harness_champion WHERE tenant_id=%s AND harness_key=%s",
+            (tenant_id, request.harness_key), tenant_id=tenant_id,
+        )
+        promotion_id = uuid4()
+        gate_state = "CLEAR" if not reasons else "BLOCKED"
+        status = "PENDING" if not reasons else "REFUSED"
+        async with self.database.session(tenant_id) as connection:
+            await connection.execute(
+                """
+                INSERT INTO harness_promotion(
+                  id,tenant_id,harness_key,challenger_version,incumbent_version,evaluation_id,
+                  rollback_drill_id,status,gate_state,gate_reasons,requested_by,rationale
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (
+                    promotion_id, tenant_id, request.harness_key, request.challenger_version,
+                    champion["harness_version"] if champion else None, request.evaluation_id,
+                    request.rollback_drill_id, status, gate_state,
+                    Jsonb([item.model_dump(mode="json") for item in reasons]), actor_key,
+                    request.rationale,
+                ),
+            )
+        await self._record_audit(
+            tenant_id=tenant_id, actor_key=actor_key, action="PROPOSE_HARNESS_PROMOTION",
+            target_kind="harness_promotion", target_id=str(promotion_id),
+            detail={
+                "harness_key": request.harness_key,
+                "challenger_version": request.challenger_version,
+                "gate_state": gate_state, "blocked_by": [item.code for item in reasons],
+            },
+        )
+        return await self.harness_promotion(promotion_id, tenant_id=tenant_id)
+
+    async def decide_harness_promotion(
+        self, promotion_id: UUID, request: HarnessPromotionDecisionRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
+        now = datetime.now(UTC)
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM harness_promotion WHERE id=%s FOR UPDATE", (promotion_id,),
+            )
+            promotion = await cursor.fetchone()
+            if promotion is None:
+                raise APIError(404, "HARNESS_PROMOTION_NOT_FOUND", "The promotion was not found.")
+            if promotion["status"] != "PENDING":
+                raise APIError(
+                    409, "HARNESS_PROMOTION_DECIDED",
+                    "This promotion has already been decided.",
+                )
+            if promotion["requested_by"] == actor_key:
+                # Governance is the third precondition A1 names, and one person is not it.
+                raise APIError(
+                    403, "SECOND_PERSON_REQUIRED",
+                    "A promotion must be approved by someone other than the actor who "
+                    "proposed it.",
+                )
+            status = "PROMOTED" if request.decision == "PROMOTE" else "REJECTED"
+            await connection.execute(
+                """
+                UPDATE harness_promotion
+                SET status=%s,decided_by=%s,decision_rationale=%s,decided_at=%s WHERE id=%s
+                """,
+                (status, actor_key, request.rationale, now, promotion_id),
+            )
+            if status == "PROMOTED":
+                await connection.execute(
+                    """
+                    INSERT INTO harness_champion(
+                      tenant_id,harness_key,harness_version,previous_version,promotion_id,
+                      promoted_by,promoted_at
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(tenant_id,harness_key) DO UPDATE SET
+                      harness_version=EXCLUDED.harness_version,
+                      previous_version=harness_champion.harness_version,
+                      promotion_id=EXCLUDED.promotion_id,
+                      promoted_by=EXCLUDED.promoted_by,
+                      promoted_at=EXCLUDED.promoted_at,
+                      version=harness_champion.version+1
+                    """,
+                    (
+                        tenant_id, promotion["harness_key"], promotion["challenger_version"],
+                        promotion["incumbent_version"], promotion_id, actor_key, now,
+                    ),
+                )
+        await self._record_audit(
+            tenant_id=tenant_id, actor_key=actor_key, action="DECIDE_HARNESS_PROMOTION",
+            target_kind="harness_promotion", target_id=str(promotion_id),
+            detail={"decision": request.decision, "rationale": request.rationale},
+        )
+        return await self.harness_promotion(promotion_id, tenant_id=tenant_id)
+
+    async def roll_back_harness_promotion(
+        self, promotion_id: UUID, request: HarnessPromotionRollbackRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel:
+        """Restore the version this promotion replaced.
+
+        Always available on a promoted challenger, and needing no second person: rollback is the
+        safe direction, and a control that is hard to reach in a hurry is not a control.
+        """
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
+        now = datetime.now(UTC)
+        async with self.database.session(tenant_id) as connection:
+            cursor = await connection.execute(
+                "SELECT * FROM harness_promotion WHERE id=%s FOR UPDATE", (promotion_id,),
+            )
+            promotion = await cursor.fetchone()
+            if promotion is None:
+                raise APIError(404, "HARNESS_PROMOTION_NOT_FOUND", "The promotion was not found.")
+            if promotion["status"] != "PROMOTED":
+                raise APIError(
+                    409, "HARNESS_PROMOTION_NOT_ACTIVE",
+                    "Only a promoted challenger can be rolled back.",
+                )
+            cursor = await connection.execute(
+                "SELECT * FROM harness_champion WHERE tenant_id=%s AND harness_key=%s FOR UPDATE",
+                (tenant_id, promotion["harness_key"]),
+            )
+            champion = await cursor.fetchone()
+            if champion is None or champion["promotion_id"] != promotion_id:
+                # A later promotion already replaced this one, so rolling this back would
+                # restore a version two steps behind what is running.
+                raise APIError(
+                    409, "HARNESS_PROMOTION_SUPERSEDED",
+                    "A later promotion replaced this one; roll that one back instead.",
+                )
+            await connection.execute(
+                """
+                UPDATE harness_promotion
+                SET status='ROLLED_BACK',rolled_back_by=%s,rollback_rationale=%s,
+                    rolled_back_at=%s
+                WHERE id=%s
+                """,
+                (actor_key, request.rationale, now, promotion_id),
+            )
+            if promotion["incumbent_version"] is None:
+                # There was no champion before this promotion, so rolling back means there is
+                # none again rather than falling back to a version that never ran.
+                await connection.execute(
+                    "DELETE FROM harness_champion WHERE tenant_id=%s AND harness_key=%s",
+                    (tenant_id, promotion["harness_key"]),
+                )
+            else:
+                await connection.execute(
+                    """
+                    UPDATE harness_champion
+                    SET harness_version=%s,previous_version=NULL,promoted_by=%s,promoted_at=%s,
+                        version=version+1
+                    WHERE tenant_id=%s AND harness_key=%s
+                    """,
+                    (
+                        promotion["incumbent_version"], actor_key, now, tenant_id,
+                        promotion["harness_key"],
+                    ),
+                )
+        await self._record_audit(
+            tenant_id=tenant_id, actor_key=actor_key, action="ROLL_BACK_HARNESS_PROMOTION",
+            target_kind="harness_promotion", target_id=str(promotion_id),
+            detail={
+                "restored_version": promotion["incumbent_version"],
+                "rationale": request.rationale,
+            },
+        )
+        return await self.harness_promotion(promotion_id, tenant_id=tenant_id)
+
+    async def harness_promotion(
+        self, promotion_id: UUID, *, tenant_id: UUID | None,
+    ) -> HarnessPromotionModel:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
+        row = await self.database.fetch_one(
+            "SELECT * FROM harness_promotion WHERE id=%s", (promotion_id,), tenant_id=tenant_id,
+        )
+        if row is None:
+            raise APIError(404, "HARNESS_PROMOTION_NOT_FOUND", "The promotion was not found.")
+        return _promotion_model(row)
+
+    async def harness_champions(self, *, tenant_id: UUID | None) -> HarnessChampionList:
+        if tenant_id is None:
+            raise APIError(400, "TENANT_REQUIRED", "A tenant is required.")
+        enabled = await self._promotion_enabled(tenant_id)
+        champions = await self.database.fetch_all(
+            "SELECT * FROM harness_champion WHERE tenant_id=%s ORDER BY harness_key",
+            (tenant_id,), tenant_id=tenant_id,
+        )
+        promotions = await self.database.fetch_all(
+            "SELECT * FROM harness_promotion WHERE tenant_id=%s ORDER BY created_at DESC LIMIT 20",
+            (tenant_id,), tenant_id=tenant_id,
+        )
+        limitations = list(_PROMOTION_LIMITATIONS)
+        if not enabled:
+            limitations.insert(0, (
+                "promotion is disabled for this tenant; an empty champion list says nothing "
+                "about whether a challenger would qualify"
+            ))
+        return HarnessChampionList(
+            promotion_enabled=enabled,
+            champions=[HarnessChampionModel(
+                harness_key=row["harness_key"], harness_version=row["harness_version"],
+                previous_version=row["previous_version"], promotion_id=row["promotion_id"],
+                promoted_by=row["promoted_by"], promoted_at=row["promoted_at"],
+            ) for row in champions],
+            recent_promotions=[_promotion_model(row) for row in promotions],
+            limitations=limitations,
+        )
+
+
+def _reason(code: str, message: str) -> GateReason:
+    return GateReason(code=code, message=message)
+
+
+def _promotion_model(row: Mapping[str, Any]) -> HarnessPromotionModel:
+    reasons = [GateReason(**item) for item in (row["gate_reasons"] or [])]
+    return HarnessPromotionModel(
+        id=row["id"], harness_key=row["harness_key"],
+        challenger_version=row["challenger_version"],
+        incumbent_version=row["incumbent_version"], evaluation_id=row["evaluation_id"],
+        rollback_drill_id=row["rollback_drill_id"], status=row["status"],
+        gate=PromotionGate(state=row["gate_state"], reasons=reasons),
+        requested_by=row["requested_by"], rationale=row["rationale"],
+        decided_by=row["decided_by"], decision_rationale=row["decision_rationale"],
+        decided_at=row["decided_at"], rolled_back_by=row["rolled_back_by"],
+        rollback_rationale=row["rollback_rationale"], rolled_back_at=row["rolled_back_at"],
+        created_at=row["created_at"],
+    )
 
 
 def _scenario_model(row: Mapping[str, Any]) -> AdversarialScenarioModel:

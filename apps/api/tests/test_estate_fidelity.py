@@ -125,6 +125,35 @@ def test_container_digest_is_resolved_and_latest_is_not() -> None:
     assert latest.limitations[0].code == "CONTAINER_IDENTITY_UNRESOLVED"
 
 
+def test_an_unopened_image_says_so_rather_than_reporting_no_packages() -> None:
+    digest = "sha256:" + "b" * 64
+    row = {
+        "id": IMAGE_ID, "entity_type": "ContainerImage", "name": "checkout",
+        "canonical_key": f"registry.example/checkout@{digest}",
+        "properties": {
+            "digest": digest, "layers": [{"digest": "sha256:" + "c" * 64}], "packages": [],
+            "coverage": {"manifest": "AVAILABLE", "os_packages": "NOT_COLLECTED"},
+        },
+        "observed_at": NOW, "relationship_confidence": 1.0,
+    }
+
+    unread = EstateFidelityMixin._container(row)
+    partial = EstateFidelityMixin._container({
+        **row, "properties": {**row["properties"], "coverage": {"os_packages": "PARTIAL"}},
+    })
+    distroless = EstateFidelityMixin._container({
+        **row,
+        "properties": {**row["properties"], "coverage": {"os_packages": "NOT_APPLICABLE"}},
+    })
+
+    codes = {item.code for item in unread.limitations}
+    # An image nobody opened and an image with nothing installed are different claims, and an
+    # empty package list alone cannot tell them apart.
+    assert "CONTAINER_PACKAGES_NOT_COLLECTED" in codes
+    assert "CONTAINER_PACKAGES_PARTIAL" in {item.code for item in partial.limitations}
+    assert "CONTAINER_HAS_NO_PACKAGE_DATABASE" in {item.code for item in distroless.limitations}
+
+
 def test_resolved_container_identity_requires_an_immutable_digest() -> None:
     with pytest.raises(ValidationError, match="immutable digest"):
         ContainerImageIdentity(state="RESOLVED", canonical_reference="registry/image:1")

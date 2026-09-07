@@ -898,5 +898,172 @@ class RepositoryScannerTests(unittest.TestCase):
         )
 
 
+class PolyglotDependencyTests(unittest.TestCase):
+    """JVM, .NET, Rust, and Go manifests.
+
+    Before these parsers a Java service scanned as a repository that depends on nothing, and
+    nothing downstream could tell that apart from a repository that genuinely has none. What
+    these tests hold is not the happy path but the three places the parsers must refuse to
+    guess: an unresolvable Maven property, a Cargo path dependency, and a replaced Go module.
+    """
+
+    def dependencies(self, files: dict[str, str]) -> dict[str, dict]:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, body in files.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(body)
+            result = scan_repository(request(root))
+        return {
+            fact["object_entity"]["key"]: fact["properties"]
+            for fact in result["facts"]
+            if fact.get("predicate") == "DEPENDS_ON"
+            and fact["subject"]["type"] == "Repository"
+        }
+
+    def test_a_maven_property_is_resolved_and_an_unresolvable_one_stays_unresolved(self) -> None:
+        found = self.dependencies({"pom.xml": """<?xml version="1.0"?>
+            <project xmlns="http://maven.apache.org/POM/4.0.0">
+              <groupId>com.acme</groupId><artifactId>b</artifactId><version>1.0.0</version>
+              <properties><spring.version>5.3.30</spring.version></properties>
+              <dependencies>
+                <dependency><groupId>org.springframework</groupId>
+                  <artifactId>spring-core</artifactId><version>${spring.version}</version></dependency>
+                <dependency><groupId>com.acme</groupId><artifactId>bom</artifactId>
+                  <version>${defined.in.parent}</version></dependency>
+              </dependencies>
+            </project>"""})
+
+        self.assertIn("pkg:maven/org.springframework/spring-core@5.3.30", found)
+        # The unresolved one is still a declared dependency; it just has no version.
+        self.assertIn("pkg:maven/com.acme/bom", found)
+        self.assertIsNone(found["pkg:maven/com.acme/bom"].get("resolved_version"))
+
+    def test_a_maven_coordinate_keeps_its_slash_so_the_purl_resolves(self) -> None:
+        found = self.dependencies({"pom.xml": """<?xml version="1.0"?>
+            <project><groupId>a</groupId><artifactId>b</artifactId><version>1</version>
+            <dependencies><dependency><groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId><version>6.1.5</version></dependency>
+            </dependencies></project>"""})
+
+        # Percent-encoding the group/artifact separator would produce a purl no registry
+        # can resolve, and the catalogue would report the package as unpublished.
+        self.assertIn("pkg:maven/org.springframework/spring-core@6.1.5", found)
+
+    def test_a_pom_with_a_document_type_declaration_is_refused(self) -> None:
+        found = self.dependencies({"pom.xml": (
+            '<?xml version="1.0"?><!DOCTYPE project [<!ENTITY x "y">]>'
+            "<project><dependencies><dependency><groupId>a.b</groupId>"
+            "<artifactId>c</artifactId><version>1</version></dependency></dependencies></project>"
+        )})
+
+        self.assertEqual({}, found)
+
+    def test_gradle_reads_string_coordinates_and_ignores_other_colon_literals(self) -> None:
+        found = self.dependencies({"build.gradle": """
+            dependencies {
+              implementation 'com.google.guava:guava:33.0.0-jre'
+              testImplementation "org.mockito:mockito-core:5.11.0"
+              implementation project(':shared:core')
+            }
+        """})
+
+        self.assertIn("pkg:maven/com.google.guava/guava@33.0.0-jre", found)
+        self.assertIn("pkg:maven/org.mockito/mockito-core@5.11.0", found)
+        # `:shared:core` is a Gradle project path, not a Maven coordinate. Its first segment
+        # carries no dot, which is what separates the two.
+        self.assertFalse([key for key in found if "shared" in key])
+
+    def test_a_gradle_version_catalog_alias_resolves_to_its_module_and_version(self) -> None:
+        found = self.dependencies({
+            "gradle/libs.versions.toml": (
+                '[versions]\nguava = "33.0.0-jre"\n'
+                '[libraries]\nguava = { module = "com.google.guava:guava", version.ref = "guava" }\n'
+            ),
+            "build.gradle": "dependencies {\n  implementation libs.guava\n}\n",
+        })
+
+        self.assertIn("pkg:maven/com.google.guava/guava@33.0.0-jre", found)
+
+    def test_nuget_reads_both_the_attribute_and_the_child_element_form(self) -> None:
+        found = self.dependencies({"Billing.csproj": """<Project Sdk="Microsoft.NET.Sdk">
+            <ItemGroup>
+              <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+              <PackageReference Include="Serilog"><Version>3.1.1</Version></PackageReference>
+            </ItemGroup></Project>"""})
+
+        self.assertIn("pkg:nuget/newtonsoft.json@13.0.3", found)
+        self.assertIn("pkg:nuget/serilog@3.1.1", found)
+
+    def test_a_nuget_lockfile_resolves_a_floating_version(self) -> None:
+        found = self.dependencies({
+            "Billing.csproj": (
+                '<Project><ItemGroup><PackageReference Include="Serilog" Version="3.*" />'
+                "</ItemGroup></Project>"
+            ),
+            "packages.lock.json": json.dumps({
+                "version": 1,
+                "dependencies": {"net8.0": {"Serilog": {"resolved": "3.1.1"}}},
+            }),
+        })
+
+        self.assertIn("pkg:nuget/serilog@3.1.1", found)
+
+    def test_a_cargo_path_dependency_never_becomes_a_registry_package(self) -> None:
+        found = self.dependencies({
+            "Cargo.toml": (
+                '[package]\nname = "b"\nversion = "0.1.0"\n\n[dependencies]\n'
+                'serde = "1.0.197"\n'
+                'tokio = { version = "^1.36", features = ["full"] }\n'
+                'helpers = { path = "../helpers" }\n'
+                'patched = { git = "https://example.test/patched" }\n'
+            ),
+            "Cargo.lock": (
+                'version = 3\n\n[[package]]\nname = "serde"\nversion = "1.0.197"\n\n'
+                '[[package]]\nname = "tokio"\nversion = "1.36.0"\n'
+            ),
+        })
+
+        self.assertIn("pkg:cargo/serde@1.0.197", found)
+        # The lockfile, not the caret range, states what is built.
+        self.assertIn("pkg:cargo/tokio@1.36.0", found)
+        # Neither of these is a crates.io package; offering upgrade targets for them would
+        # invent releases the registry has never published.
+        self.assertFalse([key for key in found if "helpers" in key or "patched" in key])
+
+    def test_a_replaced_go_module_keeps_no_resolved_version(self) -> None:
+        found = self.dependencies({"go.mod": """module github.com/acme/billing
+
+go 1.22
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+\tgithub.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
+)
+
+require github.com/acme/shared v0.4.0
+
+replace github.com/acme/shared => ../shared
+"""})
+
+        self.assertIn("pkg:golang/github.com/gin-gonic/gin@v1.9.1", found)
+        self.assertFalse(found["pkg:golang/github.com/Azure/azure-sdk-for-go@v68.0.0+incompatible"]["direct"])
+        # `replace` redirects the build, so the declared version is not what runs.
+        self.assertIn("pkg:golang/github.com/acme/shared", found)
+        self.assertIsNone(found["pkg:golang/github.com/acme/shared"].get("resolved_version"))
+
+    def test_a_go_module_path_keeps_its_case(self) -> None:
+        found = self.dependencies({"go.mod": (
+            "module github.com/acme/b\n\ngo 1.22\n\n"
+            "require github.com/Azure/azure-sdk-for-go v68.0.0+incompatible\n"
+        )})
+
+        # Lower-casing a Go module path names a module the proxy has never heard of.
+        self.assertIn(
+            "pkg:golang/github.com/Azure/azure-sdk-for-go@v68.0.0+incompatible", found,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

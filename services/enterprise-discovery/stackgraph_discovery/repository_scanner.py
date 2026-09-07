@@ -8,6 +8,7 @@ import re
 import sys
 import time
 import tomllib
+from xml.etree import ElementTree
 import yaml
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,7 +27,23 @@ from .npm_resolution import (
 
 
 SCANNER_KEY = "repository-dependency-usage"
-SCANNER_VERSION = "1.11.0"
+SCANNER_VERSION = "1.12.0"
+# Ecosystems whose package name legitimately contains a slash: an npm scope, a Maven
+# group/artifact pair, a Go module path.
+PATH_SHAPED_ECOSYSTEMS = frozenset({"npm", "maven", "golang"})
+# The runtime a dependency implies, and the build system a manifest implies. Both are read
+# rather than inferred from "npm or else Python", which mislabelled every other ecosystem.
+_ECOSYSTEM_RUNTIMES = {
+    "npm": "NODE", "pypi": "PYTHON", "maven": "JVM", "nuget": "DOTNET", "cargo": "RUST",
+    "golang": "GO",
+}
+_BUILD_SYSTEMS = {
+    "package.json": "NPM",
+    "pyproject.toml": "PYTHON", "requirements.txt": "PYTHON", "Pipfile": "PYTHON",
+    "pom.xml": "MAVEN", "build.gradle": "GRADLE", "build.gradle.kts": "GRADLE",
+    "Cargo.toml": "CARGO", "go.mod": "GO",
+    ".csproj": "DOTNET", ".fsproj": "DOTNET", ".vbproj": "DOTNET",
+}
 HTTP_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 PYPI_NORMALIZE = re.compile(r"[-_.]+")
 REQUIREMENT = re.compile(
@@ -335,7 +352,9 @@ class Dependency:
 
     @property
     def package_purl(self) -> str:
-        encoded = quote(self.normalized_name, safe="/" if self.ecosystem == "npm" else "")
+        # npm scopes, Maven group/artifact pairs, and Go module paths all carry a slash that is
+        # part of the name. Percent-encoding it would produce a purl no registry can resolve.
+        encoded = quote(self.normalized_name, safe="/" if self.ecosystem in PATH_SHAPED_ECOSYSTEMS else "")
         return f"pkg:{self.ecosystem}/{encoded}"
 
     @property
@@ -398,6 +417,10 @@ def scan_repository(request: Mapping[str, Any]) -> dict[str, Any]:
     dependencies: list[Dependency] = []
     dependencies.extend(_scan_npm(contents, diagnostics))
     dependencies.extend(_scan_python(contents, diagnostics))
+    dependencies.extend(_scan_jvm(contents, diagnostics))
+    dependencies.extend(_scan_dotnet(contents, diagnostics))
+    dependencies.extend(_scan_cargo(contents, diagnostics))
+    dependencies.extend(_scan_go(contents, diagnostics))
     # A manifest inside an installed or vendored tree declares that third-party package's own
     # dependencies, not this repository's. Attributing them here would put packages the
     # repository never chose into its blast radius as DECLARED facts.
@@ -1252,6 +1275,414 @@ def _python_requirement(
         resolved_version=version,
         resolution_evidence=resolution_evidence,
     )
+
+
+
+# ---------------------------------------------------------------------------------------------
+# JVM, .NET, Rust, and Go dependencies.
+#
+# Until these existed a Java service scanned as a repository that depends on nothing, which is
+# indistinguishable in every downstream surface from a repository that genuinely has no
+# dependencies. Each parser below reads a declaration file the ecosystem's own tooling reads,
+# and where a coordinate cannot be resolved the dependency is still recorded — with
+# `resolved_version` left None — because "declared, version unresolved" is a different and more
+# useful fact than silence.
+
+
+MAVEN_COORDINATE = re.compile(
+    r"""["']([A-Za-z0-9_.\-]+):([A-Za-z0-9_.\-]+)(?::([^"':]+))?["']"""
+)
+GRADLE_CONFIGURATION = re.compile(
+    r"\b(implementation|api|compileOnly|compileOnlyApi|runtimeOnly|testImplementation|"
+    r"testCompileOnly|testRuntimeOnly|annotationProcessor|kapt|ksp|classpath)\s*[\s(]"
+)
+GO_REQUIREMENT = re.compile(r"^\s*(?P<module>[^\s()]+)\s+(?P<version>v[^\s]+)(?P<rest>.*)$")
+_XML_NAMESPACE = re.compile(r"^\{[^}]*\}")
+
+
+def _decode_xml(content: bytes, path: str, diagnostics: list[Diagnostic]) -> Any | None:
+    """Parse an XML manifest, refusing anything with a document type declaration.
+
+    ElementTree does not resolve external entities, but a DTD is still the vector for entity
+    expansion, and no build manifest StackGraph reads needs one. Refusing outright is cheaper
+    than reasoning about which expansions are safe.
+    """
+    if b"<!DOCTYPE" in content[:4096] or b"<!ENTITY" in content[:4096]:
+        diagnostics.append(Diagnostic("WARN", "XML_DOCTYPE_REFUSED", "document type declaration", path))
+        return None
+    try:
+        return ElementTree.fromstring(content.decode("utf-8", errors="replace"))
+    except ElementTree.ParseError as error:
+        diagnostics.append(Diagnostic("ERROR", "INVALID_XML", str(error), path))
+        return None
+
+
+def _local_name(tag: Any) -> str:
+    return _XML_NAMESPACE.sub("", str(tag))
+
+
+def _child_text(element: Any, name: str) -> str | None:
+    for child in element:
+        if _local_name(child.tag) == name:
+            text = (child.text or "").strip()
+            return text or None
+    return None
+
+
+def _children(element: Any, name: str) -> list[Any]:
+    return [child for child in element if _local_name(child.tag) == name]
+
+
+def _resolve_maven_property(value: str | None, properties: Mapping[str, str]) -> str | None:
+    """Substitute `${…}` placeholders from the pom's own properties.
+
+    One level of indirection only. A property defined in a parent pom the scanner never fetched
+    stays unresolved, and an unresolved version is reported as unresolved rather than guessed.
+    """
+    if not value:
+        return None
+    if "${" not in value:
+        return value
+    resolved = value
+    for _ in range(3):
+        replaced = re.sub(
+            r"\$\{([^}]+)\}",
+            lambda match: properties.get(match.group(1), match.group(0)),
+            resolved,
+        )
+        if replaced == resolved:
+            break
+        resolved = replaced
+    return None if "${" in resolved else resolved
+
+
+def _scan_jvm(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    dependencies: list[Dependency] = []
+    catalog: dict[str, tuple[str, str | None]] = {}
+    for path, content in contents.items():
+        if PurePosixPath(path).name != "libs.versions.toml":
+            continue
+        document = _decode_toml(content, path, diagnostics)
+        if not isinstance(document, Mapping):
+            continue
+        versions = document.get("versions") if isinstance(document.get("versions"), Mapping) else {}
+        libraries = document.get("libraries") if isinstance(document.get("libraries"), Mapping) else {}
+        for alias, value in libraries.items():
+            module: str | None = None
+            version: str | None = None
+            if isinstance(value, str):
+                module, _, version = value.partition(":")
+                module = value.rsplit(":", 1)[0] if version else value
+            elif isinstance(value, Mapping):
+                if isinstance(value.get("module"), str):
+                    module = str(value["module"])
+                elif isinstance(value.get("group"), str) and isinstance(value.get("name"), str):
+                    module = f"{value['group']}:{value['name']}"
+                raw = value.get("version")
+                if isinstance(raw, str):
+                    version = raw
+                elif isinstance(raw, Mapping) and isinstance(raw.get("ref"), str):
+                    reference = versions.get(raw["ref"])
+                    version = str(reference) if isinstance(reference, str) else None
+            if module and ":" in module:
+                catalog[str(alias)] = (module, version)
+
+    for path, content in contents.items():
+        name = PurePosixPath(path).name
+        directory = str(PurePosixPath(path).parent)
+        if name == "pom.xml":
+            root = _decode_xml(content, path, diagnostics)
+            if root is None:
+                continue
+            properties: dict[str, str] = {}
+            for block in _children(root, "properties"):
+                for child in block:
+                    text = (child.text or "").strip()
+                    if text:
+                        properties[_local_name(child.tag)] = text
+            project_version = _child_text(root, "version")
+            for parent in _children(root, "parent"):
+                project_version = project_version or _child_text(parent, "version")
+            if project_version:
+                properties.setdefault("project.version", project_version)
+            for block in _children(root, "dependencies"):
+                for element in _children(block, "dependency"):
+                    group = _resolve_maven_property(_child_text(element, "groupId"), properties)
+                    artifact = _child_text(element, "artifactId")
+                    if not group or not artifact:
+                        continue
+                    version = _resolve_maven_property(_child_text(element, "version"), properties)
+                    scope = _child_text(element, "scope") or "compile"
+                    dependencies.append(Dependency(
+                        ecosystem="maven",
+                        name=f"{group}/{artifact}",
+                        requested_spec=version or "*",
+                        scope="development" if scope in {"test", "provided"} else "runtime",
+                        direct=True,
+                        component_path=directory,
+                        declaration=Evidence(
+                            path, "MANIFEST", content_hash(content),
+                            {"path": path, "coordinate": f"{group}:{artifact}"},
+                            sha256_key(f"{group}:{artifact}:{version or ''}"),
+                        ),
+                        resolved_version=version,
+                    ))
+        elif name in {"build.gradle", "build.gradle.kts"}:
+            text = content.decode("utf-8", errors="replace")
+            for line_number, line in enumerate(text.splitlines(), 1):
+                if not GRADLE_CONFIGURATION.search(line):
+                    continue
+                for match in MAVEN_COORDINATE.finditer(line):
+                    group, artifact, version = match.group(1), match.group(2), match.group(3)
+                    if "." not in group:
+                        # A Gradle coordinate's group is a reverse-domain name. Without a dot
+                        # this is some other colon-separated string literal on the same line.
+                        continue
+                    dependencies.append(Dependency(
+                        ecosystem="maven",
+                        name=f"{group}/{artifact}",
+                        requested_spec=version or "*",
+                        scope="development" if "test" in line.lower() else "runtime",
+                        direct=True,
+                        component_path=directory,
+                        declaration=Evidence(
+                            path, "MANIFEST", content_hash(content),
+                            {"path": path, "line_start": line_number, "line_end": line_number},
+                            sha256_key(match.group(0)),
+                        ),
+                        resolved_version=version if version and "$" not in version else None,
+                    ))
+                for alias_match in re.finditer(r"libs\.([A-Za-z0-9_.]+)", line):
+                    alias = alias_match.group(1).replace(".", "-")
+                    entry = catalog.get(alias) or catalog.get(alias_match.group(1))
+                    if entry is None:
+                        continue
+                    module, version = entry
+                    group, _, artifact = module.partition(":")
+                    dependencies.append(Dependency(
+                        ecosystem="maven",
+                        name=f"{group}/{artifact}",
+                        requested_spec=version or "*",
+                        scope="development" if "test" in line.lower() else "runtime",
+                        direct=True,
+                        component_path=directory,
+                        declaration=Evidence(
+                            path, "MANIFEST", content_hash(content),
+                            {"path": path, "line_start": line_number, "line_end": line_number,
+                             "version_catalog_alias": alias},
+                            sha256_key(f"{module}:{version or ''}"),
+                        ),
+                        resolved_version=version,
+                    ))
+    return dependencies
+
+
+def _scan_dotnet(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    locked: dict[str, tuple[str, str, str, bytes]] = {}
+    for path, content in contents.items():
+        if PurePosixPath(path).name != "packages.lock.json":
+            continue
+        document = _decode_json(content, path, diagnostics)
+        if not isinstance(document, Mapping):
+            continue
+        frameworks = document.get("dependencies")
+        if not isinstance(frameworks, Mapping):
+            continue
+        for framework, packages in frameworks.items():
+            if not isinstance(packages, Mapping):
+                continue
+            for package, detail in packages.items():
+                resolved = detail.get("resolved") if isinstance(detail, Mapping) else None
+                if isinstance(package, str) and isinstance(resolved, str):
+                    locked.setdefault(
+                        package.lower(),
+                        (resolved, path, f"/dependencies/{framework}/{package}", content),
+                    )
+
+    dependencies: list[Dependency] = []
+    for path, content in contents.items():
+        pure = PurePosixPath(path)
+        name = pure.name
+        suffix = pure.suffix.lower()
+        if suffix not in {".csproj", ".fsproj", ".vbproj"} and name not in {
+            "packages.config", "Directory.Packages.props", "Directory.Build.props",
+        }:
+            continue
+        root = _decode_xml(content, path, diagnostics)
+        if root is None:
+            continue
+        directory = str(pure.parent)
+        found: list[tuple[str, str | None]] = []
+        for element in root.iter():
+            tag = _local_name(element.tag)
+            if tag in {"PackageReference", "PackageVersion", "GlobalPackageReference"}:
+                package = element.get("Include") or element.get("Update")
+                version = element.get("Version") or _child_text(element, "Version")
+                if package:
+                    found.append((package, version))
+            elif tag == "package":
+                package = element.get("id")
+                if package:
+                    found.append((package, element.get("version")))
+        for package, version in found:
+            entry = locked.get(package.lower())
+            resolution_evidence = None
+            resolved = version if version and "$" not in version else None
+            if entry:
+                resolved = entry[0]
+                resolution_evidence = Evidence(
+                    entry[1], "LOCKFILE", content_hash(entry[3]),
+                    {"path": entry[1], "json_pointer": entry[2]}, sha256_key(entry[0]),
+                )
+            dependencies.append(Dependency(
+                ecosystem="nuget",
+                name=package,
+                requested_spec=version or "*",
+                scope="development" if "test" in path.lower() else "runtime",
+                direct=True,
+                component_path=directory,
+                declaration=Evidence(
+                    path, "MANIFEST", content_hash(content),
+                    {"path": path, "package": package},
+                    sha256_key(f"{package}:{version or ''}"),
+                ),
+                resolved_version=resolved,
+                resolution_evidence=resolution_evidence,
+            ))
+    return dependencies
+
+
+def _scan_cargo(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    locked: dict[str, tuple[str, str, str, bytes]] = {}
+    for path, content in contents.items():
+        if PurePosixPath(path).name != "Cargo.lock":
+            continue
+        document = _decode_toml(content, path, diagnostics)
+        if not isinstance(document, Mapping) or not isinstance(document.get("package"), list):
+            continue
+        for index, package in enumerate(document["package"]):
+            if isinstance(package, Mapping) and package.get("name") and package.get("version"):
+                locked.setdefault(
+                    str(package["name"]).lower(),
+                    (str(package["version"]), path, f"/package/{index}", content),
+                )
+
+    dependencies: list[Dependency] = []
+    for path, content in contents.items():
+        if PurePosixPath(path).name != "Cargo.toml":
+            continue
+        document = _decode_toml(content, path, diagnostics)
+        if not isinstance(document, Mapping):
+            continue
+        directory = str(PurePosixPath(path).parent)
+        sections = (
+            ("dependencies", "runtime"),
+            ("build-dependencies", "build"),
+            ("dev-dependencies", "development"),
+        )
+        for section, scope in sections:
+            table = document.get(section)
+            if not isinstance(table, Mapping):
+                continue
+            for crate, value in table.items():
+                spec: str | None = None
+                if isinstance(value, str):
+                    spec = value
+                elif isinstance(value, Mapping):
+                    if value.get("path") or value.get("git"):
+                        # A path or git dependency is not a crates.io package. Cataloguing it
+                        # against the registry would offer upgrade targets for a crate the
+                        # registry has never published.
+                        continue
+                    spec = str(value["version"]) if isinstance(value.get("version"), str) else None
+                entry = locked.get(str(crate).lower())
+                resolution_evidence = None
+                resolved = None
+                if entry:
+                    resolved = entry[0]
+                    resolution_evidence = Evidence(
+                        entry[1], "LOCKFILE", content_hash(entry[3]),
+                        {"path": entry[1], "toml_pointer": entry[2]}, sha256_key(entry[0]),
+                    )
+                elif spec and re.fullmatch(r"\d+(?:\.\d+){0,2}", spec):
+                    resolved = spec
+                dependencies.append(Dependency(
+                    ecosystem="cargo",
+                    name=str(crate),
+                    requested_spec=spec or "*",
+                    scope=scope,
+                    direct=True,
+                    component_path=directory,
+                    declaration=Evidence(
+                        path, "MANIFEST", content_hash(content),
+                        {"path": path, "toml_pointer": f"/{section}/{crate}"},
+                        sha256_key(f"{crate}:{spec or ''}"),
+                    ),
+                    resolved_version=resolved,
+                    resolution_evidence=resolution_evidence,
+                ))
+    return dependencies
+
+
+def _scan_go(contents: Mapping[str, bytes], diagnostics: list[Diagnostic]) -> list[Dependency]:
+    dependencies: list[Dependency] = []
+    for path, content in contents.items():
+        if PurePosixPath(path).name != "go.mod":
+            continue
+        directory = str(PurePosixPath(path).parent)
+        text = content.decode("utf-8", errors="replace")
+        # `replace` rewrites a module to another module or a local path. A replaced requirement
+        # is recorded, but its declared version is no longer what is built, so it is marked
+        # rather than presented as the resolved version.
+        replaced = {
+            match.group(1)
+            for match in re.finditer(r"^\s*replace\s+(\S+)\s+=>", text, re.MULTILINE)
+        }
+        for block in re.finditer(r"^\s*replace\s*\((.*?)^\s*\)", text, re.MULTILINE | re.DOTALL):
+            replaced.update(
+                match.group(1)
+                for match in re.finditer(r"^\s*(\S+)\s+.*=>", block.group(1), re.MULTILINE)
+            )
+        in_block = False
+        for line_number, raw in enumerate(text.splitlines(), 1):
+            line = raw.split("//", 1)[0].strip()
+            comment = raw.partition("//")[2]
+            if not in_block and re.match(r"^require\s*\($", line):
+                in_block = True
+                continue
+            if in_block and line == ")":
+                in_block = False
+                continue
+            candidate = line
+            if not in_block:
+                single = re.match(r"^require\s+(.+)$", line)
+                if single is None:
+                    continue
+                candidate = single.group(1).strip()
+            if not candidate:
+                continue
+            match = GO_REQUIREMENT.match(candidate)
+            if match is None:
+                continue
+            module = match.group("module")
+            version = match.group("version")
+            dependencies.append(Dependency(
+                ecosystem="golang",
+                name=module,
+                requested_spec=version,
+                scope="runtime",
+                direct="indirect" not in comment,
+                component_path=directory,
+                declaration=Evidence(
+                    path, "MANIFEST", content_hash(content),
+                    {"path": path, "line_start": line_number, "line_end": line_number},
+                    sha256_key(f"{module} {version}"),
+                ),
+                # Go requirements are exact versions, so a requirement is its own resolution —
+                # unless a `replace` directive points the build somewhere else.
+                resolved_version=None if module in replaced else version,
+            ))
+    return dependencies
 
 
 def _scan_sources(
@@ -2473,12 +2904,18 @@ def _component_facts(
             "frameworks": frameworks,
             "ecosystems": ecosystems,
             "build_systems": sorted({
-                "NPM" if PurePosixPath(path).name == "package.json" else
-                "PYTHON" if PurePosixPath(path).name in {"pyproject.toml", "requirements.txt", "Pipfile"} else
-                "DOCKER"
+                _BUILD_SYSTEMS.get(PurePosixPath(path).name)
+                or _BUILD_SYSTEMS.get(PurePosixPath(path).suffix.lower())
+                or "DOCKER"
                 for path in evidence_paths
             }),
-            "runtime": sorted({"NODE" if item.ecosystem == "npm" else "PYTHON" for item in component_dependencies}),
+            "runtime": sorted({
+                # An ecosystem with no runtime mapping is left out rather than folded into the
+                # nearest one: labelling a Maven component's runtime PYTHON would be a fact
+                # about this repository that is simply untrue.
+                _ECOSYSTEM_RUNTIMES[item.ecosystem]
+                for item in component_dependencies if item.ecosystem in _ECOSYSTEM_RUNTIMES
+            }),
             "entry_points": [],
             "tests": tests,
             "dependency_count": len(component_dependencies),
@@ -4270,7 +4707,15 @@ def _usage_limitations(
     return values
 
 
+# Maven coordinates and Go module paths are case-sensitive: `github.com/Azure/azure-sdk-for-go`
+# lowercased is a module the proxy has never heard of. Every other ecosystem StackGraph reads
+# treats names case-insensitively, so folding case there makes two spellings one package.
+CASE_SENSITIVE_ECOSYSTEMS = frozenset({"maven", "golang"})
+
+
 def normalize_package_name(ecosystem: str, value: str) -> str:
+    if ecosystem in CASE_SENSITIVE_ECOSYSTEMS:
+        return value.strip()
     name = value.strip().lower()
     return PYPI_NORMALIZE.sub("-", name) if ecosystem == "pypi" else name
 

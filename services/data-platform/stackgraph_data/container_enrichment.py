@@ -21,6 +21,7 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from stackgraph_data.container_packages import PackageInventory, read_package_inventory
 from stackgraph_data.container_registry import (
     ContainerRegistryClient,
     ContainerRegistryError,
@@ -29,17 +30,24 @@ from stackgraph_data.container_registry import (
 )
 
 
-METHOD_VERSION = "container-enrichment/1.0.0"
+METHOD_VERSION = "container-enrichment/1.1.0"
+
+# `ecosystem` names what the package is; `source` names the database it was read from. A
+# `pkg:npm` record found in an image's node_modules and one declared by a repository are the
+# same ecosystem and very different claims.
+_SOURCE_OF_ECOSYSTEM = {"deb": "dpkg", "apk": "apk", "pypi": "python", "npm": "npm"}
 
 
-def _flag_enabled(connection: Connection[dict[str, Any]], tenant_id: UUID) -> bool:
+def _flag_enabled(
+    connection: Connection[dict[str, Any]], tenant_id: UUID, flag_key: str = "REGISTRY_ENRICHMENT",
+) -> bool:
     row = connection.execute(
         """
         SELECT enabled FROM phase2_feature_flag
-        WHERE flag_key='REGISTRY_ENRICHMENT' AND (tenant_id IS NULL OR tenant_id=%s)
+        WHERE flag_key=%s AND (tenant_id IS NULL OR tenant_id=%s)
         ORDER BY (tenant_id IS NOT NULL) DESC LIMIT 1
         """,
-        (tenant_id,),
+        (flag_key, tenant_id),
     ).fetchone()
     return bool(row and row["enabled"])
 
@@ -96,6 +104,7 @@ def persist_resolution(
     source_revision: str,
     observed_at: Any,
     resolved: ResolvedImage,
+    inventory: PackageInventory | None = None,
 ) -> UUID:
     reference = resolved.reference
     if reference.tag:
@@ -146,8 +155,17 @@ def persist_resolution(
                 "media_type": resolved.media_type,
                 "method_version": METHOD_VERSION,
             }),
-            Jsonb({"limitations": list(resolved.limitations)}),
-            Jsonb(dict(resolved.coverage)), source_revision, observed_at,
+            Jsonb({"limitations": [
+                *resolved.limitations, *(inventory.limitations if inventory else ()),
+            ]}),
+            # The manifest's coverage plus what the layer read achieved. `os_packages` stays
+            # NOT_COLLECTED unless a read actually happened, so an image nobody looked inside is
+            # never confused with one that has no packages.
+            Jsonb({
+                **dict(resolved.coverage),
+                **({"os_packages": inventory.coverage} if inventory else {}),
+            }),
+            source_revision, observed_at,
         ),
     ).fetchone()
     profile_id = row["id"]
@@ -158,6 +176,25 @@ def persist_resolution(
         """,
         (tenant_id, image_entity_id, profile_id),
     )
+    if inventory is not None:
+        # Rewritten wholesale rather than merged: the inventory describes this digest, and a
+        # package that has disappeared from a re-read must disappear from the record too.
+        connection.execute(
+            "DELETE FROM estate_container_package WHERE container_profile_id=%s", (profile_id,),
+        )
+        for package in inventory.packages:
+            connection.execute(
+                """
+                INSERT INTO estate_container_package(
+                  tenant_id,container_profile_id,name,version,ecosystem,purl,source
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT DO NOTHING
+                """,
+                (
+                    tenant_id, profile_id, package.name, package.version, package.ecosystem,
+                    package.purl, _SOURCE_OF_ECOSYSTEM.get(package.ecosystem),
+                ),
+            )
     for ordinal, layer in enumerate(resolved.layers):
         connection.execute(
             """
@@ -182,10 +219,18 @@ def run_enrichment(
 ) -> dict[str, int]:
     connection.execute("SELECT set_config('app.tenant_id',%s,true)", (str(tenant_id),))
     if not _flag_enabled(connection, tenant_id):
-        return {"examined": 0, "resolved": 0, "unresolvable": 0, "skipped_disabled": 1}
+        return {
+            "examined": 0, "resolved": 0, "unresolvable": 0, "packages_recorded": 0,
+            "skipped_disabled": 1,
+        }
+    # Reading layers is a second, much larger decision than reading a manifest, so it has its
+    # own flag. With it off the profile still reports `os_packages: NOT_COLLECTED`, which is
+    # what it has always said and remains true.
+    read_packages = _flag_enabled(connection, tenant_id, "CONTAINER_PACKAGE_INVENTORY")
     examined = 0
     resolved_count = 0
     unresolvable = 0
+    packages_recorded = 0
     for image in unresolved_images(connection, tenant_id, limit=limit):
         examined += 1
         try:
@@ -195,16 +240,28 @@ def run_enrichment(
             # reports an unresolved tag as INFERRED or UNRESOLVED, which is the truth.
             unresolvable += 1
             continue
+        inventory = None
+        if read_packages:
+            try:
+                inventory = read_package_inventory(registry, resolved)
+            except ContainerRegistryError as error:
+                # A failed layer read never costs the digest. The manifest resolution is still
+                # a real identity worth recording, with the gap stated beside it.
+                inventory = PackageInventory(
+                    coverage="NOT_COLLECTED",
+                    limitations=(f"the image's layers could not be read: {error}",),
+                )
+            packages_recorded += len(inventory.packages)
         persist_resolution(
             connection, tenant_id=tenant_id, image_entity_id=image["image_entity_id"],
             repository_entity_id=image["repository_entity_id"],
             source_revision=image["source_revision"], observed_at=image["observed_at"],
-            resolved=resolved,
+            resolved=resolved, inventory=inventory,
         )
         resolved_count += 1
     return {
         "examined": examined, "resolved": resolved_count, "unresolvable": unresolvable,
-        "skipped_disabled": 0,
+        "packages_recorded": packages_recorded, "skipped_disabled": 0,
     }
 
 

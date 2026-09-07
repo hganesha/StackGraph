@@ -25,6 +25,11 @@ from app.models import (
     HarnessEvaluationModel,
     HarnessEvaluationRecordRequest,
     HarnessEvaluationStartRequest,
+    HarnessChampionList,
+    HarnessPromotionDecisionRequest,
+    HarnessPromotionModel,
+    HarnessPromotionProposeRequest,
+    HarnessPromotionRollbackRequest,
     AIProviderConfigurationUpdateRequest,
     AIProviderConnectionTest,
     AskRequest,
@@ -300,6 +305,21 @@ class ReadModelsProtocol(Protocol):
     async def harness_evaluation(
         self, evaluation_id: UUID, *, tenant_id: UUID | None,
     ) -> HarnessEvaluationModel: ...
+    async def propose_harness_promotion(
+        self, request: HarnessPromotionProposeRequest, *, tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel: ...
+    async def decide_harness_promotion(
+        self, promotion_id: UUID, request: HarnessPromotionDecisionRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel: ...
+    async def roll_back_harness_promotion(
+        self, promotion_id: UUID, request: HarnessPromotionRollbackRequest, *,
+        tenant_id: UUID | None, actor_key: str,
+    ) -> HarnessPromotionModel: ...
+    async def harness_promotion(
+        self, promotion_id: UUID, *, tenant_id: UUID | None,
+    ) -> HarnessPromotionModel: ...
+    async def harness_champions(self, *, tenant_id: UUID | None) -> HarnessChampionList: ...
     async def estate_components(
         self, *, tenant_id: UUID | None, cursor: UUID | None, limit: int,
     ) -> EstateComponentList: ...
@@ -1090,6 +1110,71 @@ async def finish_harness_evaluation(
     principal = await _principal(request)
     _require(principal, "admin")
     return await _store(request).complete_harness_evaluation(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/immune-system/champions", response_model=HarnessChampionList,
+    response_model_exclude_none=True, operation_id="listHarnessChampions",
+    tags=["immune-system"],
+)
+async def list_harness_champions(request: Request) -> HarnessChampionList:
+    principal = await _principal(request)
+    return await _store(request).harness_champions(tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/immune-system/promotions", response_model=HarnessPromotionModel, status_code=201,
+    response_model_exclude_none=True, operation_id="proposeHarnessPromotion",
+    tags=["immune-system"],
+)
+async def propose_harness_promotion(
+    body: HarnessPromotionProposeRequest, request: Request,
+) -> HarnessPromotionModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).propose_harness_promotion(
+        body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.get(
+    "/immune-system/promotions/{id}", response_model=HarnessPromotionModel,
+    response_model_exclude_none=True, operation_id="getHarnessPromotion",
+    tags=["immune-system"],
+)
+async def get_harness_promotion(id: UUID, request: Request) -> HarnessPromotionModel:
+    principal = await _principal(request)
+    return await _store(request).harness_promotion(id, tenant_id=principal.tenant_id)
+
+
+@router.post(
+    "/immune-system/promotions/{id}/decision", response_model=HarnessPromotionModel,
+    response_model_exclude_none=True, operation_id="decideHarnessPromotion",
+    tags=["immune-system"],
+)
+async def decide_harness_promotion(
+    id: UUID, body: HarnessPromotionDecisionRequest, request: Request,
+) -> HarnessPromotionModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).decide_harness_promotion(
+        id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
+    )
+
+
+@router.post(
+    "/immune-system/promotions/{id}/rollback", response_model=HarnessPromotionModel,
+    response_model_exclude_none=True, operation_id="rollBackHarnessPromotion",
+    tags=["immune-system"],
+)
+async def roll_back_harness_promotion(
+    id: UUID, body: HarnessPromotionRollbackRequest, request: Request,
+) -> HarnessPromotionModel:
+    principal = await _principal(request)
+    _require(principal, "admin")
+    return await _store(request).roll_back_harness_promotion(
         id, body, tenant_id=principal.tenant_id, actor_key=principal.actor_key,
     )
 

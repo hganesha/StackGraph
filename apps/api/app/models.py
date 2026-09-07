@@ -3558,16 +3558,26 @@ class HarnessEvaluationResultModel(ContractModel):
 
 
 class PromotionPosture(ContractModel):
-    """The champion/challenger half of §36, stated instead of silently missing.
+    """Whether this evaluation could back a promotion, and what stands in the way if not.
 
-    A1 requires promotion to stay disabled until offline evaluation, rollback, and governance
-    are proven. `NOT_IMPLEMENTED` is the honest description: there is no promotion table and no
-    champion column, so this is not a switch somebody can flip by accident.
+    A1 requires offline evaluation, rollback, and governance to be proven before the
+    champion/challenger loop runs. Those are computed from evidence rather than configured, so
+    an evaluation carries its own answer: `DISABLED` when the loop is switched off for the
+    tenant, `BLOCKED` when it is on and this evaluation does not meet the preconditions, and
+    `ELIGIBLE` when it does. A missing reason would leave a reader unable to tell which.
     """
 
-    state: Literal["NOT_IMPLEMENTED"] = "NOT_IMPLEMENTED"
+    state: Literal["ELIGIBLE", "BLOCKED", "DISABLED"]
     reason: str = Field(min_length=1)
-    blocked_by: list[str] = Field(min_length=1)
+    blocked_by: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_blockers_match_the_state(self) -> "PromotionPosture":
+        if self.state == "ELIGIBLE" and self.blocked_by:
+            raise ValueError("an eligible posture cannot name a blocker")
+        if self.state != "ELIGIBLE" and not self.blocked_by:
+            raise ValueError("a posture that is not eligible must name what blocks it")
+        return self
 
 
 class HarnessEvaluationModel(ContractModel):
@@ -3603,3 +3613,86 @@ class HarnessEvaluationModel(ContractModel):
 class HarnessEvaluationCompleteRequest(ContractModel):
     status: Literal["COMPLETED", "ABANDONED"]
     note: str | None = Field(default=None, max_length=4000)
+
+
+class PromotionGate(ContractModel):
+    """Whether the evidence A1 requires exists, and what is missing when it does not.
+
+    The three preconditions are computed, never configured: a clean completed evaluation that
+    covers what the incumbent covered, a passed rollback drill recorded no earlier than that
+    evaluation, and an approver who is not the proposer.
+    """
+
+    state: GateState
+    reasons: list[GateReason] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_blocked_gates_name_a_blocker(self) -> "PromotionGate":
+        if self.state == "CLEAR" and self.reasons:
+            raise ValueError("a clear promotion gate cannot carry blocking reasons")
+        if self.state != "CLEAR" and not self.reasons:
+            raise ValueError("a blocked promotion gate must name what blocked it")
+        return self
+
+
+class HarnessPromotionProposeRequest(ContractModel):
+    harness_key: str = Field(min_length=1, max_length=255)
+    challenger_version: str = Field(min_length=1, max_length=255)
+    evaluation_id: UUID
+    rollback_drill_id: UUID
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class HarnessPromotionDecisionRequest(ContractModel):
+    decision: Literal["PROMOTE", "REJECT"]
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class HarnessPromotionRollbackRequest(ContractModel):
+    rationale: str = Field(min_length=1, max_length=4000)
+
+
+class HarnessPromotionModel(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    id: UUID
+    harness_key: str
+    challenger_version: str
+    incumbent_version: str | None = None
+    evaluation_id: UUID
+    rollback_drill_id: UUID
+    status: Literal["PENDING", "PROMOTED", "REJECTED", "ROLLED_BACK", "REFUSED"]
+    gate: PromotionGate
+    requested_by: str
+    rationale: str
+    decided_by: str | None = None
+    decision_rationale: str | None = None
+    decided_at: datetime | None = None
+    rolled_back_by: str | None = None
+    rollback_rationale: str | None = None
+    rolled_back_at: datetime | None = None
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_two_person_decision(self) -> "HarnessPromotionModel":
+        if self.decided_by is not None and self.decided_by == self.requested_by:
+            raise ValueError("a promotion cannot be approved by the actor who proposed it")
+        if (self.gate.state != "CLEAR") != (self.status == "REFUSED"):
+            raise ValueError("a blocked gate produces a refusal and nothing else")
+        return self
+
+
+class HarnessChampionModel(ContractModel):
+    harness_key: str
+    harness_version: str
+    previous_version: str | None = None
+    promotion_id: UUID
+    promoted_by: str
+    promoted_at: datetime
+
+
+class HarnessChampionList(ContractModel):
+    contract_version: Literal["1.0.0"] = "1.0.0"
+    promotion_enabled: bool
+    champions: list[HarnessChampionModel] = Field(default_factory=list)
+    recent_promotions: list[HarnessPromotionModel] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)

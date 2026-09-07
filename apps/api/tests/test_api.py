@@ -27,7 +27,10 @@ from app.models import (
     AgentAuthorizationDecisionModel,
     AgentControlDrillResult,
     AgentKillSwitchModel,
+    HarnessChampionList,
     HarnessEvaluationModel,
+    HarnessPromotionModel,
+    PromotionGate,
     PromotionPosture,
     ScenarioClassCoverage,
     AssumptionList,
@@ -120,6 +123,7 @@ from app.models import (
 
 NOW = datetime(2026, 8, 19, 14, 10, tzinfo=UTC)
 EVALUATION_ID = UUID("00000000-0000-4000-8000-000000000b01")
+PROMOTION_ID = UUID("00000000-0000-4000-8000-000000000b03")
 
 
 class StubDatabase:
@@ -293,8 +297,9 @@ class StubReadModels:
             estate_watermark="facts:empty;projection:empty", created_by=actor_key,
             started_at=NOW,
             promotion=PromotionPosture(
-                reason="Champion/challenger promotion is not implemented.",
-                blocked_by=["OFFLINE_EVALUATION_UNPROVEN"],
+                state="DISABLED",
+                reason="Champion/challenger promotion is switched off for this tenant.",
+                blocked_by=["HARNESS_PROMOTION_DISABLED"],
             ),
         )
 
@@ -315,6 +320,38 @@ class StubReadModels:
         self.last_tenant_id = tenant_id
         self.last_actor_key = actor_key
         return self._evaluation(evaluation_id)
+
+    def _promotion(self, promotion_id, actor_key="local-user"):
+        return HarnessPromotionModel(
+            id=promotion_id, harness_key="agent-harness:example", challenger_version="1.1.0",
+            incumbent_version="1.0.0", evaluation_id=EVALUATION_ID,
+            rollback_drill_id=UUID("00000000-0000-4000-8000-000000000b02"),
+            status="PENDING", gate=PromotionGate(state="CLEAR"), requested_by=actor_key,
+            rationale="Clean evaluation over every derived class.", created_at=NOW,
+        )
+
+    async def propose_harness_promotion(self, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._promotion(PROMOTION_ID, actor_key)
+
+    async def harness_promotion(self, promotion_id, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return self._promotion(promotion_id)
+
+    async def decide_harness_promotion(self, promotion_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._promotion(promotion_id)
+
+    async def roll_back_harness_promotion(self, promotion_id, request, *, tenant_id, actor_key):
+        self.last_tenant_id = tenant_id
+        self.last_actor_key = actor_key
+        return self._promotion(promotion_id)
+
+    async def harness_champions(self, *, tenant_id):
+        self.last_tenant_id = tenant_id
+        return HarnessChampionList(promotion_enabled=False, champions=[], recent_promotions=[])
 
     async def agent_kill_switch(self, *, tenant_id):
         self.last_tenant_id = tenant_id
