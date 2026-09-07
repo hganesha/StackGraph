@@ -40,3 +40,14 @@
 .error { color: var(--sg-color-signal-danger-700); }
 .visuallyHidden { position: absolute; overflow: hidden; clip-path: inset(50%); inline-size: 1px; block-size: 1px; white-space: nowrap; }
 @media (max-width: 760px) { .form, .expectations { grid-template-columns: 1fr; } }
+.champions, .promotions { display: flex; flex-direction: column; gap: var(--sg-space-2); margin: 0; padding: 0; list-style: none; }
+.champions li { display: flex; flex-direction: column; padding: var(--sg-space-3); background: var(--sg-surface-card); border: var(--sg-border-hairline) solid var(--sg-surface-border); border-radius: var(--sg-radius-control); }
+.champions span { color: var(--sg-text-secondary); }
+.champions small { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.promotions li { display: flex; flex-direction: column; gap: var(--sg-space-2); padding: var(--sg-space-3); background: var(--sg-surface-card); border-inline-start: 4px solid var(--sg-surface-border-strong); }
+.promotions li[data-status="REFUSED"] { border-inline-start-color: var(--sg-color-signal-danger-500); }
+.promotions li[data-status="ROLLED_BACK"] { border-inline-start-color: var(--sg-color-signal-warning-500); }
+.promotions li > div { display: flex; flex-direction: column; }
+.promotions span { color: var(--sg-text-muted); font-size: var(--sg-type-small-size); }
+.gateReasons { display: flex; flex-direction: column; gap: 2px; margin: 0; padding-inline-start: var(--sg-space-4); color: var(--sg-text-secondary); font-size: var(--sg-type-small-size); }
+.eligible { padding: var(--sg-space-2) var(--sg-space-3); color: var(--sg-text-secondary); background: var(--sg-surface-sunken); }

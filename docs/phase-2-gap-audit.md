@@ -473,19 +473,14 @@ the same repository does not produce two different graphs depending on how a pac
 The endpoint still distinguishes an estate with no AI supply chain from one that was never
 scanned for it.
 
-**§36's immune system.** The half the plan asks for is built and the half it forbids is
-unrepresentable. Eight generators derive adversarial scenarios from rows that exist — stale facts,
-open contradictions, partial catalogue collections, quarantined interpretations, datastores with
-consumers, harnesses grounded by retrieved content, subjects under competing ChangeSets, and
-declared topologies with nothing observed beside them. A class that derived nothing says why, so
-`NOT_DERIVABLE` never reads as immunity. Evaluation is `OFFLINE` by a column that admits one
-value; a failure cannot be recorded without a diagnosis, `INCONCLUSIVE` is a first-class outcome
-rather than a rounded pass, unanswered scenarios are named rather than counted, and a finished
-evaluation is immutable. There is no promotion table and no champion column: A1 requires that
-loop to stay closed until rollback and governance are proven, and `PromotionPosture` states the
-omission in the API response instead of leaving it to be inferred from a missing endpoint.
-
-### Still open
+**§36's immune system.** Eight generators derive adversarial scenarios from rows that exist —
+stale facts, open contradictions, partial catalogue collections, quarantined interpretations,
+datastores with consumers, harnesses grounded by retrieved content, subjects under competing
+ChangeSets, and declared topologies with nothing observed beside them. A class that derived
+nothing says why, so `NOT_DERIVABLE` never reads as immunity. Evaluation is `OFFLINE` by a column
+that admits one value; a failure cannot be recorded without a diagnosis, `INCONCLUSIVE` is a
+first-class outcome rather than a rounded pass, unanswered scenarios are named rather than
+counted, and a finished evaluation is immutable.
 
 **Container package inventory.** Closed. The enrichment step opens layer blobs and reads dpkg,
 apk, Python `dist-info`, and `node_modules` package databases into `estate_container_package`,
@@ -519,5 +514,46 @@ the proxy's list cannot see them. Three places the parsers refuse to guess: an u
 property leaves the dependency versionless, a Cargo path or git dependency is not a crates.io
 package, and a Go module a `replace` directive redirects keeps no resolved version.
 
-**Champion/challenger promotion.** Deliberately unbuilt, per A1. Adding it is a migration
-somebody has to write and review, which is the point.
+**Champion/challenger promotion.** Closed. Migration 059 left it unrepresentable and said why:
+A1 requires the loop to stay disabled "until offline evaluation, rollback, and governance are
+proven". That is a condition, not a prohibition, and the honest way to open it was to make the
+three proofs computable and require them — not to add a table and a flag and declare the
+condition met.
+
+Each precondition is now evidence the schema already holds. *Offline evaluation*: a completed
+evaluation of the challenger with no failure, no inconclusive outcome and no unanswered scenario,
+covering every class this estate has derived and every scenario the incumbent was tested against
+— a challenger evaluated against less than the champion can score better while being tested less,
+so that is refused by name. *Rollback*: a passed `ROLLBACK` drill recorded no earlier than the
+evaluation it vouches for, plus a rollback path that restores the previous version, needs no
+second person, and is always available. *Governance*: two people, enforced by a database CHECK
+rather than only by the API, because a rule that lives in application code is one the next writer
+can forget.
+
+A proposal that fails the gate is written down with every reason, not just the first. A refusal
+nobody can read is indistinguishable from a promotion nobody attempted, and a proposer who
+discovers the blockers one round at a time learns the gate the slow way.
+
+### Still open
+
+These are the gaps the work above left behind. Each is reported by the surface that has it
+rather than left to be inferred from a short list or an empty one.
+
+**RPM package databases.** Detected inside an image and deliberately not parsed. They are
+Berkeley DB, ndb, or SQLite depending on the distribution's age, and a confident wrong answer
+about what is installed is worse than a stated gap. `coverage.os_packages` reports `PARTIAL` and
+the limitation names the reason.
+
+**Registries with no adapter.** Conan, Hex, RubyGems, Composer and the rest are recordable as
+`OTHER` and not enumerable. `package_catalog_collection` has no row for them, so target coverage
+says the catalogue was never collected rather than implying the registry is small.
+
+**Signals the registries themselves do not publish.** Maven has no yank or deprecation at all;
+the NuGet flat container carries no release dates or listing state; Go retractions live in a
+module's own `go.mod`, out of the proxy list's reach. Each adapter reports its own blind spots as
+limitations instead of defaulting the missing value.
+
+**Gradle coordinates built at runtime.** Dependencies are read from string literals and version
+catalogue aliases. A coordinate assembled from variables at configuration time is missed, and a
+Maven property defined in a parent pom the scanner never fetched leaves its dependency
+versionless rather than guessed.

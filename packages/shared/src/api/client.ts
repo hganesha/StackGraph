@@ -113,6 +113,12 @@ import type {
   HarnessEvaluationModel,
   HarnessEvaluationRecordRequest,
   HarnessEvaluationStartRequest,
+  HarnessChampionList,
+  HarnessPromotionDecisionRequest,
+  HarnessPromotionModel,
+  HarnessPromotionProposeRequest,
+  HarnessPromotionRollbackRequest,
+  PromotionGate,
   PromotionPosture,
   AgentKillSwitchModel,
   AgentKillSwitchUpdateRequest,
@@ -266,6 +272,17 @@ export interface StackGraphClient {
   finishHarnessEvaluation(
     id: string, body: HarnessEvaluationCompleteRequest,
   ): Promise<HarnessEvaluationModel>;
+  listHarnessChampions(): Promise<HarnessChampionList>;
+  proposeHarnessPromotion(
+    body: HarnessPromotionProposeRequest,
+  ): Promise<HarnessPromotionModel>;
+  getHarnessPromotion(id: string): Promise<HarnessPromotionModel>;
+  decideHarnessPromotion(
+    id: string, body: HarnessPromotionDecisionRequest,
+  ): Promise<HarnessPromotionModel>;
+  rollBackHarnessPromotion(
+    id: string, body: HarnessPromotionRollbackRequest,
+  ): Promise<HarnessPromotionModel>;
   listComponents(cursor?: string, limit?: number): Promise<EstateComponentList>;
   getComponent(id: string): Promise<EstateComponentDetail>;
   getApplication(id: string): Promise<ApplicationDetail>;
@@ -567,11 +584,14 @@ const fixtureFlights = new Map<string, FlightRecordModel>();
 const fixtureEvaluations = new Map<string, HarnessEvaluationModel>();
 // The champion/challenger half of §36 has no implementation to demonstrate, so the fixture
 // states its absence in the same shape the API does rather than omitting the field.
+// Promotion is off by default, so the fixture reports the posture a fresh tenant actually has
+// rather than the one that makes the surface look finished.
 const FIXTURE_PROMOTION_POSTURE: PromotionPosture = {
-  state: "NOT_IMPLEMENTED",
-  reason: "Champion/challenger promotion is not implemented. The evaluation half of §36 runs offline; the promotion half stays unrepresentable until rollback and governance are proven, so no configuration change can enable it.",
-  blocked_by: ["OFFLINE_EVALUATION_UNPROVEN", "ROLLBACK_UNPROVEN", "PROMOTION_GOVERNANCE_ABSENT"],
+  state: "DISABLED",
+  reason: "Champion/challenger promotion is switched off for this tenant. Nothing about this evaluation is being asserted either way.",
+  blocked_by: ["HARNESS_PROMOTION_DISABLED"],
 };
+const fixturePromotions = new Map<string, HarnessPromotionModel>();
 const fixtureAssumptions = new Map<string, AssumptionModel>();
 let fixtureKillSwitch: AgentKillSwitchModel = {
   contract_version: "1.0.0", engaged: true,
@@ -1394,6 +1414,41 @@ const fixtureClient: StackGraphClient = {
     evaluation.completed_at = new Date().toISOString();
     fixtureEvaluations.set(id, evaluation);
     return clone(evaluation);
+  },
+  async listHarnessChampions() {
+    await delay();
+    return {
+      contract_version: "1.0.0" as const,
+      promotion_enabled: false,
+      champions: [],
+      recent_promotions: [...fixturePromotions.values()].map(clone),
+      limitations: [
+        "promotion is disabled for this tenant; an empty champion list says nothing about whether a challenger would qualify",
+      ],
+    } satisfies HarnessChampionList;
+  },
+  async proposeHarnessPromotion(body) {
+    await delay();
+    // The fixture refuses for the same reason a fresh tenant does, rather than pretending the
+    // preconditions are met: a demo that always clears the gate teaches the wrong thing.
+    throw new FixtureApiError(409, {
+      code: "HARNESS_PROMOTION_DISABLED",
+      message: "Champion/challenger promotion is disabled for this tenant.",
+    });
+  },
+  async getHarnessPromotion(id) {
+    await delay();
+    const promotion = fixturePromotions.get(id);
+    if (!promotion) throw new FixtureApiError(404, { code: "HARNESS_PROMOTION_NOT_FOUND", message: "The promotion was not found." });
+    return clone(promotion);
+  },
+  async decideHarnessPromotion(id, body) {
+    await delay();
+    throw new FixtureApiError(404, { code: "HARNESS_PROMOTION_NOT_FOUND", message: "The promotion was not found." });
+  },
+  async rollBackHarnessPromotion(id, body) {
+    await delay();
+    throw new FixtureApiError(404, { code: "HARNESS_PROMOTION_NOT_FOUND", message: "The promotion was not found." });
   },
   async runAgentControlDrill(body) {
     await delay();
@@ -2914,6 +2969,14 @@ const liveClient: StackGraphClient = {
     req(`/immune-system/evaluations/${encodeURIComponent(id)}/results`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   finishHarnessEvaluation: (id, body) =>
     req(`/immune-system/evaluations/${encodeURIComponent(id)}/finish`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  listHarnessChampions: () => req("/immune-system/champions"),
+  proposeHarnessPromotion: (body) =>
+    req("/immune-system/promotions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  getHarnessPromotion: (id) => req(`/immune-system/promotions/${encodeURIComponent(id)}`),
+  decideHarnessPromotion: (id, body) =>
+    req(`/immune-system/promotions/${encodeURIComponent(id)}/decision`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  rollBackHarnessPromotion: (id, body) =>
+    req(`/immune-system/promotions/${encodeURIComponent(id)}/rollback`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   listContradictions: (subjectId, limit = 50) => {
     const query = new URLSearchParams({ limit: String(limit) });
     if (subjectId) query.set("subject_id", subjectId);

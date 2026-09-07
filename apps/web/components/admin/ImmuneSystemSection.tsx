@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { IconBug, IconVaccine } from "@tabler/icons-react";
+import { IconBug, IconTrophy, IconVaccine } from "@tabler/icons-react";
 import {
   stackGraphClient,
   type AdversarialScenarioList,
@@ -118,6 +118,10 @@ export function ImmuneSystemSection() {
     onSuccess: setEvaluation,
   });
 
+  const champions = useQuery({
+    queryKey: ["immune-system", "champions"],
+    queryFn: () => stackGraphClient.listHarnessChampions(),
+  });
   const nextScenario = evaluation?.unevaluated_scenario_ids?.[0] ?? null;
   const scenarioTitle = useMemo(() => {
     const found = (scenarios.data?.scenarios ?? []).find((item) => item.id === nextScenario);
@@ -260,11 +264,17 @@ export function ImmuneSystemSection() {
                 ))}
               </ul>
             ) : null}
-            <GateNotice
-              verdict="CONSTRAIN"
-              reason={evaluation.promotion.reason}
-              action={<span>Blocked by: {evaluation.promotion.blocked_by.join(", ")}</span>}
-            />
+            {evaluation.promotion.state === "ELIGIBLE" ? (
+              <p className={styles.eligible}>{evaluation.promotion.reason}</p>
+            ) : (
+              <GateNotice
+                verdict="CONSTRAIN"
+                reason={evaluation.promotion.reason}
+                action={
+                  <span>Blocked by: {(evaluation.promotion.blocked_by ?? []).join(", ")}</span>
+                }
+              />
+            )}
           </div>
         ) : (
           <p className={styles.quiet}>
@@ -273,6 +283,84 @@ export function ImmuneSystemSection() {
           </p>
         )}
         {requestError ? <p className={styles.error} role="alert">{requestError.message}</p> : null}
+      </section>
+
+      <section className={styles.card} aria-labelledby="immune-promotion-heading">
+        <header>
+          <IconTrophy size={20} aria-hidden="true" />
+          <div>
+            <h3 id="immune-promotion-heading">Champion and challenger</h3>
+            <p>
+              A challenger becomes the champion only on evidence: a clean evaluation covering
+              every derived class and everything the incumbent was tested against, a passed
+              rollback drill, and a second person&apos;s approval.
+            </p>
+          </div>
+        </header>
+
+        {champions.isLoading ? <Skeleton height={140} /> : champions.isError ? (
+          <GateNotice
+            verdict="BLOCKED"
+            reason="The champion record could not be read, so which harness version is current is unknown."
+          />
+        ) : champions.data ? (
+          <>
+            {!champions.data.promotion_enabled ? (
+              <GateNotice
+                verdict="CONSTRAIN"
+                reason="Promotion is switched off for this tenant. An empty champion list below says nothing about whether a challenger would qualify."
+              />
+            ) : null}
+            {(champions.data.champions ?? []).length > 0 ? (
+              <ul className={styles.champions}>
+                {(champions.data.champions ?? []).map((champion) => (
+                  <li key={champion.harness_key}>
+                    <strong>{champion.harness_key}</strong>
+                    <span>
+                      running {champion.harness_version}
+                      {champion.previous_version ? ` · replaced ${champion.previous_version}` : ""}
+                    </span>
+                    <small>
+                      promoted by {champion.promoted_by} on{" "}
+                      {new Date(champion.promoted_at).toLocaleDateString()}
+                    </small>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.quiet}>No harness has a recorded champion in this tenant.</p>
+            )}
+
+            {(champions.data.recent_promotions ?? []).length > 0 ? (
+              <ol className={styles.promotions}>
+                {(champions.data.recent_promotions ?? []).map((promotion) => (
+                  <li key={promotion.id} data-status={promotion.status}>
+                    <div>
+                      <strong>
+                        {promotion.harness_key} → {promotion.challenger_version}
+                      </strong>
+                      <span>
+                        {promotion.status}
+                        {promotion.decided_by ? ` · approved by ${promotion.decided_by}` : ""}
+                        {promotion.rolled_back_by ? ` · rolled back by ${promotion.rolled_back_by}` : ""}
+                      </span>
+                    </div>
+                    {(promotion.gate.reasons ?? []).length > 0 ? (
+                      <ul className={styles.gateReasons}>
+                        {(promotion.gate.reasons ?? []).map((reason) => (
+                          <li key={reason.code}>{reason.message}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <ul className={styles.limitations}>
+              {(champions.data.limitations ?? []).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </>
+        ) : null}
       </section>
     </>
   );

@@ -12,12 +12,18 @@ from app.errors import APIError
 from app.immune_system import GENERATOR_VERSION
 from app.models import (
     ADVERSARIAL_SCENARIO_CLASSES,
+    GateReason,
+    HarnessPromotionModel,
     AdversarialScenarioGenerateRequest,
     AdversarialScenarioList,
     HarnessEvaluationCompleteRequest,
     HarnessEvaluationModel,
     HarnessEvaluationRecordRequest,
     HarnessEvaluationStartRequest,
+    HarnessPromotionDecisionRequest,
+    HarnessPromotionProposeRequest,
+    HarnessPromotionRollbackRequest,
+    PromotionGate,
     PromotionPosture,
     ScenarioClassCoverage,
 )
@@ -32,6 +38,9 @@ ENTITY = UUID("00000000-0000-4000-8000-000000000d01")
 FACT = UUID("00000000-0000-4000-8000-000000000e01")
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 MIGRATION = Path(__file__).parents[3] / "infrastructure/database/migrations/059_adversarial_evaluation.sql"
+PROMOTION_MIGRATION = (
+    Path(__file__).parents[3] / "infrastructure/database/migrations/062_harness_promotion.sql"
+)
 
 
 class _Cursor:
@@ -159,7 +168,9 @@ def test_a_failed_scenario_cannot_be_recorded_without_a_diagnosis() -> None:
 
 
 def test_evaluation_counts_must_account_for_every_scenario() -> None:
-    promotion = PromotionPosture(reason="not implemented", blocked_by=["ROLLBACK_UNPROVEN"])
+    promotion = PromotionPosture(
+        state="DISABLED", reason="switched off", blocked_by=["HARNESS_PROMOTION_DISABLED"],
+    )
     with pytest.raises(ValidationError, match="account for every scenario"):
         HarnessEvaluationModel(
             id=EVALUATION, harness_key="h", harness_version="1", status="COMPLETED",
@@ -335,6 +346,7 @@ def test_an_evaluation_with_unanswered_scenarios_cannot_be_completed() -> None:
 
 def test_an_unanswered_scenario_is_named_rather_than_rounded_into_a_pass() -> None:
     database = FakeDatabase([
+        ("phase2_feature_flag", [{"enabled": False}]),
         ("SELECT * FROM harness_evaluation WHERE id=%s", [_evaluation_row(passed_count=1)]),
         ("FROM harness_evaluation_result result", [{
             "id": uuid4(), "scenario_id": SCENARIO, "scenario_key": "stale-context:1",
@@ -350,8 +362,9 @@ def test_an_unanswered_scenario_is_named_rather_than_rounded_into_a_pass() -> No
     assert evaluation.passed_count == 1
     assert evaluation.unevaluated_count == 1
     assert evaluation.unevaluated_scenario_ids == [ENTITY]
-    assert evaluation.promotion.state == "NOT_IMPLEMENTED"
-    assert evaluation.promotion.blocked_by
+    # With the loop switched off, the posture says so rather than implying the evaluation
+    # would or would not qualify.
+    assert evaluation.promotion.state == "DISABLED"
 
 
 def test_a_finished_evaluation_refuses_further_results() -> None:
@@ -374,19 +387,6 @@ def test_a_finished_evaluation_refuses_further_results() -> None:
 # -- the half that stays closed -----------------------------------------------------------------
 
 
-def test_no_route_can_promote_a_challenger() -> None:
-    app, _ = app_with_stubs()
-    paths = app.openapi()["paths"]
-
-    assert "/immune-system/scenarios" in paths
-    assert "/immune-system/evaluations" in paths
-    for path in paths:
-        if not path.startswith("/immune-system"):
-            continue
-        assert "promot" not in path
-        assert "champion" not in path
-
-
 def test_immune_system_operations_are_exposed_under_stable_identifiers() -> None:
     app, _ = app_with_stubs()
     document = app.openapi()
@@ -398,6 +398,11 @@ def test_immune_system_operations_are_exposed_under_stable_identifiers() -> None
         "/immune-system/evaluations/{id}": {"get": "getHarnessEvaluation"},
         "/immune-system/evaluations/{id}/results": {"post": "recordHarnessEvaluationResult"},
         "/immune-system/evaluations/{id}/finish": {"post": "finishHarnessEvaluation"},
+        "/immune-system/champions": {"get": "listHarnessChampions"},
+        "/immune-system/promotions": {"post": "proposeHarnessPromotion"},
+        "/immune-system/promotions/{id}": {"get": "getHarnessPromotion"},
+        "/immune-system/promotions/{id}/decision": {"post": "decideHarnessPromotion"},
+        "/immune-system/promotions/{id}/rollback": {"post": "rollBackHarnessPromotion"},
     }
     for path, methods in expected.items():
         for method, operation_id in methods.items():
@@ -414,15 +419,15 @@ def test_the_read_surface_states_the_disabled_generation_rather_than_returning_n
     assert len(body["coverage"]) == len(ADVERSARIAL_SCENARIO_CLASSES)
 
 
-def test_migration_records_evaluation_and_cannot_record_promotion() -> None:
+def test_migration_059_records_evaluation_and_left_promotion_to_a_later_migration() -> None:
     sql = MIGRATION.read_text()
 
     assert "CREATE TABLE adversarial_scenario" in sql
     assert "CREATE TABLE harness_evaluation" in sql
     assert "CREATE TABLE harness_evaluation_result" in sql
     # The promotion half is absent by construction, not switched off by a default.
-    # The promotion half is unrepresentable, so it is absent from the DDL itself rather than
-    # present and defaulted off. Prose is stripped first: the migration explains the omission.
+    # 059 deliberately held no promotion structure. Migration 062 adds it under computed
+    # preconditions rather than editing this one, which is checksummed and never rewritten.
     ddl = "\n".join(
         line for line in sql.splitlines()
         if not line.strip().startswith("--") and "'" not in line
@@ -446,3 +451,404 @@ def test_migration_names_every_scenario_class_the_plan_enumerates() -> None:
     sql = MIGRATION.read_text()
     for scenario_class in ADVERSARIAL_SCENARIO_CLASSES:
         assert f"'{scenario_class}'" in sql
+
+
+# -- champion/challenger --------------------------------------------------------------------------
+#
+# A1 admits this loop only once offline evaluation, rollback, and governance are proven. Each of
+# those is computed here, so these tests are the proof that the gate is evidence and not a flag.
+
+
+DRILL = UUID("00000000-0000-4000-8000-000000000f01")
+PROMOTION = UUID("00000000-0000-4000-8000-000000000f02")
+STARTED = datetime(2026, 9, 6, 8, 0, tzinfo=UTC)
+
+
+def _clean_evaluation(**overrides):
+    row = {
+        "id": EVALUATION, "harness_key": "agent-harness:billing:langchain",
+        "harness_version": "1.4.0", "execution_mode": "OFFLINE", "status": "COMPLETED",
+        "selected_scenario_ids": [SCENARIO, ENTITY], "scenario_count": 2, "passed_count": 2,
+        "failed_count": 0, "inconclusive_count": 0,
+        "estate_watermark": "facts:1;projection:1", "created_by": "proposer",
+        "started_at": STARTED, "completed_at": NOW,
+    }
+    row.update(overrides)
+    return row
+
+
+def _promotion_database(
+    *, enabled=True, evaluation=None, derived=None, drill=None, champion=None,
+    incumbent=None,
+):
+    """A tenant with one clean evaluation, one passed rollback drill, and no champion."""
+    return FakeDatabase([
+        ("phase2_feature_flag", [{"enabled": enabled}]),
+        ("SELECT * FROM harness_evaluation WHERE id=%s", [evaluation or _clean_evaluation()]),
+        ("GROUP BY scenario_class", derived if derived is not None else [
+            {"scenario_class": "STALE_CONTEXT", "total": 2, "evaluated": 2},
+        ]),
+        ("FROM harness_champion champion", [champion] if champion else []),
+        ("SELECT selected_scenario_ids FROM harness_evaluation", [incumbent] if incumbent else []),
+        ("FROM agent_control_drill", [drill if drill is not None else {
+            "drill_kind": "ROLLBACK", "status": "PASSED", "performed_at": NOW,
+        }]),
+        ("SELECT harness_version FROM harness_champion", []),
+        ("INSERT INTO harness_promotion", []),
+        ("INSERT INTO admin_audit_log", []),
+        ("SELECT * FROM harness_promotion WHERE id=%s", lambda params: [
+            _promotion_row(id=params[0]),
+        ]),
+    ])
+
+
+def _promotion_row(**overrides):
+    row = {
+        "id": PROMOTION, "harness_key": "agent-harness:billing:langchain",
+        "challenger_version": "1.5.0", "incumbent_version": "1.4.0",
+        "evaluation_id": EVALUATION, "rollback_drill_id": DRILL, "status": "PENDING",
+        "gate_state": "CLEAR", "gate_reasons": [], "requested_by": "proposer",
+        "rationale": "Clean over every derived class.", "decided_by": None,
+        "decision_rationale": None, "decided_at": None, "rolled_back_by": None,
+        "rollback_rationale": None, "rolled_back_at": None, "created_at": NOW,
+    }
+    row.update(overrides)
+    return row
+
+
+def _propose(store, **overrides):
+    request = HarnessPromotionProposeRequest(
+        harness_key="agent-harness:billing:langchain", challenger_version="1.4.0",
+        evaluation_id=EVALUATION, rollback_drill_id=DRILL,
+        rationale="The challenger passed every derived scenario class.",
+        **overrides,
+    )
+    return asyncio.run(store.propose_harness_promotion(
+        request, tenant_id=TENANT, actor_key="proposer",
+    ))
+
+
+def _gate_codes(database) -> list[str]:
+    for query, params in database.executed:
+        if "INSERT INTO harness_promotion" in query:
+            return [item["code"] for item in params[9].obj]
+    raise AssertionError("no promotion was written")
+
+
+def test_a_promotion_proposal_is_refused_while_the_loop_is_switched_off() -> None:
+    store = ReadModelStore(_promotion_database(enabled=False))
+
+    with pytest.raises(APIError) as error:
+        _propose(store)
+
+    assert error.value.code == "HARNESS_PROMOTION_DISABLED"
+
+
+def test_a_clean_evaluation_with_a_passed_drill_clears_the_gate() -> None:
+    database = _promotion_database()
+    promotion = _propose(ReadModelStore(database))
+
+    assert _gate_codes(database) == []
+    assert promotion.gate.state == "CLEAR"
+    assert promotion.status == "PENDING"
+
+
+def test_a_failed_scenario_blocks_promotion() -> None:
+    database = _promotion_database(
+        evaluation=_clean_evaluation(passed_count=1, failed_count=1),
+    )
+    _propose(ReadModelStore(database))
+
+    # A failure is what §36 exists to find. Promoting past one makes the evaluation decorative.
+    assert "EVALUATION_HAS_FAILURES" in _gate_codes(database)
+
+
+def test_an_inconclusive_scenario_blocks_promotion_like_a_failure() -> None:
+    database = _promotion_database(
+        evaluation=_clean_evaluation(passed_count=1, inconclusive_count=1),
+    )
+    _propose(ReadModelStore(database))
+
+    assert "EVALUATION_HAS_INCONCLUSIVE_OUTCOMES" in _gate_codes(database)
+
+
+def test_an_unfinished_evaluation_blocks_promotion() -> None:
+    database = _promotion_database(evaluation=_clean_evaluation(status="RUNNING"))
+    _propose(ReadModelStore(database))
+
+    assert "EVALUATION_NOT_COMPLETED" in _gate_codes(database)
+
+
+def test_a_derived_class_the_harness_never_saw_blocks_promotion() -> None:
+    database = _promotion_database(derived=[
+        {"scenario_class": "STALE_CONTEXT", "total": 2, "evaluated": 2},
+        {"scenario_class": "MALICIOUS_REPOSITORY_CONTENT", "total": 3, "evaluated": 0},
+    ])
+    _propose(ReadModelStore(database))
+
+    # A class the estate derived but the harness was never shown is a gap the pass rate cannot
+    # see: 100% over a chosen subset is not 100%.
+    codes = _gate_codes(database)
+    assert "SCENARIO_CLASS_NOT_EVALUATED" in codes
+
+
+def test_an_estate_with_no_scenarios_cannot_promote_anything() -> None:
+    database = _promotion_database(derived=[])
+    _propose(ReadModelStore(database))
+
+    assert "NO_SCENARIOS_DERIVED" in _gate_codes(database)
+
+
+def test_a_challenger_tested_against_less_than_the_champion_is_blocked() -> None:
+    database = _promotion_database(
+        champion={"harness_version": "1.3.0", "evaluation_id": EVALUATION},
+        incumbent={"selected_scenario_ids": [SCENARIO, ENTITY, FACT]},
+    )
+    _propose(ReadModelStore(database))
+
+    # Regression by omission: a challenger evaluated against fewer scenarios can score better
+    # while having been tested less.
+    assert "INCUMBENT_COVERAGE_NOT_MATCHED" in _gate_codes(database)
+
+
+def test_a_failed_rollback_drill_blocks_promotion() -> None:
+    database = _promotion_database(drill={
+        "drill_kind": "ROLLBACK", "status": "FAILED", "performed_at": NOW,
+    })
+    _propose(ReadModelStore(database))
+
+    assert "ROLLBACK_DRILL_FAILED" in _gate_codes(database)
+
+
+def test_a_drill_older_than_the_evaluation_does_not_vouch_for_this_promotion() -> None:
+    database = _promotion_database(drill={
+        "drill_kind": "ROLLBACK", "status": "PASSED",
+        "performed_at": STARTED - timedelta(days=1),
+    })
+    _propose(ReadModelStore(database))
+
+    assert "ROLLBACK_DRILL_PREDATES_EVALUATION" in _gate_codes(database)
+
+
+def test_a_kill_switch_drill_is_not_a_rollback_drill() -> None:
+    database = _promotion_database(drill={
+        "drill_kind": "KILL_SWITCH", "status": "PASSED", "performed_at": NOW,
+    })
+    _propose(ReadModelStore(database))
+
+    assert "ROLLBACK_DRILL_WRONG_KIND" in _gate_codes(database)
+
+
+def test_every_blocker_is_reported_rather_than_only_the_first() -> None:
+    database = _promotion_database(
+        evaluation=_clean_evaluation(status="RUNNING", passed_count=1, failed_count=1),
+        drill={"drill_kind": "ROLLBACK", "status": "FAILED", "performed_at": NOW},
+    )
+    _propose(ReadModelStore(database))
+
+    codes = _gate_codes(database)
+    # A proposer who fixes one blocker and rediscovers the next has learnt the gate one round
+    # at a time.
+    assert {"EVALUATION_NOT_COMPLETED", "EVALUATION_HAS_FAILURES", "ROLLBACK_DRILL_FAILED"} <= set(codes)
+
+
+def test_a_refused_proposal_is_recorded_with_its_reasons() -> None:
+    database = _promotion_database(evaluation=_clean_evaluation(failed_count=2, passed_count=0))
+    _propose(ReadModelStore(database))
+
+    written = next(
+        params for query, params in database.executed
+        if "INSERT INTO harness_promotion" in query
+    )
+    # A refusal nobody can read is indistinguishable from a promotion nobody attempted.
+    assert written[7] == "REFUSED"
+    assert written[8] == "BLOCKED"
+    assert written[9].obj
+
+
+def test_one_person_cannot_approve_their_own_proposal() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [_promotion_row()]),
+    ])
+
+    with pytest.raises(APIError) as error:
+        asyncio.run(ReadModelStore(database).decide_harness_promotion(
+            PROMOTION, HarnessPromotionDecisionRequest(decision="PROMOTE", rationale="ok"),
+            tenant_id=TENANT, actor_key="proposer",
+        ))
+
+    # Governance is the third precondition A1 names, and one person is not it.
+    assert error.value.code == "SECOND_PERSON_REQUIRED"
+
+
+def test_approval_by_a_second_person_installs_the_champion() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [_promotion_row()]),
+        ("UPDATE harness_promotion", []),
+        ("INSERT INTO harness_champion", []),
+        ("INSERT INTO admin_audit_log", []),
+        ("SELECT * FROM harness_promotion WHERE id=%s", [
+            _promotion_row(status="PROMOTED", decided_by="approver", decided_at=NOW),
+        ]),
+    ])
+
+    promotion = asyncio.run(ReadModelStore(database).decide_harness_promotion(
+        PROMOTION, HarnessPromotionDecisionRequest(decision="PROMOTE", rationale="Reviewed."),
+        tenant_id=TENANT, actor_key="approver",
+    ))
+
+    assert promotion.status == "PROMOTED"
+    assert promotion.decided_by == "approver"
+    assert [1 for query, _ in database.executed if "INSERT INTO harness_champion" in query]
+
+
+def test_a_refused_proposal_cannot_be_approved() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [
+            _promotion_row(status="REFUSED", gate_state="BLOCKED", gate_reasons=[
+                {"code": "EVALUATION_HAS_FAILURES", "message": "one failed",
+                 "evidence_fact_ids": []},
+            ]),
+        ]),
+    ])
+
+    with pytest.raises(APIError) as error:
+        asyncio.run(ReadModelStore(database).decide_harness_promotion(
+            PROMOTION, HarnessPromotionDecisionRequest(decision="PROMOTE", rationale="ok"),
+            tenant_id=TENANT, actor_key="approver",
+        ))
+
+    assert error.value.code == "HARNESS_PROMOTION_DECIDED"
+
+
+def test_rollback_restores_the_version_the_promotion_replaced() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [
+            _promotion_row(status="PROMOTED", decided_by="approver", decided_at=NOW),
+        ]),
+        ("FROM harness_champion WHERE tenant_id=%s AND harness_key=%s FOR UPDATE", [
+            {"promotion_id": PROMOTION, "harness_version": "1.5.0"},
+        ]),
+        ("UPDATE harness_promotion", []),
+        ("UPDATE harness_champion", []),
+        ("INSERT INTO admin_audit_log", []),
+        ("SELECT * FROM harness_promotion WHERE id=%s", [
+            _promotion_row(status="ROLLED_BACK", decided_by="approver", decided_at=NOW,
+                           rolled_back_by="responder", rolled_back_at=NOW),
+        ]),
+    ])
+
+    promotion = asyncio.run(ReadModelStore(database).roll_back_harness_promotion(
+        PROMOTION, HarnessPromotionRollbackRequest(rationale="Latency regression in staging."),
+        tenant_id=TENANT, actor_key="responder",
+    ))
+
+    assert promotion.status == "ROLLED_BACK"
+    restored = next(
+        params for query, params in database.executed if "UPDATE harness_champion" in query
+    )
+    assert "1.4.0" in restored
+
+
+def test_rollback_needs_no_second_person() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [
+            _promotion_row(status="PROMOTED", decided_by="approver", decided_at=NOW),
+        ]),
+        ("FROM harness_champion WHERE tenant_id=%s AND harness_key=%s FOR UPDATE", [
+            {"promotion_id": PROMOTION, "harness_version": "1.5.0"},
+        ]),
+        ("UPDATE harness_promotion", []),
+        ("UPDATE harness_champion", []),
+        ("INSERT INTO admin_audit_log", []),
+        ("SELECT * FROM harness_promotion WHERE id=%s", [
+            _promotion_row(status="ROLLED_BACK", decided_by="approver", decided_at=NOW,
+                           rolled_back_by="proposer", rolled_back_at=NOW),
+        ]),
+    ])
+
+    # Rollback is the safe direction, and a control that is hard to reach in a hurry is not a
+    # control. The proposer can pull it.
+    promotion = asyncio.run(ReadModelStore(database).roll_back_harness_promotion(
+        PROMOTION, HarnessPromotionRollbackRequest(rationale="Reverting."),
+        tenant_id=TENANT, actor_key="proposer",
+    ))
+
+    assert promotion.status == "ROLLED_BACK"
+
+
+def test_a_superseded_promotion_cannot_be_rolled_back() -> None:
+    database = FakeDatabase([
+        ("FROM harness_promotion WHERE id=%s FOR UPDATE", [
+            _promotion_row(status="PROMOTED", decided_by="approver", decided_at=NOW),
+        ]),
+        ("FROM harness_champion WHERE tenant_id=%s AND harness_key=%s FOR UPDATE", [
+            {"promotion_id": SCENARIO, "harness_version": "1.6.0"},
+        ]),
+    ])
+
+    with pytest.raises(APIError) as error:
+        asyncio.run(ReadModelStore(database).roll_back_harness_promotion(
+            PROMOTION, HarnessPromotionRollbackRequest(rationale="Revert."),
+            tenant_id=TENANT, actor_key="responder",
+        ))
+
+    # Rolling this back would restore a version two steps behind what is running.
+    assert error.value.code == "HARNESS_PROMOTION_SUPERSEDED"
+
+
+def test_a_blocked_gate_can_only_produce_a_refusal() -> None:
+    with pytest.raises(ValidationError, match="blocked gate produces a refusal"):
+        HarnessPromotionModel(
+            id=PROMOTION, harness_key="h", challenger_version="1.1.0",
+            evaluation_id=EVALUATION, rollback_drill_id=DRILL, status="PENDING",
+            gate=PromotionGate(
+                state="BLOCKED",
+                reasons=[GateReason(code="EVALUATION_HAS_FAILURES", message="one failed")],
+            ),
+            requested_by="proposer", rationale="why", created_at=NOW,
+        )
+
+
+def test_an_approver_cannot_be_recorded_as_the_proposer() -> None:
+    with pytest.raises(ValidationError, match="approved by the actor who proposed it"):
+        HarnessPromotionModel(
+            id=PROMOTION, harness_key="h", challenger_version="1.1.0",
+            evaluation_id=EVALUATION, rollback_drill_id=DRILL, status="PROMOTED",
+            gate=PromotionGate(state="CLEAR"), requested_by="proposer", rationale="why",
+            decided_by="proposer", decided_at=NOW, created_at=NOW,
+        )
+
+
+def test_an_empty_champion_list_with_promotion_off_says_so() -> None:
+    database = FakeDatabase([
+        ("phase2_feature_flag", [{"enabled": False}]),
+        ("FROM harness_champion WHERE tenant_id=%s ORDER BY", []),
+        ("FROM harness_promotion WHERE tenant_id=%s ORDER BY", []),
+    ])
+
+    result = asyncio.run(ReadModelStore(database).harness_champions(tenant_id=TENANT))
+
+    assert result.promotion_enabled is False
+    assert result.champions == []
+    assert any("says nothing about" in item for item in result.limitations)
+
+
+def test_promotion_migration_makes_each_precondition_structural() -> None:
+    sql = PROMOTION_MIGRATION.read_text()
+
+    assert "CREATE TABLE harness_promotion" in sql
+    assert "CREATE TABLE harness_champion" in sql
+    # Two people, enforced by the database rather than only by the API.
+    assert "CHECK(decided_by IS NULL OR decided_by<>requested_by)" in sql
+    # A rollback drill is not optional: the column is NOT NULL and references a real drill.
+    assert "rollback_drill_id uuid NOT NULL" in sql
+    assert "REFERENCES agent_control_drill(id,tenant_id)" in sql
+    # A blocked gate can produce nothing but a refusal, and a refusal must name a reason.
+    assert "CHECK((gate_state='BLOCKED')=(status='REFUSED'))" in sql
+    assert "jsonb_array_length(gate_reasons)>0" in sql
+    assert "trg_harness_promotion_append_only" in sql
+    assert "'HARNESS_PROMOTION',false" in sql
+    for table in ("harness_promotion", "harness_champion"):
+        assert f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in sql
+

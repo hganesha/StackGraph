@@ -1893,6 +1893,23 @@ export interface GraphRiskList {
   snapshot?: GraphAnalysisSnapshot | null;
 }
 
+export interface HarnessChampionList {
+  champions?: Array<HarnessChampionModel>;
+  contract_version?: "1.0.0";
+  limitations?: Array<string>;
+  promotion_enabled: boolean;
+  recent_promotions?: Array<HarnessPromotionModel>;
+}
+
+export interface HarnessChampionModel {
+  harness_key: string;
+  harness_version: string;
+  previous_version?: string | null;
+  promoted_at: string;
+  promoted_by: string;
+  promotion_id: string;
+}
+
 export interface HarnessEvaluationCompleteRequest {
   note?: string | null;
   status: "COMPLETED" | "ABANDONED";
@@ -1941,6 +1958,44 @@ export interface HarnessEvaluationStartRequest {
   harness_key: string;
   harness_version: string;
   scenario_ids: Array<string>;
+}
+
+export interface HarnessPromotionDecisionRequest {
+  decision: "PROMOTE" | "REJECT";
+  rationale: string;
+}
+
+export interface HarnessPromotionModel {
+  challenger_version: string;
+  contract_version?: "1.0.0";
+  created_at: string;
+  decided_at?: string | null;
+  decided_by?: string | null;
+  decision_rationale?: string | null;
+  evaluation_id: string;
+  gate: PromotionGate;
+  harness_key: string;
+  id: string;
+  incumbent_version?: string | null;
+  rationale: string;
+  requested_by: string;
+  rollback_drill_id: string;
+  rollback_rationale?: string | null;
+  rolled_back_at?: string | null;
+  rolled_back_by?: string | null;
+  status: "PENDING" | "PROMOTED" | "REJECTED" | "ROLLED_BACK" | "REFUSED";
+}
+
+export interface HarnessPromotionProposeRequest {
+  challenger_version: string;
+  evaluation_id: string;
+  harness_key: string;
+  rationale: string;
+  rollback_drill_id: string;
+}
+
+export interface HarnessPromotionRollbackRequest {
+  rationale: string;
 }
 
 export interface HTTPValidationError {
@@ -2395,10 +2450,15 @@ export interface Phase3IntelligenceMetrics {
   successful_validation_rate?: number | null;
 }
 
+export interface PromotionGate {
+  reasons?: Array<GateReason>;
+  state: "BLOCKED" | "ESCALATE" | "CONSTRAIN" | "CLEAR";
+}
+
 export interface PromotionPosture {
-  blocked_by: Array<string>;
+  blocked_by?: Array<string>;
   reason: string;
-  state?: "NOT_IMPLEMENTED";
+  state: "ELIGIBLE" | "BLOCKED" | "DISABLED";
 }
 
 export interface ProviderQuota {
