@@ -1097,3 +1097,145 @@ def test_admin_member_connector_scan_lifecycle_over_live_schema() -> None:
             ):
                 connection.execute(f"DELETE FROM {table} WHERE tenant_id=%s", (tenant_id,))
             connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
+
+
+def test_a_repository_removed_from_scanning_resumes_its_existing_target() -> None:
+    """Stopping and re-adding a repository must reuse the row the first scan promoted.
+
+    A repository's ingest target is created with the pending key
+    `github:repo-name:<owner>/<name>` and promoted to the canonical `github:repo:<id>` by its
+    first successful scan. Re-adding used to upsert on the pending key, miss the promoted row,
+    and insert a second target for one repository — and the next scan then promoted that one
+    onto the key the first already held, raising a unique violation a long way from the action
+    that caused it.
+    """
+    database_url = os.environ["STACKGRAPH_TEST_DATABASE_URL"]
+    admin_database_url = os.getenv("STACKGRAPH_TEST_ADMIN_DATABASE_URL", database_url)
+    tenant_id = "00000000-0000-4000-8000-00000000b201"
+    canonical_key = "github:repo:920001"
+
+    def configure_tenant(connection) -> None:
+        connection.execute("SELECT set_config('app.tenant_id', %s, true)", (tenant_id,))
+
+    with psycopg.connect(admin_database_url) as connection:
+        configure_tenant(connection)
+        connection.execute(
+            "INSERT INTO tenant(id,tenant_key,name) VALUES (%s,'rescan-test','Rescan test')",
+            (tenant_id,),
+        )
+
+    def targets():
+        with psycopg.connect(admin_database_url, row_factory=dict_row) as connection:
+            configure_tenant(connection)
+            return connection.execute(
+                """
+                SELECT target.id,target.target_key,target.enabled,target.disabled_at,
+                       target.disabled_by,target.refresh_policy
+                FROM ingest_target target
+                JOIN source_system source ON source.id=target.source_system_id
+                WHERE target.tenant_id=%s AND target.target_kind='REPOSITORY'
+                  AND source.source_key='github-app'
+                ORDER BY target.created_at
+                """,
+                (tenant_id,),
+            ).fetchall()
+
+    try:
+        async def exercise():
+            app = create_app(settings=Settings(
+                environment="test",
+                database_url=database_url,
+                default_tenant_id=tenant_id,
+                development_actor_key="rescan-admin",
+            ))
+            async with app.router.lifespan_context(app):
+                async with AsyncClient(
+                    transport=ASGITransport(app=app, raise_app_exceptions=False),
+                    base_url="http://testserver",
+                ) as client:
+                    await client.put(
+                        "/admin/github/token", json={"token": "integration-github-token-3456"},
+                    )
+                    first = await client.post(
+                        "/admin/github/repositories", json={"repository": "acme/billing"},
+                    )
+                    assert first.status_code == 201, first.text
+
+                    # The first successful scan promotes the key and records what it learned.
+                    with psycopg.connect(admin_database_url) as connection:
+                        configure_tenant(connection)
+                        connection.execute(
+                            """
+                            UPDATE ingest_target SET target_key=%s,
+                              refresh_policy=refresh_policy||%s::jsonb
+                            WHERE id=%s
+                            """,
+                            (
+                                canonical_key,
+                                '{"repository_id":"920001","default_branch":"main",'
+                                '"visibility":"PRIVATE"}',
+                                targets()[0]["id"],
+                            ),
+                        )
+
+                    stopped = await client.delete(
+                        f"/admin/connectors/{first.json()['id']}",
+                    )
+                    assert stopped.status_code == 200, stopped.text
+                    after_removal = targets()
+
+                    second = await client.post(
+                        "/admin/github/repositories", json={"repository": "acme/billing"},
+                    )
+                    return first, stopped, after_removal, second
+
+        first, stopped, after_removal, second = asyncio.run(exercise())
+
+        # Stopping is recorded on the row that survives, not only in the audit log.
+        assert len(after_removal) == 1
+        assert after_removal[0]["enabled"] is False
+        assert after_removal[0]["disabled_at"] is not None
+        assert after_removal[0]["disabled_by"] == "rescan-admin"
+
+        assert second.status_code == 201, second.text
+        resumed = targets()
+        # One repository, one target. Two would collide on the next promotion.
+        assert len(resumed) == 1
+        assert resumed[0]["id"] == after_removal[0]["id"]
+        assert resumed[0]["target_key"] == canonical_key
+        assert resumed[0]["enabled"] is True
+        assert resumed[0]["disabled_at"] is None
+        assert resumed[0]["disabled_by"] is None
+        # What the first scan learned survives the stop, so the repository is not rediscovered
+        # from scratch as though it had never been seen.
+        assert resumed[0]["refresh_policy"]["repository_id"] == "920001"
+        assert resumed[0]["refresh_policy"]["default_branch"] == "main"
+        # And the connection settings are refreshed rather than left stale.
+        assert resumed[0]["refresh_policy"]["full_name"] == "acme/billing"
+
+        # The next scan re-promotes to the same canonical key: the violation is gone.
+        with psycopg.connect(admin_database_url) as connection:
+            configure_tenant(connection)
+            connection.execute(
+                "UPDATE ingest_target SET target_key=%s WHERE id=%s",
+                (canonical_key, resumed[0]["id"]),
+            )
+    finally:
+        with psycopg.connect(admin_database_url) as connection:
+            configure_tenant(connection)
+            connection.execute(
+                """
+                DELETE FROM ingest_run WHERE ingest_target_id IN (
+                  SELECT id FROM ingest_target WHERE tenant_id=%s
+                )
+                """,
+                (tenant_id,),
+            )
+            connection.execute("DELETE FROM connector WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM ingest_target WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM connector_account WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant_secret WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM admin_audit_log WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM source_system WHERE tenant_id=%s", (tenant_id,))
+            connection.execute("DELETE FROM tenant WHERE id=%s", (tenant_id,))
+

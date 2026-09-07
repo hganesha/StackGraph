@@ -856,37 +856,83 @@ class AdminReadModelsMixin:
             )
             account = await account_cursor.fetchone()
             assert account is not None
-            target_cursor = await connection.execute(
+            connection_policy = json.dumps({
+                "provider": "github",
+                "direct_repository": True,
+                "owner": owner,
+                "name": name,
+                "full_name": full_name,
+                "activity_enabled": True,
+                "cadence_seconds": cadence_seconds,
+                "schedule_enabled": schedule_enabled,
+            })
+            # A repository that has been scanned before no longer carries the key it was created
+            # with: the first successful scan promotes `github:repo-name:<owner>/<name>` to the
+            # canonical `github:repo:<id>`. Its durable identity is the full name in the refresh
+            # policy, so that is what a re-add matches on.
+            #
+            # Upserting on the pending key instead misses the promoted row and inserts a second
+            # target for one repository — and the next scan promotes that one onto the key the
+            # first already holds, raising a unique violation far from the action that caused it.
+            #
+            # A repository renamed on GitHub while it was stopped is not matched here: the
+            # request carries only the new owner/name, and the repository id that would identify
+            # it is not known until a scan runs. That case still collides at promotion, and is
+            # left visible rather than papered over with a guess about which row it meant.
+            existing_cursor = await connection.execute(
                 """
-                INSERT INTO ingest_target(
-                  tenant_id,source_system_id,connector_account_id,target_kind,target_key,
-                  priority,enabled,refresh_policy,next_due_at
-                ) VALUES (%s,%s,%s,'REPOSITORY',%s,'HOT',true,%s::jsonb,
-                          CASE WHEN %s THEN now() ELSE NULL END)
-                ON CONFLICT(tenant_id,source_system_id,target_kind,target_key) DO UPDATE
-                  SET connector_account_id=EXCLUDED.connector_account_id,enabled=true,
-                      refresh_policy=EXCLUDED.refresh_policy,
-                      next_due_at=EXCLUDED.next_due_at,updated_at=now()
-                RETURNING id
+                SELECT id,target_key,enabled,disabled_at,disabled_by
+                FROM ingest_target
+                WHERE tenant_id=%s AND source_system_id=%s AND target_kind='REPOSITORY'
+                  AND (target_key=%s OR lower(refresh_policy->>'full_name')=%s)
+                ORDER BY (target_key=%s) DESC,created_at
+                LIMIT 1
+                FOR UPDATE
                 """,
                 (
-                    tenant_id,
-                    source["id"],
-                    account["id"],
+                    tenant_id, source["id"], pending_target_key, normalized_name,
                     pending_target_key,
-                    json.dumps({
-                        "provider": "github",
-                        "direct_repository": True,
-                        "owner": owner,
-                        "name": name,
-                        "full_name": full_name,
-                        "activity_enabled": True,
-                        "cadence_seconds": cadence_seconds,
-                        "schedule_enabled": schedule_enabled,
-                    }),
-                    schedule_enabled,
                 ),
             )
+            existing_target = await existing_cursor.fetchone()
+            if existing_target is None:
+                target_cursor = await connection.execute(
+                    """
+                    INSERT INTO ingest_target(
+                      tenant_id,source_system_id,connector_account_id,target_kind,target_key,
+                      priority,enabled,refresh_policy,next_due_at
+                    ) VALUES (%s,%s,%s,'REPOSITORY',%s,'HOT',true,%s::jsonb,
+                              CASE WHEN %s THEN now() ELSE NULL END)
+                    ON CONFLICT(tenant_id,source_system_id,target_kind,target_key) DO UPDATE
+                      SET connector_account_id=EXCLUDED.connector_account_id,enabled=true,
+                          refresh_policy=ingest_target.refresh_policy||EXCLUDED.refresh_policy,
+                          disabled_at=NULL,disabled_by=NULL,
+                          next_due_at=EXCLUDED.next_due_at,updated_at=now()
+                    RETURNING id
+                    """,
+                    (
+                        tenant_id, source["id"], account["id"], pending_target_key,
+                        connection_policy, schedule_enabled,
+                    ),
+                )
+            else:
+                # Resume the row rather than replace it. The stored policy is merged into, not
+                # overwritten, so what the first scan learned — repository id, default branch,
+                # visibility — survives a stop and restart instead of being rediscovered as
+                # though the repository had never been seen.
+                target_cursor = await connection.execute(
+                    """
+                    UPDATE ingest_target
+                    SET connector_account_id=%s,enabled=true,
+                        refresh_policy=refresh_policy||%s::jsonb,
+                        disabled_at=NULL,disabled_by=NULL,
+                        next_due_at=CASE WHEN %s THEN now() ELSE NULL END,
+                        updated_at=now()
+                    WHERE id=%s
+                    RETURNING id
+                    """,
+                    (account["id"], connection_policy, schedule_enabled, existing_target["id"]),
+                )
             target = await target_cursor.fetchone()
             assert target is not None
             connector_cursor = await connection.execute(
@@ -1539,13 +1585,14 @@ class AdminReadModelsMixin:
                 await connection.execute(
                     """
                     UPDATE ingest_target target
-                    SET enabled=false,next_due_at=NULL,updated_at=now()
+                    SET enabled=false,next_due_at=NULL,
+                        disabled_at=now(),disabled_by=%s,updated_at=now()
                     FROM ingest_target root
                     WHERE root.id=%s AND (
                       target.id=root.id OR target.connector_account_id=root.connector_account_id
                     )
                     """,
-                    (target_id,),
+                    (actor_key, target_id),
                 )
                 await connection.execute(
                     """
